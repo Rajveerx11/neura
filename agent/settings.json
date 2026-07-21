@@ -1,0 +1,15 @@
+{
+  "defaultModel": "gpt-5.5",
+  "defaultProvider": "openai-codex",
+  "theme": "neura-dark",
+  "packages": [
+    "npm:@ollama/pi-web-search",
+    "npm:@spences10/pi-redact",
+    "npm:@spences10/pi-lsp",
+    "npm:pi-subagents"
+  ],
+  "skills": [
+    "~/.claude/skills"
+  ],
+  "lastChangelogVersion": "0.81.1"
+}

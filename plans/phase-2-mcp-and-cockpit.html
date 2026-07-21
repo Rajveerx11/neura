@@ -1,0 +1,200 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Phase 2 — MCP Bridge + Neura Cockpit</title>
+<style>
+  :root{
+    --bg:#07090d; --panel:#0d1016; --panel2:#12151d; --line:#1a2030;
+    --text:#d6dded; --dim:#828da3; --faint:#525b6e;
+    --acc:#7c9cff; --acc2:#57d4a8; --warn:#f0b754; --bad:#ef7373; --purple:#b78cf7; --orange:#f59d67;
+    --mono:'Cascadia Code','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:16px/1.6 'Segoe UI',system-ui,sans-serif;padding:0 0 80px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 28px}
+  h1{font-size:29px;line-height:1.25}
+  h2{font-size:21px;margin:54px 0 6px;display:flex;align-items:center;gap:10px}
+  h2 .n{font:600 13px/1 var(--mono);color:var(--bg);background:var(--acc);border-radius:20px;padding:6px 10px}
+  h3{font-size:16px;margin:24px 0 8px}
+  p.lead{color:var(--dim);margin:4px 0 0}
+  code{font-family:var(--mono);font-size:13.5px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#9fc0ff}
+  pre{font-family:var(--mono);font-size:13px;line-height:1.55;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;margin:12px 0}
+  pre code{background:none;border:none;padding:0;color:#c7d4ea}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+  th{color:var(--dim);text-align:left;font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px;border-bottom:2px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;font:600 11.5px/1 var(--mono);border-radius:12px;padding:4px 9px;white-space:nowrap}
+  .t-ok{background:rgba(87,212,168,.15);color:var(--acc2)}
+  .t-warn{background:rgba(240,183,84,.15);color:var(--warn)}
+  .t-bad{background:rgba(239,115,115,.15);color:var(--bad)}
+  .t-info{background:rgba(124,156,255,.15);color:var(--acc)}
+  .t-p{background:rgba(183,140,247,.15);color:var(--purple)}
+  .grid{display:grid;gap:14px;margin:16px 0}
+  .g2{grid-template-columns:1fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h4{font-size:14px;margin:0 0 6px}
+  .card p{font-size:13.5px;color:var(--dim)}
+  .hero{background:linear-gradient(135deg,#0c1120,#080a10);border-bottom:1px solid var(--line);padding:48px 0 36px;margin-bottom:8px}
+  .kicker{font:600 12px/1 var(--mono);color:var(--acc);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
+  .callout{border-left:3px solid var(--warn);background:rgba(240,183,84,.06);border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0;font-size:14.5px}
+  .callout.good{border-color:var(--acc2);background:rgba(87,212,168,.06)}
+  .callout.info{border-color:var(--acc);background:rgba(124,156,255,.06)}
+  .callout.bad{border-color:var(--bad);background:rgba(239,115,115,.06)}
+  .q{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:10px 0}
+  .q .qq{font-weight:600;font-size:15px}
+  .q .qa{font-size:13.5px;color:var(--dim);margin-top:4px}
+  .q .qa b{color:var(--acc2)}
+  /* terminal mockup */
+  .term{background:#05070a;border:1px solid #1d2536;border-radius:12px;margin:18px 0;font-family:var(--mono);font-size:13px;line-height:1.7;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .term .bar{background:#0c101a;padding:8px 14px;font-size:12px;color:var(--faint);display:flex;gap:8px;align-items:center}
+  .term .dot{width:10px;height:10px;border-radius:50%}
+  .term .body{padding:16px 18px}
+  .term .u{color:#9fc0ff}
+  .term .a{color:#c7d4ea}
+  .term .d{color:#525b6e}
+  .term .g{color:#57d4a8}
+  .term .y{color:#f0b754}
+  .term .p{color:#b78cf7}
+  .term .o{color:#f59d67}
+  .term .widget{border:1px dashed #2b3552;border-radius:6px;padding:6px 10px;margin:8px 0;color:#828da3}
+  .term .editor{border:1px solid #2b3552;border-radius:6px;padding:8px 10px;margin:8px 0;color:#d6dded}
+  .term .footer{border-top:1px solid #1a2030;margin-top:10px;padding-top:8px;color:#828da3;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px}
+  .lbl{position:relative}
+  .lbl .tip{position:absolute;right:-4px;top:-10px;background:var(--acc);color:var(--bg);font:600 10px/1 var(--mono);border-radius:8px;padding:3px 7px;z-index:2}
+  .toolb{display:inline-block;font:600 11px/1 var(--mono);border-radius:4px;padding:3px 7px;margin-right:8px}
+  .tb-read{background:rgba(124,156,255,.18);color:#7c9cff}
+  .tb-write{background:rgba(87,212,168,.18);color:#57d4a8}
+  .tb-edit{background:rgba(183,140,247,.18);color:#b78cf7}
+  .tb-bash{background:rgba(245,157,103,.18);color:#f59d67}
+  .dash{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #2b3552;border-radius:6px;margin:10px 0;overflow:hidden}
+  .dash .col{padding:8px 12px;border-right:1px solid #1a2030;font-size:12.5px}
+  .dash .col:last-child{border-right:none}
+  .dash .h{font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+  .dash li{list-style:none;color:#828da3;margin:2px 0}
+  .banner{background:linear-gradient(90deg,rgba(124,156,255,.10),transparent);border-left:3px solid var(--acc);padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:10px}
+  .logo{font-family:var(--mono);font-size:10.5px;line-height:1.15;color:#7c9cff;white-space:pre;margin:2px 0 8px;text-shadow:0 0 18px rgba(124,156,255,.35)}
+  @media(max-width:760px){.g2{grid-template-columns:1fr}.dash{grid-template-columns:1fr}.dash .col{border-right:none;border-bottom:1px solid #1a2030}}
+</style>
+
+<div class="hero"><div class="wrap">
+  <div class="kicker">Phase 2 Proposal · rev 3 · 2026-07-21 · Awaiting confirmation — nothing implemented</div>
+  <h1>MCP bridge + <span style="color:var(--acc)">Neura</span> — your personal agent on top of Pi</h1>
+  <p class="lead">Rev 3: zero emojis (symbols only), minimal footer, launches as <code>neura</code> with an ASCII logo. Part A unchanged (approved MCP set, waiting on tokens).</p>
+</div></div>
+
+<div class="wrap">
+
+<h2><span class="n">A</span> MCP bridge — unchanged, waiting on tokens</h2>
+<p class="lead">Install <code>@spences10/pi-mcp</code> + one <code>~/.pi/agent/mcp.json</code>.</p>
+
+<table>
+  <tr><th>Server</th><th>Transport</th><th>Auth needed from you</th><th>Status</th></tr>
+  <tr><td><b>gfi-scout</b></td><td>stdio (local exe)</td><td>None — reuse existing GitHub token (moved to env var, see hardening)</td><td><span class="tag t-ok">Ready</span></td></tr>
+  <tr><td><b>paper</b></td><td>HTTP localhost:29979</td><td>None</td><td><span class="tag t-ok">Ready</span></td></tr>
+  <tr><td><b>plan</b></td><td>HTTP hosted</td><td>May hit OAuth wall outside Claude — will test, fallback is skip (plans stay local HTML anyway)</td><td><span class="tag t-warn">Test</span></td></tr>
+  <tr><td><b>Context7</b></td><td>stdio via npx</td><td><b>Free API key</b> from context7.com/dashboard</td><td><span class="tag t-warn">Need key</span></td></tr>
+  <tr><td><b>Supabase</b></td><td>stdio via npx</td><td><b>Personal access token</b> (dashboard → Access Tokens). Start <code>--read-only</code></td><td><span class="tag t-warn">Need token</span></td></tr>
+  <tr><td><b>Notion</b></td><td>stdio via npx</td><td><b>Internal integration token</b> (notion.so/my-integrations), share only needed pages</td><td><span class="tag t-warn">Need token</span></td></tr>
+  <tr><td style="color:var(--faint)">Gmail · Calendar · Drive · Canva · apify · Vibe</td><td colspan="2" style="color:var(--faint)">Skipped on Pi — no engineering value, extra attack surface</td><td><span class="tag t-bad">Skip</span></td></tr>
+</table>
+
+<h3>Proposed mcp.json (tokens via env, never inline)</h3>
+<pre><code>{
+  "mcpServers": {
+    "gfi-scout": { "command": "C:\\Users\\rajve\\.local\\bin\\gfi-scout.exe",
+                   "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" } },
+    "paper":     { "url": "http://127.0.0.1:29979/mcp" },
+    "context7":  { "command": "npx", "args": ["-y", "@upstash/context7-mcp"],
+                   "env": { "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}" } },
+    "supabase":  { "command": "npx",
+                   "args": ["-y", "@supabase/mcp-server-supabase", "--read-only"],
+                   "env": { "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}" } },
+    "notion":    { "command": "npx", "args": ["-y", "@notionhq/notion-mcp-server"],
+                   "env": { "NOTION_TOKEN": "${NOTION_TOKEN}" } }
+  }
+}</code></pre>
+
+<div class="callout bad"><b>Hardening:</b> your GitHub token currently sits in plaintext inside <code>.claude.json</code>. Phase 2 moves it (and new tokens) into user environment variables. Consider rotating it. <code>pi-redact</code> (installed) covers the model-context side.</div>
+
+<h2><span class="n">B</span> Neura — the cockpit, rev 2</h2>
+<p class="lead">Same honest constraint as before: Pi is a single-column terminal — the "right panel" is a dashboard strip drawn with columns inside a full-width widget. Everything below is buildable with the documented API; one item (recoloring built-in tool headers) carries a small risk flag.</p>
+
+<div class="term">
+  <div class="bar"><span class="dot" style="background:#ef7373"></span><span class="dot" style="background:#f0b754"></span><span class="dot" style="background:#57d4a8"></span>&nbsp; neura · C:\Projects\your-app</div>
+  <div class="body">
+
+    <div class="lbl"><div class="logo">███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗
+████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔══██╗
+██╔██╗ ██║ █████╗   ██║   ██║ ██████╔╝ ███████║
+██║╚██╗██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██╔══██║
+██║ ╚████║ ███████╗ ╚██████╔╝ ██║  ██║ ██║  ██║
+╚═╝  ╚═══╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝<div class="tip">ASCII LOGO · on launch</div></div></div>
+
+    <div class="lbl"><div class="banner">
+      <span class="a">Good evening, Rajveer.</span>
+      <span class="d">3 todos open · last session: Axon Landing Page · 2 week-goals on track</span>
+      <div class="tip">GREETING · time-aware</div>
+    </div></div>
+
+    <div class="lbl"><div class="dash">
+      <div class="col"><div class="h" style="color:#7c9cff">▸ Today</div>
+        <li>[ ] wire Supabase MCP</li><li>[ ] rate limiter tests</li><li>[x] vet pi packages</li></div>
+      <div class="col"><div class="h" style="color:#57d4a8">▸ Projects</div>
+        <li>Axon Landing Page <span class="d">· 2d ago</span></li><li>Testing IDE <span class="d">· 5d ago</span></li><li>Visage growth <span class="d">· 1w ago</span></li></div>
+      <div class="col"><div class="h" style="color:#b78cf7">▸ This week</div>
+        <li>Ship Neura v1</li><li>MCP bridge live</li><li>1 LinkedIn post</li></div>
+      <div class="tip" style="position:absolute;right:-4px;top:-10px">DASHBOARD · /dash toggles</div>
+    </div></div>
+
+    <div class="d">› you</div>
+    <div class="u">add rate limiting to the api</div>
+    <div class="d" style="margin-top:6px">› neura · gpt-5.5</div>
+    <div class="a">Token-bucket limiter, middleware level:</div>
+    <div class="lbl">
+      <div><span class="toolb tb-read">READ</span><span class="d">src/api/routes.ts</span></div>
+      <div><span class="toolb tb-write">WRITE</span><span class="d">middleware/rateLimit.ts</span> <span class="g">+42</span></div>
+      <div><span class="toolb tb-edit">EDIT</span><span class="d">src/api/routes.ts</span> <span class="g">+3 −1</span></div>
+      <div><span class="toolb tb-bash">BASH</span><span class="d">npm test</span> <span class="g">✓ 14 passed</span><span class="tip">TOOL CALLS · color-coded per tool</span></div>
+    </div>
+
+    <div class="lbl"><div class="widget">⠹ working · bash · 12s &nbsp;·&nbsp; ● subagents: 1 (review) &nbsp;·&nbsp; ▪ redact: 3 caught<div class="tip">OPS STRIP · auto-hides when idle</div></div></div>
+    <div class="lbl"><div class="editor">█ type your message… &nbsp;<span class="d">(/todo · /goal · /dash · /preset · /skill-doctor)</span><div class="tip">EDITOR</div></div></div>
+    <div class="lbl"><div class="footer"><span><span class="g">●</span> gpt-5.5</span><span class="p">main*</span><span>ctx <span class="y">41%</span></span><span>$0.84</span><div class="tip">FOOTER · 4 fields only</div></div></div>
+  </div>
+</div>
+
+<h3>The spec, piece by piece</h3>
+<table>
+  <tr><th>Change</th><th>How it works</th><th>Feasibility</th></tr>
+  <tr><td><b><code>neura</code> launch command</b></td><td>Shim on PATH (<code>neura.cmd</code> + PowerShell alias) that runs Pi with the Neura profile. You type <code>neura</code>, never <code>pi</code>. Window/tab title set to "neura".</td><td><span class="tag t-ok">Simple shim</span></td></tr>
+  <tr><td><b>ASCII logo on launch</b></td><td>Block-style NEURA wordmark (shown in mockup) printed as the session-start banner, accent-colored, followed by the greeting. Rendered via startup widget; hides once you start typing.</td><td><span class="tag t-ok">Documented API</span></td></tr>
+  <tr><td><b>No emojis, ever</b></td><td>Hard rule across all surfaces: geometric symbols only (● ▸ ▪ ◆ ⠹ box-drawing). Also written into NEURA.md so the model's own replies stay emoji-free.</td><td><span class="tag t-ok">Style rule</span></td></tr>
+  <tr><td><b>Minimal footer — 4 fields</b></td><td>model · branch · ctx% · cost. Guard and MCP status removed from the always-on footer; they surface <i>only on anomaly</i> (guard tripped, MCP server down) as a transient notice, then disappear. NEURA mark lives in the logo, not the footer.</td><td><span class="tag t-ok">Less code</span></td></tr>
+  <tr><td><b>Neura identity + greeting</b></td><td>On <code>session_start</code>: logo + time-of-day greeting ("Good morning/afternoon/evening, Rajveer") + one-line status digest. System prompt names the agent Neura.</td><td><span class="tag t-ok">Documented API</span></td></tr>
+  <tr><td><b>Dashboard (your "right panel")</b></td><td>Full-width 3-column widget above editor: <b>Today's todos</b> · <b>Recent projects</b> · <b>Week goals</b>. <code>/dash</code> toggles it so it never eats space mid-work.</td><td><span class="tag t-ok">Documented API</span></td></tr>
+  <tr><td><b>Todos</b></td><td><code>/todo add …</code>, <code>/todo done N</code>, stored in <code>~/.pi/agent/neura/todos.json</code>. Neura can also check items off itself when it completes them.</td><td><span class="tag t-ok">Simple</span></td></tr>
+  <tr><td><b>Recent projects</b></td><td>Read from Pi's own session store (<code>~/.pi/agent/sessions/</code> folder names + last-modified). Real data, zero bookkeeping from you.</td><td><span class="tag t-ok">Simple</span></td></tr>
+  <tr><td><b>Week goals</b></td><td><code>/goal set …</code> stored in <code>~/.pi/agent/neura/goals.md</code>. Optional later: auto-pull from your plan-day/learn-day Obsidian notes (Q2 below).</td><td><span class="tag t-ok">Simple</span></td></tr>
+  <tr><td><b>Color-coded built-in tools</b></td><td>READ=blue · WRITE=green · EDIT=purple · BASH=orange, as colored badges. Plan A: theme tool-colors if Pi's theme schema exposes them. Plan B: intercept rendering via extension. Verified at build time.</td><td><span class="tag t-warn">One unknown</span></td></tr>
+  <tr><td><b>Darker palette</b></td><td>Theme "neura-dark": near-black base <code>#05070a</code>, muted borders, color only where it carries meaning (tools, status, accents). This document is rendered in it.</td><td><span class="tag t-ok">Theme file</span></td></tr>
+  <tr><td><b>Personality</b></td><td>NEURA.md system-prompt layer: terse builder tone, greets by name, root-cause-first engineering, your report format (ship-report.ts already live), no emojis in replies, build-in-public awareness.</td><td><span class="tag t-ok">Done pattern</span></td></tr>
+</table>
+
+<div class="callout info"><b>Deliberately minimal:</b> footer is 4 fields. Guard/MCP show up only when broken — healthy systems are silent. The dashboard is the only "big" surface and it's toggleable.</div>
+
+<h3>Build list (Part B)</h3>
+<div class="grid g2">
+  <div class="card"><h4><span class="tag t-info">neura.ts</span> identity + dashboard</h4><p>ASCII logo + greeting on launch, 3-column dashboard, <code>/todo</code> <code>/goal</code> <code>/dash</code>, projects from session store, todos/goals persisted in <code>~/.pi/agent/neura/</code>.</p></div>
+  <div class="card"><h4><span class="tag t-info">cockpit.ts</span> footer + ops strip</h4><p>4-field footer (model · branch · ctx% · cost), anomaly-only guard/MCP notices, spinner + subagent/redact ops strip, auto-hide when idle.</p></div>
+  <div class="card"><h4><span class="tag t-info">neura launcher</span> shim on PATH</h4><p><code>neura.cmd</code> + PowerShell alias: launches Pi with Neura profile, sets window title. You never type <code>pi</code> again.</p></div>
+  <div class="card"><h4><span class="tag t-info">neura-dark</span> theme</h4><p>Near-black theme file + per-tool colors (Plan A) or render intercept (Plan B).</p></div>
+  <div class="card"><h4><span class="tag t-info">NEURA.md</span> persona</h4><p>Personality + behavior layer injected into system prompt; names the agent, encodes your engineering style.</p></div>
+</div>
+
+<h2><span class="n">C</span> Confirm before I build</h2>
+<div class="q"><div class="qq">1. Tokens — still the only blocker for Part A</div><div class="qa">Context7 key (free) · Supabase PAT · Notion integration token. <b>Recommend: set them as env vars yourself so I never see them</b> — I'll give exact commands when you're ready. Part B needs no tokens and can ship first.</div></div>
+<div class="q"><div class="qq">2. Week goals source?</div><div class="qa">v1 = manual <code>/goal set</code>. Later auto-pull from plan-day/learn-day Obsidian notes. <b>Recommend manual v1</b> — zero coupling, ships today.</div></div>
+<div class="q"><div class="qq">3. Dashboard default: shown or hidden on launch?</div><div class="qa"><b>Recommend shown at launch</b> (that's the "open Neura, see my world" moment), auto-hidden once you send the first message, <code>/dash</code> brings it back.</div></div>
+<div class="q"><div class="qq">4. Build order OK?</div><div class="qa">Part B (Neura, no tokens needed) first → Part A MCP when you've set the 3 env vars. <b>Recommend yes.</b></div></div>
+
+</div>

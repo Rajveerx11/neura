@@ -1,0 +1,249 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Agent — Agentic Engineering Customization Plan</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#12161f; --panel2:#171c27; --line:#232a38;
+    --text:#dbe2ee; --dim:#8b94a7; --faint:#5b6375;
+    --acc:#7c9cff; --acc2:#57d4a8; --warn:#f0b754; --bad:#ef7373; --purple:#b78cf7;
+    --mono:'Cascadia Code','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:16px/1.6 'Segoe UI',system-ui,sans-serif;padding:0 0 80px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 28px}
+  h1{font-size:30px;line-height:1.25}
+  h2{font-size:21px;margin:56px 0 6px;display:flex;align-items:center;gap:10px}
+  h2 .n{font:600 13px/1 var(--mono);color:var(--bg);background:var(--acc);border-radius:20px;padding:6px 10px}
+  h3{font-size:16px;margin:22px 0 8px;color:var(--text)}
+  p.lead{color:var(--dim);margin:4px 0 0}
+  code{font-family:var(--mono);font-size:13.5px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#9fc0ff}
+  pre{font-family:var(--mono);font-size:13px;line-height:1.55;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;overflow-x:auto;margin:12px 0}
+  pre code{background:none;border:none;padding:0}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+  th{color:var(--dim);text-align:left;font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px;border-bottom:2px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;font:600 11.5px/1 var(--mono);border-radius:12px;padding:4px 9px;white-space:nowrap}
+  .t-ok{background:rgba(87,212,168,.15);color:var(--acc2)}
+  .t-warn{background:rgba(240,183,84,.15);color:var(--warn)}
+  .t-bad{background:rgba(239,115,115,.15);color:var(--bad)}
+  .t-info{background:rgba(124,156,255,.15);color:var(--acc)}
+  .t-p{background:rgba(183,140,247,.15);color:var(--purple)}
+  .grid{display:grid;gap:14px;margin:16px 0}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:1fr 1fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h4{font-size:14px;margin:0 0 6px;display:flex;gap:8px;align-items:center}
+  .card p{font-size:13.5px;color:var(--dim)}
+  .hero{background:linear-gradient(135deg,#121826,#0d1119);border-bottom:1px solid var(--line);padding:52px 0 40px;margin-bottom:8px}
+  .kicker{font:600 12px/1 var(--mono);color:var(--acc);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
+  .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px}
+  .fact{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .fact .v{font:600 17px/1.3 var(--mono);color:var(--text)}
+  .fact .k{font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+  .callout{border-left:3px solid var(--warn);background:rgba(240,183,84,.06);border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0;font-size:14.5px}
+  .callout.good{border-color:var(--acc2);background:rgba(87,212,168,.06)}
+  .callout.info{border-color:var(--acc);background:rgba(124,156,255,.06)}
+  .phase{display:flex;gap:16px;margin:18px 0;align-items:stretch}
+  .pnum{flex:0 0 46px;display:flex;flex-direction:column;align-items:center}
+  .pnum .c{width:38px;height:38px;border-radius:50%;background:var(--panel2);border:2px solid var(--acc);color:var(--acc);font:700 15px/34px var(--mono);text-align:center}
+  .pnum .l{flex:1;width:2px;background:var(--line);margin-top:6px}
+  .pbody{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:4px}
+  .pbody h4{font-size:15.5px;margin-bottom:2px}
+  .pbody .eff{font:600 11.5px var(--mono);color:var(--faint)}
+  .pbody p{font-size:14px;color:var(--dim);margin-top:6px}
+  .pbody ul{margin:8px 0 0 18px;font-size:14px;color:var(--dim)}
+  .pbody li{margin:3px 0}
+  svg text{font-family:'Segoe UI',sans-serif}
+  svg .mono{font-family:var(--mono)}
+  .diagram{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0;overflow-x:auto}
+  .q{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:10px 0}
+  .q .qq{font-weight:600;font-size:15px}
+  .q .qa{font-size:13.5px;color:var(--dim);margin-top:4px}
+  .q .qa b{color:var(--acc2);font-weight:600}
+  @media(max-width:760px){.g2,.g3,.facts{grid-template-columns:1fr}}
+</style>
+
+<div class="hero"><div class="wrap">
+  <div class="kicker">Research + Plan · 2026-07-21 · No changes made yet</div>
+  <h1>Turning Pi into your production agentic-engineering harness</h1>
+  <p class="lead">Import all Claude Code skills, wire MCP, add guardrail extensions, and build a hardened setup you can trust for company work.</p>
+  <div class="facts">
+    <div class="fact"><div class="v">pi 0.79.3</div><div class="k">Installed &amp; working</div></div>
+    <div class="fact"><div class="v">46 skills</div><div class="k">In ~/.claude/skills</div></div>
+    <div class="fact"><div class="v">18 copied</div><div class="k">Already in ~/.pi/agent/skills</div></div>
+    <div class="fact"><div class="v">gpt-5.5</div><div class="k">Current default (codex provider)</div></div>
+  </div>
+</div></div>
+
+<div class="wrap">
+
+<h2><span class="n">1</span> What Pi actually is</h2>
+<p class="lead">Ground truth from official docs (pi.dev) — matters because it defines what "customizing" means here.</p>
+<div class="grid g3">
+  <div class="card"><h4>🪶 Minimal core</h4><p>Terminal coding harness by Mario Zechner (badlogic). Core = LLM loop + read/write/edit/bash tools. Deliberately ships <b>without</b> MCP, subagents, permission flows, or plan mode.</p></div>
+  <div class="card"><h4>🧩 Everything is an extension</h4><p>All missing features are added via TypeScript extensions, skills, and installable packages (<code>pi install npm:… / git:…</code>). This is the "custom harness" surface.</p></div>
+  <div class="card"><h4>🔁 Claude-compatible skills</h4><p>Pi reads the exact same <code>SKILL.md</code> frontmatter format as Claude Code. Docs explicitly support pointing settings at <code>~/.claude/skills</code>.</p></div>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 1000 360" width="100%" style="min-width:820px">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6375"/></marker>
+  </defs>
+  <!-- core -->
+  <rect x="380" y="130" width="240" height="110" rx="12" fill="#171c27" stroke="#7c9cff" stroke-width="2"/>
+  <text x="500" y="162" text-anchor="middle" fill="#dbe2ee" font-size="17" font-weight="600">Pi core</text>
+  <text x="500" y="186" text-anchor="middle" fill="#8b94a7" font-size="12.5">agent loop · read/write/edit/bash</text>
+  <text x="500" y="205" text-anchor="middle" fill="#8b94a7" font-size="12.5">session tree · model providers</text>
+  <text x="500" y="228" text-anchor="middle" fill="#5b6375" font-size="11.5" class="mono">~/.pi/agent/settings.json</text>
+  <!-- satellites -->
+  <g>
+    <rect x="40" y="30" width="230" height="80" rx="10" fill="#12161f" stroke="#57d4a8" stroke-width="1.5"/>
+    <text x="155" y="58" text-anchor="middle" fill="#57d4a8" font-size="14" font-weight="600">Skills</text>
+    <text x="155" y="78" text-anchor="middle" fill="#8b94a7" font-size="11.5">SKILL.md · progressive disclosure</text>
+    <text x="155" y="94" text-anchor="middle" fill="#8b94a7" font-size="11.5">same format as Claude Code ✓</text>
+    <line x1="270" y1="80" x2="385" y2="150" stroke="#5b6375" stroke-width="1.5" marker-end="url(#ar)"/>
+  </g>
+  <g>
+    <rect x="40" y="250" width="230" height="80" rx="10" fill="#12161f" stroke="#b78cf7" stroke-width="1.5"/>
+    <text x="155" y="278" text-anchor="middle" fill="#b78cf7" font-size="14" font-weight="600">Extensions (TypeScript)</text>
+    <text x="155" y="298" text-anchor="middle" fill="#8b94a7" font-size="11.5">events · registerTool · commands</text>
+    <text x="155" y="314" text-anchor="middle" fill="#8b94a7" font-size="11.5">tool_call intercept = guardrails</text>
+    <line x1="270" y1="290" x2="385" y2="220" stroke="#5b6375" stroke-width="1.5" marker-end="url(#ar)"/>
+  </g>
+  <g>
+    <rect x="730" y="30" width="230" height="80" rx="10" fill="#12161f" stroke="#f0b754" stroke-width="1.5"/>
+    <text x="845" y="58" text-anchor="middle" fill="#f0b754" font-size="14" font-weight="600">Packages</text>
+    <text x="845" y="78" text-anchor="middle" fill="#8b94a7" font-size="11.5">pi install npm:@x/y · git:user/repo</text>
+    <text x="845" y="94" text-anchor="middle" fill="#8b94a7" font-size="11.5">bundle extensions + skills + prompts</text>
+    <line x1="730" y1="80" x2="618" y2="150" stroke="#5b6375" stroke-width="1.5" marker-end="url(#ar)"/>
+  </g>
+  <g>
+    <rect x="730" y="250" width="230" height="80" rx="10" fill="#12161f" stroke="#ef7373" stroke-width="1.5"/>
+    <text x="845" y="278" text-anchor="middle" fill="#ef7373" font-size="14" font-weight="600">MCP (via extension)</text>
+    <text x="845" y="298" text-anchor="middle" fill="#8b94a7" font-size="11.5">@spences10/pi-mcp + mcp.json</text>
+    <text x="845" y="314" text-anchor="middle" fill="#8b94a7" font-size="11.5">not in core — by design</text>
+    <line x1="730" y1="290" x2="618" y2="220" stroke="#5b6375" stroke-width="1.5" marker-end="url(#ar)"/>
+  </g>
+</svg>
+</div>
+
+<h2><span class="n">2</span> Skills import — mostly free, but triage needed</h2>
+<p class="lead">Zero-copy path exists: one settings line makes Pi read your Claude skills directly. But not every skill survives the trip.</p>
+
+<pre><code>// ~/.pi/agent/settings.json
+{
+  "skills": ["~/.claude/skills"]   // Pi docs explicitly support this
+}</code></pre>
+
+<div class="callout good"><b>Big win:</b> no migration script, no duplication. Edit a skill once, both Claude Code and Pi see it. The 18 hyperframes-family skills already copied into <code>~/.pi/agent/skills/</code> become redundant → delete the copies, keep one source of truth.</div>
+
+<table>
+  <tr><th>Tier</th><th>Skills</th><th>Why</th></tr>
+  <tr>
+    <td><span class="tag t-ok">Works as-is</span></td>
+    <td>hyperframes family (10), security, scalability, cost-reducer, code-structure, create-skill, researcher, roast, linkedin/upwork/resume writers, n8n, trigger-dev, composio, genmedia, frontend-design, caveman…</td>
+    <td>Pure instructions + local scripts/CLI calls. Harness-agnostic.</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-warn">Needs edits</span></td>
+    <td>plan-day, learn-day, learn-post, youtube-researcher, local-coder, shorts</td>
+    <td>Reference Claude-side MCP tools (Google Calendar via claude.ai) or assume Claude harness features. Rewrite tool references to Pi-side equivalents once MCP is wired.</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-bad">Claude-only</span></td>
+    <td>visual-plan (hosted Plan MCP + Artifact), paper-mcp, paper-deck-style</td>
+    <td>Depend on claude.ai connectors / Claude-specific tools. Leave them; Pi will ignore or fail gracefully. Optionally add a Pi-native "plan to local HTML" skill later.</td>
+  </tr>
+</table>
+
+<h2><span class="n">3</span> MCP servers — the honest part</h2>
+<p class="lead">Pi gets MCP via <code>@spences10/pi-mcp</code> (config format ≈ Claude's <code>mcpServers</code>). But your connectors split into two very different groups.</p>
+
+<table>
+  <tr><th>Server</th><th>Where it lives now</th><th>Portable?</th><th>How</th></tr>
+  <tr><td><code>gfi-scout</code>, <code>paper</code>, <code>plan</code></td><td>Local, in <code>.claude.json</code></td><td><span class="tag t-ok">Yes, copy config</span></td><td>Same command/args into <code>~/.pi/agent/mcp.json</code></td></tr>
+  <tr><td>Context7</td><td>claude.ai connector</td><td><span class="tag t-ok">Yes</span></td><td>Public MCP server, free API key → local config</td></tr>
+  <tr><td>Supabase, Notion</td><td>claude.ai connector</td><td><span class="tag t-ok">Yes</span></td><td>Official standalone MCP servers exist; auth with your own PAT/token</td></tr>
+  <tr><td>Gmail, Calendar, Drive, Canva, apify, Vibe</td><td>claude.ai connector</td><td><span class="tag t-warn">Re-auth needed</span></td><td>Auth lives inside claude.ai — not exportable. Wire per-service MCP (Google via official/community servers or Composio) only for the ones Pi actually needs</td></tr>
+</table>
+
+<div class="callout"><b>Recommendation:</b> don't port everything. Pi is your <i>engineering</i> harness — it needs Context7, Supabase, Notion, gfi-scout. Gmail/Canva/video connectors belong to Claude workflows; porting them adds attack surface for zero engineering value.</div>
+
+<h2><span class="n">4</span> Ecosystem — don't build what exists</h2>
+<p class="lead">Production-quality packages already cover most of the "custom harness" wishlist. Build custom extensions only for the gaps.</p>
+<div class="grid g2">
+  <div class="card"><h4><span class="tag t-info">install</span> @spences10/pi-mcp</h4><p>MCP bridge. Trust model built in: project-local <code>mcp.json</code> untrusted by default — good security posture.</p></div>
+  <div class="card"><h4><span class="tag t-info">install</span> nicobailon/pi-subagents</h4><p>Subagents, chains, parallel fan-out, code review, background jobs. Recreates the Claude Code Agent/workflow feel.</p></div>
+  <div class="card"><h4><span class="tag t-info">install</span> @spences10/pi-redact</h4><p>Scans tool output for API keys, tokens, connection strings, SSH config before the model sees them. Core of the "no vulnerabilities" requirement.</p></div>
+  <div class="card"><h4><span class="tag t-info">install</span> @spences10/pi-lsp</h4><p>Language-server diagnostics into the loop — model sees type errors without running builds. Big quality lift for shipping fast.</p></div>
+  <div class="card"><h4><span class="tag t-p">optional</span> badlogic/pi-skills</h4><p>Official skill pack: web search, browser automation, transcription. Fills gaps your Claude skills assume the harness provides (e.g. WebSearch).</p></div>
+  <div class="card"><h4><span class="tag t-p">optional</span> @spences10/pi-observability + pi-telemetry</h4><p>Run logging, stats, export. Useful once Pi does company work and you need an audit trail.</p></div>
+</div>
+
+<h2><span class="n">5</span> Custom extensions to actually write</h2>
+<p class="lead">Small, targeted TypeScript — the same pattern as your existing <code>autogit.ts</code>. Each is &lt;100 lines.</p>
+<div class="grid g2">
+  <div class="card"><h4>🛡️ guardrail.ts</h4><p>Intercept <code>tool_call</code>: block/confirm destructive bash (<code>rm -rf</code>, force-push, <code>DROP TABLE</code>, prod env writes), deny reads of <code>.env</code>/key files unless confirmed. This is Pi's version of Claude Code's permission system — Pi ships with none.</p></div>
+  <div class="card"><h4>📋 ship-report.ts</h4><p>On <code>agent_end</code>, emit your standard end-of-iteration report (what/why/do-now/takeaway) — ports your Claude reporting habit into Pi.</p></div>
+  <div class="card"><h4>🎛️ provider presets</h4><p><code>registerProvider</code> + commands to hot-swap between codex/Anthropic/local Qwen (your llama.cpp setup) per task type — cheap model for grunt work, big model for design.</p></div>
+  <div class="card"><h4>🔍 skill-lint command</h4><p><code>/skill-doctor</code>: scans loaded skills for references to tools Pi doesn't have (Claude-only MCP names) and reports which tier-2 skills still need porting.</p></div>
+</div>
+
+<h2><span class="n">6</span> Production hardening checklist</h2>
+<table>
+  <tr><th>Risk</th><th>Mitigation</th><th>Covered by</th></tr>
+  <tr><td>Secrets leaked into model context / logs</td><td>Output redaction before model sees tool results</td><td><span class="tag t-ok">pi-redact</span></td></tr>
+  <tr><td>Destructive commands (rm, force-push, prod DB)</td><td>tool_call interception + confirm</td><td><span class="tag t-p">custom guardrail.ts</span></td></tr>
+  <tr><td>Malicious project-local config (cloned repos)</td><td>Pi's project trust prompt + pi-mcp untrusted-by-default for project <code>mcp.json</code></td><td><span class="tag t-ok">built-in</span></td></tr>
+  <tr><td>Supply chain (installed pi packages run arbitrary TS)</td><td>Pin versions, read source before <code>pi install</code>, prefer npm-published over raw git</td><td><span class="tag t-warn">process</span></td></tr>
+  <tr><td>Company data through third-party MCP</td><td>Only local/self-authed MCP servers on Pi; no claude.ai relays; scoped tokens (Supabase read-only where possible)</td><td><span class="tag t-p">config policy</span></td></tr>
+  <tr><td>No audit trail</td><td>Sessions already persisted; add observability/telemetry when company use starts</td><td><span class="tag t-p">optional pkg</span></td></tr>
+</table>
+
+<h2><span class="n">7</span> Phased rollout</h2>
+
+<div class="phase"><div class="pnum"><div class="c">1</div><div class="l"></div></div><div class="pbody">
+  <h4>Skills unification <span class="eff">~15 min</span></h4>
+  <p>Add <code>"skills": ["~/.claude/skills"]</code> to Pi settings. Delete the 18 duplicated copies in <code>~/.pi/agent/skills/</code>. Verify with a Pi session that skill descriptions appear in system prompt.</p>
+</div></div>
+
+<div class="phase"><div class="pnum"><div class="c">2</div><div class="l"></div></div><div class="pbody">
+  <h4>MCP bridge <span class="eff">~30 min</span></h4>
+  <ul>
+    <li>Install <code>@spences10/pi-mcp</code></li>
+    <li><code>~/.pi/agent/mcp.json</code>: gfi-scout, paper, plan (copy from .claude.json) + Context7 with own key</li>
+    <li>Supabase + Notion official MCP with personal tokens (scoped)</li>
+  </ul>
+</div></div>
+
+<div class="phase"><div class="pnum"><div class="c">3</div><div class="l"></div></div><div class="pbody">
+  <h4>Harness packages <span class="eff">~30 min</span></h4>
+  <p>Install pi-subagents, pi-redact, pi-lsp. Smoke-test each: fan-out a subagent, echo a fake token through bash (must be redacted), open a TS project (must show diagnostics).</p>
+</div></div>
+
+<div class="phase"><div class="pnum"><div class="c">4</div><div class="l"></div></div><div class="pbody">
+  <h4>Custom guardrails <span class="eff">~1–2 h</span></h4>
+  <p>Write <code>guardrail.ts</code> (destructive-command intercept, .env read confirm). One test file that asserts blocked patterns actually block.</p>
+</div></div>
+
+<div class="phase"><div class="pnum"><div class="c">5</div><div class="l"></div></div><div class="pbody">
+  <h4>Workflow polish <span class="eff">iterative</span></h4>
+  <p>ship-report.ts, provider presets (incl. local Qwen), /skill-doctor, port tier-2 skills as needed. Driven by real daily use, not upfront.</p>
+</div></div>
+
+<div class="phase"><div class="pnum"><div class="c">6</div></div><div class="pbody">
+  <h4>Company-grade <span class="eff">when needed</span></h4>
+  <p>Observability/telemetry package, scoped tokens audit, pin all package versions, document the setup as a repo (<code>pi install git:</code> your own config repo = reproducible harness on any machine).</p>
+</div></div>
+
+<div class="callout info"><b>Endgame:</b> phase 6's config repo is the real "custom harness" — your whole Pi setup (extensions + mcp.json + settings + skill pointers) as one installable package. New machine, one command, identical rig.</div>
+
+<h2><span class="n">8</span> Open questions — decide before Phase 1</h2>
+<div class="q"><div class="qq">1. Primary model on Pi?</div><div class="qa">Currently gpt-5.5 via codex provider. Keep, or wire Anthropic API key too and swap per task? <b>Recommend: keep gpt-5.5 default, add Anthropic + local Qwen as presets in Phase 5.</b></div></div>
+<div class="q"><div class="qq">2. Which MCP servers does Pi really need day-1?</div><div class="qa">Proposed: gfi-scout, paper, plan, Context7, Supabase, Notion. Skip Gmail/Canva/media on Pi. <b>Recommend: confirm the skip-list.</b></div></div>
+<div class="q"><div class="qq">3. Company work boundary?</div><div class="qa">Does company policy allow personal-token MCP (Notion/Supabase) from a local agent? Affects Phase 2 scope. <b>Recommend: personal projects first, company after tokens reviewed.</b></div></div>
+<div class="q"><div class="qq">4. Guardrail strictness?</div><div class="qa">Block-and-ask (safer, slower) vs log-and-allow (faster, riskier) for destructive commands. <b>Recommend: block-and-ask for git force/rm/db-drop, log-only for the rest.</b></div></div>
+
+</div>

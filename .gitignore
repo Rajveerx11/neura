@@ -1,0 +1,8 @@
+# never commit secrets or machine state
+auth.json
+models.json
+*.env
+.env*
+**/sessions/
+**/todos.json
+node_modules/
