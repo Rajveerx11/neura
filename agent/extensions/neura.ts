@@ -162,13 +162,12 @@ function dashboard(): string[] {
   return lines;
 }
 
-function banner(): string[] {
+// pi caps widgets at 10 lines each — logo and dashboard are separate widgets
+function logoLines(): string[] {
   return [
     ...LOGO.map((l) => fg(ACC, l)),
     "",
-    `${fg(TXT, greeting())}  ${fg(DIM, "/dash toggles this dashboard")}`,
-    "",
-    ...dashboard(),
+    `${fg(TXT, greeting())}  ${fg(DIM, "/dash toggles the dashboard")}`,
   ];
 }
 
@@ -182,9 +181,19 @@ export default function (pi) {
   try { persona = fs.readFileSync(path.join(NEURA_DIR, "NEURA.md"), "utf-8"); } catch {}
 
   const show = (ctx, full: boolean) => {
-    try { ctx.ui.setWidget("neura", full ? banner() : dashboard()); visible = true; } catch {}
+    try {
+      if (full) ctx.ui.setWidget("neura-logo", logoLines());
+      ctx.ui.setWidget("neura-dash", dashboard());
+      visible = true;
+    } catch {}
   };
-  const hide = (ctx) => { try { ctx.ui.setWidget("neura", undefined); visible = false; } catch {} };
+  const hide = (ctx) => {
+    try {
+      ctx.ui.setWidget("neura-logo", undefined);
+      ctx.ui.setWidget("neura-dash", undefined);
+      visible = false;
+    } catch {}
+  };
 
   pi.on("session_start", (_e, ctx) => {
     // session-only theme: Theme INSTANCE path does not persist to settings,

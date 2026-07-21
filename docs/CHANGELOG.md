@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-21 — v1.4
+
+- **Fixed "(widget truncated)"**: pi caps each widget at 10 lines (`MAX_WIDGET_LINES`); logo+greeting+dashboard in one widget exceeded it. Split into two widgets (`neura-logo`, `neura-dash`), each within budget.
+- **Shloka feature removed**: Windows Terminal's cell-grid renderer breaks Devanagari conjuncts (रक्षितः → र क्ष ति) — complex-script shaping is a terminal limitation, unfixable from pi. Verses live on in git history if a GUI surface ever wants them.
+
 ## 2026-07-21 — Cockpit v1.2
 
 - **pi/neura split**: all Neura extensions gate on `NEURA` env var; `neura.cmd` sets it. Plain `pi` = stock agent (default theme, no persona/widgets/guardrails); `neura` = full custom. Theme applied session-only via `ctx.ui.setTheme(instance)` — never persisted to settings. Verified: `pi` answers "Pi", `neura` answers "Neura".
