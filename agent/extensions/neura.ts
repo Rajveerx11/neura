@@ -61,9 +61,8 @@ function todayTodos(): { text: string; done: boolean }[] {
 // ponytail: RRULE recurring masters are not expanded; single events + all-day covered
 let calEvents: string[] = [];
 
-function parseIcsToday(ics: string): string[] {
-  const today = new Date();
-  const y = today.getFullYear(), mo = today.getMonth(), da = today.getDate();
+function parseIcsDay(ics: string, day: Date): { t: number; label: string }[] {
+  const y = day.getFullYear(), mo = day.getMonth(), da = day.getDate();
   const out: { t: number; label: string }[] = [];
   for (const block of ics.split("BEGIN:VEVENT").slice(1)) {
     const body = block.split("END:VEVENT")[0];
@@ -79,7 +78,15 @@ function parseIcsToday(ics: string): string[] {
     const when = ts ? `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}` : "all-day";
     out.push({ t: ts ? start.getTime() : 0, label: `${when} ${sum[1].trim().slice(0, 30)}` });
   }
-  return out.sort((a, b) => a.t - b.t).slice(0, 4).map((e) => e.label);
+  return out.sort((a, b) => a.t - b.t);
+}
+
+function parseIcsToday(ics: string): string[] {
+  const today = parseIcsDay(ics, new Date());
+  if (today.length) return today.slice(0, 4).map((e) => e.label);
+  // nothing today (evening planning pattern) — show tomorrow, labeled
+  const tm = new Date(); tm.setDate(tm.getDate() + 1);
+  return parseIcsDay(ics, tm).slice(0, 4).map((e) => `tmrw ${e.label}`);
 }
 
 async function fetchCalendar(): Promise<string[]> {
