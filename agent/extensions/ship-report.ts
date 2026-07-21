@@ -12,6 +12,8 @@ When a work iteration completes (a batch of tasks done — not every tool call),
 Keep it short: proper headings, tight bullets, no walls of text.`;
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   pi.on("before_agent_start", (event) => {
     return { systemPrompt: event.systemPrompt + REPORT_RULES };
   });

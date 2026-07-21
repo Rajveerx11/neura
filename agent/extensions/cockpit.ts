@@ -6,7 +6,7 @@ const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const ACC = "#e8a34a", TEAL = "#4db8a8", RED = "#ef7373", YEL = "#ffcf5c", DIM = "#5e574a", MUT = "#9a917f";
+const ACC = "#3d8f7a", TEAL = "#7fc4ae", RED = "#e06c6c", YEL = "#d9a44a", DIM = "#4e5751", MUT = "#8a938e";
 
 function ctxBar(pct: number): string {
   const cells = 8, filled = Math.round((pct / 100) * cells);
@@ -36,6 +36,8 @@ function sessionCost(ctx): number | null {
 }
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   pi.on("session_start", (_e, ctx) => {
     try {
       ctx.ui.setFooter((tui, _theme, footerData) => ({

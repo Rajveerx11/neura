@@ -16,7 +16,7 @@ const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const ACC = "#e8a34a", GRN = "#4db8a8", PUR = "#f2c98a", DIM = "#5e574a", TXT = "#e6dfd2"; // saffron · teal · sand
+const ACC = "#3d8f7a", GRN = "#7fc4ae", PUR = "#8a938e", DIM = "#4e5751", TXT = "#dde3df"; // jade · mint · slate
 
 const LOGO = [
   "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
@@ -131,6 +131,8 @@ function banner(): string[] {
 // ---- extension ----
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   let visible = false;
   let persona = "";
   try { persona = fs.readFileSync(path.join(NEURA_DIR, "NEURA.md"), "utf-8"); } catch {}
@@ -140,7 +142,15 @@ export default function (pi) {
   };
   const hide = (ctx) => { try { ctx.ui.setWidget("neura", undefined); visible = false; } catch {} };
 
-  pi.on("session_start", (_e, ctx) => show(ctx, true)); // logo + greeting + dashboard on launch
+  pi.on("session_start", (_e, ctx) => {
+    // session-only theme: Theme INSTANCE path does not persist to settings,
+    // so plain `pi` keeps its own theme
+    try {
+      const t = ctx.ui.getTheme?.("neura-dark");
+      if (t) ctx.ui.setTheme?.(t);
+    } catch {}
+    show(ctx, true); // logo + greeting + dashboard on launch
+  });
   pi.on("agent_start", (_e, ctx) => hide(ctx));         // auto-hide once work starts
 
   pi.registerCommand("dash", {

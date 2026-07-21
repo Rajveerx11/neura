@@ -21,6 +21,8 @@ const CLAUDE_ONLY = [
 ];
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   pi.registerCommand("skill-doctor", {
     description: "Scan skills for Claude-only tool references that won't work in pi",
     handler: async (_args, ctx) => {

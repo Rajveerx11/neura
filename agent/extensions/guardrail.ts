@@ -16,6 +16,8 @@ const DESTRUCTIVE = [
 const SECRET_FILES = /\.env(\.[a-z]+)?$|id_rsa|id_ed25519|\.pem$|\.key$|auth\.json$|credentials/i;
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   pi.on("tool_call", async (event, ctx) => {
     // Destructive shell commands: block-and-ask
     if (event.toolName === "bash") {

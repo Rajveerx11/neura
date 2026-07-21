@@ -8,6 +8,8 @@ const PRESETS = {
 };
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   pi.registerProvider("local-qwen", {
     name: "Local Qwen (llama.cpp)",
     baseUrl: "http://127.0.0.1:8080/v1",

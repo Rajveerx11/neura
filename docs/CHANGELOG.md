@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-21 — Cockpit v1.2
+
+- **pi/neura split**: all Neura extensions gate on `NEURA` env var; `neura.cmd` sets it. Plain `pi` = stock agent (default theme, no persona/widgets/guardrails); `neura` = full custom. Theme applied session-only via `ctx.ui.setTheme(instance)` — never persisted to settings. Verified: `pi` answers "Pi", `neura` answers "Neura".
+- **Shlokas v2**: replaced with ~50 SHORT one-liner verses; compact 2-line display `॥ verse ॥` + `meaning — source`; grapheme-cluster width calc (Intl.Segmenter) fixes ragged Devanagari alignment.
+- **Palette v3**: saffron dropped from UI — muted jade `#3d8f7a` accent, mint `#7fc4ae`, slate, warm-neutral darks. Saffron `#e8a34a` reserved exclusively for the shloka.
+- **Font**: Windows Terminal defaults set to `Cascadia Code, Nirmala Text` (Devanagari fallback); backup at `settings.json.bak-neura`.
+
 ## 2026-07-21 — Cockpit v1.1 (rev 4)
 
 - **Palette**: blue dropped; saffron-gold scheme — accent `#e8a34a`, sand `#f2c98a`, teal `#4db8a8`, warm near-black backgrounds. Theme + all extensions recolored.

@@ -1,5 +1,6 @@
-// shloka — on every new session, one Sanskrit shloka bottom-right (below editor),
-// rotating through ~105 verses in ~/.pi/agent/neura/shlokas.json. Hides when work starts.
+// shloka — one short Sanskrit verse bottom-right on each new Neura session.
+// Compact 2-line display: ॥ verse ॥ over meaning — source. Rotates through
+// ~50 short verses in ~/.pi/agent/neura/shlokas.json. Neura-only (NEURA env).
 // Delete file to unwire.
 
 import * as fs from "node:fs";
@@ -13,11 +14,11 @@ const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const SAND = "#f2c98a", DIM = "#525b6e";
+const SAND = "#e8a34a", DIM = "#4e5751"; // saffron reserved for the shloka alone
 
-// terminal display width ~ chars minus ANSI codes and Devanagari combining marks
-const dispWidth = (s: string) =>
-  s.replace(/\x1b\[[0-9;]*m/g, "").replace(/[ऀ-ःऺ-्॑-ॗॢॣ]/g, "").length;
+// display width via grapheme clusters — handles Devanagari conjuncts/matras
+const seg = new Intl.Segmenter("hi", { granularity: "grapheme" });
+const dispWidth = (s: string) => [...seg.segment(s.replace(/\x1b\[[0-9;]*m/g, ""))].length;
 const rightAlign = (s: string, width: number) => " ".repeat(Math.max(0, width - dispWidth(s) - 1)) + s;
 
 function nextShloka(): { sa: string; en: string; src: string } | null {
@@ -32,6 +33,8 @@ function nextShloka(): { sa: string; en: string; src: string } | null {
 }
 
 export default function (pi) {
+  if (!process.env.NEURA) return; // plain `pi` stays stock
+
   pi.on("session_start", (_e, ctx) => {
     const s = nextShloka();
     if (!s) return;
@@ -39,13 +42,9 @@ export default function (pi) {
       ctx.ui.setWidget("neura-shloka", (_tui, _theme) => ({
         invalidate() {},
         render(width: number): string[] {
-          // ponytail: split long shlokas at the danda so lines stay readable
-          const parts = s.sa.split("। ").map((p, i, a) => (i < a.length - 1 ? p + "।" : p));
           return [
-            "",
-            ...parts.map((p) => rightAlign(fg(SAND, p), width)),
-            rightAlign(fg(DIM, `${s.en}`), width),
-            rightAlign(fg(DIM, `— ${s.src}`), width),
+            rightAlign(fg(SAND, `॥ ${s.sa} ॥`), width),
+            rightAlign(fg(DIM, `${s.en} — ${s.src}`), width),
           ];
         },
       }), { placement: "belowEditor" });
