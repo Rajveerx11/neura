@@ -76,7 +76,7 @@ function parseIcsDay(ics: string, day: Date): { t: number; label: string }[] {
     else start = new Date(+ds.slice(0, 4), +ds.slice(4, 6) - 1, +ds.slice(6, 8), +ts.slice(0, 2), +ts.slice(2, 4));
     if (start.getFullYear() !== y || start.getMonth() !== mo || start.getDate() !== da) continue;
     const when = ts ? `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}` : "all-day";
-    out.push({ t: ts ? start.getTime() : 0, label: `${when} ${sum[1].trim().slice(0, 30)}` });
+    out.push({ t: ts ? start.getTime() : 0, label: `${when} ${sum[1].trim().slice(0, 24)}` });
   }
   return out.sort((a, b) => a.t - b.t);
 }
@@ -116,6 +116,9 @@ function weekGoals(): string[] {
   return goals;
 }
 
+// not real projects: home dir, temp/scratchpad, worktrees, uuid-named session dirs
+const JUNK_PROJECT = /[0-9a-f]{8}-[0-9a-f]{4}|^Users-rajve$|^rajve$|Temp|scratchpad|worktrees/i;
+
 function recentProjects(): string[] {
   try {
     return fs.readdirSync(SESSIONS_DIR, { withFileTypes: true })
@@ -125,8 +128,9 @@ function recentProjects(): string[] {
         // "--C--Axon Landing Page--" -> "Axon Landing Page"
         const parts = e.name.replace(/^--|--$/g, "").split("--").filter(Boolean);
         const name = (parts.pop() || e.name).split(/[\\/]/).pop()!;
-        return { name: name.slice(0, 26), mtime: st.mtimeMs };
+        return { name: name.slice(0, 20), mtime: st.mtimeMs };
       })
+      .filter((p) => !JUNK_PROJECT.test(p.name))
       .sort((a, b) => b.mtime - a.mtime).slice(0, 4)
       .map((p) => {
         const days = Math.floor((Date.now() - p.mtime) / 86400000);
@@ -142,10 +146,12 @@ function recentProjects(): string[] {
 const COL = 34;
 const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 const pad = (s: string) => s + " ".repeat(Math.max(0, COL - strip(s).length));
+// hard cap raw cell text so a long entry can never bleed into the next column
+const fit = (s: string) => (s.length > COL - 3 ? s.slice(0, COL - 4) + "…" : s);
 
 function dashboard(): string[] {
-  const events = calEvents.map((e) => fg(TXT, e));
-  const todos = todayTodos().map((t) => `${t.done ? fg(DIM, "[x]") : fg(TXT, "[ ]")} ${fg(t.done ? DIM : TXT, t.text)}`);
+  const events = calEvents.map((e) => fg(TXT, fit(e)));
+  const todos = todayTodos().map((t) => `${t.done ? fg(DIM, "[x]") : fg(TXT, "[ ]")} ${fg(t.done ? DIM : TXT, fit(t.text).slice(0, COL - 8))}`);
   const todayCol = [...events, ...todos].slice(0, 5);
   const projects = recentProjects();
   const goals = weekGoals().map((g) => fg(TXT, g.slice(0, 30)));
