@@ -10,5 +10,7 @@
   "skills": [
     "~/.claude/skills"
   ],
-  "lastChangelogVersion": "0.81.1"
+  "lastChangelogVersion": "0.81.1",
+  "theme": "dark",
+  "quietStartup": true
 }
