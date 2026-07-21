@@ -5,7 +5,7 @@
   :root{
     --bg:#07090d; --panel:#0d1016; --panel2:#12151d; --line:#1a2030;
     --text:#d6dded; --dim:#828da3; --faint:#525b6e;
-    --acc:#7c9cff; --acc2:#57d4a8; --warn:#f0b754; --bad:#ef7373; --purple:#b78cf7; --orange:#f59d67;
+    --acc:#e8a34a; --acc2:#57d4a8; --warn:#f0b754; --bad:#ef7373; --purple:#4db8a8; --orange:#f59d67;
     --mono:'Cascadia Code','Consolas',monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -49,7 +49,7 @@
   .term .bar{background:#0c101a;padding:8px 14px;font-size:12px;color:var(--faint);display:flex;gap:8px;align-items:center}
   .term .dot{width:10px;height:10px;border-radius:50%}
   .term .body{padding:16px 18px}
-  .term .u{color:#9fc0ff}
+  .term .u{color:#f2c98a}
   .term .a{color:#c7d4ea}
   .term .d{color:#525b6e}
   .term .g{color:#57d4a8}
@@ -62,24 +62,24 @@
   .lbl{position:relative}
   .lbl .tip{position:absolute;right:-4px;top:-10px;background:var(--acc);color:var(--bg);font:600 10px/1 var(--mono);border-radius:8px;padding:3px 7px;z-index:2}
   .toolb{display:inline-block;font:600 11px/1 var(--mono);border-radius:4px;padding:3px 7px;margin-right:8px}
-  .tb-read{background:rgba(124,156,255,.18);color:#7c9cff}
-  .tb-write{background:rgba(87,212,168,.18);color:#57d4a8}
-  .tb-edit{background:rgba(183,140,247,.18);color:#b78cf7}
-  .tb-bash{background:rgba(245,157,103,.18);color:#f59d67}
+  .tb-read{background:rgba(242,201,138,.15);color:#f2c98a}
+  .tb-write{background:rgba(95,207,159,.15);color:#5fcf9f}
+  .tb-edit{background:rgba(77,184,168,.15);color:#4db8a8}
+  .tb-bash{background:rgba(222,143,107,.15);color:#de8f6b}
   .dash{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #2b3552;border-radius:6px;margin:10px 0;overflow:hidden}
   .dash .col{padding:8px 12px;border-right:1px solid #1a2030;font-size:12.5px}
   .dash .col:last-child{border-right:none}
   .dash .h{font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
   .dash li{list-style:none;color:#828da3;margin:2px 0}
   .banner{background:linear-gradient(90deg,rgba(124,156,255,.10),transparent);border-left:3px solid var(--acc);padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:10px}
-  .logo{font-family:var(--mono);font-size:10.5px;line-height:1.15;color:#7c9cff;white-space:pre;margin:2px 0 8px;text-shadow:0 0 18px rgba(124,156,255,.35)}
+  .logo{font-family:var(--mono);font-size:10.5px;line-height:1.15;color:#e8a34a;white-space:pre;margin:2px 0 8px;text-shadow:0 0 18px rgba(124,156,255,.35)}
   @media(max-width:760px){.g2{grid-template-columns:1fr}.dash{grid-template-columns:1fr}.dash .col{border-right:none;border-bottom:1px solid #1a2030}}
 </style>
 
 <div class="hero"><div class="wrap">
-  <div class="kicker">Phase 2 Proposal · rev 3 · 2026-07-21 · Awaiting confirmation — nothing implemented</div>
+  <div class="kicker">Phase 2 · rev 4 · 2026-07-21 · Cockpit BUILT &amp; LIVE — Part A (MCP) still waiting on tokens</div>
   <h1>MCP bridge + <span style="color:var(--acc)">Neura</span> — your personal agent on top of Pi</h1>
-  <p class="lead">Rev 3: zero emojis (symbols only), minimal footer, launches as <code>neura</code> with an ASCII logo. Part A unchanged (approved MCP set, waiting on tokens).</p>
+  <p class="lead">Rev 4: saffron-gold palette replaces blue, footer v2 with context meter + cost ramp, and a rotating Sanskrit shloka (105 verses) bottom-right on every new session. This document renders in the new palette.</p>
 </div></div>
 
 <div class="wrap">
@@ -137,11 +137,11 @@
     </div></div>
 
     <div class="lbl"><div class="dash">
-      <div class="col"><div class="h" style="color:#7c9cff">▸ Today</div>
+      <div class="col"><div class="h" style="color:#e8a34a">▸ Today</div>
         <li>[ ] wire Supabase MCP</li><li>[ ] rate limiter tests</li><li>[x] vet pi packages</li></div>
-      <div class="col"><div class="h" style="color:#57d4a8">▸ Projects</div>
+      <div class="col"><div class="h" style="color:#4db8a8">▸ Projects</div>
         <li>Axon Landing Page <span class="d">· 2d ago</span></li><li>Testing IDE <span class="d">· 5d ago</span></li><li>Visage growth <span class="d">· 1w ago</span></li></div>
-      <div class="col"><div class="h" style="color:#b78cf7">▸ This week</div>
+      <div class="col"><div class="h" style="color:#f2c98a">▸ This week</div>
         <li>Ship Neura v1</li><li>MCP bridge live</li><li>1 LinkedIn post</li></div>
       <div class="tip" style="position:absolute;right:-4px;top:-10px">DASHBOARD · /dash toggles</div>
     </div></div>
@@ -158,14 +158,19 @@
     </div>
 
     <div class="lbl"><div class="widget">⠹ working · bash · 12s &nbsp;·&nbsp; ● subagents: 1 (review) &nbsp;·&nbsp; ▪ redact: 3 caught<div class="tip">OPS STRIP · auto-hides when idle</div></div></div>
-    <div class="lbl"><div class="editor">█ type your message… &nbsp;<span class="d">(/todo · /goal · /dash · /preset · /skill-doctor)</span><div class="tip">EDITOR</div></div></div>
-    <div class="lbl"><div class="footer"><span><span class="g">●</span> gpt-5.5</span><span class="p">main*</span><span>ctx <span class="y">41%</span></span><span>$0.84</span><div class="tip">FOOTER · 4 fields only</div></div></div>
+    <div class="lbl"><div class="editor">█ type your message… &nbsp;<span class="d">(/dash · /preset · /skill-doctor)</span><div class="tip">EDITOR</div></div></div>
+    <div class="lbl"><div style="text-align:right;color:#f2c98a;margin:8px 0 2px;line-height:1.9">उद्यमेन हि सिध्यन्ति कार्याणि न मनोरथैः।<br>न हि सुप्तस्य सिंहस्य प्रविशन्ति मुखे मृगाः॥<br><span class="d" style="font-size:12px">Work succeeds through effort, not wishes — deer do not walk into a sleeping lion's mouth.<br>— Hitopadesha</span><div class="tip">SHLOKA · rotates each session, 105 verses</div></div></div>
+    <div class="lbl"><div class="footer" style="justify-content:flex-start;gap:0"><span><span style="color:#e8a34a">▊</span> gpt-5.5</span><span class="d">&nbsp;&nbsp;·&nbsp;&nbsp;</span><span class="p">main*</span><span class="d">&nbsp;&nbsp;·&nbsp;&nbsp;</span><span><span style="color:#e8a34a">▰▰▰</span><span class="d">▱▱▱▱▱</span> 41%</span><span class="d">&nbsp;&nbsp;·&nbsp;&nbsp;</span><span>$0.84</span><div class="tip">FOOTER v2 · ctx meter + cost ramp</div></div></div>
   </div>
 </div>
 
-<h3>The spec, piece by piece</h3>
+<h3>Rev 4 changes — built and live</h3>
 <table>
-  <tr><th>Change</th><th>How it works</th><th>Feasibility</th></tr>
+  <tr><th>Change</th><th>How it works</th><th>Status</th></tr>
+  <tr><td><b>Saffron-gold palette</b></td><td>Blue is gone. New scheme: saffron <code>#e8a34a</code> accent, sand <code>#f2c98a</code>, teal <code>#4db8a8</code> secondary, warm near-black backgrounds. Theme, dashboard, logo, footer all recolored — and it pairs with the shloka's cultural note.</td><td><span class="tag t-ok">Live</span></td></tr>
+  <tr><td><b>Footer v2</b></td><td>Left-aligned, tight <code>·</code> gaps. Model gets a saffron block-mark <code>▊</code>. Context is now a meter: <code>▰▰▰▱▱▱▱▱ 41%</code> (saffron → amber &gt;60% → red &gt;85%). Cost color-ramps: quiet under $2, amber to $10, red past it.</td><td><span class="tag t-ok">Live</span></td></tr>
+  <tr><td><b>Sanskrit shloka</b></td><td>Every new session, one verse bottom-right (below editor): Devanagari in sand, English meaning + source in dim. Curated collection of ~105 verses — Bhagavad Gita, Upanishads, shanti mantras, Chanakya Niti, Panchatantra, Hitopadesha, subhashitas — rotating sequentially so nothing repeats until all are seen. Hides when work starts.</td><td><span class="tag t-ok">Live</span></td></tr>
+  <tr><th>Earlier spec</th><th>How it works</th><th>Status</th></tr>
   <tr><td><b><code>neura</code> launch command</b></td><td>Shim on PATH (<code>neura.cmd</code> + PowerShell alias) that runs Pi with the Neura profile. You type <code>neura</code>, never <code>pi</code>. Window/tab title set to "neura".</td><td><span class="tag t-ok">Simple shim</span></td></tr>
   <tr><td><b>ASCII logo on launch</b></td><td>Block-style NEURA wordmark (shown in mockup) printed as the session-start banner, accent-colored, followed by the greeting. Rendered via startup widget; hides once you start typing.</td><td><span class="tag t-ok">Documented API</span></td></tr>
   <tr><td><b>No emojis, ever</b></td><td>Hard rule across all surfaces: geometric symbols only (● ▸ ▪ ◆ ⠹ box-drawing). Also written into NEURA.md so the model's own replies stay emoji-free.</td><td><span class="tag t-ok">Style rule</span></td></tr>

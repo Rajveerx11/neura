@@ -1,12 +1,23 @@
-// cockpit — minimal Neura footer: model · branch · ctx% · cost, tight gaps.
-// Extension statuses (subagents etc.) appear as a second line only when present.
-// Delete file to unwire (built-in footer returns).
+// cockpit v2 — Neura footer: model · branch · ctx meter · cost, tight gaps, saffron palette.
+// ctx% renders as an 8-cell bar; cost color-ramps by spend. Extension statuses show as a
+// second line only when present. Delete file to unwire (built-in footer returns).
 
 const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const ACC = "#7c9cff", GRN = "#57d4a8", YEL = "#f0b754", DIM = "#525b6e", MUT = "#828da3", PUR = "#b78cf7";
+const ACC = "#e8a34a", TEAL = "#4db8a8", RED = "#ef7373", YEL = "#ffcf5c", DIM = "#5e574a", MUT = "#9a917f";
+
+function ctxBar(pct: number): string {
+  const cells = 8, filled = Math.round((pct / 100) * cells);
+  const color = pct > 85 ? RED : pct > 60 ? YEL : ACC;
+  return fg(color, "▰".repeat(filled)) + fg(DIM, "▱".repeat(cells - filled)) + " " + fg(MUT, Math.round(pct) + "%");
+}
+
+function costTag(cost: number): string {
+  const color = cost >= 10 ? RED : cost >= 2 ? YEL : MUT;
+  return fg(color, "$" + cost.toFixed(2));
+}
 
 function sessionCost(ctx): number | null {
   // ponytail: sum whatever usage/cost shape assistant messages carry; null when unknown
@@ -31,16 +42,16 @@ export default function (pi) {
         invalidate() {},
         render(_width: number): string[] {
           const parts: string[] = [];
-          parts.push(fg(GRN, "●") + " " + fg(MUT, ctx.model?.id ?? "no model"));
+          parts.push(fg(ACC, "▊ ") + fg(MUT, ctx.model?.id ?? "no model"));
           const branch = footerData.getGitBranch?.();
-          if (branch) parts.push(fg(PUR, branch));
+          if (branch) parts.push(fg(TEAL, branch));
           try {
             const u = ctx.getContextUsage?.();
             const pct = u?.percent ?? (u?.tokens && u?.contextWindow ? (u.tokens / u.contextWindow) * 100 : null);
-            if (pct != null) parts.push(fg(MUT, "ctx ") + fg(pct > 75 ? YEL : MUT, Math.round(pct) + "%"));
+            if (pct != null) parts.push(ctxBar(pct));
           } catch {}
           const cost = sessionCost(ctx);
-          if (cost != null) parts.push(fg(MUT, "$" + cost.toFixed(2)));
+          if (cost != null) parts.push(costTag(cost));
           const lines = [" " + parts.join(fg(DIM, "  ·  "))];
           // ops line: only when an extension publishes status (subagents, lsp, ...)
           try {

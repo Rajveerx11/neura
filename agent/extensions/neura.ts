@@ -16,7 +16,7 @@ const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const ACC = "#7c9cff", GRN = "#57d4a8", PUR = "#b78cf7", DIM = "#525b6e", TXT = "#d6dded";
+const ACC = "#e8a34a", GRN = "#4db8a8", PUR = "#f2c98a", DIM = "#5e574a", TXT = "#e6dfd2"; // saffron · teal · sand
 
 const LOGO = [
   "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
