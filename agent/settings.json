@@ -5,7 +5,8 @@
     "npm:@ollama/pi-web-search",
     "npm:@spences10/pi-redact",
     "npm:@spences10/pi-lsp",
-    "npm:pi-subagents"
+    "npm:pi-subagents",
+    "npm:@spences10/pi-mcp"
   ],
   "skills": [
     "~/.claude/skills"

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-22 — v1.5 (Phase 2 Part A: MCP bridge)
+
+- **`@spences10/pi-mcp@0.0.53` installed** (source-vetted: no lifecycle scripts, spawn/fetch only for configured servers, restricted child env via `pi-child-env`).
+- **`agent/mcp.json`** — 6 servers: gfi-scout, paper (localhost HTTP), plan (hosted, OAuth pending), context7, supabase (`--read-only`), notion. Zero secrets in the file.
+- **Token pass-through via allowlist, not `${VAR}`**: pi-mcp does NOT expand `${VAR}` in stdio `env` blocks (only HTTP headers). Instead `MY_PI_MCP_ENV_ALLOWLIST=GITHUB_TOKEN,CONTEXT7_API_KEY,SUPABASE_ACCESS_TOKEN,NOTION_TOKEN` (user env var) passes ambient tokens to servers that read their own env.
+- **npx servers wrapped as `cmd /c npx ...`** — pi-mcp spawns without `shell:true`; `.cmd` shims fail on modern Node (EINVAL).
+- **`GITHUB_TOKEN` moved to user env var** (from `.claude.json` plaintext — rotation still pending, old copy still in `.claude.json` until rotated).
+- Verified headless with eager connect: gfi-scout 4 tools, context7 2 tools (keyless mode), notion 28 tools registered. Supabase/paper/plan pending token / app running / OAuth. Default stays lazy connect — no startup noise.
+
 ## 2026-07-21 — v1.4
 
 - **Fixed "(widget truncated)"**: pi caps each widget at 10 lines (`MAX_WIDGET_LINES`); logo+greeting+dashboard in one widget exceeded it. Split into two widgets (`neura-logo`, `neura-dash`), each within budget.

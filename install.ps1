@@ -10,6 +10,7 @@ Copy-Item "$repo\agent\extensions\*" "$agent\extensions\" -Force
 Copy-Item "$repo\agent\themes\*" "$agent\themes\" -Force
 Copy-Item "$repo\agent\neura\*" "$agent\neura\" -Force
 Copy-Item "$repo\launcher\neura.cmd" "$bin\" -Force
+Copy-Item "$repo\agent\mcp.json" "$agent\" -Force  # no secrets — tokens flow via MY_PI_MCP_ENV_ALLOWLIST env vars
 
 # settings.json: don't clobber an existing one blindly
 $target = "$agent\settings.json"
