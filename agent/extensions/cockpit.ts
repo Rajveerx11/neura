@@ -6,7 +6,7 @@ const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const ACC = "#3d8f7a", TEAL = "#7fc4ae", RED = "#e06c6c", YEL = "#d9a44a", DIM = "#4e5751", MUT = "#8a938e";
+const ACC = "#a583d9", TEAL = "#d495b5", RED = "#e06c6c", YEL = "#d9a44a", DIM = "#56525e", MUT = "#8d8a94"; // orchid dusk
 
 function ctxBar(pct: number): string {
   const cells = 8, filled = Math.round((pct / 100) * cells);

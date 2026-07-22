@@ -16,7 +16,7 @@ const fg = (hex: string, s: string) => {
   const n = parseInt(hex.slice(1), 16);
   return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
 };
-const ACC = "#3d8f7a", GRN = "#7fc4ae", PUR = "#8a938e", DIM = "#4e5751", TXT = "#dde3df"; // jade · mint · slate
+const ACC = "#a583d9", ROSE = "#d495b5", MUT = "#8d8a94", DIM = "#56525e", TXT = "#e5e0e6"; // orchid dusk: violet · rose · plum-gray
 
 const LOGO = [
   "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
@@ -75,8 +75,8 @@ function parseIcsDay(ics: string, day: Date): { t: number; label: string }[] {
     else if (zulu) start = new Date(Date.UTC(+ds.slice(0, 4), +ds.slice(4, 6) - 1, +ds.slice(6, 8), +ts.slice(0, 2), +ts.slice(2, 4)));
     else start = new Date(+ds.slice(0, 4), +ds.slice(4, 6) - 1, +ds.slice(6, 8), +ts.slice(0, 2), +ts.slice(2, 4));
     if (start.getFullYear() !== y || start.getMonth() !== mo || start.getDate() !== da) continue;
-    const when = ts ? `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}` : "all-day";
-    out.push({ t: ts ? start.getTime() : 0, label: `${when} ${sum[1].trim().slice(0, 24)}` });
+    // no times shown — sorted chronologically, name only
+    out.push({ t: ts ? start.getTime() : 0, label: sum[1].trim().slice(0, 26) });
   }
   return out.sort((a, b) => a.t - b.t);
 }
@@ -117,7 +117,7 @@ function weekGoals(): string[] {
 }
 
 // not real projects: home dir, temp/scratchpad, worktrees, uuid-named session dirs
-const JUNK_PROJECT = /[0-9a-f]{8}-[0-9a-f]{4}|^Users-rajve$|^rajve$|Temp|scratchpad|worktrees/i;
+const JUNK_PROJECT = /[0-9a-f]{8}-[0-9a-f]{4}|^Users-rajve$|^rajve$|Temp|scratchpad|worktre|\.claude/i;
 
 function recentProjects(): string[] {
   try {
@@ -128,42 +128,39 @@ function recentProjects(): string[] {
         // "--C--Axon Landing Page--" -> "Axon Landing Page"
         const parts = e.name.replace(/^--|--$/g, "").split("--").filter(Boolean);
         const name = (parts.pop() || e.name).split(/[\\/]/).pop()!;
-        return { name: name.slice(0, 20), mtime: st.mtimeMs };
+        return { name, mtime: st.mtimeMs };
       })
-      .filter((p) => !JUNK_PROJECT.test(p.name))
+      .filter((p) => !JUNK_PROJECT.test(p.name)) // filter BEFORE truncation, else "…worktre" slips through
       .sort((a, b) => b.mtime - a.mtime).slice(0, 4)
-      .map((p) => {
-        const days = Math.floor((Date.now() - p.mtime) / 86400000);
-        const ago = days === 0 ? "today" : days === 1 ? "1d ago" : days < 7 ? `${days}d ago` : `${Math.floor(days / 7)}w ago`;
-        return `${p.name} ${fg(DIM, "· " + ago)}`;
-      });
+      .map((p) => p.name.slice(0, 24));
   } catch { return []; }
 }
 
 // ---- rendering ----
 
-// ponytail: fixed 34-char columns; a width-aware renderer can come later
-const COL = 34;
+// ponytail: fixed 32-char columns; a width-aware renderer can come later
+const COL = 32;
 const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 const pad = (s: string) => s + " ".repeat(Math.max(0, COL - strip(s).length));
 // hard cap raw cell text so a long entry can never bleed into the next column
-const fit = (s: string) => (s.length > COL - 3 ? s.slice(0, COL - 4) + "…" : s);
+const fit = (s: string) => (s.length > COL - 4 ? s.slice(0, COL - 5) + "…" : s);
 
 function dashboard(): string[] {
-  const events = calEvents.map((e) => fg(TXT, fit(e)));
+  const events = calEvents.map((e) => `${fg(ACC, "•")} ${fg(TXT, fit(e))}`);
   const todos = todayTodos().map((t) => `${t.done ? fg(DIM, "[x]") : fg(TXT, "[ ]")} ${fg(t.done ? DIM : TXT, fit(t.text).slice(0, COL - 8))}`);
   const todayCol = [...events, ...todos].slice(0, 5);
-  const projects = recentProjects();
-  const goals = weekGoals().map((g) => fg(TXT, g.slice(0, 30)));
+  const projects = recentProjects().map((p) => `${fg(ROSE, "•")} ${fg(TXT, fit(p))}`);
+  const goals = weekGoals().map((g) => `${fg(MUT, "•")} ${fg(TXT, fit(g))}`);
   const cols: [string, string[]][] = [
     [fg(ACC, "▸ Today"), todayCol.length ? todayCol : [fg(DIM, "nothing scheduled")]],
-    [fg(GRN, "▸ Projects"), projects.length ? projects : [fg(DIM, "none yet")]],
-    [fg(PUR, "▸ This week"), goals.length ? goals : [fg(DIM, "no open goals")]],
+    [fg(ROSE, "▸ Projects"), projects.length ? projects : [fg(DIM, "none yet")]],
+    [fg(MUT, "▸ This week"), goals.length ? goals : [fg(DIM, "no open goals")]],
   ];
   const rows = Math.max(...cols.map(([, c]) => c.length)) + 1;
+  const sep = fg(DIM, " │ ");
   const lines: string[] = [];
   for (let r = 0; r < rows; r++) {
-    lines.push(cols.map(([h, c]) => pad(r === 0 ? h : c[r - 1] ?? "")).join(""));
+    lines.push(cols.map(([h, c]) => pad(r === 0 ? h : c[r - 1] ?? "")).join(sep));
   }
   return lines;
 }

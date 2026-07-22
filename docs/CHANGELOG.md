@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-22 — v1.6.1 (dashboard redesign + palette v4 "orchid dusk")
+
+- **Palette v4**: jade/mint dropped (third rejected palette: blue, saffron, jade). New "orchid dusk" — violet `#a583d9` accent, rose `#d495b5` secondary, ivory text `#e5e0e6`, plum-gray neutrals. Chosen from 4 candidates rendered live as terminal swatches. Applied across neura.ts, cockpit.ts, and all decorative theme tokens; semantic colors (diff green/red, warning amber, error red) kept.
+- **Dashboard layout**: dim `│` separators between columns; every list entry is a bullet (`•` in the column's accent color); calendar events show name only (times dropped, still sorted chronologically, `tmrw` prefix stays); project entries show name only ("Xw ago" dropped); columns 34 → 32 chars (same total width with separators).
+- **Junk-filter bug fixed**: filter ran on the truncated name, so `Test-.claude-worktre` (cut before "worktrees" completed) slipped through. Filter now runs on the full name, plus `worktre` and `\.claude` patterns.
+
 ## 2026-07-22 — v1.6 (Phase 3A: self-verification via proof-of-work)
 
 - **`check-gate.ts`** — Neura now verifies its own work with Rajveer's own [proof-of-work](https://github.com/Rajveerx11/proof-of-work) (`uvx --from proof-of-work-agent`, zero install, Python 3.11 + uv confirmed on machine).
