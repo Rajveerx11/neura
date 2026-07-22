@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-22 — v1.5.1
+
+- **Hosted plan server removed from mcp.json** — its OAuth serves plan.agent-native.com (hosted visual plans); Rajveer's visual plans are always local HTML files opened in Zen, so the server has no use. Down to 5 servers.
+
 ## 2026-07-22 — v1.5 (Phase 2 Part A: MCP bridge)
 
 - **`@spences10/pi-mcp@0.0.53` installed** (source-vetted: no lifecycle scripts, spawn/fetch only for configured servers, restricted child env via `pi-child-env`).

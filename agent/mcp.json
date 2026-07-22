@@ -6,9 +6,6 @@
     "paper": {
       "url": "http://127.0.0.1:29979/mcp"
     },
-    "plan": {
-      "url": "https://plan.agent-native.com/_agent-native/mcp"
-    },
     "context7": {
       "command": "cmd",
       "args": ["/c", "npx", "-y", "@upstash/context7-mcp"]

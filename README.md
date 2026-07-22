@@ -17,7 +17,7 @@ Launch with `neura` in any terminal.
 | Skill doctor | `agent/extensions/skill-doctor.ts` | `/skill-doctor` scans skill dirs for Claude-only tool references that won't work in pi |
 | Autogit | `agent/extensions/autogit.ts` | Pre-existing: auto stage→commit→push after agent turns (needs `autogit` on PATH) |
 | Theme | `agent/themes/neura-dark.json` | Near-black theme, jade accent `#3d8f7a`, all 51 tokens |
-| MCP bridge | `agent/mcp.json` | 6 servers via `@spences10/pi-mcp`: gfi-scout · paper · plan · Context7 · Supabase (read-only) · Notion. Tokens flow through `MY_PI_MCP_ENV_ALLOWLIST` user env vars — never in the file |
+| MCP bridge | `agent/mcp.json` | 5 servers via `@spences10/pi-mcp`: gfi-scout · paper · Context7 · Supabase (read-only) · Notion. Tokens flow through `MY_PI_MCP_ENV_ALLOWLIST` user env vars — never in the file |
 | Persona | `agent/neura/NEURA.md` | Names the agent Neura, terse root-cause engineering style, **no emojis ever** |
 | Launcher | `launcher/neura.cmd` | `neura` command (goes in `~/.local/bin`, on PATH) |
 | Config | `agent/settings.json` | gpt-5.5 default, neura-dark theme, packages, skills pointed at `~/.claude/skills` |
@@ -47,7 +47,7 @@ powershell -File C:\Neura\install.ps1
 ## Roadmap
 
 - **Done (2026-07-21)**: Phase 1 (skills unification), packages, guardrails, cockpit v1 (Neura identity, dashboard, footer, theme, launcher)
-- **Done (2026-07-22)**: Phase 2 Part A — MCP bridge (`@spences10/pi-mcp` + `agent/mcp.json`). Context7/Supabase/Notion reach full power once their tokens are set as user env vars; plan server needs one-time OAuth (`npx @agent-native/core@latest connect https://plan.agent-native.com`).
+- **Done (2026-07-22)**: Phase 2 Part A — MCP bridge (`@spences10/pi-mcp` + `agent/mcp.json`). Context7/Supabase/Notion reach full power once their tokens are set as user env vars. Hosted plan server dropped — visual plans are always local HTML, never the hosted service.
 - **v1.1**: per-tool color badges (needs built-in tool override), width-aware dashboard columns.
 
 Plans for each phase are in `plans/` (self-contained HTML, open in any browser). Change history in `docs/CHANGELOG.md`.
