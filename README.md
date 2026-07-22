@@ -17,7 +17,7 @@ Launch with `neura` in any terminal.
 | Check gate | `agent/extensions/check-gate.ts` | Self-verification via [proof-of-work](https://github.com/Rajveerx11/proof-of-work): quick tamper scan (`--no-tests`) after every turn that changed the working tree, failures fed back to the agent (1 retry cap); `/ship` runs the full check — real tests + signed audit-log verdict |
 | Skill doctor | `agent/extensions/skill-doctor.ts` | `/skill-doctor` scans skill dirs for Claude-only tool references that won't work in pi |
 | Autogit | `agent/extensions/autogit.ts` | Pre-existing: auto stage→commit→push after agent turns (needs `autogit` on PATH) |
-| Theme | `agent/themes/neura-dark.json` | Near-black theme, jade accent `#3d8f7a`, all 51 tokens |
+| Theme | `agent/themes/neura-dark.json` | Near-black theme, "orchid dusk" palette — violet `#a583d9` + rose `#d495b5`, all 51 tokens |
 | MCP bridge | `agent/mcp.json` | 5 servers via `@spences10/pi-mcp`: gfi-scout · paper · Context7 · Supabase (read-only) · Notion. Tokens flow through `MY_PI_MCP_ENV_ALLOWLIST` user env vars — never in the file |
 | Persona | `agent/neura/NEURA.md` | Names the agent Neura, terse root-cause engineering style, **no emojis ever** |
 | Launcher | `launcher/neura.cmd` | `neura` command (goes in `~/.local/bin`, on PATH) |
