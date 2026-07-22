@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-22 — v1.6 (Phase 3A: self-verification via proof-of-work)
+
+- **`check-gate.ts`** — Neura now verifies its own work with Rajveer's own [proof-of-work](https://github.com/Rajveerx11/proof-of-work) (`uvx --from proof-of-work-agent`, zero install, Python 3.11 + uv confirmed on machine).
+  - Quick gate: after every agent run that changed the working tree, `proof-of-work check --no-tests --json --base HEAD` runs; on FAIL the block/warn reasons are fed back via `pi.sendUserMessage(..., {deliverAs:"followUp"})` so the agent fixes itself — capped at 1 auto-retry per user prompt.
+  - `/ship`: full check (real test re-run, coverage, verdict signed into the hash-chained audit log).
+  - **Dirty detection is tree-fingerprint, not tool-name**: sha1 of `git status --porcelain` + `git diff HEAD` compared between `agent_start` and `agent_settled`. First attempt watched `edit`/`write` tool calls and missed the agent appending via `bash` — snapshot compare catches every mutation path.
+  - Verified: `--base HEAD` sees **unstaged** worktree changes (caught a planted `sys.exit(0)` fake-pass as BLOCK in the scratch-repo test).
+  - Gated `ctx.hasUI`: print mode (`pi -p`) tears down before async handlers finish and never processes follow-ups — gate is interactive-only; late `ctx` uses wrapped so a mid-check session switch can't crash the harness.
+- Supermemory evaluated for Phase 3C memory: deferred — service+database is too heavy for the fact-file need, but it ships an MCP server, so it can drop into `mcp.json` later with zero code if deep semantic recall becomes real.
+
 ## 2026-07-22 — v1.5.1
 
 - **Hosted plan server removed from mcp.json** — its OAuth serves plan.agent-native.com (hosted visual plans); Rajveer's visual plans are always local HTML files opened in Zen, so the server has no use. Down to 5 servers.
