@@ -1,4 +1,5 @@
 # never commit secrets or machine state
+MEMORY.md
 auth.json
 models.json
 *.env

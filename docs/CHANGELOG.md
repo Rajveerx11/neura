@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-23 — v1.8 (Phase 3C: persistent memory + context sidecar)
+
+- **`neura-memory.ts`** — cross-session memory, Claude Code model: `~/.pi/agent/neura/MEMORY.md`, one bullet per fact, injected into every turn's system prompt; the agent is told the path so it can update its own memory with file tools. `/remember <fact>` saves (dated), `/memory` shows. Verified: fact recalled in a fresh headless session. MEMORY.md gitignored — personal data stays out of the repo.
+- **`@spences10/pi-context@0.1.12` installed** (vetted: no network, no child processes, local SQLite only) — oversized tool/MCP output lands in a searchable sidecar instead of being truncated at 50 KiB; pi-mcp integrates with it automatically.
+- Supermemory decision recorded: deferred — its MCP server can drop into mcp.json later if deep semantic recall over long history becomes a real need.
+- Phase 3 (A+B+C) complete: Neura now verifies its own work, can undo its own edits, and remembers across sessions.
+
 ## 2026-07-23 — v1.7 (Phase 3B: /undo checkpoints + error fixes + launch polish)
 
 - **`checkpoint.ts` (Phase 3B)** — silent worktree snapshot before every agent run via git plumbing (throwaway `GIT_INDEX_FILE` + `write-tree`; no stash entries, worktree untouched). `/undo` restores the last snapshot (state before /undo is itself snapshotted, so /undo is reversible); `/undo list` shows the session's snapshots. Plumbing verified end-to-end in a scratch repo, incl. restoring a deleted file. Deliberate limits: `.gitignore`d files excluded (`--force` would drag node_modules into git objects), files created after a snapshot are left in place (never auto-delete untracked work), in-memory only.
