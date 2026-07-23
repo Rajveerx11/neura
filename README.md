@@ -14,6 +14,7 @@ Launch with `neura` in any terminal.
 | Guardrails | `agent/extensions/guardrail.ts` | Block-and-ask on destructive commands (rm -rf, force-push, DROP TABLE, Remove-Item -Recurse -Force, disk format) and secret-file access (.env, keys, credentials) — pi ships with no permission system, this is it |
 | Report format | `agent/extensions/ship-report.ts` | Injects the end-of-iteration report format (What / Why / Do now / Takeaway) into every turn |
 | Model presets | `agent/extensions/presets.ts` | `/preset gpt` ↔ `/preset qwen`; registers local llama.cpp (Qwen3-Coder-30B) as a provider at `127.0.0.1:8080/v1` |
+| Checkpoints | `agent/extensions/checkpoint.ts` | Silent worktree snapshot (git plumbing, throwaway index) before every agent run; `/undo` restores, `/undo list` inspects; /undo itself is reversible |
 | Check gate | `agent/extensions/check-gate.ts` | Self-verification via [proof-of-work](https://github.com/Rajveerx11/proof-of-work): quick tamper scan (`--no-tests`) after every turn that changed the working tree, failures fed back to the agent (1 retry cap); `/ship` runs the full check — real tests + signed audit-log verdict |
 | Skill doctor | `agent/extensions/skill-doctor.ts` | `/skill-doctor` scans skill dirs for Claude-only tool references that won't work in pi |
 | Autogit | `agent/extensions/autogit.ts` | Pre-existing: auto stage→commit→push after agent turns (needs `autogit` on PATH) |

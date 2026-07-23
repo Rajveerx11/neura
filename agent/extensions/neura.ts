@@ -18,6 +18,13 @@ const fg = (hex: string, s: string) => {
 };
 const ACC = "#a583d9", ROSE = "#d495b5", MUT = "#8d8a94", DIM = "#56525e", TXT = "#e5e0e6"; // orchid dusk: violet · rose · plum-gray
 
+// linear blend between two hex colors, t in [0,1] — used for the logo gradient
+function mix(a: string, b: string, t: number): string {
+  const A = parseInt(a.slice(1), 16), B = parseInt(b.slice(1), 16);
+  const ch = (sh: number) => Math.round(((A >> sh) & 255) + (((B >> sh) & 255) - ((A >> sh) & 255)) * t);
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, "0")}`;
+}
+
 const LOGO = [
   "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
   "████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔══██╗",
@@ -161,16 +168,20 @@ function dashboard(): string[] {
   const lines: string[] = [];
   for (let r = 0; r < rows; r++) {
     lines.push(cols.map(([h, c]) => pad(r === 0 ? h : c[r - 1] ?? "")).join(sep));
+    // hairline rule under the header row, crosses aligned with the column separators
+    if (r === 0) lines.push(cols.map(() => fg(DIM, "─".repeat(COL))).join(fg(DIM, "─┼─")));
   }
   return lines;
 }
 
 // pi caps widgets at 10 lines each — logo and dashboard are separate widgets
 function logoLines(): string[] {
+  const date = new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
   return [
-    ...LOGO.map((l) => fg(ACC, l)),
+    // vertical violet -> rose gradient down the wordmark
+    ...LOGO.map((l, i) => fg(mix(ACC, ROSE, i / (LOGO.length - 1)), l)),
     "",
-    `${fg(TXT, greeting())}  ${fg(DIM, "/dash toggles the dashboard")}`,
+    `${fg(TXT, greeting())}  ${fg(DIM, `${date} · /dash toggles the dashboard`)}`,
   ];
 }
 

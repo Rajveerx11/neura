@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-23 — v1.7 (Phase 3B: /undo checkpoints + error fixes + launch polish)
+
+- **`checkpoint.ts` (Phase 3B)** — silent worktree snapshot before every agent run via git plumbing (throwaway `GIT_INDEX_FILE` + `write-tree`; no stash entries, worktree untouched). `/undo` restores the last snapshot (state before /undo is itself snapshotted, so /undo is reversible); `/undo list` shows the session's snapshots. Plumbing verified end-to-end in a scratch repo, incl. restoring a deleted file. Deliberate limits: `.gitignore`d files excluded (`--force` would drag node_modules into git objects), files created after a snapshot are left in place (never auto-delete untracked work), in-memory only.
+- **autogit "not found on PATH" fixed** — npm installs autogit as `.ps1`/`.cmd` shims; Windows `spawn("autogit")` needs `cmd /c`. Also mutes to a single notice per session when autogit genuinely isn't installed (was two red errors every turn).
+- **MCP startup warnings silenced** — paper (app rarely running) and supabase (token not set) marked `"disabled": true` in mcp.json; re-enable with `/mcp enable paper` / `/mcp enable supabase` when ready.
+- **Packages updated** via `pi update --extensions` (pi-lsp, pi-mcp).
+- **Launch polish**: logo gets a vertical violet→rose gradient (truecolor lerp), greeting line shows the date, dashboard headers get a dim hairline rule with `┼` crosses aligned to the column separators.
+
 ## 2026-07-22 — v1.6.1 (dashboard redesign + palette v4 "orchid dusk")
 
 - **Palette v4**: jade/mint dropped (third rejected palette: blue, saffron, jade). New "orchid dusk" — violet `#a583d9` accent, rose `#d495b5` secondary, ivory text `#e5e0e6`, plum-gray neutrals. Chosen from 4 candidates rendered live as terminal swatches. Applied across neura.ts, cockpit.ts, and all decorative theme tokens; semantic colors (diff green/red, warning amber, error red) kept.

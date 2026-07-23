@@ -4,7 +4,8 @@
       "command": "C:\\Users\\rajve\\.local\\bin\\gfi-scout.exe"
     },
     "paper": {
-      "url": "http://127.0.0.1:29979/mcp"
+      "url": "http://127.0.0.1:29979/mcp",
+      "disabled": true
     },
     "context7": {
       "command": "cmd",
@@ -12,7 +13,8 @@
     },
     "supabase": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@supabase/mcp-server-supabase", "--read-only"]
+      "args": ["/c", "npx", "-y", "@supabase/mcp-server-supabase", "--read-only"],
+      "disabled": true
     },
     "notion": {
       "command": "cmd",
