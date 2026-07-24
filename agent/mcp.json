@@ -18,7 +18,8 @@
     },
     "notion": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@notionhq/notion-mcp-server"]
+      "args": ["/c", "npx", "-y", "@notionhq/notion-mcp-server"],
+      "disabled": true
     }
   }
 }

@@ -74,8 +74,8 @@ Every dashboard data source is wrapped in try/catch and degrades to empty — a 
 `agent/mcp.json` (live copy `~/.pi/agent/mcp.json`) defines servers loaded by `@spences10/pi-mcp`. Rules learned the hard way:
 - pi-mcp does **not** expand `${VAR}` in stdio `env` blocks (only in HTTP headers). Tokens reach servers via the user env var `MY_PI_MCP_ENV_ALLOWLIST` (ambient pass-through) — never write tokens or `${VAR}` placeholders into mcp.json.
 - npx-based servers must be spawned as `"command": "cmd", "args": ["/c", "npx", ...]` — pi-mcp spawns without a shell and `.cmd` shims fail on modern Node.
-- A server that can't currently connect (missing token, companion app closed) gets `"disabled": true` in mcp.json instead of failing at startup; re-enable with `/mcp enable <server>`. paper and supabase ship disabled for exactly this reason.
-- CONTEXT7_API_KEY / SUPABASE_ACCESS_TOKEN / NOTION_TOKEN are still unset (user task); context7 works keyless with rate limits.
+- A server that can't currently connect (missing token, companion app closed) gets `"disabled": true` in mcp.json instead of failing at startup; re-enable with `/mcp enable <server>`. paper, supabase, and notion ship disabled for exactly this reason.
+- CONTEXT7_API_KEY is set as a user env var (flows via MY_PI_MCP_ENV_ALLOWLIST). SUPABASE_ACCESS_TOKEN / NOTION_TOKEN deliberately unset — user skipped both; their servers stay disabled.
 
 ### Skills and packages
 

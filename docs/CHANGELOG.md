@@ -1,6 +1,12 @@
 # Changelog
 
-## 2026-07-23 — v1.8 (Phase 3C: persistent memory + context sidecar)
+## 2026-07-24 — v1.9 (Phase 3D: subagent delegation + skill audit + context7 key)
+
+- **Subagent delegation wired into persona** — one NEURA.md rule: `scout` before unfamiliar code, `oracle` for risky decisions, `reviewer` on the diff after non-trivial implementations; skip for trivial edits. No config needed — pi-subagents ships 8 builtin agents ready to use. Verified headless: agent lists all 8, `delegate` spawn round-trips (returned PONG).
+- **Skill audit run** (skill-doctor logic): 30 skills scanned, 7 flagged for Claude-only tool references — build-premium-website, learn-post, linkedin-post-writer, remotion-video-prompt, shorts (AskUserQuestion); plan-day, trigger-dev (`mcp__` tool names). Port case by case only if one misfires in pi.
+- **CONTEXT7_API_KEY set** as user env var (reaches the server via MY_PI_MCP_ENV_ALLOWLIST — never in mcp.json). Verified live: context7 resolved `/colinhacks/zod` in a headless Neura session.
+- **Supabase and Notion skipped** by user decision — notion now `"disabled": true` in mcp.json like paper/supabase (NOTION_TOKEN unset; an enabled server with no token is a startup failure waiting to happen).
+- Telemetry/observability deferred — no pain it solves yet; revisit if check-gate or subagents misbehave in daily use.
 
 - **`neura-memory.ts`** — cross-session memory, Claude Code model: `~/.pi/agent/neura/MEMORY.md`, one bullet per fact, injected into every turn's system prompt; the agent is told the path so it can update its own memory with file tools. `/remember <fact>` saves (dated), `/memory` shows. Verified: fact recalled in a fresh headless session. MEMORY.md gitignored — personal data stays out of the repo.
 - **`@spences10/pi-context@0.1.12` installed** (vetted: no network, no child processes, local SQLite only) — oversized tool/MCP output lands in a searchable sidecar instead of being truncated at 50 KiB; pi-mcp integrates with it automatically.
