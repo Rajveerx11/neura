@@ -7,3 +7,4 @@ models.json
 **/sessions/
 **/todos.json
 node_modules/
+.pi-subagents/
