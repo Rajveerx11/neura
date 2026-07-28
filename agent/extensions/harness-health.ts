@@ -111,7 +111,7 @@ function healthLines(report: HealthReport, width: number): string[] {
     line("core", report.core),
     line("workflow", report.workflow),
     line("context", report.context),
-    line("workspace", report.workspace, PALETTE.rose),
+    line("workspace", report.workspace, PALETTE.muted),
     line("bridges", report.bridges, PALETTE.muted),
     line(ok ? "status" : "next", report.action, ok ? PALETTE.success : PALETTE.warning),
     fg(PALETTE.dim, "/health close hides this panel"),

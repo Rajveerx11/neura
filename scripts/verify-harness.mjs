@@ -23,7 +23,6 @@ const loaderPath = path.join(
 assert.ok(fs.existsSync(loaderPath), `pi extension loader missing: ${loaderPath}`);
 
 process.env.NEURA = "1";
-delete process.env.NEURA_GCAL_ICS;
 
 const { loadExtensions } = await import(pathToFileURL(loaderPath).href);
 const extensionDir = path.join(repoRoot, "agent", "extensions");
@@ -64,8 +63,29 @@ const ui = {
 };
 const context = { cwd: repoRoot, hasUI: true, ui };
 
-const dashboardExtension = extensionWithCommand("dash");
-await firstHandler(dashboardExtension, "session_start")({}, context);
+const continuityExtension = extensionWithCommand("dash");
+await firstHandler(continuityExtension, "session_start")({}, context);
+assert.ok(widgets.has("neura-launch"), "continuity launch widget missing");
+assert.equal(widgets.has("neura-logo"), false, "legacy logo widget still registered");
+assert.equal(widgets.has("neura-dash"), false, "legacy dashboard widget still registered");
+
+const launchFactory = widgets.get("neura-launch");
+for (const width of [40, 60, 92, 120]) {
+  const launchText = launchFactory(null, null).render(width).map(stripAnsi).join("\n");
+  assert.match(launchText, /LAST/, `launch LAST state missing at ${width} columns`);
+  assert.match(launchText, /NOW/, `launch NOW state missing at ${width} columns`);
+  assert.match(launchText, /NEXT/, `launch NEXT state missing at ${width} columns`);
+  assert.doesNotMatch(launchText, /\bToday\b|\bProjects\b|\bThis week\b/, "legacy dashboard content remains");
+}
+await firstHandler(continuityExtension, "agent_start")({}, context);
+assert.equal(widgets.has("neura-launch"), false, "continuity launch did not hide when work started");
+await continuityExtension.commands.get("dash").handler("", context);
+assert.ok(widgets.has("neura-launch"), "/dash did not restore the continuity launch");
+
+const theme = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "themes", "neura-dark.json"), "utf-8"));
+assert.equal(theme.colors.accent, "#d97841", "Forged Tungsten copper accent missing");
+assert.equal(theme.colors.selectedBg, "#1c2024", "Forged Tungsten raised surface missing");
+assert.equal(theme.colors.mdHeading, theme.colors.accent, "theme introduces a second heading accent");
 
 const healthExtension = extensionWithCommand("health");
 await healthExtension.commands.get("health").handler("", context);

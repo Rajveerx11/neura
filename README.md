@@ -9,7 +9,7 @@ Launch with `neura` in any terminal.
 
 | Piece | File | What it does |
 |---|---|---|
-| Identity + dashboard | `agent/extensions/neura.ts` | Width-aware logo and dashboard: three columns on wide terminals, compact stacked sections on narrow terminals; `/dash` toggle; injects `NEURA.md` persona every turn |
+| Identity + continuity | `agent/extensions/neura.ts` | Width-aware LAST/NOW/NEXT launch spine; local recent-session and current git context; `/dash` toggle; injects `NEURA.md` persona every turn |
 | Cockpit footer | `agent/extensions/cockpit.ts` | Responsive model · git branch · ctx% · cost footer; low-priority fields collapse before they overflow; live operations appear only while active |
 | Harness health | `agent/extensions/harness-health.ts` | `/health` readiness console for runtime tools, checkpoints, proof gate, memory, skills, git state, MCP bridges, and local Qwen |
 | Guardrails | `agent/extensions/guardrail.ts` | Block-and-ask on destructive commands (rm -rf, force-push, DROP TABLE, Remove-Item -Recurse -Force, disk format) and secret-file access (.env, keys, credentials) — pi ships with no permission system, this is it |
@@ -20,7 +20,7 @@ Launch with `neura` in any terminal.
 | Check gate | `agent/extensions/check-gate.ts` | Self-verification via [proof-of-work](https://github.com/Rajveerx11/proof-of-work): quick tamper scan (`--no-tests`) after every turn that changed the working tree, failures fed back to the agent (1 retry cap); `/ship` runs the full check — real tests + signed audit-log verdict |
 | Skill doctor | `agent/extensions/skill-doctor.ts` | `/skill-doctor` scans skill dirs for Claude-only tool references that won't work in pi |
 | Autogit | `agent/extensions/autogit.ts` | Pre-existing: auto stage→commit→push after agent turns (needs `autogit` on PATH) |
-| Theme | `agent/themes/neura-dark.json` | Near-black theme, "orchid dusk" palette — violet `#a583d9` + rose `#d495b5`, all 51 tokens |
+| Theme | `agent/themes/neura-dark.json` | Forged Tungsten: tungsten neutrals, burnt copper `#d97841`, bone text, semantic outcome colors |
 | MCP bridge | `agent/mcp.json` | 5 servers via `@spences10/pi-mcp`: gfi-scout · paper · Context7 · Supabase (read-only) · Notion. Tokens flow through `MY_PI_MCP_ENV_ALLOWLIST` user env vars — never in the file |
 | Persona | `agent/neura/NEURA.md` | Names the agent Neura, terse root-cause engineering style, **no emojis ever** |
 | Launcher | `launcher/neura.cmd` | `neura` command (goes in `~/.local/bin`, on PATH) |
@@ -60,7 +60,7 @@ The Node verifier loads every TypeScript extension through pi's real loader, che
 ## Operator commands
 
 - `/health` checks the complete agentic harness; `/health close` hides the panel.
-- `/dash` toggles the launch dashboard.
+- `/dash` toggles the continuity launch.
 - `/ship` runs the full proof-of-work gate.
 - `/undo` restores the checkpoint from before the last agent run.
 - `/preset gpt|qwen` changes the execution model.
@@ -69,6 +69,7 @@ The Node verifier loads every TypeScript extension through pi's real loader, che
 
 - **Done (2026-07-21)**: Phase 1 (skills unification), packages, guardrails, cockpit v1 (Neura identity, dashboard, footer, theme, launcher)
 - **Done (2026-07-22)**: Phase 2 Part A — MCP bridge (`@spences10/pi-mcp` + `agent/mcp.json`). Context7/Supabase/Notion reach full power once their tokens are set as user env vars. Hosted plan server dropped — visual plans are always local HTML, never the hosted service.
+- **Done (2026-07-28)**: Forged Tungsten design system and Continuity Spine launch.
 - **Next**: per-tool color badges (needs built-in tool override), structured task/run telemetry.
 
 Plans for each phase are in `plans/` (self-contained HTML, open in any browser). Change history in `docs/CHANGELOG.md`.

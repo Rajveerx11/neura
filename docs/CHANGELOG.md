@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-28 — v2.1 (Forged Tungsten + Continuity Spine)
+
+- Replaced Orchid Dusk with Forged Tungsten: tungsten neutrals, one burnt-copper
+  brand accent, bone text, and semantic colors reserved for real outcomes.
+- Removed the decorative logo gradient and three-column launch dashboard.
+- Added a responsive LAST/NOW/NEXT continuity launch backed by local session
+  timestamps and current git state. Transcript contents are never parsed.
+- Removed calendar, Obsidian task, and weekly-goal launch reads to reduce startup
+  work and permanent information noise.
+- Kept `/dash` as the existing toggle command while changing its surface to the
+  continuity launch.
+
 ## 2026-07-28 — v2.0 (agentic engineering console)
 
 - Added a shared harness core for palette, ANSI layout, process checks, and git health.

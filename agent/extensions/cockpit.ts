@@ -5,7 +5,7 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { PALETTE, fg } from "../neura/core.ts";
 
-const { accent: ACC, rose: ROSE, error: RED, warning: YEL, dim: DIM, muted: MUT } = PALETTE;
+const { accent: ACC, error: RED, warning: YEL, dim: DIM, muted: MUT } = PALETTE;
 
 function ctxBar(pct: number): string {
   const cells = 8, filled = Math.round((pct / 100) * cells);
@@ -44,7 +44,7 @@ export default function (pi) {
         render(width: number): string[] {
           const parts: string[] = [fg(ACC, "▊ ") + fg(MUT, ctx.model?.id ?? "no model")];
           const branch = footerData.getGitBranch?.();
-          if (branch) parts.push(fg(ROSE, branch));
+          if (branch) parts.push(fg(MUT, branch));
           try {
             const u = ctx.getContextUsage?.();
             const pct = u?.percent ?? (u?.tokens && u?.contextWindow ? (u.tokens / u.contextWindow) * 100 : null);

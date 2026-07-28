@@ -1,15 +1,17 @@
 import { execFile } from "node:child_process";
 
 export const PALETTE = {
-  accent: "#a583d9",
-  rose: "#d495b5",
-  text: "#e5e0e6",
-  muted: "#8d8a94",
-  dim: "#56525e",
-  border: "#2c2833",
-  warning: "#d9a44a",
-  error: "#e06c6c",
-  success: "#5fcf9f",
+  canvas: "#0b0c0e",
+  surface: "#14171a",
+  raised: "#1c2024",
+  accent: "#d97841",
+  text: "#e8e2d8",
+  muted: "#a8a39b",
+  dim: "#666a6d",
+  border: "#2c3237",
+  warning: "#d3a64a",
+  error: "#df6b63",
+  success: "#69c08a",
 } as const;
 
 const ANSI = /\x1b\[[0-9;]*m/g;

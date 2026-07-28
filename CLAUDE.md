@@ -22,12 +22,12 @@ Fresh-machine restore is `install.ps1` (copies `agent/*` → `~/.pi/agent/`, lau
 ```powershell
 node scripts/verify-harness.mjs                           # extension load + responsive UI + safety tests
 powershell -File .\install.ps1 -Check                    # prerequisites + repo/live drift
-pi -p "What is your name? One word."                    # expect "Pi" — stock pi must stay stock
-$env:NEURA="1"; pi -p "What is your name? One word."    # expect "Neura"
-neura                                                    # fresh terminal: logo + greeting + 3-column dashboard
+pi --no-session --no-context-files -p "What is your name? One word."                 # expect "Pi"
+$env:NEURA="1"; pi --no-session --no-context-files -p "What is your name? One word." # expect "Neura"
+neura                                                    # fresh terminal: continuity launch
 ```
 
-Dashboard must show no "(widget truncated)" and no UUID/temp entries under Projects.
+Launch must show no "(widget truncated)" and no UUID/temp entries under LAST.
 
 ## Architecture
 
@@ -52,7 +52,7 @@ Hard-won platform rules:
 
 | File | Role |
 |---|---|
-| `neura.ts` | Gradient logo, greeting + date, 3-column dashboard (calendar events + Obsidian daily-note todos · pi session-store projects · learn-day week goals), `/dash` toggle, persona injection |
+| `neura.ts` | Forged Tungsten continuity launch: greeting, LAST/NOW/NEXT session spine, `/dash` toggle, persona injection |
 | `check-gate.ts` | Self-verification: after any agent run that changed the worktree, runs `uvx --from proof-of-work-agent proof-of-work check --no-tests --json --base HEAD`; failures fed back via `pi.sendUserMessage(..., {deliverAs:"followUp"})`, capped at 1 auto-retry per user prompt. `/ship` = full check (real tests, signed audit log). Dirty detection is a git tree fingerprint (`status --porcelain` + `diff HEAD` hashed) compared between `agent_start` and `agent_settled` — never tool names |
 | `checkpoint.ts` | Worktree snapshot before every agent run via throwaway `GIT_INDEX_FILE` + `write-tree`; `/undo` restores (itself reversible), `/undo list`. Never `add --force` (would snapshot node_modules); never deletes files created after a snapshot |
 | `neura-memory.ts` | Cross-session memory: `~/.pi/agent/neura/MEMORY.md` injected every turn; `/remember`, `/memory`; agent is told the path so it maintains its own memory. MEMORY.md is gitignored (personal data) |
@@ -64,15 +64,11 @@ Hard-won platform rules:
 | `skill-doctor.ts` | `/skill-doctor` flags skills using Claude-only tools |
 | `autogit.ts`, `october-bus.ts` | Pre-existing, not Neura-specific. autogit spawns through `cmd /c` (npm ships it as `.ps1`/`.cmd` shims) |
 
-### Data sources (all fail-soft)
+### Launch continuity source
 
-Every dashboard data source is wrapped in try/catch and degrades to empty — a missing vault, profile, or env var must never break launch:
-- Obsidian daily notes: `C:/Users/rajve/OneDrive/Documents/Obsidian Vault`, filename `DD-MM-YY(Ddd).md`
-- Week goals: `~/.claude/skills/learn-day/data/profile.md` + open checkboxes from the week's notes
-- Projects: `~/.pi/agent/sessions/` dir names, junk filtered by `JUNK_PROJECT` regex
-- Calendar: secret iCal URL in env var `NEURA_GCAL_ICS` (fetched async, 4s timeout; falls back to tomorrow's events with `tmrw` prefix when today is empty). RRULE recurring events are deliberately not expanded
-
-`NEURA_VAULT` and `NEURA_LEARN_PROFILE` override the two personal paths for portable installs.
+The launch reads only local pi session-directory names and timestamps, filtered
+by `JUNK_PROJECT`. It does not parse transcript contents. Git branch and dirty
+state come from the current workspace. Every read fails soft.
 
 ### MCP bridge
 
@@ -91,10 +87,10 @@ check-gate's engine is the user's own [proof-of-work](https://github.com/Rajveer
 ## Hard constraints
 
 - **No emojis, ever** — anywhere in Neura output, widgets, or persona. Geometric/box symbols only.
-- **No blue, saffron, or jade/green accents** (three rejected palettes — see CHANGELOG). Current palette v4 "orchid dusk": violet `#a583d9`, rose `#d495b5`, ivory `#e5e0e6`, plum-gray dims — theme file `agent/themes/neura-dark.json`. Semantic colors (diff green/red, warning amber) are exempt.
+- **Forged Tungsten only:** canvas `#0b0c0e`, surface `#14171a`, raised `#1c2024`, copper `#d97841`, bone `#e8e2d8`, muted steel `#a8a39b`. Copper is the sole brand accent. Semantic green/amber/red are outcomes only.
 - **No secrets in this repo.** Tokens live in user env vars; `auth.json`, `models.json`, session files, and `MEMORY.md` are deliberately untracked.
-- Dashboard is width-aware: 3 computed columns at 92+ terminal columns, stacked summaries below that. Every widget stays within pi's 10-line cap and ANSI-aware truncation prevents bleed. Junk-filter project names BEFORE truncating them.
-- Calendar events show name only (no times); project entries show name only (no "ago" labels) — user preference, don't reintroduce.
+- No decorative gradients, colored glow, or ambient color noise.
+- Launch is width-aware LAST/NOW/NEXT continuity, not a dashboard wall. Every widget stays within pi's 10-line cap and ANSI-aware truncation prevents bleed. Junk-filter project names before truncating them.
 - No Devanagari in terminal output — Windows Terminal cannot shape conjuncts (why the shloka feature was removed).
 
 `docs/CHANGELOG.md` records the rationale behind each version; check it before re-attempting something previously removed or deferred.
