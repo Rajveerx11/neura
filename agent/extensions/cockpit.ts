@@ -1,12 +1,11 @@
-// cockpit v2 — Neura footer: model · branch · ctx meter · cost, tight gaps, saffron palette.
+// cockpit v3 — responsive Neura footer: model · branch · context · cost · live operations.
 // ctx% renders as an 8-cell bar; cost color-ramps by spend. Extension statuses show as a
 // second line only when present. Delete file to unwire (built-in footer returns).
 
-const fg = (hex: string, s: string) => {
-  const n = parseInt(hex.slice(1), 16);
-  return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
-};
-const ACC = "#a583d9", TEAL = "#d495b5", RED = "#e06c6c", YEL = "#d9a44a", DIM = "#56525e", MUT = "#8d8a94"; // orchid dusk
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { PALETTE, fg } from "../neura/core.ts";
+
+const { accent: ACC, rose: ROSE, error: RED, warning: YEL, dim: DIM, muted: MUT } = PALETTE;
 
 function ctxBar(pct: number): string {
   const cells = 8, filled = Math.round((pct / 100) * cells);
@@ -42,11 +41,10 @@ export default function (pi) {
     try {
       ctx.ui.setFooter((tui, _theme, footerData) => ({
         invalidate() {},
-        render(_width: number): string[] {
-          const parts: string[] = [];
-          parts.push(fg(ACC, "▊ ") + fg(MUT, ctx.model?.id ?? "no model"));
+        render(width: number): string[] {
+          const parts: string[] = [fg(ACC, "▊ ") + fg(MUT, ctx.model?.id ?? "no model")];
           const branch = footerData.getGitBranch?.();
-          if (branch) parts.push(fg(TEAL, branch));
+          if (branch) parts.push(fg(ROSE, branch));
           try {
             const u = ctx.getContextUsage?.();
             const pct = u?.percent ?? (u?.tokens && u?.contextWindow ? (u.tokens / u.contextWindow) * 100 : null);
@@ -54,12 +52,20 @@ export default function (pi) {
           } catch {}
           const cost = sessionCost(ctx);
           if (cost != null) parts.push(costTag(cost));
-          const lines = [" " + parts.join(fg(DIM, "  ·  "))];
+          const separator = fg(DIM, "  ·  ");
+          const selected: string[] = [];
+          for (const part of parts) {
+            const candidate = " " + [...selected, part].join(separator);
+            if (selected.length && visibleWidth(candidate) > width) break;
+            selected.push(part);
+          }
+          const lines = [truncateToWidth(" " + selected.join(separator), width)];
           // ops line: only when an extension publishes status (subagents, lsp, ...)
           try {
             const statuses = footerData.getExtensionStatuses?.();
             if (statuses && statuses.size > 0) {
-              lines.push(" " + [...statuses.values()].map((s) => fg(DIM, String(s))).join(fg(DIM, "  ·  ")));
+              const statusLine = " " + [...statuses.values()].map((s) => fg(MUT, String(s))).join(separator);
+              lines.push(truncateToWidth(statusLine, width));
             }
           } catch {}
           return lines;

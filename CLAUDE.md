@@ -20,6 +20,8 @@ Fresh-machine restore is `install.ps1` (copies `agent/*` → `~/.pi/agent/`, lau
 ### Verification commands
 
 ```powershell
+node scripts/verify-harness.mjs                           # extension load + responsive UI + safety tests
+powershell -File .\install.ps1 -Check                    # prerequisites + repo/live drift
 pi -p "What is your name? One word."                    # expect "Pi" — stock pi must stay stock
 $env:NEURA="1"; pi -p "What is your name? One word."    # expect "Neura"
 neura                                                    # fresh terminal: logo + greeting + 3-column dashboard
@@ -54,7 +56,8 @@ Hard-won platform rules:
 | `check-gate.ts` | Self-verification: after any agent run that changed the worktree, runs `uvx --from proof-of-work-agent proof-of-work check --no-tests --json --base HEAD`; failures fed back via `pi.sendUserMessage(..., {deliverAs:"followUp"})`, capped at 1 auto-retry per user prompt. `/ship` = full check (real tests, signed audit log). Dirty detection is a git tree fingerprint (`status --porcelain` + `diff HEAD` hashed) compared between `agent_start` and `agent_settled` — never tool names |
 | `checkpoint.ts` | Worktree snapshot before every agent run via throwaway `GIT_INDEX_FILE` + `write-tree`; `/undo` restores (itself reversible), `/undo list`. Never `add --force` (would snapshot node_modules); never deletes files created after a snapshot |
 | `neura-memory.ts` | Cross-session memory: `~/.pi/agent/neura/MEMORY.md` injected every turn; `/remember`, `/memory`; agent is told the path so it maintains its own memory. MEMORY.md is gitignored (personal data) |
-| `cockpit.ts` | 4-field footer: model · git branch · ctx% meter · cost, with color ramps |
+| `cockpit.ts` | Responsive footer: model · git branch · ctx% meter · cost; fields collapse before overflow; live extension operations use the second line |
+| `harness-health.ts` | `/health` readiness console: runtime tools, checkpoint/proof gate, memory, skills, git state, MCP bridges, and local Qwen |
 | `guardrail.ts` | Block-and-ask on destructive commands and secret-file reads — pi has no permission system; this is it. Don't weaken it |
 | `ship-report.ts` | Injects end-of-iteration report format into every turn |
 | `presets.ts` | `/preset gpt\|qwen`; registers local llama.cpp (Qwen3-Coder-30B) provider at `127.0.0.1:8080/v1` |
@@ -68,6 +71,8 @@ Every dashboard data source is wrapped in try/catch and degrades to empty — a 
 - Week goals: `~/.claude/skills/learn-day/data/profile.md` + open checkboxes from the week's notes
 - Projects: `~/.pi/agent/sessions/` dir names, junk filtered by `JUNK_PROJECT` regex
 - Calendar: secret iCal URL in env var `NEURA_GCAL_ICS` (fetched async, 4s timeout; falls back to tomorrow's events with `tmrw` prefix when today is empty). RRULE recurring events are deliberately not expanded
+
+`NEURA_VAULT` and `NEURA_LEARN_PROFILE` override the two personal paths for portable installs.
 
 ### MCP bridge
 
@@ -88,7 +93,7 @@ check-gate's engine is the user's own [proof-of-work](https://github.com/Rajveer
 - **No emojis, ever** — anywhere in Neura output, widgets, or persona. Geometric/box symbols only.
 - **No blue, saffron, or jade/green accents** (three rejected palettes — see CHANGELOG). Current palette v4 "orchid dusk": violet `#a583d9`, rose `#d495b5`, ivory `#e5e0e6`, plum-gray dims — theme file `agent/themes/neura-dark.json`. Semantic colors (diff green/red, warning amber) are exempt.
 - **No secrets in this repo.** Tokens live in user env vars; `auth.json`, `models.json`, session files, and `MEMORY.md` are deliberately untracked.
-- Dashboard columns are fixed 32 chars + `│` separators; cell text hard-truncates (`fit()`) so entries never bleed across columns. Junk-filter project names BEFORE truncating them.
+- Dashboard is width-aware: 3 computed columns at 92+ terminal columns, stacked summaries below that. Every widget stays within pi's 10-line cap and ANSI-aware truncation prevents bleed. Junk-filter project names BEFORE truncating them.
 - Calendar events show name only (no times); project entries show name only (no "ago" labels) — user preference, don't reintroduce.
 - No Devanagari in terminal output — Windows Terminal cannot shape conjuncts (why the shloka feature was removed).
 

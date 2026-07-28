@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-28 — v2.0 (agentic engineering console)
+
+- Added a shared harness core for palette, ANSI layout, process checks, and git health.
+- Rebuilt the launch UI as a width-aware console: full wordmark and three columns on wide terminals, compact identity and stacked summaries on narrow terminals.
+- Added `/health` for runtime, workflow, context, workspace, MCP, and local-model readiness.
+- Made the footer responsive and exposed checkpoint/proof-of-work activity only while those operations run.
+- Expanded destructive-operation coverage and made sensitive operations fail closed when interactive approval is unavailable.
+- Added `install.ps1 -Check` drift/prerequisite diagnostics and `-ForceSettings` for explicit settings replacement.
+- Added `scripts/verify-harness.mjs`, a deterministic extension-load, responsive-layout, health, footer, and guardrail test.
+
 ## 2026-07-24 — v1.9 (Phase 3D: subagent delegation + skill audit + context7 key)
 
 - **Subagent delegation wired into persona** — one NEURA.md rule: `scout` before unfamiliar code, `oracle` for risky decisions, `reviewer` on the diff after non-trivial implementations; skip for trivial edits. No config needed — pi-subagents ships 8 builtin agents ready to use. Verified headless: agent lists all 8, `delegate` spawn round-trips (returned PONG).

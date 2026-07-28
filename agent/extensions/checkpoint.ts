@@ -63,12 +63,17 @@ export default function (pi) {
   });
 
   pi.on("agent_start", async (_event, ctx) => {
-    const tree = await snapshot(ctx.cwd);
-    if (!tree) return;
-    if (snaps.length && snaps[snaps.length - 1].tree === tree) return; // nothing changed
-    const when = new Date().toTimeString().slice(0, 5);
-    snaps.push({ tree, when, label: lastPrompt || "(auto)" });
-    if (snaps.length > 20) snaps.shift();
+    try { if (ctx.hasUI) ctx.ui.setStatus("neura-checkpoint", "checkpoint"); } catch {}
+    try {
+      const tree = await snapshot(ctx.cwd);
+      if (!tree) return;
+      if (snaps.length && snaps[snaps.length - 1].tree === tree) return; // nothing changed
+      const when = new Date().toTimeString().slice(0, 5);
+      snaps.push({ tree, when, label: lastPrompt || "(auto)" });
+      if (snaps.length > 20) snaps.shift();
+    } finally {
+      try { if (ctx.hasUI) ctx.ui.setStatus("neura-checkpoint", undefined); } catch {}
+    }
   });
 
   pi.registerCommand("undo", {

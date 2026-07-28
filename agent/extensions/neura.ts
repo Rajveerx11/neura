@@ -5,18 +5,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { truncateToWidth } from "@earendil-works/pi-tui";
+import { PALETTE, fg, padAnsi, truncateText } from "../neura/core.ts";
 
-const VAULT = "C:/Users/rajve/OneDrive/Documents/Obsidian Vault"; // from plan-day/learn-day profile
-const LEARN_PROFILE = path.join(os.homedir(), ".claude", "skills", "learn-day", "data", "profile.md");
+const VAULT = process.env.NEURA_VAULT || "C:/Users/rajve/OneDrive/Documents/Obsidian Vault";
+const LEARN_PROFILE = process.env.NEURA_LEARN_PROFILE ||
+  path.join(os.homedir(), ".claude", "skills", "learn-day", "data", "profile.md");
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const SESSIONS_DIR = path.join(os.homedir(), ".pi", "agent", "sessions");
 
-// truecolor helpers (no emojis — geometric symbols only)
-const fg = (hex: string, s: string) => {
-  const n = parseInt(hex.slice(1), 16);
-  return `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m${s}\x1b[0m`;
-};
-const ACC = "#a583d9", ROSE = "#d495b5", MUT = "#8d8a94", DIM = "#56525e", TXT = "#e5e0e6"; // orchid dusk: violet · rose · plum-gray
+const { accent: ACC, rose: ROSE, muted: MUT, dim: DIM, text: TXT, border: BORDER } = PALETTE;
 
 // linear blend between two hex colors, t in [0,1] — used for the logo gradient
 function mix(a: string, b: string, t: number): string {
@@ -145,43 +143,76 @@ function recentProjects(): string[] {
 
 // ---- rendering ----
 
-// ponytail: fixed 32-char columns; a width-aware renderer can come later
-const COL = 32;
-const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
-const pad = (s: string) => s + " ".repeat(Math.max(0, COL - strip(s).length));
-// hard cap raw cell text so a long entry can never bleed into the next column
-const fit = (s: string) => (s.length > COL - 4 ? s.slice(0, COL - 5) + "…" : s);
+type DashSection = { title: string; color: string; empty: string; items: string[] };
 
-function dashboard(): string[] {
-  const events = calEvents.map((e) => `${fg(ACC, "•")} ${fg(TXT, fit(e))}`);
-  const todos = todayTodos().map((t) => `${t.done ? fg(DIM, "[x]") : fg(TXT, "[ ]")} ${fg(t.done ? DIM : TXT, fit(t.text).slice(0, COL - 8))}`);
-  const todayCol = [...events, ...todos].slice(0, 5);
-  const projects = recentProjects().map((p) => `${fg(ROSE, "•")} ${fg(TXT, fit(p))}`);
-  const goals = weekGoals().map((g) => `${fg(MUT, "•")} ${fg(TXT, fit(g))}`);
-  const cols: [string, string[]][] = [
-    [fg(ACC, "▸ Today"), todayCol.length ? todayCol : [fg(DIM, "nothing scheduled")]],
-    [fg(ROSE, "▸ Projects"), projects.length ? projects : [fg(DIM, "none yet")]],
-    [fg(MUT, "▸ This week"), goals.length ? goals : [fg(DIM, "no open goals")]],
+function dashboardSections(): DashSection[] {
+  const events = calEvents.map((event) => `${fg(ACC, "•")} ${fg(TXT, event)}`);
+  const todos = todayTodos().map((todo) =>
+    `${fg(todo.done ? DIM : TXT, todo.done ? "[x]" : "[ ]")} ${fg(todo.done ? DIM : TXT, todo.text)}`,
+  );
+  return [
+    { title: "Today", color: ACC, empty: "nothing scheduled", items: [...events, ...todos].slice(0, 5) },
+    {
+      title: "Projects",
+      color: ROSE,
+      empty: "none yet",
+      items: recentProjects().map((project) => `${fg(ROSE, "•")} ${fg(TXT, project)}`),
+    },
+    {
+      title: "This week",
+      color: MUT,
+      empty: "no open goals",
+      items: weekGoals().map((goal) => `${fg(MUT, "•")} ${fg(TXT, goal)}`),
+    },
   ];
-  const rows = Math.max(...cols.map(([, c]) => c.length)) + 1;
-  const sep = fg(DIM, " │ ");
-  const lines: string[] = [];
-  for (let r = 0; r < rows; r++) {
-    lines.push(cols.map(([h, c]) => pad(r === 0 ? h : c[r - 1] ?? "")).join(sep));
-    // hairline rule under the header row, crosses aligned with the column separators
-    if (r === 0) lines.push(cols.map(() => fg(DIM, "─".repeat(COL))).join(fg(DIM, "─┼─")));
+}
+
+function dashboard(width: number): string[] {
+  const sections = dashboardSections();
+  if (width >= 92) {
+    const columnWidth = Math.max(24, Math.floor((width - 6) / 3));
+    const rows = Math.max(...sections.map((section) => Math.max(1, section.items.length)));
+    const separator = fg(BORDER, " │ ");
+    const lines = [
+      sections.map((section) => padAnsi(fg(section.color, `▸ ${section.title}`), columnWidth)).join(separator),
+      sections.map(() => fg(BORDER, "─".repeat(columnWidth))).join(fg(BORDER, "─┼─")),
+    ];
+    for (let row = 0; row < rows; row++) {
+      lines.push(sections.map((section) => {
+        const value = section.items[row] ?? (row === 0 ? fg(DIM, section.empty) : "");
+        return padAnsi(truncateToWidth(value, columnWidth), columnWidth);
+      }).join(separator));
+    }
+    return lines;
   }
-  return lines;
+
+  const itemWidth = Math.max(12, width - 2);
+  return sections.flatMap((section) => {
+    const summary = section.items.length
+      ? section.items.slice(0, width < 58 ? 1 : 2).map((item) => truncateText(item.replace(/\x1b\[[0-9;]*m/g, ""), itemWidth)).join("  ·  ")
+      : section.empty;
+    return [
+      fg(section.color, `▸ ${section.title}`),
+      fg(section.items.length ? TXT : DIM, truncateText(summary, itemWidth)),
+    ];
+  });
 }
 
 // pi caps widgets at 10 lines each — logo and dashboard are separate widgets
-function logoLines(): string[] {
+function logoLines(width: number): string[] {
   const date = new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
+  if (width < 72) {
+    return [
+      truncateToWidth(`${fg(ACC, "◆ NEURA")} ${fg(DIM, "/")} ${fg(ROSE, "agentic engineering console")}`, width),
+      truncateToWidth(fg(TXT, greeting()), width),
+      truncateToWidth(fg(DIM, `${date} · /health readiness`), width),
+    ];
+  }
   return [
     // vertical violet -> rose gradient down the wordmark
     ...LOGO.map((l, i) => fg(mix(ACC, ROSE, i / (LOGO.length - 1)), l)),
     "",
-    `${fg(TXT, greeting())}  ${fg(DIM, `${date} · /dash toggles the dashboard`)}`,
+    `${fg(TXT, greeting())}  ${fg(DIM, `${date} · /dash dashboard · /health readiness`)}`,
   ];
 }
 
@@ -196,8 +227,16 @@ export default function (pi) {
 
   const show = (ctx, full: boolean) => {
     try {
-      if (full) ctx.ui.setWidget("neura-logo", logoLines());
-      ctx.ui.setWidget("neura-dash", dashboard());
+      if (full) {
+        ctx.ui.setWidget("neura-logo", () => ({
+          render: (width: number) => logoLines(width),
+          invalidate() {},
+        }));
+      }
+      ctx.ui.setWidget("neura-dash", () => ({
+        render: (width: number) => dashboard(width),
+        invalidate() {},
+      }));
       visible = true;
     } catch {}
   };

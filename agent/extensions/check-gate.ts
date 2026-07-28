@@ -78,8 +78,10 @@ export default function (pi) {
     if (!(await isGitRepo(ctx.cwd))) return;
 
     checking = true;
+    try { ctx.ui.setStatus("neura-proof", "proof · quick"); } catch {}
     const v = await runPow(ctx.cwd, true, 90_000);
     checking = false;
+    try { ctx.ui.setStatus("neura-proof", undefined); } catch {}
     if (!v) return;
 
     try {
@@ -109,8 +111,9 @@ export default function (pi) {
         return;
       }
       ctx.ui.notify("running full proof-of-work check (tests + signed log)...");
-      const v = await runPow(ctx.cwd, false, 600_000);
+      ctx.ui.setStatus("neura-proof", "proof · full");
       try {
+        const v = await runPow(ctx.cwd, false, 600_000);
         if (!v) {
           ctx.ui.notify("proof-of-work did not produce a verdict (uvx installed? repo has HEAD?)", "warning");
         } else if (v.passed) {
@@ -122,7 +125,11 @@ export default function (pi) {
             { deliverAs: "followUp" },
           );
         }
-      } catch {} // session replaced during the long check — never crash
+      } catch {
+        // session replaced during the long check — never crash
+      } finally {
+        try { ctx.ui.setStatus("neura-proof", undefined); } catch {}
+      }
     },
   });
 }

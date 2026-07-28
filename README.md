@@ -9,8 +9,9 @@ Launch with `neura` in any terminal.
 
 | Piece | File | What it does |
 |---|---|---|
-| Identity + dashboard | `agent/extensions/neura.ts` | ASCII logo + time-aware greeting on launch; automatic 3-column dashboard (today's todos from Obsidian daily note · recent projects from pi's session store · week goals from learn-day profile + open checkboxes); `/dash` toggle; injects `NEURA.md` persona every turn |
-| Cockpit footer | `agent/extensions/cockpit.ts` | Minimal 4-field footer: model · git branch · ctx% · cost, tight gaps; extension statuses appear as a second line only when active |
+| Identity + dashboard | `agent/extensions/neura.ts` | Width-aware logo and dashboard: three columns on wide terminals, compact stacked sections on narrow terminals; `/dash` toggle; injects `NEURA.md` persona every turn |
+| Cockpit footer | `agent/extensions/cockpit.ts` | Responsive model · git branch · ctx% · cost footer; low-priority fields collapse before they overflow; live operations appear only while active |
+| Harness health | `agent/extensions/harness-health.ts` | `/health` readiness console for runtime tools, checkpoints, proof gate, memory, skills, git state, MCP bridges, and local Qwen |
 | Guardrails | `agent/extensions/guardrail.ts` | Block-and-ask on destructive commands (rm -rf, force-push, DROP TABLE, Remove-Item -Recurse -Force, disk format) and secret-file access (.env, keys, credentials) — pi ships with no permission system, this is it |
 | Report format | `agent/extensions/ship-report.ts` | Injects the end-of-iteration report format (What / Why / Do now / Takeaway) into every turn |
 | Model presets | `agent/extensions/presets.ts` | `/preset gpt` ↔ `/preset qwen`; registers local llama.cpp (Qwen3-Coder-30B) as a provider at `127.0.0.1:8080/v1` |
@@ -39,7 +40,16 @@ git clone <this repo> C:\Neura
 powershell -File C:\Neura\install.ps1
 ```
 
-`install.ps1` copies `agent/*` into `~/.pi/agent/` and the launcher into `~/.local/bin`.
+`install.ps1` copies `agent/*` into `~/.pi/agent/` and the launcher into `~/.local/bin`. Use `install.ps1 -Check` to detect missing prerequisites or drift between this repo and the live harness.
+
+## Verify changes
+
+```powershell
+node scripts/verify-harness.mjs
+powershell -File .\install.ps1 -Check
+```
+
+The Node verifier loads every TypeScript extension through pi's real loader, checks responsive widget/footer bounds, exercises `/health`, and verifies critical guardrail paths.
 
 ## Security rules
 
@@ -47,10 +57,18 @@ powershell -File C:\Neura\install.ps1
 - `auth.json`, `models.json`, session files are deliberately NOT tracked.
 - Vet any new pi package source before `pi install` (check: no postinstall scripts, no unknown network calls, explainable exec).
 
+## Operator commands
+
+- `/health` checks the complete agentic harness; `/health close` hides the panel.
+- `/dash` toggles the launch dashboard.
+- `/ship` runs the full proof-of-work gate.
+- `/undo` restores the checkpoint from before the last agent run.
+- `/preset gpt|qwen` changes the execution model.
+
 ## Roadmap
 
 - **Done (2026-07-21)**: Phase 1 (skills unification), packages, guardrails, cockpit v1 (Neura identity, dashboard, footer, theme, launcher)
 - **Done (2026-07-22)**: Phase 2 Part A — MCP bridge (`@spences10/pi-mcp` + `agent/mcp.json`). Context7/Supabase/Notion reach full power once their tokens are set as user env vars. Hosted plan server dropped — visual plans are always local HTML, never the hosted service.
-- **v1.1**: per-tool color badges (needs built-in tool override), width-aware dashboard columns.
+- **Next**: per-tool color badges (needs built-in tool override), structured task/run telemetry.
 
 Plans for each phase are in `plans/` (self-contained HTML, open in any browser). Change history in `docs/CHANGELOG.md`.
