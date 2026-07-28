@@ -8,3 +8,4 @@ models.json
 **/todos.json
 node_modules/
 .pi-subagents/
+.agents/
