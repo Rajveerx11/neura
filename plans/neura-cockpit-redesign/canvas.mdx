@@ -1,0 +1,359 @@
+{/* Canvas source. */}
+
+<DesignBoard
+  title="Neura cockpit state system"
+  mode="design"
+  design={{
+    notes: "Forged Tungsten terminal cockpit. Neutral dark chrome, burnt copper focus, bone text, semantic verdict colors, and detail on demand. No decorative gradients, glow, emoji, or permanent sidebar.",
+    styleSources: [
+      {
+        kind: "codebase",
+        title: "Neura v2.0 terminal shell",
+        summary: "Grounded in neura.ts, cockpit.ts, harness-health.ts, and neura-dark.json.",
+      },
+      {
+        kind: "manual",
+        title: "Official interface research",
+        summary: "Linear hierarchy, Warp control transfer, Claude status and permissions, GitHub checks, Vercel failure detail.",
+      },
+    ],
+  }}
+  version={2}
+>
+  <Section
+    id="main-lifecycle"
+    title="Main lifecycle"
+    subtitle="Brief, work, approval, proof, and handoff remain one continuous terminal session."
+  >
+    <Artboard id="launch" label="Launch / continuity" surface="desktop" x={0} y={0} order={1}>
+      <Screen
+        surface="desktop"
+        renderMode="design"
+        html={`
+<div data-design-id="launch-shell" style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:12px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px">
+    <strong style="color:var(--wf-accent)">NEURA</strong>
+    <span class="wf-pill accent">READY</span>
+    <div style="flex:1"></div>
+    <small>Mon, 28 Jul</small>
+  </div>
+  <div>
+    <h1 style="margin:0">Good evening, Rajveer.</h1>
+    <p class="wf-muted" style="margin:4px 0 0">Context restored. One continuation is ready.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:68px 16px 1fr;grid-template-rows:repeat(3,1fr);gap:0 12px;flex:1;align-items:stretch">
+    <strong class="wf-muted" style="padding-top:12px">LAST</strong>
+    <div style="border-left:1.4px solid var(--wf-accent)"></div>
+    <section style="border-bottom:1.4px solid var(--wf-line);padding:10px 0"><strong>19:42 · Cockpit redesign</strong><p class="wf-muted">Forged Tungsten system approved.</p></section>
+    <strong class="wf-muted" style="padding-top:12px">NOW</strong>
+    <div style="border-left:1.4px solid var(--wf-accent)"></div>
+    <section style="border-bottom:1.4px solid var(--wf-line);padding:10px 0"><strong>C:\\Neura · main</strong><p class="wf-muted">Design approved. Product implementation unlocked.</p></section>
+    <strong style="color:var(--wf-accent);padding-top:12px">NEXT</strong>
+    <div style="border-left:1.4px solid var(--wf-accent)"></div>
+    <section style="padding:10px 0"><strong style="color:var(--wf-accent)">Build the cockpit lifecycle</strong><p>Enter resume · N new task</p></section>
+  </div>
+  <div class="wf-box" style="display:flex;align-items:center;gap:10px;padding:10px 12px">
+    <span style="color:var(--wf-accent)">›</span><span class="wf-muted">What should Neura do next?</span>
+  </div>
+  <div data-design-id="launch-footer" style="display:flex;align-items:center;width:100%;gap:8px;border-top:1.4px solid var(--wf-line);padding-top:8px">
+    <span class="wf-pill accent">gpt-5.5</span><span>main</span><span class="wf-muted">context 12%</span><div style="flex:1"></div><small>/health readiness</small>
+  </div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="brief" label="Brief / scope lock" surface="desktop" x={1300} y={0} order={2}>
+      <Screen
+        surface="desktop"
+        renderMode="design"
+        html={`
+<div data-design-id="brief-shell" style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:12px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div data-design-id="phase-ribbon" style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px">
+    <strong style="color:var(--wf-accent)">NEURA / BRIEF</strong>
+    <span class="wf-pill accent">PLAN-ONLY</span>
+    <div style="flex:1"></div>
+    <small class="wf-muted">scope locked</small>
+  </div>
+  <section class="wf-card" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div><small class="wf-muted">OUTCOME</small><p>Approve complete cockpit design before implementation.</p></div>
+    <div><small class="wf-muted">CONSTRAINTS</small><p>Forged Tungsten. Stock pi unchanged.</p></div>
+    <div><small class="wf-muted">PROOF</small><p>State matrix, responsive checks, real edit journey.</p></div>
+    <div><small class="wf-muted">ALLOWED SCOPE</small><p><strong>C:\\Neura\\plans</strong> only.</p></div>
+  </section>
+  <div style="display:flex;flex-direction:column;gap:10px;flex:1">
+    <div class="wf-box"><strong>Rajveer</strong><p>Design every cockpit state. No code until approval.</p></div>
+    <div class="wf-box" style="border-color:var(--wf-accent)"><strong style="color:var(--wf-accent)">Neura</strong><p>Plan gate active. Research and interactive visual review only.</p></div>
+  </div>
+  <div class="wf-box" style="display:flex;align-items:center;gap:10px;padding:10px 12px"><span style="color:var(--wf-accent)">›</span><span class="wf-muted">Refine outcome or approve design direction…</span></div>
+  <div style="display:flex;align-items:center;width:100%;gap:8px;border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span><span>main</span><span class="wf-muted">context 18%</span><div style="flex:1"></div><small>brief</small></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="work" label="Work / active step" surface="desktop" x={2600} y={0} order={3}>
+      <Screen
+        surface="desktop"
+        renderMode="design"
+        html={`
+<div data-design-id="work-shell" style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:12px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div data-design-id="work-ribbon" style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px">
+    <strong style="color:var(--wf-accent)">NEURA / WORK</strong>
+    <span>cockpit redesign</span><span class="wf-pill accent">3 / 5</span>
+    <div style="flex:1"></div><small class="wf-muted">Esc interrupt</small>
+  </div>
+  <div style="display:flex;gap:8px;white-space:nowrap;overflow:hidden">
+    <span class="wf-pill">✓ inspect</span><span class="wf-pill">✓ research</span><span class="wf-pill accent">● design states</span><span class="wf-pill">○ verify</span><span class="wf-pill">○ handoff</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:9px;flex:1">
+    <div class="wf-box" style="display:flex;align-items:center;gap:10px"><span class="wf-muted">READ</span><strong>agent/extensions/harness-health.ts</strong><div style="flex:1"></div><small>complete</small></div>
+    <div class="wf-box" style="display:flex;align-items:center;gap:10px"><span class="wf-muted">WEB</span><strong>Official interface patterns</strong><div style="flex:1"></div><small>6 sources</small></div>
+    <div class="wf-box" style="display:flex;align-items:center;gap:10px;border-color:var(--wf-accent)"><span style="color:var(--wf-accent)">ACTIVE</span><strong>Compose state-complete canvas</strong><div style="flex:1"></div><small>11 states</small></div>
+    <div class="wf-box" style="display:flex;align-items:center;gap:10px"><span class="wf-muted">NEXT</span><span>Validate local Plan renderer</span></div>
+  </div>
+  <div class="wf-box" style="display:flex;align-items:center;gap:10px;padding:10px 12px"><span style="color:var(--wf-accent)">›</span><span class="wf-muted">Steer current work…</span></div>
+  <div style="display:flex;align-items:center;width:100%;gap:8px;border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span><span>main</span><span class="wf-muted">context 34%</span><span class="wf-muted">$0.42</span><div style="flex:1"></div><small>checkpoint · reviewer queued</small></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="approval" label="Approval / focused risk" surface="panel" x={3900} y={0} order={4}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div data-design-id="approval-panel" style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:13px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:9px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px">
+    <strong style="color:var(--wf-warn)">APPROVAL REQUIRED</strong><div style="flex:1"></div><span class="wf-pill">destructive</span>
+  </div>
+  <div><h2 style="margin:0">Restore worktree snapshot?</h2><p class="wf-muted">This overwrites tracked files with snapshot from 19:42.</p></div>
+  <div class="wf-box" style="display:flex;flex-direction:column;gap:7px">
+    <small class="wf-muted">ACTION</small><code>/undo snapshot 19:42 "cockpit redesign"</code>
+    <small class="wf-muted">BOUNDARY</small><span>C:\\Neura only</span>
+    <small class="wf-muted">RECOVERY</small><span>Current state is snapshotted first.</span>
+  </div>
+  <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" /> Allow similar restores this session</label>
+  <div style="flex:1"></div>
+  <div style="display:flex;gap:9px"><button>Deny</button><button class="primary" style="flex:1">Allow once</button></div>
+  <small class="wf-muted">No decision defaults to deny.</small>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="proof" label="Proof / verdict" surface="desktop" x={5000} y={0} order={5}>
+      <Screen
+        surface="desktop"
+        renderMode="design"
+        html={`
+<div data-design-id="proof-shell" style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:12px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px">
+    <strong style="color:var(--wf-accent)">NEURA / PROOF</strong><span>cockpit redesign</span>
+    <div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-ok)">VERIFIED</span>
+  </div>
+  <section class="wf-card" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:11px 12px;border-bottom:1.4px solid var(--wf-line)"><strong style="color:var(--wf-ok)">✓</strong><span>Harness verification</span><small>42 checks · 1.8s</small></div>
+    <div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:11px 12px;border-bottom:1.4px solid var(--wf-line)"><strong style="color:var(--wf-ok)">✓</strong><span>Proof-of-work quick</span><small>PASS · 3 files</small></div>
+    <div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:11px 12px;border-bottom:1.4px solid var(--wf-line)"><strong style="color:var(--wf-ok)">✓</strong><span>Responsive state matrix</span><small>48 / 72 / 92 / 120</small></div>
+    <div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:11px 12px"><strong style="color:var(--wf-ok)">✓</strong><span>Stock pi isolation</span><small>unchanged</small></div>
+  </section>
+  <div class="wf-box" style="display:flex;align-items:center;gap:10px;border-color:var(--wf-ok)"><strong style="color:var(--wf-ok)">READY</strong><span>All required checks passed.</span><div style="flex:1"></div><button>View evidence</button></div>
+  <div style="flex:1"></div>
+  <div class="wf-box" style="display:flex;align-items:center;gap:10px;padding:10px 12px"><span style="color:var(--wf-accent)">›</span><span class="wf-muted">Run /ship for signed full proof…</span></div>
+  <div style="display:flex;align-items:center;width:100%;gap:8px;border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span><span>main</span><span class="wf-muted">context 41%</span><div style="flex:1"></div><small style="color:var(--wf-ok)">proof passed</small></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="closeout" label="Handoff / closeout" surface="desktop" x={6300} y={0} order={6}>
+      <Screen
+        surface="desktop"
+        renderMode="design"
+        html={`
+<div data-design-id="handoff-shell" style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:12px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px">
+    <strong style="color:var(--wf-accent)">NEURA / HANDOFF</strong><span>cockpit redesign</span><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-ok)">SHIP READY</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:12px;flex:1">
+    <section class="wf-card" style="display:flex;flex-direction:column;gap:10px">
+      <h2 style="margin:0">What changed</h2>
+      <div>• Added state-aware cockpit shell</div>
+      <div>• Unified approval, proof, and recovery</div>
+      <div>• Added compact layouts at four widths</div>
+      <hr />
+      <strong>Why</strong>
+      <p class="wf-muted">Lifecycle stays legible without permanent chrome.</p>
+    </section>
+    <section class="wf-card" style="display:flex;flex-direction:column;gap:10px">
+      <h2 style="margin:0">Proof</h2>
+      <div style="color:var(--wf-ok)">✓ harness 42/42</div>
+      <div style="color:var(--wf-ok)">✓ proof-of-work PASS</div>
+      <div style="color:var(--wf-ok)">✓ stock pi isolated</div>
+      <hr />
+      <strong>Do this now</strong>
+      <p>Review live terminal once, then approve sync.</p>
+    </section>
+  </div>
+  <div class="wf-box"><strong>Key takeaway</strong><p class="wf-muted">Good agent UI makes state and evidence visible; transcript carries conversation.</p></div>
+  <div class="wf-box" style="display:flex;align-items:center;gap:10px;padding:10px 12px"><span style="color:var(--wf-accent)">›</span><span class="wf-muted">Start next task…</span></div>
+  <div style="display:flex;align-items:center;width:100%;gap:8px;border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span><span>main</span><span class="wf-muted">context 43%</span><div style="flex:1"></div><small>handoff</small></div>
+</div>`}
+      />
+    </Artboard>
+  </Section>
+
+  <Section
+    id="control-recovery"
+    title="Control, context, and recovery"
+    subtitle="Command-driven surfaces appear only when requested or when attention is required."
+  >
+    <Artboard id="health-ready" label="Health / ready" surface="panel" x={0} y={1400} order={7}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:10px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / HARNESS HEALTH</strong><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-ok)">READY</span></div>
+  <div style="display:grid;grid-template-columns:88px 1fr;gap:9px 12px">
+    <small class="wf-muted">CORE</small><span>pi 0.81 · git 2.50 · uvx 0.8</span>
+    <small class="wf-muted">WORKFLOW</small><span style="color:var(--wf-ok)">● checkpoint · ● proof · ● autogit</span>
+    <small class="wf-muted">CONTEXT</small><span>● persona · ● memory · ● 46 skills</span>
+    <small class="wf-muted">WORKSPACE</small><span>main · clean</span>
+    <small class="wf-muted">BRIDGES</small><span>2/5 MCP · local Qwen offline</span>
+  </div>
+  <div style="flex:1"></div><div class="wf-box" style="border-color:var(--wf-ok)">Agentic harness is ready.</div><small class="wf-muted">/health close</small>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="health-degraded" label="Health / degraded" surface="panel" x={1300} y={1400} order={8}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:10px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / HARNESS HEALTH</strong><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-warn)">DEGRADED</span></div>
+  <div style="display:grid;grid-template-columns:88px 1fr;gap:9px 12px">
+    <small class="wf-muted">CORE</small><span>pi 0.81 · git 2.50 · <strong style="color:var(--wf-warn)">uvx missing</strong></span>
+    <small class="wf-muted">WORKFLOW</small><span>● checkpoint · <strong style="color:var(--wf-warn)">○ proof unavailable</strong></span>
+    <small class="wf-muted">CONTEXT</small><span>● persona · ● memory · ● 46 skills</span>
+    <small class="wf-muted">WORKSPACE</small><span>main · 2 changes</span>
+    <small class="wf-muted">BRIDGES</small><span>2/5 MCP · local Qwen offline</span>
+  </div>
+  <div style="flex:1"></div>
+  <div class="wf-box" style="border-color:var(--wf-warn)"><strong style="color:var(--wf-warn)">IMPACT</strong><p>Automatic proof gate cannot run. Edits remain checkpointed.</p><button class="primary">Install uv</button></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="recovery" label="Recovery / snapshot" surface="panel" x={2600} y={1400} order={9}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:12px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / RECOVERY</strong><div style="flex:1"></div><span class="wf-pill">/undo</span></div>
+  <h2 style="margin:0">Restore last checkpoint</h2>
+  <div class="wf-box" style="display:flex;flex-direction:column;gap:7px"><strong>19:42 · cockpit redesign</strong><small class="wf-muted">Tree 2d8b… · C:\\Neura</small><span>Restores tracked and captured untracked files.</span></div>
+  <div class="wf-box"><strong>Safety</strong><p class="wf-muted">Current state is snapshotted first. Files created after snapshot remain.</p></div>
+  <div style="flex:1"></div><div style="display:flex;gap:9px"><button>Cancel</button><button class="primary" style="flex:1">Preview restore</button></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="memory" label="Memory / durable facts" surface="popover" x={3900} y={1400} order={10}>
+      <Screen
+        surface="popover"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;box-sizing:border-box;padding:16px;gap:10px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:9px"><strong>Memory</strong><div style="flex:1"></div><span class="wf-pill">3 facts</span></div>
+  <div class="wf-box"><strong>Design</strong><p>Forged Tungsten. Neutral chrome, copper focus, semantic status only.</p><small class="wf-muted">today</small></div>
+  <div class="wf-box"><strong>Workflow</strong><p>Plan and design require approval before code.</p><small class="wf-muted">today</small></div>
+  <div style="display:flex;gap:8px"><button>/remember</button><button class="primary">Open file</button></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="model" label="Model control" surface="popover" x={5000} y={1400} order={11}>
+      <Screen
+        surface="popover"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;box-sizing:border-box;padding:16px;gap:10px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:9px"><strong>Model preset</strong><div style="flex:1"></div><small class="wf-muted">/preset</small></div>
+  <button class="primary" style="display:flex;align-items:center;gap:9px;text-align:left"><span>●</span><span><strong>GPT-5.5</strong><br/><small>Default · big-model work</small></span></button>
+  <button style="display:flex;align-items:center;gap:9px;text-align:left"><span class="wf-muted">○</span><span><strong>Qwen3-Coder 30B</strong><br/><small class="wf-muted">Offline · start llama.cpp first</small></span></button>
+  <small class="wf-muted">Switch affects current session only.</small>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="agents" label="Agents / command panel" surface="panel" x={6300} y={1400} order={12}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:16px;gap:10px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / AGENTS</strong><div style="flex:1"></div><span class="wf-pill accent">2 active</span></div>
+  <div class="wf-box" style="display:grid;grid-template-columns:92px 1fr auto;gap:8px"><strong>scout</strong><span>Map terminal UI constraints</span><small style="color:var(--wf-ok)">done</small></div>
+  <div class="wf-box" style="display:grid;grid-template-columns:92px 1fr auto;gap:8px;border-color:var(--wf-accent)"><strong>reviewer</strong><span>Stress-test 13 cockpit states</span><small style="color:var(--wf-accent)">active</small></div>
+  <div class="wf-box" style="display:grid;grid-template-columns:92px 1fr auto;gap:8px"><strong>main</strong><span>Compose approval plan</span><small>waiting</small></div>
+  <div style="flex:1"></div><div style="display:flex;gap:8px"><button>Take over</button><button class="primary">Open reviewer</button></div>
+</div>`}
+      />
+    </Artboard>
+  </Section>
+
+  <Section
+    id="compact-states"
+    title="Compact terminal"
+    subtitle="Meaning survives at 72 and 48 columns; decoration collapses first."
+  >
+    <Artboard id="compact-launch" label="Compact launch" surface="panel" x={0} y={2800} order={13}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:14px;gap:9px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div><strong style="color:var(--wf-accent)">NEURA</strong><span class="wf-muted"> / READY</span></div>
+  <div><strong>Good evening, Rajveer.</strong><br/><small class="wf-muted">Context restored.</small></div>
+  <div><small class="wf-muted">LAST</small><p>Cockpit system approved</p></div>
+  <div><small class="wf-muted">NOW</small><p>C:\\Neura · main</p></div>
+  <div style="border-left:1.4px solid var(--wf-accent);padding-left:10px"><small style="color:var(--wf-accent)">NEXT</small><p>Build the cockpit lifecycle</p><small>Enter resume · N new task</small></div>
+  <div style="flex:1"></div><div class="wf-box">› What should Neura do next?</div>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> <span class="wf-muted">main · 12%</span></div>
+</div>`}
+      />
+    </Artboard>
+
+    <Artboard id="compact-work" label="Compact work" surface="panel" x={1300} y={2800} order={14}>
+      <Screen
+        surface="panel"
+        renderMode="design"
+        html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:14px;gap:9px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1.4px solid var(--wf-line);padding-bottom:8px"><strong style="color:var(--wf-accent)">WORK</strong><span>3/5 cockpit redesign</span></div>
+  <div class="wf-box"><strong style="color:var(--wf-accent)">ACTIVE</strong><p>Compose state canvas</p></div>
+  <div class="wf-box"><strong>DONE</strong><p>Inspect repo · research patterns</p></div>
+  <div class="wf-box"><strong>NEXT</strong><p>Validate local plan</p></div>
+  <div style="flex:1"></div><div class="wf-box">› Steer current work…</div>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> <span class="wf-muted">34% · proof queued</span></div>
+</div>`}
+      />
+    </Artboard>
+  </Section>
+
+  <Annotation id="note-launch" title="Continuity, not dashboard" targetId="launch" placement="bottom" text="Launch restores LAST, NOW, and NEXT. One recommended continuation owns focus; everything else stays ambient or on demand." />
+  <Annotation id="note-brief" title="Scope becomes visible" targetId="brief" placement="bottom" text="Brief surface records outcome, constraints, proof, and allowed scope before mutation. PLAN-ONLY is explicit." />
+  <Annotation id="note-work" title="Progress without dashboard noise" targetId="work" placement="bottom" text="One active step, completed milestones, next step. Raw tool output remains transcript content, not permanent chrome." />
+  <Annotation id="note-approval" title="Safety owns focus" targetId="approval" placement="bottom" text="Approval names risk, action, boundary, and recovery. Missing interaction or dismissal means deny." />
+  <Annotation id="note-proof" title="Evidence is a product state" targetId="proof" placement="bottom" text="Checks separate running state from conclusion. Details remain inspectable; verdict stays scannable." />
+  <Annotation id="note-handoff" title="Close the loop" targetId="closeout" placement="bottom" text="Existing report preference becomes a compact handoff record with changed scope, proof, manual next step, and takeaway." />
+  <Annotation id="note-degraded" title="Degraded is actionable" targetId="health-degraded" placement="bottom" text="Show missing capability, exact impact, and one repair action. Never claim ready when proof cannot run." />
+  <Annotation id="note-compact" title="Meaning collapses last" targetId="compact-work" placement="bottom" text="Wordmark, secondary labels, and detail collapse before model, phase, active task, or verdict." />
+
+  <Connector from="launch" to="brief" label="first prompt" />
+  <Connector from="brief" to="work" label="scope approved" />
+  <Connector from="work" to="approval" />
+  <Connector from="approval" to="proof" label="allow once" />
+  <Connector from="proof" to="closeout" label="verified" />
+</DesignBoard>

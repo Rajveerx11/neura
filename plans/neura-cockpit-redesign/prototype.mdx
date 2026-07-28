@@ -1,0 +1,160 @@
+<Prototype
+  title="Operate the Neura lifecycle"
+  brief="Click through continuity launch, brief, work, approval, proof, handoff, and health states. Prototype is illustrative only and performs no commands."
+  surface="desktop"
+  initialScreenId="proto-launch"
+>
+  <PrototypeScreen
+    id="proto-launch"
+    title="Launch"
+    summary="Continuity Spine restores the last thread and presents one next action."
+    surface="desktop"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:14px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;width:100%;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA</strong><span class="wf-pill accent">READY</span><div style="flex:1"></div><small>Mon, 28 Jul</small></div>
+  <div><h1 style="margin:0">Good evening, Rajveer.</h1><p class="wf-muted">Context restored. One continuation is ready.</p></div>
+  <div style="display:grid;grid-template-columns:68px 16px 1fr;grid-template-rows:repeat(3,1fr);gap:0 12px;flex:1">
+    <strong class="wf-muted" style="padding-top:10px">LAST</strong><div style="border-left:1.4px solid var(--wf-accent)"></div><section style="border-bottom:1.4px solid var(--wf-line);padding:8px 0"><strong>19:42 · Cockpit redesign</strong><p class="wf-muted">Forged Tungsten system approved.</p></section>
+    <strong class="wf-muted" style="padding-top:10px">NOW</strong><div style="border-left:1.4px solid var(--wf-accent)"></div><section style="border-bottom:1.4px solid var(--wf-line);padding:8px 0"><strong>C:\\Neura · main</strong><p class="wf-muted">Design approved. Implementation unlocked.</p></section>
+    <strong style="color:var(--wf-accent);padding-top:10px">NEXT</strong><div style="border-left:1.4px solid var(--wf-accent)"></div><section style="padding:8px 0"><strong style="color:var(--wf-accent)">Build the cockpit lifecycle</strong><p>Enter resume · N new task</p></section>
+  </div>
+  <div style="display:flex;gap:10px"><button data-goto="proto-health">Open health</button><button class="primary" data-goto="proto-brief" style="flex:1">Resume thread</button></div>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> main · context 12%</div>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-brief"
+    title="Brief"
+    summary="Outcome, constraints, proof, and allowed scope are visible."
+    surface="desktop"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:14px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / BRIEF</strong><span class="wf-pill accent">PLAN-ONLY</span><div style="flex:1"></div><small class="wf-muted">scope locked</small></div>
+  <section class="wf-card" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1">
+    <div><small class="wf-muted">OUTCOME</small><p>Approve complete cockpit design.</p></div>
+    <div><small class="wf-muted">CONSTRAINTS</small><p>No product edits. Stock pi unchanged.</p></div>
+    <div><small class="wf-muted">PROOF</small><p>State matrix and responsive journey.</p></div>
+    <div><small class="wf-muted">ALLOWED SCOPE</small><p>C:\\Neura\\plans only.</p></div>
+  </section>
+  <div style="display:flex;gap:10px"><button data-goto="proto-launch">Refine later</button><button class="primary" data-goto="proto-work" style="flex:1">Preview approved execution</button></div>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> main · brief</div>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-work"
+    title="Work"
+    summary="Active step stays visible while transcript remains central."
+    surface="desktop"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:14px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;width:100%;gap:10px;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / WORK</strong><span>cockpit redesign</span><span class="wf-pill accent">3 / 5</span><div style="flex:1"></div><small>Esc interrupt</small></div>
+  <div style="display:flex;gap:8px"><span class="wf-pill">✓ inspect</span><span class="wf-pill">✓ research</span><span class="wf-pill accent">● design</span><span class="wf-pill">○ verify</span></div>
+  <div style="display:flex;flex-direction:column;gap:10px;flex:1">
+    <div class="wf-box"><strong>READ</strong> agent/extensions/harness-health.ts <small class="wf-muted">complete</small></div>
+    <div class="wf-box"><strong>WEB</strong> official interface patterns <small class="wf-muted">6 sources</small></div>
+    <div class="wf-box" style="border-color:var(--wf-accent)"><strong style="color:var(--wf-accent)">ACTIVE</strong> compose state-complete canvas</div>
+  </div>
+  <div style="display:flex;gap:10px"><button data-goto="proto-brief">Back to brief</button><button class="primary" data-goto="proto-approval" style="flex:1">Preview risky action</button></div>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> main · 34% · checkpoint</div>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-approval"
+    title="Approval"
+    summary="Risk, action, boundary, and recovery own focus."
+    surface="panel"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:14px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-warn)">APPROVAL REQUIRED</strong><div style="flex:1"></div><span class="wf-pill">destructive</span></div>
+  <h2>Restore worktree snapshot?</h2>
+  <div class="wf-box"><small class="wf-muted">ACTION</small><p><code>/undo snapshot 19:42 "cockpit redesign"</code></p><small class="wf-muted">BOUNDARY</small><p>C:\\Neura only</p><small class="wf-muted">RECOVERY</small><p>Current state is snapshotted first.</p></div>
+  <label><input type="checkbox" /> Allow similar restores this session</label>
+  <div style="flex:1"></div>
+  <div style="display:flex;gap:10px"><button data-goto="proto-work">Deny</button><button class="primary" data-goto="proto-proof" style="flex:1">Allow once</button></div>
+  <small class="wf-muted">Prototype performs no restore.</small>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-proof"
+    title="Proof"
+    summary="Verification becomes inspectable evidence with one conclusion."
+    surface="desktop"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:14px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / PROOF</strong><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-ok)">VERIFIED</span></div>
+  <section class="wf-card" style="display:flex;flex-direction:column;gap:10px;flex:1">
+    <div style="display:flex"><strong style="color:var(--wf-ok)">✓ Harness verification</strong><div style="flex:1"></div><small>42 checks</small></div>
+    <hr/><div style="display:flex"><strong style="color:var(--wf-ok)">✓ Proof-of-work quick</strong><div style="flex:1"></div><small>PASS</small></div>
+    <hr/><div style="display:flex"><strong style="color:var(--wf-ok)">✓ Responsive matrix</strong><div style="flex:1"></div><small>4 widths</small></div>
+    <hr/><div style="display:flex"><strong style="color:var(--wf-ok)">✓ Stock pi isolation</strong><div style="flex:1"></div><small>unchanged</small></div>
+  </section>
+  <div style="display:flex;gap:10px"><button data-goto="proto-work">Inspect work</button><button class="primary" data-goto="proto-handoff" style="flex:1">Open handoff</button></div>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> main · proof passed</div>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-handoff"
+    title="Handoff"
+    summary="Closeout combines change scope, proof, and next manual action."
+    surface="desktop"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:14px;background:var(--wf-paper);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / HANDOFF</strong><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-ok)">SHIP READY</span></div>
+  <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:12px;flex:1">
+    <section class="wf-card"><h2>What changed</h2><p>• State-aware cockpit shell</p><p>• Unified approval, proof, recovery</p><p>• Compact layouts</p></section>
+    <section class="wf-card"><h2>Proof</h2><p style="color:var(--wf-ok)">✓ harness 42/42</p><p style="color:var(--wf-ok)">✓ proof PASS</p><hr/><strong>Do this now</strong><p>Review live terminal, then approve sync.</p></section>
+  </div>
+  <button class="primary" data-goto="proto-launch">Start next task</button>
+  <div style="border-top:1.4px solid var(--wf-line);padding-top:8px"><span class="wf-pill accent">gpt-5.5</span> main · handoff</div>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-health"
+    title="Health"
+    summary="Ready state with direct route to degraded behavior."
+    surface="panel"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:12px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / HARNESS HEALTH</strong><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-ok)">READY</span></div>
+  <div style="display:grid;grid-template-columns:90px 1fr;gap:10px"><small class="wf-muted">CORE</small><span>pi · git · uvx</span><small class="wf-muted">WORKFLOW</small><span>● checkpoint · ● proof · ● autogit</span><small class="wf-muted">CONTEXT</small><span>● persona · ● memory · ● skills</span><small class="wf-muted">WORKSPACE</small><span>main · clean</span><small class="wf-muted">BRIDGES</small><span>2/5 MCP · Qwen offline</span></div>
+  <div style="flex:1"></div><div style="display:flex;gap:10px"><button data-goto="proto-launch">Close</button><button class="primary" data-goto="proto-degraded" style="flex:1">Preview degraded</button></div>
+</div>`}
+  />
+
+  <PrototypeScreen
+    id="proto-degraded"
+    title="Degraded"
+    summary="Missing proof dependency with impact and repair."
+    surface="panel"
+    renderMode="design"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:18px;gap:12px;background:var(--wf-card);color:var(--wf-ink)">
+  <div style="display:flex;align-items:center;border-bottom:1.4px solid var(--wf-line);padding-bottom:10px"><strong style="color:var(--wf-accent)">NEURA / HARNESS HEALTH</strong><div style="flex:1"></div><span class="wf-pill" style="color:var(--wf-warn)">DEGRADED</span></div>
+  <div class="wf-box"><strong style="color:var(--wf-warn)">uvx missing</strong><p>Automatic proof gate cannot run. Checkpoints still protect edits.</p></div>
+  <div class="wf-box"><strong>Next action</strong><p>Install uv, then rerun /health.</p></div>
+  <div style="flex:1"></div><div style="display:flex;gap:10px"><button data-goto="proto-health">Back</button><button class="primary" data-goto="proto-launch" style="flex:1">Continue reduced</button></div>
+</div>`}
+  />
+
+  <PrototypeTransition id="t-launch-brief" from="proto-launch" to="proto-brief" label="Start task" trigger="click Start cockpit task" />
+  <PrototypeTransition id="t-launch-health" from="proto-launch" to="proto-health" label="Inspect readiness" trigger="click Open health" />
+  <PrototypeTransition id="t-brief-work" from="proto-brief" to="proto-work" label="Approve scope" trigger="click Preview approved execution" />
+  <PrototypeTransition id="t-work-approval" from="proto-work" to="proto-approval" label="Risk detected" trigger="click Preview risky action" />
+  <PrototypeTransition id="t-approval-proof" from="proto-approval" to="proto-proof" label="Allow once" trigger="click Allow once" />
+  <PrototypeTransition id="t-proof-handoff" from="proto-proof" to="proto-handoff" label="Verified" trigger="click Open handoff" />
+  <PrototypeTransition id="t-handoff-launch" from="proto-handoff" to="proto-launch" label="New task" trigger="click Start next task" />
+  <PrototypeTransition id="t-health-degraded" from="proto-health" to="proto-degraded" label="Missing dependency" trigger="click Preview degraded" />
+</Prototype>

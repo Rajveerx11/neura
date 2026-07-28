@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Neura Cockpit Redesign Plan</title>
+  <style>
+    :root{
+      --bg:#0b0c0e;--surface:#14171a;--raised:#1c2024;--line:#2c3237;
+      --copper:#d97841;--ivory:#e8e2d8;--muted:#a8a39b;--dim:#666a6d;
+      --ok:#69c08a;--warn:#d3a64a;--bad:#df6b63;
+      --radius:14px;--mono:"Cascadia Code","SFMono-Regular",Consolas,monospace;
+      --sans:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;background:var(--bg)}
+    body{margin:0;color:var(--ivory);background:var(--bg);font-family:var(--sans)}
+    button,a,input,textarea{font:inherit}
+    button{color:inherit}
+    a{color:inherit}
+    .shell{width:min(1500px,calc(100% - 40px));margin:auto}
+    .nav{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.08);
+      background:rgba(11,12,14,.92);backdrop-filter:blur(18px)}
+    .nav-inner{height:64px;display:flex;align-items:center;gap:24px}
+    .brand{font:700 14px var(--mono);letter-spacing:.08em;color:var(--copper);white-space:nowrap}
+    .brand b{display:inline-grid;place-items:center;width:22px;height:22px;border:1px solid var(--copper);
+      transform:rotate(45deg);margin-right:12px}
+    .brand b span{transform:rotate(-45deg)}
+    .nav-links{display:flex;gap:6px;overflow:auto;scrollbar-width:none}
+    .nav-links a{text-decoration:none;color:var(--muted);font-size:13px;padding:8px 10px;border-radius:8px;white-space:nowrap}
+    .nav-links a:hover,.nav-links a.active{background:var(--raised);color:var(--ivory)}
+    .lock{margin-left:auto;border:1px solid rgba(217,164,74,.35);color:var(--warn);padding:7px 10px;
+      border-radius:999px;font:700 11px var(--mono);white-space:nowrap}
+    section{padding:96px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .hero{min-height:calc(100dvh - 64px);display:grid;grid-template-columns:1.05fr .95fr;align-items:center;gap:64px;padding:72px 0}
+    .kicker{font:700 12px var(--mono);letter-spacing:.14em;color:var(--copper);text-transform:uppercase}
+    h1{font-size:clamp(54px,8vw,126px);line-height:.82;letter-spacing:-.075em;margin:22px 0 28px;max-width:9ch}
+    h1 span{color:var(--copper);font-weight:450}
+    .hero-copy{font-size:clamp(18px,2vw,25px);line-height:1.45;max-width:590px;color:var(--muted)}
+    .hero-actions{display:flex;gap:10px;margin-top:34px}
+    .btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 15px;
+      text-decoration:none;cursor:pointer;transition:.18s transform,.18s border-color}
+    .btn:hover{border-color:var(--copper);transform:translateY(-2px)}
+    .btn.primary{background:var(--copper);border-color:var(--copper);color:var(--bg);font-weight:750}
+    .hero-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+      border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-top:48px}
+    .metric{background:var(--surface);padding:18px}.metric strong{font:700 28px var(--mono);display:block}
+    .metric small{color:var(--muted)}
+    .orbit{position:relative;width:min(100%,620px);aspect-ratio:1 / 1;margin:auto;border:1px solid var(--line);
+      border-radius:50%;background:var(--surface)}
+    .orbit:before,.orbit:after{content:"";position:absolute;inset:16%;border:1px solid var(--line);border-radius:50%}
+    .orbit:after{inset:33%;border-color:rgba(217,120,65,.48)}
+    .core{position:absolute;inset:38%;display:grid;place-items:center;text-align:center;border-radius:50%;
+      background:var(--copper);color:var(--bg);font:800 15px var(--mono);z-index:2}
+    .node{position:absolute;width:126px;padding:13px;background:var(--surface);border:1px solid var(--line);
+      border-radius:12px;text-align:center;font:700 12px var(--mono)}
+    .node small{display:block;color:var(--muted);font:400 10px var(--sans);margin-top:4px}
+    .node.n1{left:50%;top:3%;transform:translateX(-50%)}.node.n2{right:0;top:50%;transform:translateY(-50%)}
+    .node.n3{left:50%;bottom:3%;transform:translateX(-50%)}.node.n4{left:0;top:50%;transform:translateY(-50%)}
+    .section-head{max-width:780px;margin-bottom:44px}
+    .section-head h2{font-size:clamp(38px,5vw,72px);line-height:1;letter-spacing:-.05em;margin:14px 0 18px}
+    .section-head p{font-size:18px;line-height:1.6;color:var(--muted);margin:0}
+    .infographic{border:1px solid var(--line);border-radius:var(--radius);background:rgba(20,23,26,.9);overflow:hidden}
+    .sim-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:18px}
+    .sim-toolbar{display:flex;gap:8px;align-items:center;padding:14px;border-bottom:1px solid var(--line);overflow:auto}
+    .state-tabs{display:flex;gap:6px;overflow:auto;scrollbar-width:none;flex:1}
+    .state-tab,.width-tab{border:1px solid var(--line);background:transparent;color:var(--muted);padding:8px 10px;
+      border-radius:8px;white-space:nowrap;cursor:pointer;font:600 11px var(--mono)}
+    .state-tab.active,.width-tab.active{color:var(--ivory);border-color:var(--copper);background:rgba(217,120,65,.11)}
+    .widths{display:flex;gap:5px;border-left:1px solid var(--line);padding-left:10px}
+    .stage{padding:22px;min-height:650px;display:grid;place-items:center;background:#101214}
+    .terminal{width:min(100%,980px);height:570px;border:1px solid #343a3f;border-radius:12px;background:#0c0e10;
+      overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35);transition:.35s width}
+    .terminal[data-width="92"]{width:82%}.terminal[data-width="72"]{width:64%}.terminal[data-width="48"]{width:44%}
+    .term-top{height:38px;display:flex;align-items:center;gap:8px;padding:0 13px;border-bottom:1px solid #292e32;
+      background:#121518;color:#7c8388;font:11px var(--mono)}
+    .term-led{width:8px;height:8px;border-radius:50%;background:#3a4045}.term-title{margin:auto}
+    .term-body{height:calc(100% - 38px);padding:16px;display:flex;flex-direction:column;gap:11px;font:12px/1.45 var(--mono);overflow:hidden}
+    .term-ribbon{display:flex;align-items:center;gap:9px;padding-bottom:9px;border-bottom:1px solid #2c3237;white-space:nowrap;overflow:hidden}
+    .copper{color:var(--copper)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+    .dim{color:var(--dim)}.muted{color:var(--muted)}.spacer{flex:1}
+    .term-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;flex:1}
+    .term-card{border:1px solid #2c3237;background:#121519;border-radius:8px;padding:11px;min-width:0}
+    .term-card strong{display:block;margin-bottom:7px}.term-card p{margin:6px 0;color:#cbc6be}
+    .term-line{display:flex;align-items:center;gap:9px;border:1px solid #2c3237;background:#121519;border-radius:8px;padding:10px;min-width:0}
+    .term-line b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .continuity{display:grid;grid-template-columns:54px 16px minmax(0,1fr);grid-template-rows:repeat(3,1fr);flex:1;min-height:0}
+    .spine-label{padding-top:10px;font-weight:800;color:var(--muted)}.spine-label.active{color:var(--copper)}
+    .spine{border-left:1px solid var(--copper)}.spine-copy{padding:8px 0;border-bottom:1px solid var(--line);min-width:0}
+    .spine-copy:last-child{border-bottom:0}.spine-copy strong{display:block}.spine-copy p{margin:4px 0;color:var(--muted)}
+    .term-pill{border:1px solid #42494f;border-radius:999px;padding:3px 7px;font-size:10px;white-space:nowrap}
+    .term-input{border:1px solid #394148;background:#14171a;border-radius:8px;padding:10px;color:#a8a39b}
+    .term-footer{display:flex;gap:8px;align-items:center;border-top:1px solid #2c3237;padding-top:8px;white-space:nowrap;overflow:hidden}
+    .term-footer .primary-tag{color:var(--bg);background:var(--copper);border-radius:999px;padding:3px 7px;font-weight:800}
+    .panel{max-width:540px;margin:auto;border:1px solid #4a5258;background:#14171a;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:13px}
+    .panel h3{font-size:20px;margin:0}.panel .actions{display:flex;gap:8px;margin-top:auto}.panel button{flex:1;padding:9px;border:1px solid #42494f;border-radius:7px;background:#1c2024;color:var(--ivory)}
+    .panel button.primary{background:var(--copper);color:var(--bg);border-color:var(--copper);font-weight:800}
+    .sim-info{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+    .sim-info>div{background:var(--surface);padding:18px}.sim-info small{font:700 10px var(--mono);color:var(--copper);letter-spacing:.1em}
+    .sim-info p{margin:8px 0 0;color:var(--muted);line-height:1.5}.sim-info strong{display:block;font-size:17px;margin-top:7px}
+    .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;position:relative}
+    .flow:before{content:"";position:absolute;left:7%;right:7%;top:58px;height:1px;background:var(--copper)}
+    .phase{position:relative;padding:22px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);min-height:260px}
+    .phase-index{position:relative;z-index:2;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;
+      margin-bottom:28px;background:var(--bg);border:1px solid var(--copper);font:800 20px var(--mono);color:var(--copper)}
+    .phase h3{font-size:25px;margin:0 0 10px}.phase p{color:var(--muted);line-height:1.55}.phase ul{padding:0;list-style:none;color:var(--muted);font-size:13px}
+    .phase li{padding:5px 0}.phase li:before{content:"›";color:var(--copper);margin-right:8px}
+    .atlas{display:grid;grid-template-columns:180px repeat(5,1fr);gap:5px}
+    .atlas>*{min-height:58px;display:flex;align-items:center;padding:10px;border-radius:8px;background:var(--surface);border:1px solid transparent}
+    .atlas .head{font:700 10px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;background:transparent}
+    .atlas .row{font:700 12px var(--mono)}.cell{justify-content:center;text-align:center;font-size:11px;color:var(--muted)}
+    .cell.on{background:rgba(217,120,65,.12);border-color:rgba(217,120,65,.48);color:var(--ivory)}
+    .cell.attn{background:rgba(211,166,74,.12);border-color:rgba(211,166,74,.42);color:var(--warn)}
+    .cell.proof{background:rgba(105,192,138,.10);border-color:rgba(105,192,138,.38);color:var(--ok)}
+    .design-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .tokens{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:18px}
+    .swatch{min-height:120px;border-radius:11px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid rgba(255,255,255,.08)}
+    .swatch b{font:700 11px var(--mono)}.swatch code{font-size:10px;color:inherit;opacity:.8}
+    .hierarchy{padding:24px;display:flex;flex-direction:column;gap:10px}
+    .tier{padding:17px;border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:130px 1fr;gap:14px;align-items:center}
+    .tier strong{font:700 11px var(--mono);color:var(--copper)}.tier p{margin:0;color:var(--muted)}
+    .tier:nth-child(1){width:72%;border-color:var(--copper)}.tier:nth-child(2){width:82%}.tier:nth-child(3){width:91%}.tier:nth-child(4){width:100%}
+    .system-contract{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:18px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+    .system-rule{background:var(--surface);padding:20px;min-height:150px}.system-rule b{font:800 24px var(--mono);color:var(--copper)}
+    .system-rule strong{display:block;margin:12px 0 7px}.system-rule p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .funnel,.pipeline{padding:24px;min-height:500px}
+    .funnel-step{margin:auto;padding:17px;text-align:center;border:1px solid var(--line);background:var(--surface)}
+    .funnel-step+ .funnel-step{margin-top:10px}.f1{width:100%}.f2{width:84%}.f3{width:68%;border-color:var(--warn)}
+    .f4{width:52%;border-color:var(--bad)}.funnel-step strong{display:block;font:800 12px var(--mono)}
+    .pipeline-row{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+    .signal{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:1px solid currentColor;font:800 11px var(--mono)}
+    .pipeline-row small{color:var(--muted)}
+    .topology{padding:30px;display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:40px;align-items:center}
+    .topo-col{display:flex;flex-direction:column;gap:10px}.topo-node{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font:700 12px var(--mono)}
+    .topo-node span{display:block;color:var(--muted);font:400 11px var(--sans);margin-top:5px}
+    .topo-core{padding:26px;border:1px solid var(--copper);border-radius:50%;aspect-ratio:1;display:grid;place-items:center;text-align:center;background:rgba(217,120,65,.08)}
+    .topo-core strong{font:800 18px var(--mono);color:var(--copper)}.topo-core p{color:var(--muted);max-width:190px}
+    .roadmap{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+    .mile{background:var(--surface);padding:20px;min-height:245px}.mile b{font:800 31px var(--mono);color:var(--copper)}
+    .mile h3{font-size:17px}.mile p{color:var(--muted);font-size:13px;line-height:1.55}
+    .files{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:18px}.file{padding:13px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font:12px var(--mono)}
+    .file small{display:block;color:var(--muted);font-family:var(--sans);margin-top:5px}
+    .verify{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+    .verify-card{padding:22px}.ring{width:108px;height:108px;border-radius:50%;display:grid;place-items:center;margin-bottom:18px;
+      background:conic-gradient(var(--ok) 0 88%,var(--line) 88%)}.ring:after{content:attr(data-label);display:grid;place-items:center;width:78px;height:78px;border-radius:50%;background:var(--surface);font:800 16px var(--mono)}
+    .verify-card h3{font-size:21px}.verify-card p{color:var(--muted);line-height:1.55}.commands code{display:block;padding:12px;border-bottom:1px solid var(--line);font:11px var(--mono);color:var(--copper)}
+    .decisions{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .decision{padding:20px}.decision h3{min-height:48px}.option{display:flex;align-items:flex-start;gap:9px;padding:12px;border:1px solid var(--line);border-radius:9px;margin:8px 0;cursor:pointer}
+    .option:has(input:checked){border-color:var(--copper);background:rgba(217,120,65,.09)}.option input{accent-color:var(--copper);margin-top:3px}
+    .option span{font-size:13px}.option small{display:block;color:var(--muted);margin-top:3px}
+    .decision-actions{display:flex;gap:10px;margin-top:18px}.decision-status{color:var(--ok);font:12px var(--mono);align-self:center}
+    footer{padding:46px 0}.foot{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px}.foot strong{color:var(--copper)}
+    .reveal{opacity:0;transform:translateY(20px);transition:.6s ease}.reveal.in{opacity:1;transform:none}
+    @media(max-width:1050px){
+      .hero,.sim-layout,.design-grid,.split{grid-template-columns:1fr}
+      .flow{grid-template-columns:1fr 1fr}.flow:before{display:none}.roadmap{grid-template-columns:repeat(3,1fr)}.system-contract{grid-template-columns:1fr 1fr}
+      .topology{grid-template-columns:1fr}.topo-core{width:280px;margin:auto}.verify{grid-template-columns:1fr}.decisions{grid-template-columns:1fr}
+      .sim-info{display:grid;grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:720px){
+      .shell{width:min(100% - 24px,1500px)}section{padding:64px 0}.nav-links{display:none}.hero{padding:42px 0}
+      h1{font-size:58px}.hero-meta{grid-template-columns:1fr 1fr}.orbit{transform:scale(.9)}
+      .flow,.roadmap,.tokens,.system-contract{grid-template-columns:1fr}.atlas{grid-template-columns:100px repeat(5,120px);overflow:auto}
+      .sim-toolbar{align-items:flex-start;flex-direction:column}.widths{border:0;padding:0}.stage{padding:10px;min-height:560px}
+      .terminal,.terminal[data-width]{width:100%;height:530px}.term-grid{grid-template-columns:1fr}.term-grid .term-card:nth-child(n+3){display:none}
+      .sim-info{grid-template-columns:1fr}.topology{padding:18px}.files{grid-template-columns:1fr}.foot{align-items:flex-start;flex-direction:column}
+    }
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;transform:none;transition:none}.btn{transition:none}}
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="shell nav-inner">
+      <div class="brand"><b><span>N</span></b>NEURA PLAN</div>
+      <nav class="nav-links" aria-label="Plan sections">
+        <a href="#simulator">Simulator</a><a href="#lifecycle">Lifecycle</a><a href="#atlas">States</a>
+        <a href="#system">System</a><a href="#architecture">Architecture</a><a href="#delivery">Delivery</a>
+        <a href="#decisions">Decisions</a>
+      </nav>
+      <div class="lock">PLAN ONLY · CODE LOCKED</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="shell">
+      <section class="hero">
+        <div>
+          <div class="kicker">Rajveer's personal engineering cockpit</div>
+          <h1>One cockpit. <span>Every state.</span></h1>
+          <p class="hero-copy">A complete visual system for brief, work, approval, proof, recovery, health, memory, agents, models, degraded operation, and handoff.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="#simulator">Operate prototype</a>
+            <a class="btn" href="#decisions">Review decisions</a>
+          </div>
+          <div class="hero-meta">
+            <div class="metric"><strong>14</strong><small>designed states</small></div>
+            <div class="metric"><strong>4</strong><small>lifecycle phases</small></div>
+            <div class="metric"><strong>4</strong><small>terminal widths</small></div>
+            <div class="metric"><strong>0</strong><small>product edits</small></div>
+          </div>
+        </div>
+        <div class="orbit" aria-label="Neura lifecycle orbit infographic">
+          <div class="core">NEURA<br>COCKPIT</div>
+          <div class="node n1">BRIEF<small>scope and proof</small></div>
+          <div class="node n2">WORK<small>active operation</small></div>
+          <div class="node n3">PROOF<small>evidence and verdict</small></div>
+          <div class="node n4">HANDOFF<small>close the loop</small></div>
+        </div>
+      </section>
+
+      <section id="simulator" class="reveal">
+        <div class="section-head">
+          <div class="kicker">Interactive cockpit</div>
+          <h2>Inspect every product state.</h2>
+          <p>Switch state and terminal width. Content, density, footer collapse, focus, and safety hierarchy change in place.</p>
+        </div>
+        <div class="sim-layout">
+          <div class="infographic">
+            <div class="sim-toolbar">
+              <div class="state-tabs" id="stateTabs"></div>
+              <div class="widths" id="widthTabs"></div>
+            </div>
+            <div class="stage">
+              <div class="terminal" id="terminal" data-width="120">
+                <div class="term-top"><i class="term-led"></i><i class="term-led"></i><i class="term-led"></i><span class="term-title">Neura · C:\Neura</span></div>
+                <div class="term-body" id="termBody"></div>
+              </div>
+            </div>
+          </div>
+          <aside class="sim-info" id="simInfo"></aside>
+        </div>
+      </section>
+
+      <section id="lifecycle" class="reveal">
+        <div class="section-head">
+          <div class="kicker">Lifecycle model</div>
+          <h2>Four phases. One continuous session.</h2>
+          <p>Launch is preflight. Contextual surfaces appear only when a decision, failure, or inspection requires them.</p>
+        </div>
+        <div class="flow">
+          <article class="phase"><div class="phase-index">01</div><h3>Brief</h3><p>Turn a prompt into a visible contract.</p><ul><li>Outcome</li><li>Constraints</li><li>Proof</li><li>Allowed scope</li></ul></article>
+          <article class="phase"><div class="phase-index">02</div><h3>Work</h3><p>Show one active step without dashboard noise.</p><ul><li>Current operation</li><li>Milestones</li><li>Interrupt hint</li><li>Agent status</li></ul></article>
+          <article class="phase"><div class="phase-index">03</div><h3>Proof</h3><p>Separate running checks from final verdict.</p><ul><li>Checkpoint</li><li>Harness tests</li><li>Proof gate</li><li>Evidence detail</li></ul></article>
+          <article class="phase"><div class="phase-index">04</div><h3>Handoff</h3><p>Close with scope, evidence, and next action.</p><ul><li>What changed</li><li>Why</li><li>Do this now</li><li>Key takeaway</li></ul></article>
+        </div>
+      </section>
+
+      <section id="atlas" class="reveal">
+        <div class="section-head">
+          <div class="kicker">State atlas</div>
+          <h2>Every state has one visual job.</h2>
+          <p>Matrix prevents permanent chrome. Each surface owns only the signals needed for that moment.</p>
+        </div>
+        <div class="atlas infographic" id="atlasGrid"></div>
+      </section>
+
+      <section id="system" class="reveal">
+        <div class="section-head">
+          <div class="kicker">Design system</div>
+          <h2>Forged Tungsten. Quiet by default.</h2>
+          <p>Neutral chrome carries the interface. Burnt copper marks identity, focus, and the current action. Status colors appear only for real outcomes or risk.</p>
+        </div>
+        <div class="design-grid">
+          <div class="infographic tokens">
+            <div class="swatch" style="background:#0b0c0e"><b>Canvas</b><code>#0b0c0e</code></div>
+            <div class="swatch" style="background:#14171a"><b>Surface</b><code>#14171a</code></div>
+            <div class="swatch" style="background:#1c2024"><b>Raised</b><code>#1c2024</code></div>
+            <div class="swatch" style="background:#d97841;color:#0b0c0e"><b>Burnt copper</b><code>#d97841</code></div>
+            <div class="swatch" style="background:#a8a39b;color:#0b0c0e"><b>Muted steel</b><code>#a8a39b</code></div>
+            <div class="swatch" style="background:#e8e2d8;color:#0b0c0e"><b>Bone</b><code>#e8e2d8</code></div>
+            <div class="swatch" style="background:#69c08a;color:#07130e"><b>Verified</b><code>#69c08a</code></div>
+            <div class="swatch" style="background:#d3a64a;color:#160f05"><b>Attention</b><code>#d3a64a</code></div>
+            <div class="swatch" style="background:#df6b63;color:#170707"><b>Blocked</b><code>#df6b63</code></div>
+          </div>
+          <div class="infographic hierarchy">
+            <div class="tier"><strong>1 · PHASE</strong><p>Where am I in the agent lifecycle?</p></div>
+            <div class="tier"><strong>2 · OBJECTIVE</strong><p>What outcome is Neura pursuing?</p></div>
+            <div class="tier"><strong>3 · EVIDENCE</strong><p>What happened, and what proves it?</p></div>
+            <div class="tier"><strong>4 · AMBIENT</strong><p>Model, branch, context, cost, and background operation.</p></div>
+          </div>
+        </div>
+        <div class="system-contract">
+          <div class="system-rule"><b>1</b><strong>Brand accent</strong><p>Copper only for identity, focus, and the primary action.</p></div>
+          <div class="system-rule"><b>3</b><strong>Elevation levels</strong><p>Canvas, surface, and raised. Depth without tinted panels.</p></div>
+          <div class="system-rule"><b>0</b><strong>Decorative effects</strong><p>No ornamental gradients, colored glow, or ambient noise.</p></div>
+          <div class="system-rule"><b>ON</b><strong>Demand detail</strong><p>Health, memory, agents, and proof expand only when needed.</p></div>
+        </div>
+      </section>
+
+      <section class="reveal">
+        <div class="section-head">
+          <div class="kicker">Safety and proof</div>
+          <h2>Attention narrows. Evidence expands.</h2>
+          <p>Risk removes noise and forces a decision. Verification adds detail only after work changes the tree.</p>
+        </div>
+        <div class="split">
+          <div class="infographic funnel">
+            <h3>Approval funnel</h3>
+            <div class="funnel-step f1"><strong>PROPOSED ACTION</strong><span class="muted">exact command or mutation</span></div>
+            <div class="funnel-step f2"><strong>RISK CLASS</strong><span class="muted">destructive, secret, infrastructure</span></div>
+            <div class="funnel-step f3"><strong>BOUNDARY + RECOVERY</strong><span class="muted">target, scope, reversible state</span></div>
+            <div class="funnel-step f4"><strong>ALLOW OR DENY</strong><span class="muted">missing input defaults to deny</span></div>
+          </div>
+          <div class="infographic pipeline">
+            <h3>Proof pipeline</h3>
+            <div class="pipeline-row"><span class="signal copper">1</span><div><b>Tree changed</b><small>fingerprint before and after</small></div><span class="muted">trigger</span></div>
+            <div class="pipeline-row"><span class="signal copper">2</span><div><b>Quick gate</b><small>proof-of-work without tests</small></div><span class="muted">running</span></div>
+            <div class="pipeline-row"><span class="signal ok">3</span><div><b>Harness verification</b><small>responsive and safety checks</small></div><span class="ok">passed</span></div>
+            <div class="pipeline-row"><span class="signal ok">4</span><div><b>Conclusion</b><small>evidence linked to changed scope</small></div><span class="ok">verified</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="architecture" class="reveal">
+        <div class="section-head">
+          <div class="kicker">Implementation topology</div>
+          <h2>Coordinate presentation, not product logic.</h2>
+          <p>Existing extensions keep their jobs. One session-local state publisher gives ribbon and footer a consistent view.</p>
+        </div>
+        <div class="infographic topology">
+          <div class="topo-col">
+            <div class="topo-node">checkpoint.ts<span>snapshot and recovery state</span></div>
+            <div class="topo-node">guardrail.ts<span>approval and risk state</span></div>
+            <div class="topo-node">check-gate.ts<span>proof and verdict state</span></div>
+            <div class="topo-node">pi-subagents<span>role and operation status</span></div>
+          </div>
+          <div class="topo-core"><div><strong>cockpit-state.ts</strong><p>Session local. Ephemeral. No database. No transcript duplication.</p></div></div>
+          <div class="topo-col">
+            <div class="topo-node">neura.ts<span>launch, ribbon, panels, handoff</span></div>
+            <div class="topo-node">cockpit.ts<span>ambient responsive footer</span></div>
+            <div class="topo-node">notifications<span>decisive outcomes only</span></div>
+            <div class="topo-node">verify-harness.mjs<span>state and width snapshots</span></div>
+          </div>
+        </div>
+        <div class="files">
+          <div class="file">agent/neura/cockpit-state.ts<small>New session state publisher.</small></div>
+          <div class="file">agent/neura/core.ts<small>Shared responsive and semantic formatting.</small></div>
+          <div class="file">agent/extensions/neura.ts<small>Launch, phase ribbon, panels, closeout.</small></div>
+          <div class="file">agent/extensions/cockpit.ts<small>Footer state and collapse order.</small></div>
+          <div class="file">agent/extensions/guardrail.ts<small>Risk surface, deny-first behavior.</small></div>
+          <div class="file">agent/extensions/checkpoint.ts<small>Recovery preview and restore state.</small></div>
+          <div class="file">agent/extensions/check-gate.ts<small>Queued, running, passed, failed proof.</small></div>
+          <div class="file">scripts/verify-harness.mjs<small>Lifecycle and width validation.</small></div>
+        </div>
+      </section>
+
+      <section id="delivery" class="reveal">
+        <div class="section-head">
+          <div class="kicker">Delivery plan</div>
+          <h2>Small layers. Checkable outcomes.</h2>
+          <p>Implementation starts only after approval. Repo changes verify first, then approved files sync to live install.</p>
+        </div>
+        <div class="roadmap">
+          <article class="mile"><b>1</b><h3>State foundation</h3><p>Create session-local publisher. Prove independent extensions can publish without circular dependencies.</p></article>
+          <article class="mile"><b>2</b><h3>Shell hierarchy</h3><p>Build Continuity Spine launch. Add phase ribbon. Wire responsive footer collapse.</p></article>
+          <article class="mile"><b>3</b><h3>Safety and proof</h3><p>Render approval, verification, failure, and recovery as first-class states.</p></article>
+          <article class="mile"><b>4</b><h3>Context controls</h3><p>Unify health, memory, agents, and model control surfaces.</p></article>
+          <article class="mile"><b>5</b><h3>Compact and handoff</h3><p>Finish closeout record and test 48, 72, 92, and 120 columns.</p></article>
+          <article class="mile"><b>6</b><h3>Verify and sync</h3><p>Run harness, stock isolation, real edit journey, then copy approved files live.</p></article>
+        </div>
+      </section>
+
+      <section class="reveal">
+        <div class="section-head">
+          <div class="kicker">Verification</div>
+          <h2>Design approval includes a test contract.</h2>
+          <p>Every implementation claim maps to a deterministic command or observable terminal journey.</p>
+        </div>
+        <div class="verify">
+          <article class="infographic verify-card"><div class="ring" data-label="14/14"></div><h3>State coverage</h3><p>Launch, brief, work, approval, proof, recovery, health, memory, agents, model, degraded, closeout, and compact variants.</p></article>
+          <article class="infographic verify-card"><div class="ring" data-label="4/4" style="background:conic-gradient(var(--copper) 0 100%,var(--line) 100%)"></div><h3>Width coverage</h3><p>48, 72, 92, and 120 columns. No overlap, widget truncation, footer wrapping, or lost primary action.</p></article>
+          <article class="infographic verify-card commands"><h3>Required commands</h3><code>node scripts/verify-harness.mjs</code><code>powershell -File .\install.ps1 -Check</code><code>pi -p "What is your name? One word."</code><code>$env:NEURA="1"; pi -p "What is your name?"</code></article>
+        </div>
+      </section>
+
+      <section id="decisions" class="reveal">
+        <div class="section-head">
+          <div class="kicker">Approval decisions</div>
+          <h2>Three choices unlock implementation.</h2>
+          <p>Selections stay in this browser only. Export creates a local text receipt. Nothing is uploaded.</p>
+        </div>
+        <form id="decisionForm">
+          <div class="decisions">
+            <article class="infographic decision">
+              <h3>Active-work density</h3>
+              <label class="option"><input type="radio" name="density" value="Phase ribbon plus footer" checked><span>Phase ribbon plus footer<small>Recommended. Clear lifecycle, low chrome.</small></span></label>
+              <label class="option"><input type="radio" name="density" value="Footer only"><span>Footer only<small>Maximum transcript space.</small></span></label>
+              <label class="option"><input type="radio" name="density" value="Persistent task panel"><span>Persistent task panel<small>More detail, more pressure.</small></span></label>
+            </article>
+            <article class="infographic decision">
+              <h3>Approval convenience</h3>
+              <label class="option"><input type="radio" name="approval" value="Allow similar this session" checked><span>Allow similar this session<small>Recommended. No persistent trust.</small></span></label>
+              <label class="option"><input type="radio" name="approval" value="Allow once only"><span>Allow once only<small>Strongest friction.</small></span></label>
+            </article>
+            <article class="infographic decision">
+              <h3>Agent detail</h3>
+              <label class="option"><input type="radio" name="agents" value="Footer plus command panel" checked><span>Footer plus command panel<small>Recommended. Ambient summary, on-demand detail.</small></span></label>
+              <label class="option"><input type="radio" name="agents" value="Transcript cards"><span>Transcript cards<small>More visible history, more noise.</small></span></label>
+            </article>
+          </div>
+          <div class="decision-actions">
+            <button class="btn primary" type="button" id="saveDecisions">Save locally</button>
+            <button class="btn" type="button" id="exportDecisions">Export receipt</button>
+            <span class="decision-status" id="decisionStatus"></span>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="shell foot"><strong>NEURA COCKPIT PLAN</strong><span>Local standalone HTML</span><span>Product code untouched</span><span>C:\Neura\plans\neura-cockpit-redesign.html</span></div>
+  </footer>
+
+  <script>
+    const states=[
+      {id:"launch",label:"Launch",surface:"Continuity Spine",trigger:"Session start",next:"Resume or new task",purpose:"Restore the last meaningful thread, current boundary, and one recommended continuation."},
+      {id:"brief",label:"Brief",surface:"Ribbon + transcript",trigger:"Prompt accepted",next:"Approve or refine",purpose:"Make outcome, constraints, proof, and allowed scope visible."},
+      {id:"work",label:"Work",surface:"Ribbon + operation feed",trigger:"Agent starts",next:"Settled or approval",purpose:"Show one active step, completed milestones, and next work."},
+      {id:"approval",label:"Approval",surface:"Focused panel",trigger:"Risk detected",next:"Allow or deny",purpose:"Name risk, exact action, boundary, and recovery. Missing input denies."},
+      {id:"proof",label:"Proof",surface:"Evidence panel",trigger:"Tree changed",next:"Pass or fix",purpose:"Separate queued, running, passed, failed, and unavailable checks."},
+      {id:"recovery",label:"Recovery",surface:"Snapshot panel",trigger:"/undo",next:"Preview or cancel",purpose:"Show restore target, limits, and current-state reversibility."},
+      {id:"health",label:"Health",surface:"Readiness panel",trigger:"/health",next:"Close",purpose:"Inspect core, workflow, context, workspace, bridges, and local model."},
+      {id:"memory",label:"Memory",surface:"Popover",trigger:"/memory",next:"Close or remember",purpose:"Inspect durable facts and provenance without permanent chrome."},
+      {id:"agents",label:"Agents",surface:"Command panel",trigger:"/agents",next:"Close or take over",purpose:"Show role, task, state, and last meaningful update."},
+      {id:"model",label:"Model",surface:"Popover",trigger:"/preset",next:"Select or close",purpose:"Show current model, availability, and session-only switch."},
+      {id:"degraded",label:"Degraded",surface:"Readiness panel",trigger:"Capability missing",next:"Repair or continue",purpose:"Show missing capability, exact impact, and one next action."},
+      {id:"handoff",label:"Handoff",surface:"Closeout record",trigger:"Iteration done",next:"New prompt",purpose:"Close with scope, proof, manual next step, and takeaway."},
+      {id:"compact",label:"Compact",surface:"Stacked shell",trigger:"Narrow terminal",next:"Resize",purpose:"Preserve phase, active task, model, and verdict while detail collapses."},
+      {id:"failure",label:"Proof fail",surface:"Evidence panel",trigger:"Check fails",next:"Fix root cause",purpose:"Show decisive failure, affected scope, and direct recovery action."}
+    ];
+    const widths=[120,92,72,48];
+    let activeState="launch",activeWidth=120;
+    const tabs=document.getElementById("stateTabs"),widthTabs=document.getElementById("widthTabs");
+    const term=document.getElementById("terminal"),body=document.getElementById("termBody"),info=document.getElementById("simInfo");
+
+    function footer(op=""){
+      return `<div class="term-footer"><span class="primary-tag">gpt-5.5</span><span>main</span><span class="muted">context 34%</span><span class="muted">$0.42</span><span class="spacer"></span><span class="muted">${op}</span></div>`;
+    }
+    function ribbon(phase,meta=""){
+      return `<div class="term-ribbon"><b class="copper">NEURA / ${phase}</b><span>${meta}</span><span class="spacer"></span><span class="dim">Esc interrupt</span></div>`;
+    }
+    const templates={
+      launch:()=>`<div class="term-ribbon"><b class="copper">NEURA</b><span class="term-pill">READY</span><span class="spacer"></span><span>Mon, 28 Jul</span></div>
+        <div><b style="font-size:23px">Good evening, Rajveer.</b><div class="muted">Context restored. One continuation is ready.</div></div>
+        <div class="continuity"><div class="spine-label">LAST</div><div class="spine"></div><div class="spine-copy"><strong>19:42 · Cockpit redesign</strong><p>Forged Tungsten system approved.</p></div><div class="spine-label">NOW</div><div class="spine"></div><div class="spine-copy"><strong>C:\\Neura · main</strong><p>Design approved. Product implementation unlocked.</p></div><div class="spine-label active">NEXT</div><div class="spine"></div><div class="spine-copy"><strong class="copper">Build the cockpit lifecycle</strong><p>Enter resume · N new task</p></div></div><div class="term-input">› What should Neura do next?</div>${footer("/health readiness")}`,
+      brief:()=>`${ribbon("BRIEF","cockpit redesign · PLAN-ONLY")}<div class="term-grid"><div class="term-card"><strong class="copper">OUTCOME</strong><p>Approve complete cockpit design.</p></div><div class="term-card"><strong class="copper">CONSTRAINTS</strong><p>No product edits. Stock pi unchanged.</p></div><div class="term-card"><strong class="copper">PROOF</strong><p>State matrix and responsive journey.</p></div></div><div class="term-line"><b>Rajveer</b><span>No code until plan approval.</span></div><div class="term-line"><b class="copper">Neura</b><span>Scope locked to C:\\Neura\\plans.</span></div><div class="term-input">› Refine outcome or approve direction...</div>${footer("brief")}`,
+      work:()=>`${ribbon("WORK","cockpit redesign · 3 / 5")}<div class="term-line"><span class="ok">✓</span><b>Inspect repository</b><span class="spacer"></span><span class="muted">complete</span></div><div class="term-line"><span class="ok">✓</span><b>Research official patterns</b><span class="spacer"></span><span class="muted">6 sources</span></div><div class="term-line" style="border-color:#d97841"><span class="copper">●</span><b>Compose state-complete canvas</b><span class="spacer"></span><span class="copper">active</span></div><div class="term-line"><span class="dim">○</span><b>Validate responsive states</b></div><div class="spacer"></div><div class="term-input">› Steer current work...</div>${footer("checkpoint · reviewer queued")}`,
+      approval:()=>`${ribbon("APPROVAL","focused safety state")}<div class="panel"><div class="term-ribbon"><b class="warn">APPROVAL REQUIRED</b><span class="spacer"></span><span class="term-pill">destructive</span></div><h3>Restore worktree snapshot?</h3><div class="term-card"><strong class="muted">ACTION</strong><p>/undo snapshot 19:42</p><strong class="muted">BOUNDARY</strong><p>C:\\Neura only</p><strong class="muted">RECOVERY</strong><p>Current state is snapshotted first.</p></div><label><input type="checkbox"> Allow similar restores this session</label><div class="actions"><button>Deny</button><button class="primary">Allow once</button></div><small class="muted">No decision defaults to deny.</small></div>`,
+      proof:()=>`${ribbon("PROOF","cockpit redesign")}<div class="term-line"><span class="ok">✓</span><b>Harness verification</b><span class="spacer"></span><span>42 checks · 1.8s</span></div><div class="term-line"><span class="ok">✓</span><b>Proof-of-work quick</b><span class="spacer"></span><span>PASS · 3 files</span></div><div class="term-line"><span class="ok">✓</span><b>Responsive matrix</b><span class="spacer"></span><span>48 / 72 / 92 / 120</span></div><div class="term-line"><span class="ok">✓</span><b>Stock pi isolation</b><span class="spacer"></span><span>unchanged</span></div><div class="term-card" style="border-color:#69c08a"><strong class="ok">VERIFIED</strong><p>All required checks passed.</p></div><div class="spacer"></div>${footer("proof passed")}`,
+      recovery:()=>`${ribbon("RECOVERY","/undo")}<div class="panel"><h3>Restore last checkpoint</h3><div class="term-card"><strong>19:42 · cockpit redesign</strong><p class="muted">Tree 2d8b... · C:\\Neura</p><p>Restores tracked and captured untracked files.</p></div><div class="term-card"><strong>Safety</strong><p>Current state is snapshotted first. Later files remain.</p></div><div class="actions"><button>Cancel</button><button class="primary">Preview restore</button></div></div>`,
+      health:()=>`${ribbon("HARNESS HEALTH","READY")}<div class="term-line"><b class="muted">CORE</b><span>pi 0.81 · git 2.50 · uvx 0.8</span></div><div class="term-line"><b class="muted">WORKFLOW</b><span class="ok">● checkpoint · ● proof · ● autogit</span></div><div class="term-line"><b class="muted">CONTEXT</b><span>● persona · ● memory · ● 46 skills</span></div><div class="term-line"><b class="muted">WORKSPACE</b><span>main · clean</span></div><div class="term-line"><b class="muted">BRIDGES</b><span>2/5 MCP · local Qwen offline</span></div><div class="spacer"></div><div class="term-card" style="border-color:#69c08a"><strong class="ok">Agentic harness is ready.</strong></div>${footer("/health close")}`,
+      memory:()=>`${ribbon("MEMORY","3 durable facts")}<div class="panel"><div class="term-card"><strong>Design</strong><p>Forged Tungsten. Neutral chrome, burnt copper accent, semantic status only.</p><small class="muted">today</small></div><div class="term-card"><strong>Product</strong><p>Keep Neura minimal, fast, and debloated. Detail stays on demand.</p><small class="muted">today</small></div><div class="term-card"><strong>Workflow</strong><p>Plan and design require approval before code.</p><small class="muted">today</small></div><div class="actions"><button>/remember</button><button class="primary">Open file</button></div></div>`,
+      agents:()=>`${ribbon("AGENTS","2 active")}<div class="term-line"><b>scout</b><span>Map terminal UI constraints</span><span class="spacer"></span><span class="ok">done</span></div><div class="term-line" style="border-color:#d97841"><b>reviewer</b><span>Stress-test cockpit states</span><span class="spacer"></span><span class="copper">active</span></div><div class="term-line"><b>main</b><span>Compose approval plan</span><span class="spacer"></span><span class="muted">waiting</span></div><div class="spacer"></div><div class="term-input">Take over · Open reviewer</div>${footer("reviewer active")}`,
+      model:()=>`${ribbon("MODEL CONTROL","/preset")}<div class="panel"><div class="term-line" style="border-color:#d97841"><span class="copper">●</span><b>GPT-5.5</b><span class="spacer"></span><span>current</span></div><div class="term-line"><span class="dim">○</span><b>Qwen3-Coder 30B</b><span class="spacer"></span><span class="warn">offline</span></div><div class="term-card"><p>Switch affects current session only.</p></div></div>`,
+      degraded:()=>`${ribbon("HARNESS HEALTH","DEGRADED")}<div class="term-line"><b class="muted">CORE</b><span>pi 0.81 · git 2.50 · </span><span class="warn">uvx missing</span></div><div class="term-line"><b class="muted">WORKFLOW</b><span>● checkpoint · </span><span class="warn">○ proof unavailable</span></div><div class="term-line"><b class="muted">WORKSPACE</b><span>main · 2 changes</span></div><div class="term-card" style="border-color:#d3a64a"><strong class="warn">IMPACT</strong><p>Automatic proof gate cannot run. Edits remain checkpointed.</p><p class="copper">Next: install uv, then run /health.</p></div><div class="spacer"></div>${footer("reduced operation")}`,
+      handoff:()=>`${ribbon("HANDOFF","SHIP READY")}<div class="term-grid" style="grid-template-columns:1.1fr .9fr"><div class="term-card"><strong>What changed</strong><p>• State-aware cockpit shell</p><p>• Unified approval, proof, recovery</p><p>• Compact layouts</p></div><div class="term-card"><strong>Proof</strong><p class="ok">✓ harness 42/42</p><p class="ok">✓ proof PASS</p><p class="ok">✓ stock pi isolated</p></div></div><div class="term-card"><strong>Do this now</strong><p>Review live terminal once, then approve sync.</p><strong>Key takeaway</strong><p class="muted">State and evidence belong in chrome. Conversation belongs in transcript.</p></div><div class="term-input">› Start next task...</div>${footer("handoff")}`,
+      compact:()=>`${ribbon("WORK","3/5 cockpit redesign")}<div class="term-line" style="border-color:#d97841"><b class="copper">ACTIVE</b><span>Compose state canvas</span></div><div class="term-line"><b>DONE</b><span>Inspect · research</span></div><div class="term-line"><b>NEXT</b><span>Validate local plan</span></div><div class="spacer"></div><div class="term-input">› Steer work...</div>${footer("proof queued")}`,
+      failure:()=>`${ribbon("PROOF","FAILED")}<div class="term-line"><span class="ok">✓</span><b>Harness load</b><span class="spacer"></span><span>passed</span></div><div class="term-line" style="border-color:#df6b63"><span class="bad">×</span><b>Responsive footer</b><span class="spacer"></span><span class="bad">48-column overflow</span></div><div class="term-card" style="border-color:#df6b63"><strong class="bad">ROOT CAUSE</strong><p>Operation detail survives after context collapse.</p><strong class="copper">NEXT ACTION</strong><p>Collapse operation detail before branch label, then rerun harness.</p></div><div class="spacer"></div>${footer("proof failed · fix required")}`
+    };
+    function render(){
+      [...tabs.children].forEach(b=>b.classList.toggle("active",b.dataset.id===activeState));
+      [...widthTabs.children].forEach(b=>b.classList.toggle("active",Number(b.dataset.width)===activeWidth));
+      term.dataset.width=activeWidth;
+      body.innerHTML=templates[activeState]();
+      const s=states.find(x=>x.id===activeState);
+      info.innerHTML=`<div><small>STATE</small><strong>${s.label}</strong></div><div><small>PURPOSE</small><p>${s.purpose}</p></div><div><small>SURFACE</small><strong>${s.surface}</strong></div><div><small>TRIGGER</small><p>${s.trigger}</p></div><div><small>EXIT</small><p>${s.next}</p></div><div><small>WIDTH</small><strong>${activeWidth} columns</strong></div>`;
+    }
+    states.forEach(s=>{const b=document.createElement("button");b.className="state-tab";b.dataset.id=s.id;b.textContent=s.label;b.onclick=()=>{activeState=s.id;render()};tabs.appendChild(b)});
+    widths.forEach(w=>{const b=document.createElement("button");b.className="width-tab";b.dataset.width=w;b.textContent=w;b.onclick=()=>{activeWidth=w;render()};widthTabs.appendChild(b)});
+    render();
+
+    const atlasHeads=["State","Phase","Footer","Panel","Safety","Proof"];
+    const atlasRows=[
+      ["Launch","on","on","","",""],["Brief","on","on","on","attn",""],["Work","on","on","","",""],
+      ["Approval","","","attn","attn",""],["Verification","on","on","proof","","proof"],["Recovery","","on","attn","attn",""],
+      ["Health","","on","on","","proof"],["Memory","","on","on","",""],["Agents","","on","on","",""],
+      ["Model","","on","on","",""],["Degraded","","on","attn","attn","proof"],["Handoff","on","on","on","","proof"],["Compact","on","on","","",""]
+    ];
+    const atlas=document.getElementById("atlasGrid");
+    atlasHeads.forEach(h=>atlas.insertAdjacentHTML("beforeend",`<div class="head">${h}</div>`));
+    atlasRows.forEach(r=>{atlas.insertAdjacentHTML("beforeend",`<div class="row">${r[0]}</div>`);r.slice(1).forEach((v,i)=>atlas.insertAdjacentHTML("beforeend",`<div class="cell ${v}">${v?(i===0?"phase":i===1?"ambient":i===2?"focused":i===3?"risk":"evidence"):"quiet"}</div>`))});
+
+    const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add("in")}),{threshold:.08});
+    document.querySelectorAll(".reveal").forEach(el=>observer.observe(el));
+    const navObserver=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){document.querySelectorAll(".nav-links a").forEach(a=>a.classList.toggle("active",a.getAttribute("href")==="#"+e.target.id))}}),{rootMargin:"-35% 0px -55% 0px"});
+    document.querySelectorAll("section[id]").forEach(el=>navObserver.observe(el));
+
+    const form=document.getElementById("decisionForm"),status=document.getElementById("decisionStatus");
+    function decisions(){return Object.fromEntries(new FormData(form).entries())}
+    document.getElementById("saveDecisions").onclick=()=>{localStorage.setItem("neura-cockpit-decisions",JSON.stringify(decisions()));status.textContent="Saved locally"};
+    document.getElementById("exportDecisions").onclick=()=>{const d=decisions();const text=`NEURA COCKPIT DESIGN APPROVAL\n\nActive-work density: ${d.density}\nApproval convenience: ${d.approval}\nAgent detail: ${d.agents}\n\nProduct implementation remains blocked until explicit approval.\n`;const url=URL.createObjectURL(new Blob([text],{type:"text/plain"}));const a=document.createElement("a");a.href=url;a.download="neura-cockpit-decisions.txt";a.click();URL.revokeObjectURL(url);status.textContent="Receipt exported"};
+    const saved=JSON.parse(localStorage.getItem("neura-cockpit-decisions")||"null");
+    if(saved)Object.entries(saved).forEach(([name,value])=>{const el=form.querySelector(`[name="${name}"][value="${value}"]`);if(el)el.checked=true});
+  </script>
+</body>
+</html>

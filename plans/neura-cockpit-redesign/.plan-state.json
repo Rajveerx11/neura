@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "canvas": {
+    "zoom": 0.12,
+    "pan": {
+      "x": 60,
+      "y": 42
+    }
+  },
+  "localOnly": true,
+  "kind": "plan"
+}
