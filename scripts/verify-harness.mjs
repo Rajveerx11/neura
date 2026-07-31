@@ -49,9 +49,13 @@ const widthOf = (value) => Array.from(stripAnsi(value)).length;
 
 const widgets = new Map();
 const statuses = new Map();
+const notices = [];
 const ui = {
   getTheme: () => null,
   setTheme() {},
+  notify(message, level) {
+    notices.push({ message, level });
+  },
   setWidget(id, value) {
     if (value === undefined) widgets.delete(id);
     else widgets.set(id, value);
@@ -122,6 +126,32 @@ for (const width of [24, 40, 80, 120]) {
   assert.ok(footer.render(width).every((line) => widthOf(line) <= width), `footer overflows at ${width} columns`);
 }
 
+// /preset must resolve dated catalog ids (claude-opus-5-2026xxxx) by prefix, newest first,
+// and tell the user which provider to /login when the model is absent.
+const presetExtension = extensionWithCommand("preset");
+const runPreset = (name, models) => {
+  notices.length = 0;
+  return presetExtension.commands.get("preset").handler(name, {
+    ui,
+    modelRegistry: {
+      find: (provider, id) => models.find((m) => m.provider === provider && m.id === id),
+      getAll: () => models,
+    },
+  });
+};
+const opusCatalog = [
+  { provider: "anthropic", id: "claude-opus-5-20260101" },
+  { provider: "anthropic", id: "claude-opus-5-20260420" },
+  { provider: "anthropic", id: "claude-sonnet-5" },
+];
+await runPreset("opus", opusCatalog);
+assert.match(notices.at(-1).message, /claude-opus-5-20260420/, "/preset opus picked the wrong catalog entry");
+await runPreset("opus", []);
+assert.equal(notices.at(-1).level, "error", "/preset with no matching model should report an error");
+assert.match(notices.at(-1).message, /\/login anthropic/, "/preset should point at the provider login");
+await runPreset("", opusCatalog);
+assert.match(notices.at(-1).message, /gpt.*opus.*qwen/s, "/preset listing lost a preset");
+
 const guardrail = loaded.extensions.find((extension) => extension.resolvedPath.endsWith(`${path.sep}guardrail.ts`));
 assert.ok(guardrail, "guardrail extension missing");
 const guard = firstHandler(guardrail, "tool_call");
@@ -139,5 +169,5 @@ assert.equal(
 assert.equal(await guard({ toolName: "bash", input: { command: "terraform destroy" } }, approved), undefined);
 
 console.log(
-  `Neura verify: ${loaded.extensions.length} extensions; responsive UI, health, footer, guardrails passed.`,
+  `Neura verify: ${loaded.extensions.length} extensions; responsive UI, health, footer, presets, guardrails passed.`,
 );

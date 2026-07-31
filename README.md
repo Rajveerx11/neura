@@ -14,7 +14,7 @@ Launch with `neura` in any terminal.
 | Harness health | `agent/extensions/harness-health.ts` | `/health` readiness console for runtime tools, checkpoints, proof gate, memory, skills, git state, MCP bridges, and local Qwen |
 | Guardrails | `agent/extensions/guardrail.ts` | Block-and-ask on destructive commands (rm -rf, force-push, DROP TABLE, Remove-Item -Recurse -Force, disk format) and secret-file access (.env, keys, credentials) — pi ships with no permission system, this is it |
 | Report format | `agent/extensions/ship-report.ts` | Injects the end-of-iteration report format (What / Why / Do now / Takeaway) into every turn |
-| Model presets | `agent/extensions/presets.ts` | `/preset gpt` ↔ `/preset qwen`; registers local llama.cpp (Qwen3-Coder-30B) as a provider at `127.0.0.1:8080/v1` |
+| Model presets | `agent/extensions/presets.ts` | `/preset gpt` (Codex, included in the ChatGPT sub) ↔ `/preset opus` (Claude Opus 5, billed as Claude extra usage) ↔ `/preset qwen` (local llama.cpp Qwen3-Coder-30B at `127.0.0.1:8080/v1`) |
 | Memory | `agent/extensions/neura-memory.ts` | Cross-session memory: `~/.pi/agent/neura/MEMORY.md` injected every turn; `/remember <fact>`, `/memory`; agent updates its own memory file (MEMORY.md itself is gitignored) |
 | Checkpoints | `agent/extensions/checkpoint.ts` | Silent worktree snapshot (git plumbing, throwaway index) before every agent run; `/undo` restores, `/undo list` inspects; /undo itself is reversible |
 | Check gate | `agent/extensions/check-gate.ts` | Self-verification via [proof-of-work](https://github.com/Rajveerx11/proof-of-work): quick tamper scan (`--no-tests`) after every turn that changed the working tree, failures fed back to the agent (1 retry cap); `/ship` runs the full check — real tests + signed audit-log verdict |
@@ -63,13 +63,14 @@ The Node verifier loads every TypeScript extension through pi's real loader, che
 - `/dash` toggles the continuity launch.
 - `/ship` runs the full proof-of-work gate.
 - `/undo` restores the checkpoint from before the last agent run.
-- `/preset gpt|qwen` changes the execution model.
+- `/preset gpt|opus|qwen` changes the execution model. `opus` needs `/login anthropic` once (Claude Pro/Max); pi bills third-party harness usage as Claude **extra usage**, per token, not against plan limits.
 
 ## Roadmap
 
 - **Done (2026-07-21)**: Phase 1 (skills unification), packages, guardrails, cockpit v1 (Neura identity, dashboard, footer, theme, launcher)
 - **Done (2026-07-22)**: Phase 2 Part A — MCP bridge (`@spences10/pi-mcp` + `agent/mcp.json`). Context7/Supabase/Notion reach full power once their tokens are set as user env vars. Hosted plan server dropped — visual plans are always local HTML, never the hosted service.
 - **Done (2026-07-28)**: Forged Tungsten design system and Continuity Spine launch.
-- **Next**: per-tool color badges (needs built-in tool override), structured task/run telemetry.
+- **Done (2026-07-31)**: `/preset opus` — Neura can run Claude Opus 5 for the hard 5% instead of being locked to one brain.
+- **Next**: run scorecard (surface `run-history.jsonl` outcomes so model choice is evidence-based), plan/todo surface (pi has no built-in equivalent), per-tool color badges (needs built-in tool override).
 
 Plans for each phase are in `plans/` (self-contained HTML, open in any browser). Change history in `docs/CHANGELOG.md`.

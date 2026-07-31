@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-31 — v2.2 (second brain: /preset opus)
+
+- **Root cause of "I trust Claude Code more" was the model, not the harness.** `auth.json`
+  held exactly one credential (`openai-codex`) and `models-store.json` cached exactly one
+  provider, so Neura was structurally incapable of running anything but gpt-5.5 while
+  Claude Code ran Opus 5. The harness was never the weak part.
+- **`/preset opus`** — pi 0.82.1 added Claude Opus 5 on the `anthropic` provider plus
+  Claude Pro/Max OAuth via `/login`. Neura can now switch brains per task.
+  Cost caveat recorded deliberately: pi bills third-party harness usage as Claude
+  **extra usage**, per token — it does *not* draw on plan limits. `gpt` stays the default
+  because Codex usage is included in the ChatGPT subscription.
+- **Preset resolution is prefix-based, not exact.** Catalog IDs carry date suffixes
+  (`claude-opus-5-2026xxxx`); `find()` alone would miss them. Exact match first, then the
+  newest prefix match from `modelRegistry.getAll()`.
+- **`pi.setModel()` rejection no longer escapes the command** — a bad or expired credential
+  now reports which model was attempted and which provider to `/login`, instead of an
+  unhandled rejection.
+- `scripts/verify-harness.mjs` covers preset resolution: dated-ID prefix pick, missing-model
+  login hint, and the full preset listing.
+
 ## 2026-07-28 — v2.1 (Forged Tungsten + Continuity Spine)
 
 - Replaced Orchid Dusk with Forged Tungsten: tungsten neutrals, one burnt-copper
