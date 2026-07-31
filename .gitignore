@@ -6,6 +6,8 @@ models.json
 .env*
 **/sessions/
 **/todos.json
+# local Agent-Native plan bridge token, regenerated on every serve
+**/.plan-url
 node_modules/
 .pi-subagents/
 .agents/

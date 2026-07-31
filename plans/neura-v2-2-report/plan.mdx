@@ -1,0 +1,108 @@
+---
+title: "Neura v2.2 — Second Brain"
+brief: "The trust gap was the model, not the harness. Neura can now run Claude Opus 5 on demand."
+version: 1
+---
+
+# Neura v2.2 — Second Brain
+
+## What I did
+
+- **Audited the whole harness** — 12 extensions, live install, `mcp.json`, `auth.json`, `models-store.json`, pi 0.82.1 API surface. Zero drift between repo and live.
+- **Found the real reason Neura feels weaker than Claude Code**: it only ever had one brain.
+- **Shipped `/preset opus`** — Neura can switch to Claude Opus 5 per task instead of being locked to gpt-5.5.
+- **Hardened preset switching** — dated catalog IDs now resolve by prefix, and a bad credential reports which model and which `/login` instead of throwing.
+- **Tested, documented, committed, pushed** — `4444b7b`.
+
+## Why this was the real problem
+
+`auth.json` held exactly one credential. `models-store.json` cached exactly one provider. Neura was structurally incapable of running anything other than gpt-5.5 — while Claude Code was running Opus 5 on the same tasks.
+
+That is not a harness gap. Every guardrail, checkpoint, proof gate, and memory file was working. The instinct to reach for Claude Code was correct, and it was about the model.
+
+<Diagram id="one-brain-two-brain" caption="Before: one credential, one model. After: the harness picks the brain per task." frame="show">
+
+```html
+<div class="diagram-panel" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:18px">
+  <div class="diagram-box" style="display:flex;flex-direction:column;gap:10px">
+    <strong>Before</strong>
+    <div class="diagram-node">Neura harness</div>
+    <div class="diagram-node diagram-muted">auth.json: openai-codex only</div>
+    <span class="diagram-pill">gpt-5.5</span>
+    <small class="diagram-muted">Hard work still went to Claude Code, outside the harness. No guardrails, no proof gate, no checkpoints.</small>
+  </div>
+  <div class="diagram-box" style="display:flex;flex-direction:column;gap:10px">
+    <strong>After</strong>
+    <div class="diagram-node">Neura harness</div>
+    <div class="diagram-node">/preset</div>
+    <span class="diagram-pill">gpt-5.5 &middot; included</span>
+    <span class="diagram-pill">claude-opus-5 &middot; metered</span>
+    <span class="diagram-pill">qwen3-coder &middot; local, free</span>
+    <small class="diagram-muted">Same guardrails, checkpoints, and proof gate on every brain.</small>
+  </div>
+</div>
+```
+
+```css
+.diagram-panel { background: var(--wf-paper); color: var(--wf-ink); }
+.diagram-box { border: 1.4px solid var(--wf-line); border-radius: var(--wf-radius); padding: 14px; background: var(--wf-card); }
+.diagram-node { border-bottom: 1.4px solid var(--wf-line); padding: 8px 0; }
+.diagram-pill { display: inline-block; border: 1.4px solid var(--wf-accent); background: var(--wf-accent-soft); padding: 6px 9px; border-radius: 999px; }
+```
+
+</Diagram>
+
+<Callout id="cost-warning" tone="warning">
+
+**Opus in Neura is not free.** pi bills third-party harness usage as Claude **extra usage** — per token, charged separately, and it does **not** draw on Pro/Max plan limits. Codex stays the default because ChatGPT-subscription usage through pi is included. Use `/preset opus` for the hard 5%, then `/preset gpt` back.
+
+</Callout>
+
+## What is still missing
+
+<Table
+  id="remaining-gaps"
+  columns={["Gap", "Why it matters", "Cost to close"]}
+  rows={[
+    ["No run scorecard", "run-history.jsonl already records every subagent run, duration, and status — nothing surfaces it, so model choice stays a hunch instead of evidence", "Small — one command reading a file that already exists"],
+    ["No plan / todo surface", "pi has no built-in equivalent of Claude Code's task list; visible progress is the single biggest reason a long run feels trustworthy", "Medium — new extension, pi ships only an example"],
+    ["Per-tool color badges", "READ/WRITE/EDIT/BASH visual grammar; deferred since v1.0", "Medium — requires overriding built-in tools"],
+    ["paper, supabase, notion MCP disabled", "Deliberate: no tokens set, disabled beats failing at startup", "None until you want them"],
+  ]}
+/>
+
+## Do this now
+
+<Checklist
+  id="manual-steps"
+  items={[
+    {
+      id: "login-anthropic",
+      label: "In a `neura` session, run `/login` and pick Anthropic (Claude Pro/Max)",
+      note: "Interactive browser sign-in. I cannot do this for you.",
+    },
+    {
+      id: "switch-opus",
+      label: "Run `/preset opus`",
+      note: "Should report `Switched to claude-opus-5-...`. If it says 'not in registry', the login did not complete.",
+    },
+    {
+      id: "real-task",
+      label: "Give Neura one real task you would normally hand to Claude Code",
+      note: "Same brain, plus checkpoints, guardrails, and the proof gate. This is the only way the trust question gets answered.",
+    },
+    {
+      id: "switch-back",
+      label: "Run `/preset gpt` when the hard part is done",
+      note: "Codex is included in your ChatGPT subscription; Opus is metered on top of it.",
+    },
+  ]}
+/>
+
+## Key takeaway
+
+<Callout id="takeaway" tone="decision">
+
+When a tool you built feels worse than the alternative, check what it is *made of* before adding features to it. Neura was not missing capability — it was missing a credential. Three days of not reaching for it was accurate signal about the model, and no amount of extra harness polish would have fixed it.
+
+</Callout>
