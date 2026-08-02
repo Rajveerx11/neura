@@ -253,6 +253,27 @@ cockpitState.resetCockpit();
 const settings = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "settings.json"), "utf-8"));
 assert.ok(settings.skills.includes("!skills/agent-reach"), "agent-reach collision exclusion missing");
 assert.ok(settings.skills.includes("!skills/find-skills"), "find-skills collision exclusion missing");
+assert.ok(settings.packages.includes("npm:@spences10/pi-mcp@0.0.58"), "verified pi-mcp version is not pinned");
+
+const mcpConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "mcp.json"), "utf-8"));
+assert.equal(mcpConfig.mcpServers.gmail.headers["x-api-key"], "${COMPOSIO_API_KEY}", "Gmail MCP header lost its environment placeholder");
+const launcher = fs.readFileSync(path.join(repoRoot, "launcher", "neura.cmd"), "utf-8");
+assert.match(launcher, /GetEnvironmentVariable\('COMPOSIO_API_KEY','User'\)/, "launcher does not refresh the user-scoped Composio key");
+assert.match(launcher, /MY_PI_MCP_ENV_ALLOWLIST=COMPOSIO_API_KEY,/, "launcher does not allowlist the Composio key for pi-mcp");
+assert.doesNotMatch(`${JSON.stringify(mcpConfig)}\n${launcher}`, /\b(?:ak|sk)_[A-Za-z0-9_-]{12,}\b/, "Gmail MCP configuration contains a literal credential");
+
+const gmailGuardrail = loaded.extensions.find((extension) => extension.resolvedPath.endsWith(`${path.sep}gmail-guardrail.ts`));
+assert.ok(gmailGuardrail, "Gmail guardrail extension missing");
+const gmailGuard = firstHandler(gmailGuardrail, "tool_call");
+let gmailPrompts = 0;
+const deniedGmailContext = {
+  ...context,
+  ui: { ...ui, confirm: async () => { gmailPrompts++; return false; } },
+};
+assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_GET_PROFILE", input: { user_id: "me" } }, deniedGmailContext), undefined, "harmless Gmail profile read was blocked");
+assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: { recipient_email: "test@example.com", subject: "Test" } }, deniedGmailContext))?.block, true, "denied Gmail send was not blocked");
+assert.equal(gmailPrompts, 1, "Gmail send did not request exactly one human confirmation");
+assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, { ...context, hasUI: false }))?.block, true, "headless Gmail send did not fail closed");
 
 const transcript = extensionWithCommand("clip");
 assert.ok(transcript.shortcuts.has("ctrl+shift+x"), "Ctrl+Shift+X transcript chooser missing");

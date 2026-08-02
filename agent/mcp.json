@@ -11,6 +11,13 @@
       "command": "cmd",
       "args": ["/c", "npx", "-y", "@upstash/context7-mcp"]
     },
+    "gmail": {
+      "type": "streamable-http",
+      "url": "https://backend.composio.dev/tool_router/trs_4ktSzoCNvPJ3/mcp",
+      "headers": {
+        "x-api-key": "${COMPOSIO_API_KEY}"
+      }
+    },
     "supabase": {
       "command": "cmd",
       "args": ["/c", "npx", "-y", "@supabase/mcp-server-supabase", "--read-only"],

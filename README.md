@@ -24,7 +24,7 @@ Launch with `neura` in any terminal.
 | Skill doctor | `agent/extensions/skill-doctor.ts` | `/skill-doctor` scans skill dirs for Claude-only tool references that won't work in pi |
 | Autogit | `agent/extensions/autogit.ts` | Auto stage→commit→push after YOLO turns; disabled in Plan and held in the Human Away queue because `agent_end` runs outside `tool_call` mediation |
 | Theme | `agent/themes/neura-dark.json` | Forged Tungsten: tungsten neutrals, burnt copper `#d97841`, bone text, semantic outcome colors |
-| MCP bridge | `agent/mcp.json` | 5 servers via `@spences10/pi-mcp`: gfi-scout · paper · Context7 · Supabase (read-only) · Notion. Tokens flow through `MY_PI_MCP_ENV_ALLOWLIST` user env vars — never in the file |
+| MCP bridge | `agent/mcp.json` | 6 servers via `@spences10/pi-mcp`: gfi-scout · paper · Context7 · Gmail · Supabase (read-only) · Notion. Gmail uses a Composio MCP session; credentials remain in user environment variables and never enter the file |
 | Persona | `agent/neura/NEURA.md` | Names the agent Neura, terse root-cause engineering style, **no emojis ever** |
 | Launcher | `launcher/neura.cmd` | `neura` command (goes in `~/.local/bin`, on PATH) |
 | Config | `agent/settings.json` | gpt-5.5 default, neura-dark theme, packages, skills pointed at `~/.claude/skills` |
@@ -44,6 +44,13 @@ powershell -File C:\Neura\install.ps1
 ```
 
 `install.ps1` copies `agent/*` into `~/.pi/agent/` and the launcher into `~/.local/bin`. Use `install.ps1 -Check` to detect missing prerequisites or drift between this repo and the live harness.
+
+Gmail is verified against `@spences10/pi-mcp@0.0.58` and requires
+`COMPOSIO_API_KEY` as a Windows user environment variable. The
+`neura` launcher refreshes that value for already-open terminals and adds its
+name to `MY_PI_MCP_ENV_ALLOWLIST` at runtime, because `pi-mcp` only expands HTTP
+header placeholders from explicitly allowlisted variables. The key itself is
+never written to `mcp.json`, logs, or the repository.
 
 ## Verify changes
 

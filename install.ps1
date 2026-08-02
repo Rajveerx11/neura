@@ -78,6 +78,18 @@ if ($Check) {
             $drift += "settings.json is invalid"
         }
     }
+    try {
+        $desiredMcp = Get-Content "$repo\agent\mcp.json" -Raw | ConvertFrom-Json
+        $gmail = $desiredMcp.mcpServers.PSObject.Properties["gmail"]
+        if ($gmail -and $gmail.Value.disabled -ne $true) {
+            $composioKey = [Environment]::GetEnvironmentVariable("COMPOSIO_API_KEY", "User")
+            if ([string]::IsNullOrWhiteSpace($composioKey)) {
+                $drift += "COMPOSIO_API_KEY missing from Windows user environment (Gmail MCP unavailable)"
+            }
+        }
+    } catch {
+        $drift += "mcp.json is invalid"
+    }
     if ($missing.Count) { Write-Warning "Missing required commands: $($missing -join ', ')" }
     if ($drift.Count) { Write-Warning "Live harness drift: $($drift -join '; ')" }
     if (-not $missing.Count -and -not $drift.Count) { Write-Host "Neura health: ready, live harness matches source." }

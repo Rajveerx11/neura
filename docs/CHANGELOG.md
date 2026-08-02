@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-02 — v2.4.2 (Gmail MCP authentication repair)
+
+- Fixed Gmail MCP HTTP 401 startup failures. The Composio project key was valid in Windows user storage, but `pi-mcp` intentionally removed it before expanding the HTTP `x-api-key` header because `COMPOSIO_API_KEY` was absent from `MY_PI_MCP_ENV_ALLOWLIST`.
+- Updated the `neura` launcher to refresh the user-scoped key for terminals opened before setup and add only its variable name to the runtime MCP allowlist. No credential is stored in source or printed.
+- Pinned the source configuration to the verified `@spences10/pi-mcp@0.0.58` behavior.
+- Added deterministic checks for the Composio header placeholder, runtime allowlisting, and secret-free launcher/config files.
+
 ## 2026-08-02 — v2.4.1 (launch hierarchy correction)
 
 - Removed the three-way Human Away duplication across the launch ledger, idle cockpit rail, and footer. Launch now owns mode and workspace context; the footer contracts to model/context until launch clears.
