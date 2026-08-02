@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neura Interface Redesign — Quiet Instrument Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page: #0d0f11;
+      --page-raised: #13161a;
+      --paper: #ece8df;
+      --paper-soft: #cbc6bb;
+      --ink: #181a1d;
+      --line: #2b3036;
+      --line-strong: #3b424a;
+      --canvas: #0a0c0e;
+      --surface: #111418;
+      --raised: #171b20;
+      --text: #e8e5dd;
+      --muted: #a6adb4;
+      --dim: #7a828b;
+      --accent: #d77a45;
+      --focus: #f0a66f;
+      --plan: #76b8c4;
+      --human: #e0a552;
+      --success: #77c99a;
+      --error: #e07972;
+      --info: #86a7d7;
+      --radius: 2px;
+      --mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+      --sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      --content: 1280px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--paper);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.62;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--focus); text-underline-offset: 3px; }
+    a:hover { color: var(--paper); }
+    button, input { font: inherit; }
+    button { touch-action: manipulation; }
+
+    .skip-link {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 100;
+      padding: 10px 14px;
+      background: var(--paper);
+      color: var(--ink);
+      transform: translateY(-160%);
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 24px;
+      min-height: 54px;
+      padding: 0 24px;
+      background: rgba(13, 15, 17, 0.96);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+    }
+    .brand {
+      font: 600 12px/1 var(--mono);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--focus);
+      white-space: nowrap;
+    }
+    .topbar nav {
+      display: flex;
+      gap: 18px;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .topbar nav::-webkit-scrollbar { display: none; }
+    .topbar nav a {
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .topbar nav a:hover, .topbar nav a:focus-visible { color: var(--text); }
+    .plan-meta {
+      color: var(--dim);
+      font: 400 11px/1 var(--mono);
+      white-space: nowrap;
+    }
+
+    main {
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+      padding: 56px 0 96px;
+    }
+    section { scroll-margin-top: 76px; }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+      gap: 56px;
+      align-items: end;
+      padding: 20px 0 56px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+    .eyebrow, .section-index {
+      margin: 0 0 12px;
+      color: var(--focus);
+      font: 600 11px/1.3 var(--mono);
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, h4 { margin: 0; line-height: 1.12; }
+    h1 {
+      max-width: 820px;
+      font-size: clamp(36px, 5vw, 68px);
+      font-weight: 590;
+      letter-spacing: -.045em;
+    }
+    .hero-copy {
+      max-width: 740px;
+      margin: 24px 0 0;
+      color: var(--paper-soft);
+      font-size: clamp(17px, 1.6vw, 21px);
+      line-height: 1.55;
+    }
+    .decision-stamp {
+      border-left: 2px solid var(--accent);
+      padding: 4px 0 4px 18px;
+    }
+    .decision-stamp small {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--dim);
+      font: 600 11px/1.2 var(--mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .decision-stamp strong { display: block; font-size: 21px; font-weight: 600; }
+    .decision-stamp p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+    .section {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      gap: 36px;
+      padding: 68px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .section > header { position: sticky; top: 82px; align-self: start; }
+    .section > header h2 { font-size: 22px; letter-spacing: -.025em; }
+    .section > header p { margin: 12px 0 0; color: var(--dim); font-size: 13px; line-height: 1.5; }
+    .body-copy { min-width: 0; }
+    .body-copy > :first-child { margin-top: 0; }
+    .body-copy p { color: var(--paper-soft); }
+    .lead { font-size: 20px; line-height: 1.52; color: var(--text) !important; }
+    .plain-note {
+      margin: 24px 0;
+      padding: 16px 18px;
+      border-left: 2px solid var(--line-strong);
+      background: var(--page-raised);
+      color: var(--paper-soft);
+    }
+    .plain-note strong { color: var(--paper); }
+    .plain-note.decision { border-color: var(--accent); }
+    .plain-note.warning { border-color: var(--human); }
+
+    .grid-2, .grid-3, .grid-4 {
+      display: grid;
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cell {
+      min-width: 0;
+      padding: 20px;
+      background: var(--page);
+    }
+    .cell h3, .cell h4 { margin-bottom: 9px; font-size: 15px; font-weight: 620; }
+    .cell p { margin: 0; color: var(--muted); font-size: 14px; }
+    .cell code, code {
+      color: var(--focus);
+      font-family: var(--mono);
+      font-size: .92em;
+    }
+    .cell .num {
+      display: block;
+      margin-bottom: 18px;
+      color: var(--dim);
+      font: 500 11px/1 var(--mono);
+    }
+
+    .baseline-list, .rule-list, .check-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 28px;
+      margin: 24px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .baseline-list li, .rule-list li, .check-list li {
+      position: relative;
+      padding: 13px 0 13px 24px;
+      border-top: 1px solid var(--line);
+      color: var(--paper-soft);
+    }
+    .baseline-list li::before, .rule-list li::before, .check-list li::before {
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-family: var(--mono);
+      content: "—";
+    }
+    .check-list li::before { content: "□"; color: var(--success); }
+
+    .cockpit-wrap {
+      border: 1px solid var(--line-strong);
+      background: #07090a;
+      padding: 12px;
+    }
+    .cockpit-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font: 500 12px/1.2 var(--mono);
+    }
+    .toolbar-label { margin-right: 4px; color: var(--dim); }
+    .ui-button {
+      min-height: 34px;
+      padding: 7px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .ui-button:hover { border-color: var(--dim); color: var(--text); }
+    .ui-button[aria-pressed="true"] {
+      border-color: var(--accent);
+      background: #1b1714;
+      color: var(--focus);
+    }
+    .ui-button:focus-visible, .copy-button:focus-visible, a:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .terminal-shell {
+      width: 100%;
+      min-width: 0;
+      min-height: 660px;
+      display: flex;
+      flex-direction: column;
+      container-type: inline-size;
+      overflow: hidden;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      background: var(--canvas);
+      color: var(--text);
+      font: 400 14px/1.48 var(--mono);
+    }
+    .terminal-titlebar {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: 34px;
+      padding: 0 13px;
+      border-bottom: 1px solid var(--line);
+      color: var(--dim);
+      font-size: 12px;
+    }
+    .terminal-titlebar .mark { color: var(--accent); margin-right: 10px; }
+    .terminal-titlebar .window-title { color: var(--muted); }
+    .terminal-titlebar .spacer, .term-row .spacer, .code-head .spacer, .composer-top .spacer { flex: 1; }
+    .terminal-body {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      padding: 16px 18px 0;
+    }
+    .phase-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 26px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .phase-name { color: var(--focus); font-weight: 600; }
+    .phase-progress { color: var(--dim); }
+    .phase-line .right { margin-left: auto; color: var(--dim); }
+    .notice-line {
+      margin-top: 11px;
+      padding-left: 11px;
+      border-left: 2px solid var(--human);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .notice-line b { color: var(--human); font-weight: 600; }
+    .transcript {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      padding: 18px 0 12px;
+      overflow: hidden;
+    }
+    .transcript-content { max-width: 94ch; }
+    .message { margin-bottom: 18px; }
+    .message-label {
+      margin-bottom: 7px;
+      color: var(--dim);
+      font-size: 11px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .message-label .status { color: var(--success); }
+    .user-message {
+      max-width: 82ch;
+      padding: 10px 13px;
+      border-left: 2px solid var(--accent);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .assistant-message { color: var(--text); }
+    .assistant-message p { margin: 0 0 10px; }
+    .assistant-message strong { color: #f4f0e8; font-weight: 650; }
+    .assistant-message ul { margin: 9px 0 12px; padding-left: 20px; }
+    .assistant-message li { margin: 4px 0; }
+    .tool-stack { margin: 12px 0 14px; border-top: 1px solid var(--line); }
+    .tool-row {
+      display: grid;
+      grid-template-columns: 18px 58px minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .tool-row .ok { color: var(--success); }
+    .tool-row .work { color: var(--accent); }
+    .tool-row .bad { color: var(--error); }
+    .tool-row .verb { color: var(--dim); }
+    .tool-row .time { color: var(--dim); font-variant-numeric: tabular-nums; }
+    .code-block {
+      margin: 12px 0;
+      border: 1px solid var(--line-strong);
+      background: #0d1013;
+    }
+    .code-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 32px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--dim);
+      font-size: 11px;
+    }
+    .code-head .language { color: var(--plan); }
+    .copy-button {
+      min-height: 26px;
+      padding: 2px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: 500 11px/1 var(--mono);
+    }
+    .copy-button:hover { border-color: var(--accent); color: var(--focus); }
+    pre {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      color: #d7dbe0;
+      font: 400 12px/1.55 var(--mono);
+      tab-size: 2;
+    }
+    .kw { color: var(--accent); }
+    .str { color: var(--success); }
+    .fn { color: var(--plan); }
+    .comment { color: var(--dim); }
+    .response-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding-top: 7px;
+      color: var(--dim);
+      font-size: 11px;
+    }
+    .response-actions b { color: var(--muted); font-weight: 500; }
+    .working-line {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .working-pulse {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      animation: quiet-pulse 1.2s ease-in-out infinite;
+    }
+    .error-block {
+      padding: 11px 13px;
+      border-left: 2px solid var(--error);
+      background: #181112;
+      color: var(--muted);
+    }
+    .error-block strong { color: var(--error); }
+    .error-block p { margin: 4px 0 0; }
+    .approval {
+      max-width: 94ch;
+      padding: 15px;
+      border: 1px solid var(--human);
+      background: #14130f;
+    }
+    .approval-head { display: flex; align-items: flex-start; gap: 12px; }
+    .approval-head > div { min-width: 0; }
+    .approval-kicker { display: block; margin-bottom: 5px; color: var(--dim); font-size: 10px; letter-spacing: .08em; }
+    .approval-id { margin-left: auto; color: var(--dim); font-size: 10px; white-space: nowrap; }
+    .approval h4 { display: flex; gap: 9px; color: var(--human); font-size: 14px; }
+    .agent-strip {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      margin: 13px 0;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .agent-mark { color: var(--accent); font-weight: 700; }
+    .agent-name { color: var(--text); font-weight: 650; }
+    .agent-task { display: block; color: var(--muted); font-size: 11px; }
+    .agent-state { color: var(--human); font-size: 11px; white-space: nowrap; }
+    .approval dl { display: grid; grid-template-columns: 102px minmax(0, 1fr); gap: 6px 12px; margin: 12px 0; }
+    .approval dt { color: var(--dim); }
+    .approval dd { margin: 0; color: var(--text); }
+    .approval dd code { color: var(--focus); }
+    .approval-evidence { display: flex; flex-wrap: wrap; gap: 7px 14px; padding: 9px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .approval-evidence .passed { color: var(--success); }
+    .approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .approval-actions span { padding: 4px 8px; border: 1px solid var(--line-strong); color: var(--muted); }
+    .approval-actions .primary { border-color: var(--human); color: var(--human); }
+    .composer {
+      padding: 0 0 9px;
+    }
+    .composer-shell {
+      border-top: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+      padding: 8px 0 7px;
+    }
+    .composer-top {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 20px;
+      color: var(--dim);
+      font-size: 11px;
+    }
+    .mode-marker { font-weight: 600; }
+    .mode-marker.plan { color: var(--plan); }
+    .mode-marker.yolo { color: var(--accent); }
+    .mode-marker.human { color: var(--human); }
+    .composer-input { min-height: 30px; padding-top: 5px; color: var(--text); }
+    .composer-input .caret { color: var(--focus); }
+    .composer-input .placeholder { color: var(--dim); }
+    .footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 13px;
+      min-height: 27px;
+      align-items: center;
+      color: var(--dim);
+      font-size: 11px;
+    }
+    .footer .critical { color: var(--text); }
+    .footer .mode { color: var(--human); }
+    .footer .context { font-variant-numeric: tabular-nums; }
+    .footer .op { width: 100%; color: var(--muted); }
+
+    .terminal-shell[data-state="idle"] .state-work,
+    .terminal-shell[data-state="answer"] .state-work,
+    .terminal-shell[data-state="human"] .state-work,
+    .terminal-shell[data-state="failure"] .state-work,
+    .terminal-shell[data-state="idle"] .state-answer,
+    .terminal-shell[data-state="work"] .state-answer,
+    .terminal-shell[data-state="human"] .state-answer,
+    .terminal-shell[data-state="failure"] .state-answer,
+    .terminal-shell[data-state="idle"] .state-human,
+    .terminal-shell[data-state="work"] .state-human,
+    .terminal-shell[data-state="answer"] .state-human,
+    .terminal-shell[data-state="failure"] .state-human,
+    .terminal-shell[data-state="idle"] .state-failure,
+    .terminal-shell[data-state="work"] .state-failure,
+    .terminal-shell[data-state="answer"] .state-failure,
+    .terminal-shell[data-state="human"] .state-failure,
+    .terminal-shell[data-state="work"] .state-idle,
+    .terminal-shell[data-state="answer"] .state-idle,
+    .terminal-shell[data-state="human"] .state-idle,
+    .terminal-shell[data-state="failure"] .state-idle { display: none; }
+
+    .idle-ledger {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      max-width: 78ch;
+      margin-top: 6px;
+    }
+    .idle-ledger dt, .idle-ledger dd { margin: 0; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .idle-ledger dt { color: var(--dim); text-transform: uppercase; font-size: 11px; letter-spacing: .05em; }
+    .idle-ledger dd { color: var(--text); }
+    .idle-ledger dd small { display: block; margin-top: 2px; color: var(--dim); }
+    .ascii-wordmark {
+      margin: 2px 0 18px;
+      overflow: hidden;
+      color: var(--accent);
+      font: 650 10px/1.08 var(--mono);
+      letter-spacing: 0;
+      white-space: pre;
+    }
+    .ascii-caption { display: flex; gap: 10px; margin-top: 8px; color: var(--dim); font: 500 10px/1.2 var(--mono); }
+    .ascii-caption strong { color: var(--paper); font-weight: 600; }
+    .empty-prompt { margin-top: 26px; color: var(--muted); font-size: 16px; }
+
+    .spec-table-wrap { overflow-x: auto; border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th, td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--dim); font: 600 11px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    td { color: var(--paper-soft); font-size: 14px; }
+    td:first-child { color: var(--paper); font-weight: 600; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid var(--line-strong);
+      color: var(--muted);
+      font: 500 11px/1.4 var(--mono);
+      white-space: nowrap;
+    }
+    .tag.new { border-color: var(--accent); color: var(--focus); }
+    .tag.core { border-color: var(--human); color: var(--human); }
+
+    .palette {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      margin-top: 22px;
+    }
+    .swatch { min-height: 116px; padding: 14px; background: var(--page); }
+    .swatch-color { height: 34px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,.12); background: var(--swatch); }
+    .swatch strong { display: block; font: 600 12px/1.3 var(--mono); color: var(--paper); }
+    .swatch small { color: var(--dim); font: 400 11px/1.35 var(--mono); }
+
+    .type-specimen {
+      margin-top: 22px;
+      border: 1px solid var(--line);
+      background: var(--canvas);
+      color: var(--text);
+      font-family: var(--mono);
+    }
+    .type-row { display: grid; grid-template-columns: 140px 1fr; gap: 18px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .type-row:last-child { border-bottom: 0; }
+    .type-row .role { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    .type-row .sample { min-width: 0; }
+    .type-row .sample.title { font-weight: 650; color: #f4f0e8; }
+    .type-row .sample.meta { color: var(--dim); font-size: 12px; }
+    .type-row .sample.code { color: var(--plan); font-size: 12px; }
+
+    .motion-stage {
+      margin-top: 22px;
+      padding: 18px;
+      border: 1px solid var(--line-strong);
+      background: var(--canvas);
+      font: 400 13px/1.45 var(--mono);
+    }
+    .motion-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mode-machine {
+      --mode-color: var(--human);
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .mode-machine.plan { --mode-color: var(--plan); }
+    .mode-machine.yolo { --mode-color: var(--accent); }
+    .mode-machine.human { --mode-color: var(--human); }
+    .mode-switch-head { display: flex; align-items: baseline; gap: 12px; padding: 11px 0; }
+    .motion-kicker { color: var(--dim); font-size: 10px; letter-spacing: .09em; }
+    .motion-sequence { margin-left: auto; color: var(--dim); text-align: right; }
+    .motion-sequence strong { color: var(--mode-color); font-weight: 650; }
+    .capability-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); border-top: 1px solid var(--line); }
+    .capability { min-width: 0; padding: 11px 10px 12px 0; border-right: 1px solid var(--line); }
+    .capability:not(:first-child) { padding-left: 10px; }
+    .capability:last-child { border-right: 0; }
+    .capability span { display: block; margin-bottom: 6px; color: var(--dim); font-size: 9px; letter-spacing: .08em; }
+    .capability strong { display: block; overflow-wrap: anywhere; color: var(--text); font-size: 11px; font-weight: 600; }
+    .mode-verdict { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); color: var(--mode-color); font-size: 11px; }
+    .mode-verdict .timing { margin-left: auto; color: var(--dim); white-space: nowrap; }
+    .mode-machine.playing .motion-sequence strong { animation: mode-label-in 220ms cubic-bezier(.16,1,.3,1) both; }
+    .mode-machine.playing .capability { animation: boundary-latch 260ms cubic-bezier(.16,1,.3,1) both; }
+    .mode-machine.playing .capability:nth-child(2) { animation-delay: 35ms; }
+    .mode-machine.playing .capability:nth-child(3) { animation-delay: 70ms; }
+    .mode-machine.playing .capability:nth-child(4) { animation-delay: 105ms; }
+    .mode-machine.playing .mode-verdict { animation: verdict-stamp 220ms 120ms cubic-bezier(.16,1,.3,1) both; }
+
+    .state-atlas { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .state-row { display: grid; grid-template-columns: 170px 160px minmax(0,1fr); background: var(--page); }
+    .state-row > div { padding: 13px; border-right: 1px solid var(--line); }
+    .state-row > div:last-child { border-right: 0; }
+    .state-row .state-name { color: var(--paper); font-weight: 620; }
+    .state-row .signal { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+    .state-row .behavior { color: var(--paper-soft); font-size: 14px; }
+
+    .file-map { display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .file-row { display: grid; grid-template-columns: minmax(260px,.9fr) minmax(0,1.1fr); gap: 28px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .file-row code { color: var(--plan); overflow-wrap: anywhere; }
+    .file-row p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .phase-plan { counter-reset: phase; display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .phase-step { counter-increment: phase; display: grid; grid-template-columns: 62px minmax(0,1fr); gap: 18px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+    .phase-step::before { content: "0" counter(phase); color: var(--accent); font: 600 13px/1.3 var(--mono); }
+    .phase-step h3 { margin-bottom: 7px; font-size: 17px; }
+    .phase-step p { margin: 0; color: var(--muted); }
+    .phase-step ul { margin: 10px 0 0; padding-left: 19px; color: var(--paper-soft); }
+
+    .sources { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .source { min-width: 0; padding: 18px; background: var(--page); }
+    .source a { display: inline-block; font-weight: 620; }
+    .source p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+
+    .footer-note { padding-top: 42px; color: var(--dim); font-size: 13px; }
+    .footer-note strong { color: var(--paper-soft); }
+
+    @keyframes quiet-pulse { 0%,100% { opacity:.28; transform:scale(.72); } 50% { opacity:1; transform:scale(1); } }
+    @keyframes mode-label-in { from { opacity:.32; clip-path:inset(0 100% 0 0); } to { opacity:1; clip-path:inset(0 0 0 0); } }
+    @keyframes boundary-latch { 0% { opacity:.3; transform:translateY(2px); border-top-color:var(--line); } 55% { border-top-color:var(--mode-color); } 100% { opacity:1; transform:translateY(0); border-top-color:var(--line); } }
+    @keyframes verdict-stamp { from { opacity:0; clip-path:inset(0 18% 0 0); } to { opacity:1; clip-path:inset(0 0 0 0); } }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; gap: 34px; }
+      .section { grid-template-columns: 1fr; gap: 22px; }
+      .section > header { position: static; }
+      .grid-3, .grid-4, .palette { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .state-row { grid-template-columns: 140px 130px minmax(260px,1fr); }
+    }
+    @media (max-width: 640px) {
+      .topbar { grid-template-columns: 1fr auto; padding: 0 14px; }
+      .topbar nav { grid-column: 1 / -1; order: 3; padding-bottom: 10px; }
+      main { width: min(calc(100% - 24px), var(--content)); padding-top: 34px; }
+      .grid-2, .grid-3, .grid-4, .palette, .sources { grid-template-columns: 1fr; }
+      .baseline-list, .rule-list, .check-list { grid-template-columns: 1fr; }
+      .cockpit-wrap { padding: 6px; }
+      .terminal-shell { min-height: 610px; font-size: 12px; }
+      .terminal-body { padding: 11px 10px 0; }
+      .phase-line .right, .footer .hide-narrow, .tool-row .time { display: none; }
+      .tool-row { grid-template-columns: 15px 46px minmax(0,1fr); }
+      .type-row { grid-template-columns: 92px 1fr; }
+      .file-row { grid-template-columns: 1fr; gap: 8px; }
+      .state-atlas { overflow-x: auto; }
+      .state-row { min-width: 690px; }
+    }
+    @container (max-width: 620px) {
+      .ascii-wordmark { font-size: 7px; }
+      .agent-strip { grid-template-columns: 22px minmax(0,1fr); }
+      .agent-state { grid-column: 2; }
+      .approval dl { grid-template-columns: 1fr; gap: 2px; }
+      .approval dd { margin-bottom: 5px; }
+      .capability-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .capability:nth-child(2) { border-right: 0; }
+      .capability:nth-child(n+3) { border-top: 1px solid var(--line); }
+      .motion-sequence { max-width: 66%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to plan</a>
+  <div class="topbar">
+    <div class="brand">Neura / UI plan 01</div>
+    <nav aria-label="Plan sections">
+      <a href="#direction">Direction</a>
+      <a href="#cockpit">Cockpit</a>
+      <a href="#system">System</a>
+      <a href="#messages">Transcript</a>
+      <a href="#modes">Modes</a>
+      <a href="#states">States</a>
+      <a href="#implementation">Build map</a>
+      <a href="#verification">Verification</a>
+    </nav>
+    <div class="plan-meta">PLAN ONLY · 2026-08-02</div>
+  </div>
+
+  <main id="main">
+    <header class="hero" id="direction">
+      <div>
+        <p class="eyebrow">Full interface redesign · approval artifact</p>
+        <h1>Neura becomes a quiet engineering instrument.</h1>
+        <p class="hero-copy">One terminal-native visual language for startup, conversation, tool work, safety, approvals, proof, recovery, and handoff. Dense when useful. Calm by default. Every visible mark explains state or offers an action.</p>
+      </div>
+      <aside class="decision-stamp" aria-label="Chosen design direction">
+        <small>Chosen direction</small>
+        <strong>Quiet Instrument</strong>
+        <p>Swiss information discipline, workshop warmth, and terminal speed without sci-fi theatre or generic AI-dashboard styling.</p>
+      </aside>
+    </header>
+
+    <section class="section" id="baseline">
+      <header>
+        <p class="section-index">01</p>
+        <h2>What changes</h2>
+        <p>Direct response to supplied live screenshot.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">Current screen works, but it does not feel authored. Every layer speaks at similar volume, so warnings, identity, continuity, input, and footer compete.</p>
+        <ul class="baseline-list">
+          <li>Skill collisions and package updates dominate first impression. They become one compact notice line with an on-demand detail view.</li>
+          <li>Full-width orange rules create a template-like frame. New shell uses neutral hairlines; accent marks only current focus or risk.</li>
+          <li>Continuity block leaves most of wide screen empty. New resume ledger uses stronger alignment and collapses after first prompt.</li>
+          <li>Human Away is green, which reads as “safe” or “complete.” Preview mode becomes amber, explicitly labelled, never communicated by color alone.</li>
+          <li>Footer mixes mode, model, branch, context, and MCP failure without priority. New footer has a fixed survival order at narrow widths.</li>
+          <li>Input is an empty box with no helpful state. New composer names mode, boundary, submit behavior, and the next useful action.</li>
+          <li>Assistant prose has no authored anatomy. New transcript defines labels, line length, list rhythm, code headers, receipts, errors, and copy actions.</li>
+          <li>Mode animations draw decorative rails. New motion confirms real boundary changes and completes in under 400 ms.</li>
+        </ul>
+        <div class="plain-note decision"><strong>Design read:</strong> primary user is one expert operator; environment is desktop terminal; density is medium-high; mood is calm, exact, and slightly warm. The original six-line NEURA wordmark owns launch; one-cell signals and disciplined alignment own operational states.</div>
+      </div>
+    </section>
+
+    <section class="section" id="cockpit">
+      <header>
+        <p class="section-index">02</p>
+        <h2>Target cockpit</h2>
+        <p>Interactive plan mock. Switch states and widths.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">This is the proposed Neura shell after customization. It shows real labels and behavior, not placeholder cards.</p>
+        <div class="cockpit-wrap">
+          <div class="cockpit-toolbar" aria-label="Cockpit preview controls">
+            <span class="toolbar-label">State</span>
+            <button class="ui-button state-button" data-state="idle" aria-pressed="true">Idle</button>
+            <button class="ui-button state-button" data-state="work" aria-pressed="false">Working</button>
+            <button class="ui-button state-button" data-state="answer" aria-pressed="false">Answer</button>
+            <button class="ui-button state-button" data-state="human" aria-pressed="false">Approval</button>
+            <button class="ui-button state-button" data-state="failure" aria-pressed="false">Failure</button>
+            <span class="toolbar-label" style="margin-left:auto">Width</span>
+            <button class="ui-button width-button" data-width="wide" aria-pressed="true">120 col</button>
+            <button class="ui-button width-button" data-width="medium" aria-pressed="false">80 col</button>
+            <button class="ui-button width-button" data-width="narrow" aria-pressed="false">56 col</button>
+          </div>
+
+          <div class="terminal-shell" id="terminalPreview" data-state="idle" aria-label="Proposed Neura terminal cockpit">
+            <div class="terminal-titlebar"><span class="mark">◆</span><span class="window-title">Neura · C:\Neura</span><span class="spacer"></span><span>main · session 19:51</span></div>
+            <div class="terminal-body">
+              <div class="phase-line state-answer state-work">
+                <span class="phase-name">WORK</span><span class="phase-progress">3 / 5</span><span>Interface redesign plan</span><span class="right">Esc interrupt</span>
+              </div>
+              <div class="phase-line state-idle">
+                <span class="phase-name">READY</span><span>C:\Neura</span><span class="right">main · 26 changes</span>
+              </div>
+              <div class="phase-line state-human">
+                <span class="phase-name" style="color:var(--human)">HUMAN AWAY · PREVIEW</span><span>Review required</span><span class="right">queue 1</span>
+              </div>
+              <div class="phase-line state-failure">
+                <span class="phase-name" style="color:var(--error)">STOPPED</span><span>Verification failed</span><span class="right">workspace preserved</span>
+              </div>
+
+              <div class="notice-line state-idle"><b>2 notices</b> · skill aliases and 3 package updates · <span style="color:var(--focus)">/notices</span></div>
+
+              <div class="transcript">
+                <div class="state-idle transcript-content">
+                  <pre class="ascii-wordmark" aria-label="NEURA">███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗
+████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔══██╗
+██╔██╗ ██║ █████╗   ██║   ██║ ██████╔╝ ███████║
+██║╚██╗██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██╔══██║
+██║ ╚████║ ███████╗ ╚██████╔╝ ██║  ██║ ██║  ██║
+╚═╝  ╚═══╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝</pre>
+                  <div class="ascii-caption"><strong>NEURA</strong><span>Personal engineering agent</span><span>ready 19:51</span></div>
+                  <div class="message-label" style="margin-top:16px">Session resumed · 19:51</div>
+                  <dl class="idle-ledger">
+                    <dt>Workspace</dt><dd>Neura · main <small>26 working-tree changes</small></dd>
+                    <dt>Last work</dt><dd>Modes v1 <small>Verified and installed · no commit</small></dd>
+                    <dt>Safety</dt><dd style="color:var(--human)">Human Away preview <small>OS sandbox still required</small></dd>
+                    <dt>Next</dt><dd>Review interface plan <small>No product code before approval</small></dd>
+                  </dl>
+                  <p class="empty-prompt">What do you want to build?</p>
+                </div>
+
+                <div class="state-work transcript-content">
+                  <div class="message user-message"><div class="message-label">You · 19:51</div>Redesign the entire Neura interface. Create the plan first; no code changes.</div>
+                  <div class="message assistant-message">
+                    <div class="message-label">Neura · working · 01:42</div>
+                    <p><strong>Building one complete interface system.</strong> Inspecting current render paths, upstream Pi limits, and terminal-native precedents before locking the cockpit.</p>
+                    <div class="tool-stack">
+                      <div class="tool-row"><span class="ok">✓</span><span class="verb">read</span><span>agent/extensions/cockpit.ts</span><span class="time">18 ms</span></div>
+                      <div class="tool-row"><span class="ok">✓</span><span class="verb">search</span><span>Pi 0.83 UI extension surface</span><span class="time">46 ms</span></div>
+                      <div class="tool-row"><span class="work">◆</span><span class="verb">research</span><span>copy, status, motion, accessibility</span><span class="time">active</span></div>
+                    </div>
+                    <div class="working-line"><span class="working-pulse"></span><span>Composing cockpit state system · Esc stops safely</span></div>
+                  </div>
+                </div>
+
+                <div class="state-answer transcript-content">
+                  <div class="message user-message"><div class="message-label">You · 19:51</div>Redesign the entire Neura interface. Create the plan first; no code changes.</div>
+                  <div class="message assistant-message">
+                    <div class="message-label">Neura · complete · 02:18 <span class="status">verified</span></div>
+                    <p><strong>Direction locked: Quiet Instrument.</strong> Neura keeps terminal speed, gains authored hierarchy, readable output, honest safety states, and useful copy controls.</p>
+                    <ul>
+                      <li>Neutral shell; warm focus accent; semantic colors only for status.</li>
+                      <li>Tool calls collapse into receipts. Errors always include recovery.</li>
+                      <li>Last response exposes copy actions without covering transcript.</li>
+                    </ul>
+                    <div class="code-block">
+                      <div class="code-head"><span class="language">typescript</span><span>agent/neura/ui-tokens.ts</span><span class="spacer"></span><button class="copy-button" data-copy-target="sampleCode" aria-label="Copy example code">C&nbsp; copy</button></div>
+                      <pre id="sampleCode"><span class="kw">export const</span> ui = {
+  canvas: <span class="str">"#0A0C0E"</span>,
+  focus: <span class="str">"#F0A66F"</span>,
+  motion: { enter: <span class="str">220</span>, settle: <span class="str">320</span> },
+};</pre>
+                    </div>
+                    <div class="response-actions"><span><b>Ctrl+X</b> copy answer</span><span><b>Ctrl+Shift+X</b> choose block</span><span><b>/tree</b> older messages</span></div>
+                  </div>
+                </div>
+
+                <div class="state-human transcript-content">
+                  <div class="message-label">Policy review · Headmaster deferred · deterministic clamp</div>
+                  <div class="approval">
+                    <div class="approval-head">
+                      <div><span class="approval-kicker">AGENT ACTION REQUEST</span><h4><span>◇</span><span>Neura is paused at a policy boundary</span></h4></div>
+                      <span class="approval-id">A-014</span>
+                    </div>
+                    <div class="agent-strip">
+                      <span class="agent-mark">N</span>
+                      <div><span class="agent-name">Neura</span><span class="agent-task">Shipping Modes v1 after local verification</span></div>
+                      <span class="agent-state">awaiting verdict</span>
+                    </div>
+                    <dl>
+                      <dt>Intent</dt><dd>Publish the verified Modes v1 commit.</dd>
+                      <dt>Exact action</dt><dd><code>git push origin main</code></dd>
+                      <dt>Agent basis</dt><dd>Harness, proof, install check, and secret scan passed.</dd>
+                      <dt>Boundary</dt><dd>Remote mutation always returns control to the operator.</dd>
+                      <dt>Safe fallback</dt><dd>Keep the local commit ready without changing remote state.</dd>
+                      <dt>Grant</dt><dd>One identical retry · one use · expires after 120 s</dd>
+                    </dl>
+                    <div class="approval-evidence"><span class="passed">✓ 14 checks</span><span>6 changed files</span><span class="passed">✓ secrets clear</span><span>rollback: local commit retained</span></div>
+                    <div class="approval-actions"><span>V inspect evidence</span><span>D deny request</span><span>Esc keep paused</span><span class="primary">Enter grant exact retry</span></div>
+                  </div>
+                </div>
+
+                <div class="state-failure transcript-content">
+                  <div class="message-label">Proof · failed · 19:54</div>
+                  <div class="error-block"><strong>Responsive footer overflowed at 56 columns.</strong><p>Impact: mode remains visible, but branch text wraps into the composer.</p><p>Next: collapse cost, then branch detail; rerun width matrix.</p></div>
+                  <div class="tool-stack">
+                    <div class="tool-row"><span class="ok">✓</span><span class="verb">verify</span><span>wide 120 / standard 92 / compact 72</span><span class="time">pass</span></div>
+                    <div class="tool-row"><span class="bad">×</span><span class="verb">verify</span><span>narrow 56</span><span class="time">fail</span></div>
+                  </div>
+                  <div class="response-actions"><span><b>R</b> retry check</span><span><b>O</b> open failure</span><span><b>/undo</b> restore</span></div>
+                </div>
+              </div>
+
+              <div class="composer">
+                <div class="composer-shell">
+                  <div class="composer-top">
+                    <span class="mode-marker human state-answer state-human state-idle">HUMAN AWAY · PREVIEW</span>
+                    <span class="mode-marker yolo state-work state-failure">YOLO</span>
+                    <span class="spacer"></span><span class="hide-narrow">Shift+Tab mode · Enter send · Ctrl+Enter newline</span>
+                  </div>
+                  <div class="composer-input"><span class="caret">›</span> <span class="placeholder state-idle">Describe the outcome…</span><span class="placeholder state-work">Steer current work…</span><span class="placeholder state-answer">Ask a follow-up…</span><span class="placeholder state-human">Approve, deny, or ask for detail…</span><span class="placeholder state-failure">Choose recovery or give direction…</span></div>
+                </div>
+                <div class="footer">
+                  <span class="mode state-answer state-human state-idle">◇ HUMAN AWAY · PREVIEW</span>
+                  <span class="mode-marker yolo state-work state-failure">◆ YOLO</span>
+                  <span class="critical">gpt-5.6-sol</span><span>main*</span><span class="context">ctx 18%</span><span class="hide-narrow">$0.18</span><span class="hide-narrow">MCP 0/3</span>
+                  <span class="op state-work">◆ research · official sources · 3 / 7</span>
+                  <span class="op state-human" style="color:var(--human)">◇ Neura paused · remote boundary · request A-014</span>
+                  <span class="op state-failure" style="color:var(--error)">× proof failed · recovery available</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="plain-note"><strong>Prototype boundary:</strong> this HTML demonstrates intended visual rhythm. Final TUI must use Pi components and ANSI-safe width calculations. Browser-only hover effects are not assumed in terminal behavior.</div>
+      </div>
+    </section>
+
+    <section class="section" id="system">
+      <header>
+        <p class="section-index">03</p>
+        <h2>Visual system</h2>
+        <p>Tokens and rules before components.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">Neura should feel made from one material. Almost everything is neutral. Copper means focus and agency. Status colors keep fixed meanings.</p>
+        <div class="palette" aria-label="Proposed Neura color palette">
+          <div class="swatch" style="--swatch:#0A0C0E"><div class="swatch-color"></div><strong>Canvas · #0A0C0E</strong><small>Terminal field</small></div>
+          <div class="swatch" style="--swatch:#111418"><div class="swatch-color"></div><strong>Surface · #111418</strong><small>User prompt, quiet panels</small></div>
+          <div class="swatch" style="--swatch:#E8E5DD"><div class="swatch-color"></div><strong>Text · #E8E5DD</strong><small>15.56:1 on canvas</small></div>
+          <div class="swatch" style="--swatch:#A6ADB4"><div class="swatch-color"></div><strong>Muted · #A6ADB4</strong><small>8.64:1 on canvas</small></div>
+          <div class="swatch" style="--swatch:#7A828B"><div class="swatch-color"></div><strong>Dim · #7A828B</strong><small>5.03:1 on canvas</small></div>
+          <div class="swatch" style="--swatch:#D77A45"><div class="swatch-color"></div><strong>Action · #D77A45</strong><small>6.31:1 on canvas</small></div>
+          <div class="swatch" style="--swatch:#F0A66F"><div class="swatch-color"></div><strong>Focus · #F0A66F</strong><small>9.69:1 on canvas</small></div>
+          <div class="swatch" style="--swatch:#E0A552"><div class="swatch-color"></div><strong>Caution · #E0A552</strong><small>Human Away preview</small></div>
+          <div class="swatch" style="--swatch:#76B8C4"><div class="swatch-color"></div><strong>Plan · #76B8C4</strong><small>Read-only boundary</small></div>
+          <div class="swatch" style="--swatch:#77C99A"><div class="swatch-color"></div><strong>Success · #77C99A</strong><small>Completed, verified only</small></div>
+          <div class="swatch" style="--swatch:#E07972"><div class="swatch-color"></div><strong>Error · #E07972</strong><small>Stopped, failed, denied</small></div>
+          <div class="swatch" style="--swatch:#86A7D7"><div class="swatch-color"></div><strong>Info · #86A7D7</strong><small>Links, external references</small></div>
+        </div>
+
+        <h3 style="margin-top:34px">Typography inside the terminal</h3>
+        <p>Pi cannot choose the user’s terminal font. Neura therefore depends on roles, weight, alignment, and spacing—not font size tricks. Recommended Windows Terminal profile: Cascadia Mono or JetBrains Mono, 12–13 pt, normal weight, 1.2–1.3 line height. Installation must document this, never overwrite the operator’s profile.</p>
+        <div class="type-specimen">
+          <div class="type-row"><span class="role">Answer title</span><span class="sample title">Direction locked: Quiet Instrument.</span></div>
+          <div class="type-row"><span class="role">Body</span><span class="sample">Write in sentence case. Keep lines near 72–92 characters when width allows.</span></div>
+          <div class="type-row"><span class="role">Metadata</span><span class="sample meta">NEURA · complete · 02:18 · verified</span></div>
+          <div class="type-row"><span class="role">Code / path</span><span class="sample code">agent/extensions/cockpit.ts:49</span></div>
+          <div class="type-row"><span class="role">Safety</span><span class="sample" style="color:var(--human)">HUMAN AWAY · PREVIEW · review-gated</span></div>
+        </div>
+
+        <div class="grid-3" style="margin-top:26px">
+          <div class="cell"><span class="num">SPACING</span><h3>4 / 8 / 12 / 16</h3><p>Use one blank line between message groups, none inside compact receipts, and one-cell vertical plus two-cell horizontal panel padding.</p></div>
+          <div class="cell"><span class="num">GEOMETRY</span><h3>Hairlines, not boxes</h3><p>One border per focused surface. Left rails identify ownership. Rounded “web cards” do not belong in final terminal.</p></div>
+          <div class="cell"><span class="num">SYMBOLS</span><h3>Small fixed vocabulary</h3><p>◆ active, ◇ review, ✓ verified, × failed, · separation. Text always accompanies safety meaning.</p></div>
+        </div>
+
+        <h3 style="margin-top:34px">Writing rules</h3>
+        <ul class="rule-list">
+          <li>Sentence case for messages. Uppercase only for short mode and phase labels.</li>
+          <li>Lead with outcome. Put evidence after it. Put next action last.</li>
+          <li>Never say “Something went wrong.” Name cause, impact, and recovery.</li>
+          <li>Use full verbs in tool receipts: read, edited, tested, blocked, queued.</li>
+          <li>Do not repeat branch, model, or mode in multiple simultaneous surfaces.</li>
+          <li>Never use green for a preview, pending, or merely allowed state.</li>
+          <li>Show duration only after one second or when it helps diagnose slowness.</li>
+          <li>Keep decorative copy, greetings, slogans, and personality out of operational states.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="messages">
+      <header>
+        <p class="section-index">04</p>
+        <h2>Every interface part</h2>
+        <p>Exact role, shape, copy, and behavior.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">Every current and planned surface belongs to one hierarchy: ambient, conversational, active, decision, or evidence. Only decision surfaces may interrupt typing.</p>
+        <div class="spec-table-wrap">
+          <table>
+            <thead><tr><th>Surface</th><th>Target treatment</th><th>Exact behavior</th></tr></thead>
+            <tbody>
+              <tr><td>Window title</td><td><code>Neura · C:\Neura</code></td><td>Put the project first, omit model and animation, and update the title on session switch.</td></tr>
+              <tr><td>Skill conflicts</td><td>One amber notice count</td><td><code>2 notices · /notices</code>. Full paths move to an on-demand panel.</td></tr>
+              <tr><td>Package updates</td><td>Merge into notices</td><td>Never place a large update box above the cockpit. Keep command and package list in detail view.</td></tr>
+              <tr><td>Startup identity</td><td>Original six-line NEURA ASCII wordmark</td><td>Restore the prior block wordmark verbatim in copper at launch. Show once per session, above continuity, then remove after the first submitted prompt. At widths below 56 columns use a compact five-row ASCII fallback instead of clipping.</td></tr>
+              <tr><td>Startup header</td><td>Single quiet phase line</td><td>Show workspace, branch, and dirty count; add the date only when resuming from another day.</td></tr>
+              <tr><td>Continuity</td><td>Four-row ledger</td><td>Workspace, last work, safety, next. Hides after first submitted prompt; <code>/dash</code> restores.</td></tr>
+              <tr><td>User message</td><td>Soft surface + copper left rail</td><td>Label once as <code>You · time</code>, preserve Markdown, and avoid oversized bubbles or rounded corners.</td></tr>
+              <tr><td>Assistant response</td><td>Open canvas, 72–92 character measure</td><td>Metadata row, outcome-first prose, controlled lists, then contextual action rail after completion.</td></tr>
+              <tr><td>Thinking</td><td>Dim, italic, collapsed by default</td><td>One line: <code>Thinking · 18 s · Ctrl+O expand</code>. Never visually compete with final answer.</td></tr>
+              <tr><td>Working indicator</td><td>One square pulse + plain verb</td><td>No spinner for work under 300 ms. Longer work says what is happening and how to stop it.</td></tr>
+              <tr><td>Tool call</td><td>Compact receipt row</td><td>Status, verb, target, duration. Collapse output by default; preserve <code>Ctrl+O</code> expansion.</td></tr>
+              <tr><td>Tool group</td><td>One bordered stack</td><td>Consecutive reads/searches combine. Mutations remain individually visible.</td></tr>
+              <tr><td>Shell command</td><td>Command first, result second</td><td>Show cwd only when it differs. Exit code and elapsed time stay aligned at right.</td></tr>
+              <tr><td>Edit</td><td>File + line summary</td><td><code>edited cockpit.ts · +18 −7</code>; expanded view shows diff with stable plus/minus columns.</td></tr>
+              <tr><td>Diff</td><td>Neutral context, green add, red remove</td><td>Never use red/green alone: keep <code>+</code>/<code>−</code> and line numbers. Long diffs collapse.</td></tr>
+              <tr><td>Code block</td><td>Square frame with header</td><td>Language left, file/path second, copy action right. Horizontal scroll; no wrapped code by default.</td></tr>
+              <tr><td>Inline code</td><td>Copper or cyan text, no pill</td><td>Readable against canvas. Preserve exact characters. Never make it look clickable unless it is.</td></tr>
+              <tr><td>Links</td><td>Info blue + terminal hyperlink</td><td>Use OSC 8 when supported; retain visible URL fallback when not supported.</td></tr>
+              <tr><td>Tables</td><td>Aligned text, light header rule</td><td>Collapse columns by priority. At narrow width switch to key/value rows, not clipped grids.</td></tr>
+              <tr><td>Image result</td><td>Native preview when supported</td><td>Show filename, dimensions, and open hint. Never depend on image alone for outcome.</td></tr>
+              <tr><td>Info notice</td><td>One-line blue lead</td><td>Auto-clear after relevant next input. Do not steal editor focus.</td></tr>
+              <tr><td>Success notice</td><td>Check + short evidence</td><td><code>✓ copied answer</code>, <code>✓ proof passed</code>. Green reserved for verified completion.</td></tr>
+              <tr><td>Warning</td><td>Amber left rail</td><td>State impact and next action. Persistent when unresolved; otherwise clear after 4 seconds.</td></tr>
+              <tr><td>Error</td><td>Red left rail + recovery</td><td>Cause, impact, next step. Preserve input. Focus only if user action is required.</td></tr>
+              <tr><td>Permission</td><td>Agent action request</td><td>Lead with agent identity, active task, intent, exact action, evidence, policy boundary, safe fallback, and grant scope. The agent is visibly paused; default focus stays on denial.</td></tr>
+              <tr><td>Human Away return</td><td>Amber queue summary</td><td>Pending count and highest risk first. Commands never replay automatically.</td></tr>
+              <tr><td>Mode selector</td><td>Three rows, full labels</td><td>Each row says boundary, not personality: read-only, workspace autonomy, delegated review preview.</td></tr>
+              <tr><td>Mode badge</td><td>Glyph + full text</td><td>Always survives responsive collapse. Human Away always includes <code>PREVIEW</code>.</td></tr>
+              <tr><td>Mode transition</td><td>Capability latch</td><td>Change enforced state immediately, then resolve workspace, reviewer, sensitive, and remote boundaries in reading order. Finish with one policy verdict in under 360 ms.</td></tr>
+              <tr><td>Phase line</td><td>One neutral header row</td><td>Shown only during meaningful work. Phase, optional step count, task name, interrupt hint.</td></tr>
+              <tr><td>Composer</td><td>Two hairlines, no filled box</td><td>Mode/boundary above input. Placeholder changes by state. Long prompt grows to capped height, then scrolls.</td></tr>
+              <tr><td>Autocomplete</td><td>Anchored list above composer</td><td>Active row uses focus color and leading marker. Description truncates before command name.</td></tr>
+              <tr><td>Queued steering</td><td>One row beneath composer</td><td>Show count and next delivery boundary. Let user edit, send now, or remove without hidden magic.</td></tr>
+              <tr><td>Footer</td><td>One ambient row, second row only for live work</td><td>Mode, model, branch, context, cost, bridges. Collapse from right by documented priority.</td></tr>
+              <tr><td>MCP state</td><td>Footer only when degraded</td><td><code>MCP 0/3</code> opens health details. Healthy bridges disappear from narrow footer.</td></tr>
+              <tr><td>Context</td><td>Number first, tiny bar optional</td><td><code>ctx 62%</code>; warning at 70%, error at 90%. Do not show an empty decorative bar at 0%.</td></tr>
+              <tr><td>Cost</td><td>Tabular number</td><td>Two decimals under $10, warning only on operator-defined threshold. Never red merely because cost exists.</td></tr>
+              <tr><td>Checkpoint</td><td>Silent ambient state</td><td>Surface only during capture, restore, or failure. <code>/undo</code> explains what later files remain.</td></tr>
+              <tr><td>Proof</td><td>Evidence block</td><td>Command, pass/fail, count, duration. Failure points at first recovery action.</td></tr>
+              <tr><td>Health</td><td>On-demand ledger</td><td>List core, workflow, context, workspace, bridges, and action without a decorative dot wall.</td></tr>
+              <tr><td>Handoff</td><td>Outcome + evidence + next action</td><td>Three short parts. Paths remain copyable. Avoid dashboard recap cards.</td></tr>
+              <tr><td>Narrow terminal</td><td>Priority collapse</td><td>No wrapped labels, no horizontal UI overflow, no loss of mode, risk, current action, or recovery.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="copy">
+      <header>
+        <p class="section-index">05</p>
+        <h2>Copy and selection</h2>
+        <p>Small affordance, fully specified.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">Copy is keyboard-first because Neura is a TUI. Controls must remain discoverable without pretending terminal text has browser hover buttons.</p>
+        <div class="grid-3">
+          <div class="cell"><span class="num">ANSWER</span><h3><code>Ctrl+X</code> copy answer</h3><p>Reuse Pi’s existing action. After success, action text becomes <code>✓ copied answer</code> for 1.2 seconds without changing row width.</p></div>
+          <div class="cell"><span class="num">CODE</span><h3><code>Ctrl+Shift+X</code> choose block</h3><p>Open a small overlay listing language, optional path, and first meaningful line. Enter copies. Escape returns focus unchanged.</p></div>
+          <div class="cell"><span class="num">HISTORY</span><h3><code>/tree</code> then copy</h3><p>Reuse Pi’s selected-message copy path for older turns. Do not add permanent controls to every historical message.</p></div>
+        </div>
+        <div class="plain-note decision"><strong>Implementation choice:</strong> build the copy rail as an extension-owned below-editor widget and a custom overlay. Pi 0.83 already exports <code>copyToClipboard</code> and supports <code>Ctrl+X</code>; its core assistant renderer cannot be decorated by an extension. Do not patch global <code>node_modules</code> for v1.</div>
+        <ul class="rule-list">
+          <li>Visible control label is <code>C copy</code> in a focused code header; accessible description is “Copy code block.”</li>
+          <li>Copy success uses check plus text. Color is supplementary.</li>
+          <li>Clipboard failure says why and offers terminal selection as fallback.</li>
+          <li>Copied text excludes visual labels, ANSI escapes, line numbers, and collapsed-state summaries.</li>
+          <li>Whole-answer copy preserves Markdown. Code-block copy returns raw fenced content without fences.</li>
+          <li>No share, export, or remote upload action appears beside copy.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="modes">
+      <header>
+        <p class="section-index">06</p>
+        <h2>Modes and motion</h2>
+        <p>Motion confirms policy. It never performs theatre.</p>
+      </header>
+      <div class="body-copy">
+        <div class="grid-3">
+          <div class="cell"><span class="num" style="color:var(--plan)">◇ PLAN</span><h3>Read-only boundary</h3><p>Cyan marker. Composer says “Read-only.” Transition copy: <code>Tools narrowed · writes locked</code>.</p></div>
+          <div class="cell"><span class="num" style="color:var(--accent)">◆ YOLO</span><h3>Workspace autonomy</h3><p>Copper marker. Sensitive actions still ask. Transition copy: <code>Workspace tools restored · guardrails active</code>.</p></div>
+          <div class="cell"><span class="num" style="color:var(--human)">◇ HUMAN AWAY · PREVIEW</span><h3>Delegated review</h3><p>Amber marker. Never green. Transition copy: <code>Policy sealed · reviewer linked · return queue armed</code>.</p></div>
+        </div>
+
+        <div class="motion-stage">
+          <div class="motion-buttons" aria-label="Motion preview controls">
+            <button class="ui-button motion-button" data-mode="plan" aria-pressed="false">Switch to Plan</button>
+            <button class="ui-button motion-button" data-mode="yolo" aria-pressed="false">Switch to YOLO</button>
+            <button class="ui-button motion-button" data-mode="human" aria-pressed="true">Switch to Human Away</button>
+          </div>
+          <div class="mode-machine human" id="motionReadout" aria-live="polite" aria-busy="false">
+            <div class="mode-switch-head">
+              <span class="motion-kicker">BOUNDARY CHANGE</span>
+              <span class="motion-sequence"><span id="motionFrom">YOLO</span> › <strong id="motionTo">HUMAN AWAY · PREVIEW</strong></span>
+            </div>
+            <div class="capability-grid" aria-label="Active capability boundary">
+              <div class="capability"><span>WORKSPACE</span><strong id="capWorkspace">one generated file</strong></div>
+              <div class="capability"><span>REVIEWER</span><strong id="capReviewer">isolated Headmaster</strong></div>
+              <div class="capability"><span>SENSITIVE</span><strong id="capSensitive">defer to operator</strong></div>
+              <div class="capability"><span>REMOTE</span><strong id="capRemote">locked</strong></div>
+            </div>
+            <div class="mode-verdict"><span id="motionVerdict">BOUNDARY APPLIED · return queue armed · OS sandbox pending</span><span class="timing">settled 340 ms</span></div>
+          </div>
+        </div>
+
+        <div class="spec-table-wrap" style="margin-top:26px">
+          <table>
+            <thead><tr><th>Motion token</th><th>Value</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td>Immediate truth</td><td>0–60 ms</td><td>Mode badge, semantic color, and enforced capability values change before animation begins.</td></tr>
+              <tr><td>Boundary latch</td><td>180–260 ms · exponential ease-out</td><td>Four capability cells resolve in reading order: workspace, reviewer, sensitive actions, remote actions.</td></tr>
+              <tr><td>Verdict stamp</td><td>320–360 ms total</td><td>Show the final policy sentence after all capabilities are visible, without a decorative rail, spinner, or celebration.</td></tr>
+              <tr><td>Interruption</td><td>latest switch wins</td><td>Rapid Shift+Tab cancels stale timers. Only the newest mode may own the footer, composer, or transition receipt.</td></tr>
+              <tr><td>Reduced motion</td><td>Final frame only</td><td>Show the completed state for 400 ms without spatial movement or pulsing.</td></tr>
+              <tr><td>Long work</td><td>1.2 s quiet pulse</td><td>Only one pulse on screen; text names the operation. Input remains interruptible.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="states">
+      <header>
+        <p class="section-index">07</p>
+        <h2>State atlas</h2>
+        <p>Visual promise for every lifecycle state.</p>
+      </header>
+      <div class="body-copy">
+        <div class="state-atlas">
+          <div class="state-row"><div class="state-name">Launch</div><div class="signal">NEURA / READY</div><div class="behavior">Original six-line ASCII wordmark, then resume ledger and one notice count. Wordmark clears after first submitted prompt.</div></div>
+          <div class="state-row"><div class="state-name">Briefing</div><div class="signal">BRIEF · 1/3</div><div class="behavior">Outcome, constraints, open decisions. One question surface at a time.</div></div>
+          <div class="state-row"><div class="state-name">Planning</div><div class="signal">◇ PLAN</div><div class="behavior">Read-only boundary remains visible in composer and footer.</div></div>
+          <div class="state-row"><div class="state-name">Working</div><div class="signal">WORK · 3/5</div><div class="behavior">Phase line, tool receipts, one current operation. Transcript stays primary.</div></div>
+          <div class="state-row"><div class="state-name">Waiting</div><div class="signal">WAITING</div><div class="behavior">Explain dependency and what remains possible. Never animate an endless generic spinner.</div></div>
+          <div class="state-row"><div class="state-name">Sensitive action</div><div class="signal">AGENT PAUSED</div><div class="behavior">Agent identity, intent, exact request, evidence, boundary, fallback, and one-use grant. Safe default remains denial.</div></div>
+          <div class="state-row"><div class="state-name">Human away</div><div class="signal">◇ PREVIEW</div><div class="behavior">Amber safety identity, Headmaster activity, queue count, sandbox warning.</div></div>
+          <div class="state-row"><div class="state-name">Return queue</div><div class="signal">1 PENDING</div><div class="behavior">Risk order, exact retry expiry, no automatic replay.</div></div>
+          <div class="state-row"><div class="state-name">Proof</div><div class="signal">VERIFY · 4/6</div><div class="behavior">Commands and results become durable evidence; passed checks are quiet.</div></div>
+          <div class="state-row"><div class="state-name">Failure</div><div class="signal">× STOPPED</div><div class="behavior">Cause, impact, recovery. Preserve input and checkpoint.</div></div>
+          <div class="state-row"><div class="state-name">Recovery</div><div class="signal">UNDO</div><div class="behavior">Preview exact snapshot and note that later-created files remain.</div></div>
+          <div class="state-row"><div class="state-name">Complete</div><div class="signal">✓ VERIFIED</div><div class="behavior">Outcome first, changed paths, proof, next action, copy rail.</div></div>
+          <div class="state-row"><div class="state-name">Degraded</div><div class="signal">DEGRADED</div><div class="behavior">Name missing capability and reduced behavior. Do not label whole harness failed.</div></div>
+          <div class="state-row"><div class="state-name">Compact width</div><div class="signal">≤ 56 COL</div><div class="behavior">Keep mode, risk, current operation, composer, and recovery. Drop cost and healthy services first.</div></div>
+        </div>
+
+        <h3 style="margin-top:34px">Responsive contract</h3>
+        <div class="spec-table-wrap">
+          <table>
+            <thead><tr><th>Width</th><th>Footer</th><th>Transcript and panels</th></tr></thead>
+            <tbody>
+              <tr><td>120+ columns</td><td>Mode · model · branch · context · cost · degraded bridges</td><td>92-character prose measure. Tool duration aligned right. Approval uses key/value grid.</td></tr>
+              <tr><td>92–119</td><td>Same, shorter model and branch labels</td><td>Full transcript. Optional details collapse before content.</td></tr>
+              <tr><td>72–91</td><td>Mode · model · branch · context</td><td>Prose fills width. Code scrolls. Tool duration disappears.</td></tr>
+              <tr><td>56–71</td><td>Mode · short model · context</td><td>Key/value panels stack. Phase step count drops. No wrapped action labels.</td></tr>
+              <tr><td>40–55</td><td>Full mode name or safe short form + context</td><td>One-column ledger. Composer hints move to <code>?</code>. Risk and recovery never disappear.</td></tr>
+              <tr><td>Below 40</td><td>Mode only</td><td>Supported emergency layout, not a polished target. Show a width warning in <code>/health</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="accessibility">
+      <header>
+        <p class="section-index">08</p>
+        <h2>Accessibility and input</h2>
+        <p>Terminal limits do not remove accessibility duties.</p>
+      </header>
+      <div class="body-copy">
+        <ul class="check-list">
+          <li>All normal text pairs meet at least 4.5:1. Chosen text, muted, dim, and semantic colors pass against the canvas.</li>
+          <li>Focus and decision boundaries use high-contrast color plus text/glyph, never hue alone.</li>
+          <li>Every action is keyboard reachable. Escape always has a predictable cancel or interrupt meaning.</li>
+          <li>Mode change, copy success, errors, and approval results have explicit text for screen readers and logs.</li>
+          <li><code>NEURA_REDUCED_MOTION=1</code> remains supported; plan adds an operator setting and test coverage.</li>
+          <li>Animation is interruptible and never blocks input. Timers are disposed during reload and state replacement.</li>
+          <li>Selection and copied text never include ANSI escapes or purely decorative glyphs.</li>
+          <li>Links have visible text and OSC 8 enhancement; raw URL remains available when terminal capability is absent.</li>
+          <li>High-contrast Windows Terminal settings remain usable. Neura does not hardcode background assumptions into text-only output.</li>
+          <li>Color blindness test verifies Plan, YOLO, Human Away, success, warning, and failure remain distinct by wording and glyph.</li>
+        </ul>
+        <div class="plain-note warning"><strong>Safety copy rule:</strong> “Human Away” is never shown without “Preview” until OS-enforced sandboxing and adversarial replay verification exist. That label survives every responsive breakpoint.</div>
+      </div>
+    </section>
+
+    <section class="section" id="implementation">
+      <header>
+        <p class="section-index">09</p>
+        <h2>Implementation map</h2>
+        <p>Approved and implemented on 2026-08-02.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">Build extension-first. Keep plain <code>pi</code> untouched behind the existing <code>NEURA</code> gate. Avoid direct edits to global packages.</p>
+        <div class="file-map">
+          <div class="file-row"><code>C:\Neura\agent\neura\ui-tokens.ts</code><p><span class="tag new">new</span> Semantic colors, glyphs, spacing, width tiers, ANSI-safe padding, copy feedback timing, and motion tokens.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\neura\cockpit-state.ts</code><p><span class="tag new">new</span> Session-local state bus: phase, current operation, notices, queue, proof, degraded capabilities, copy availability.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\neura.ts</code><p>Replace greeting-heavy continuity block with resume ledger. Aggregate startup notices when upstream exposes them; otherwise provide one Neura notice view without hiding upstream truth.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\cockpit.ts</code><p>Render phase line, responsive footer, working status, and composer-adjacent action rail from shared state.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\transcript-actions.ts</code><p><span class="tag new">new</span> Register <code>Ctrl+Shift+X</code> and <code>/clip</code>; parse last assistant text into copyable answer/code sections; use Pi’s exported clipboard helper.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\modes.ts</code><p>Replace decorative 9/14-frame rails with short policy evidence transitions. Keep generation cancellation and reduced-motion handling.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\guardrail.ts</code><p>Publish focused review state and use action/reason/scope/recovery copy. Preserve deterministic policy and fail-closed behavior.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\harness-health.ts</code><p>Move from dot-heavy diagnostic wall to aligned capability ledger with impact and next action.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\checkpoint.ts</code><p>Publish checkpoint and recovery status. Keep snapshot semantics unchanged.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\check-gate.ts</code><p>Publish proof progress and evidence receipts. Keep proof policy unchanged.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\extensions\autogit.ts</code><p>Publish held, shipped, missing, and failed states without duplicate toasts.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\themes\neura-dark.json</code><p>Apply palette to Markdown, user messages, tools, diffs, selectors, thinking, and editor boundary.</p></div>
+          <div class="file-row"><code>C:\Neura\agent\keybindings.json</code><p>Add copy-block shortcut only after collision check. Keep <code>Shift+Tab</code> for mode cycling and <code>Ctrl+Shift+T</code> for thinking.</p></div>
+          <div class="file-row"><code>C:\Neura\scripts\verify-harness.mjs</code><p>Expand deterministic snapshots for all states, widths, ANSI width, timers, copy parsing, and reduced motion.</p></div>
+          <div class="file-row"><code>C:\Neura\install.ps1</code><p>Install new source files and verify hashes. Never overwrite <code>settings.json</code> or Windows Terminal profile.</p></div>
+          <div class="file-row"><code>@earendil-works/pi-coding-agent 0.83.0</code><p><span class="tag core">upstream boundary</span> Core assistant transcript and startup package banners are not replaceable through current extension API. v1 uses supported widgets, theme tokens, custom overlays, and existing copy actions. Any upstream renderer seam is a separate proposal, never a live <code>node_modules</code> patch.</p></div>
+        </div>
+
+        <h3 style="margin-top:36px">Build order</h3>
+        <div class="phase-plan">
+          <div class="phase-step"><div><h3>Lock visual contracts</h3><p>Add token and state modules with pure render functions. Snapshot output at 120, 92, 72, 56, and 40 columns.</p></div></div>
+          <div class="phase-step"><div><h3>Rebuild ambient shell</h3><p>Implement resume ledger, phase line, composer metadata, footer survival order, title, and notice routing.</p></div></div>
+          <div class="phase-step"><div><h3>Rebuild transcript support</h3><p>Retheme Markdown and tool surfaces. Add grouped tool receipts, error recovery copy, answer action rail, and code-block copy overlay.</p></div></div>
+          <div class="phase-step"><div><h3>Rebuild mode language</h3><p>Apply mode glyphs, colors, boundary copy, transition timing, cancellation, and reduced-motion behavior.</p></div></div>
+          <div class="phase-step"><div><h3>Unify focused states</h3><p>Apply one decision grammar to YOLO confirmation, Human Away queue, health, proof, undo, degraded mode, and handoff.</p></div></div>
+          <div class="phase-step"><div><h3>Test adverse conditions</h3><p>Long paths, Unicode, huge code blocks, rapid mode cycling, reload mid-animation, clipboard failure, MCP failure, no model, no git, and narrow terminal.</p></div></div>
+          <div class="phase-step"><div><h3>Install after approval</h3><p>Run harness, proof-of-work, live isolated smoke, then sync approved files into <code>C:\Users\rajve\.pi\agent</code> without touching unrelated settings.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="verification">
+      <header>
+        <p class="section-index">10</p>
+        <h2>Definition of done</h2>
+        <p>Observable, repeatable checks.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">Redesign is done only when every state stays readable, truthful, fast, and stable in the real Windows terminal—not when one screenshot looks polished.</p>
+        <div class="grid-2">
+          <div class="cell"><span class="num">AUTOMATED</span><h3>Deterministic harness</h3><p>Load every extension; render all cockpit states at five widths; assert both legacy and compact ASCII marks; strip ANSI and assert visible width; fake timers for capability-latch motion; test latest-transition ownership; parse and copy answer/code blocks; verify theme token coverage.</p></div>
+          <div class="cell"><span class="num">INTERACTIVE</span><h3>Real terminal smoke</h3><p>Run <code>/reload</code>; confirm the NEURA wordmark appears once; resize live Windows Terminal; cycle modes rapidly; inspect capability changes; interrupt work; expand tools; copy an answer and code block; open the agent action request, health, undo, proof, and notice views.</p></div>
+          <div class="cell"><span class="num">ACCESSIBILITY</span><h3>Contrast and motion</h3><p>Check every foreground pair; inspect grayscale and red-green simulation; verify text/glyph redundancy; repeat full smoke with reduced motion and a Windows contrast theme.</p></div>
+          <div class="cell"><span class="num">ISOLATION</span><h3>Plain Pi and live harness</h3><p><code>pi</code> remains stock while <code>neura</code> receives the shell. Installer drift must match repository source without patching global packages or overwriting settings.</p></div>
+        </div>
+        <h3 style="margin-top:32px">Acceptance checklist</h3>
+        <ul class="check-list">
+          <li>First screen shows the original NEURA ASCII identity, workspace, safety mode, last work, next action, and notice count within six seconds of scanning.</li>
+          <li>No wide orange rule, gradient, glow, emoji icon, decorative ASCII flourish beyond the launch wordmark, or unexplained animation remains.</li>
+          <li>Assistant output has predictable hierarchy for prose, lists, code, tools, diffs, links, errors, and evidence.</li>
+          <li>Copy answer, choose code block, and copy historical message all succeed and confirm without layout shift.</li>
+          <li>Human Away preview cannot be mistaken for success, sandboxing, or unlimited autonomy.</li>
+          <li>Approval reads as an agent action request: identity, task, intent, evidence, exact action, policy boundary, fallback, and grant scope are visible before choices.</li>
+          <li>Every failure tells operator what happened, what is affected, and what to do next.</li>
+          <li>Footer never wraps or hides mode/risk at 40, 56, 72, 92, or 120 columns.</li>
+          <li>Rapid <code>Shift+Tab</code> cycling updates enforced policy immediately, cancels stale transitions, and leaves only the newest capability verdict.</li>
+          <li>Reduced motion shows final policy state immediately with no pulse or spatial translation.</li>
+          <li>All current Modes v1 safety behavior and proof checks remain unchanged.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="scope">
+      <header>
+        <p class="section-index">11</p>
+        <h2>Scope and gates</h2>
+        <p>What this plan does not authorize.</p>
+      </header>
+      <div class="body-copy">
+        <div class="grid-2">
+          <div class="cell"><span class="num">IN SCOPE AFTER APPROVAL</span><h3>Neura-owned TUI</h3><p>Theme, launch, cockpit, composer-adjacent widgets, mode motion, confirmations, approvals, health, proof, recovery, copy overlay, docs, installer, and tests.</p></div>
+          <div class="cell"><span class="num">NOT IN THIS PLAN</span><h3>Platform rewrites</h3><p>No OS sandbox, Gmail authentication fix, Pi fork, Windows Terminal settings overwrite, model behavior rewrite, web dashboard, or unrelated dirty-file cleanup.</p></div>
+        </div>
+        <div class="plain-note decision"><strong>Implementation status:</strong> approved on 2026-08-02 and implemented extension-first. Human Away remains preview-labelled; OS sandboxing, adversarial replay, Gmail authentication, and unrelated dirty-file cleanup remain outside this delivery.</div>
+      </div>
+    </section>
+
+    <section class="section" id="research">
+      <header>
+        <p class="section-index">12</p>
+        <h2>Research basis</h2>
+        <p>First-party sources reviewed 2026-08-02.</p>
+      </header>
+      <div class="body-copy">
+        <p class="lead">The design borrows interaction principles, not another product’s visual skin. Local Pi 0.83 source remains the authority for feasibility.</p>
+        <div class="sources">
+          <div class="source"><a href="https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md">Pi extension UI documentation</a><p>Grounds supported widgets, footer, working indicator, custom overlays, editor wrappers, message renderers, and clipboard integration.</p></div>
+          <div class="source"><a href="https://code.claude.com/docs/en/statusline">Claude Code status line</a><p>Supports a short ambient status line, responsive data priority, event-driven refresh, and hiding status during focused permission UI.</p></div>
+          <div class="source"><a href="https://docs.warp.dev/terminal/blocks">Warp terminal Blocks</a><p>Supports grouping command and output into a meaningful unit with copy, navigation, re-input, and compact-mode behavior.</p></div>
+          <div class="source"><a href="https://docs.warp.dev/terminal/blocks/block-actions">Warp Block Actions</a><p>Supports copy input, output, both, and conversation-level actions without making every line permanently noisy.</p></div>
+          <div class="source"><a href="https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli">GitHub Copilot CLI modes</a><p>Confirms Shift+Tab mode cycling and the need to make permission differences explicit in a terminal interface.</p></div>
+          <div class="source"><a href="https://zed.dev/docs/assistant/assistant-panel">Zed Agent Panel</a><p>Supports editable queued steering, checkpoints, follow mode, model/tool visibility, and recovery as first-class agent UX.</p></div>
+          <div class="source"><a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">W3C text contrast</a><p>Sets 4.5:1 minimum for normal text. Proposed text, muted, dim, and semantic foregrounds meet this against the canvas.</p></div>
+          <div class="source"><a href="https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html">W3C non-text contrast</a><p>Guides visible focus, boundaries, and control states; decorative separators may stay quiet, meaningful controls may not.</p></div>
+          <div class="source"><a href="https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions">W3C animation from interactions</a><p>Supports disabling non-essential motion and respecting system/user reduced-motion preferences.</p></div>
+          <div class="source"><a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance">Windows Terminal appearance</a><p>Confirms font, size, line height, cursor, selection, foreground, and background belong to terminal profile configuration.</p></div>
+        </div>
+        <div class="plain-note"><strong>Dataset judgment:</strong> UI/UX Pro Max surfaced single-family terminal typography, strong keyboard feedback, short motion, explicit progress, and reduced-motion support. Its generic product-review layout, glassmorphism, glow, oversized typography, and <code>back.out</code> stagger were rejected because they conflict with a precise terminal cockpit.</div>
+      </div>
+    </section>
+
+    <footer class="footer-note"><strong>Artifact:</strong> C:\Neura\plans\neura-interface-redesign-plan.html · standalone local plan · no product code changed.</footer>
+  </main>
+
+  <script>
+    const terminal = document.getElementById('terminalPreview');
+    const stateButtons = [...document.querySelectorAll('.state-button')];
+    const widthButtons = [...document.querySelectorAll('.width-button')];
+
+    stateButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        terminal.dataset.state = button.dataset.state;
+        stateButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+      });
+    });
+
+    const widths = { wide: '100%', medium: '78%', narrow: '54%' };
+    widthButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        terminal.style.width = widths[button.dataset.width];
+        widthButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+      });
+    });
+
+    document.querySelectorAll('.copy-button').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const target = document.getElementById(button.dataset.copyTarget);
+        const text = target?.innerText ?? '';
+        try {
+          await navigator.clipboard.writeText(text);
+          const old = button.textContent;
+          button.textContent = '✓ copied';
+          window.setTimeout(() => { button.textContent = old; }, 1200);
+        } catch {
+          button.textContent = 'select text';
+        }
+      });
+    });
+
+    const motionReadout = document.getElementById('motionReadout');
+    const motionCopy = {
+      plan: {
+        title: 'PLAN',
+        capabilities: ['read only', 'not used', 'locked', 'locked'],
+        verdict: 'BOUNDARY APPLIED · inspection tools only · writes locked'
+      },
+      yolo: {
+        title: 'YOLO',
+        capabilities: ['read + write', 'not used', 'confirm', 'confirm'],
+        verdict: 'BOUNDARY APPLIED · workspace autonomy · guardrails active'
+      },
+      human: {
+        title: 'HUMAN AWAY · PREVIEW',
+        capabilities: ['one generated file', 'isolated Headmaster', 'defer to operator', 'locked'],
+        verdict: 'BOUNDARY APPLIED · return queue armed · OS sandbox pending'
+      }
+    };
+    const motionFrom = document.getElementById('motionFrom');
+    const motionTo = document.getElementById('motionTo');
+    const capabilityNodes = ['capWorkspace', 'capReviewer', 'capSensitive', 'capRemote'].map((id) => document.getElementById(id));
+    const motionVerdict = document.getElementById('motionVerdict');
+    const motionButtons = [...document.querySelectorAll('.motion-button')];
+    let currentMode = 'human';
+    let transitionGeneration = 0;
+    let transitionTimer;
+    motionButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.mode;
+        const next = motionCopy[mode];
+        const generation = ++transitionGeneration;
+        window.clearTimeout(transitionTimer);
+        motionFrom.textContent = motionCopy[currentMode].title;
+        motionTo.textContent = next.title;
+        capabilityNodes.forEach((node, index) => { node.textContent = next.capabilities[index]; });
+        motionVerdict.textContent = next.verdict;
+        motionButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        motionReadout.className = `mode-machine ${mode}`;
+        motionReadout.setAttribute('aria-busy', 'true');
+        void motionReadout.offsetWidth;
+        requestAnimationFrame(() => motionReadout.classList.add('playing'));
+        currentMode = mode;
+        transitionTimer = window.setTimeout(() => {
+          if (generation === transitionGeneration) motionReadout.setAttribute('aria-busy', 'false');
+        }, 360);
+      });
+    });
+  </script>
+</body>
+</html>

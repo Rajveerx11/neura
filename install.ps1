@@ -44,6 +44,22 @@ if ($Check) {
             $drift += "$(Split-Path $pair[0] -Leaf) differs"
         }
     }
+    $desiredKeybindings = Get-Content "$repo\agent\keybindings.json" -Raw | ConvertFrom-Json
+    $liveKeybindingsPath = Join-Path $agent "keybindings.json"
+    if (-not (Test-Path $liveKeybindingsPath)) {
+        $drift += "keybindings.json missing (Shift+Tab unavailable for modes)"
+    } else {
+        try {
+            $liveKeybindings = Get-Content $liveKeybindingsPath -Raw | ConvertFrom-Json
+            $desiredThinking = $desiredKeybindings.PSObject.Properties["app.thinking.cycle"].Value
+            $liveThinking = $liveKeybindings.PSObject.Properties["app.thinking.cycle"].Value
+            if ($liveThinking -ne $desiredThinking) {
+                $drift += "keybindings.json does not free Shift+Tab"
+            }
+        } catch {
+            $drift += "keybindings.json is invalid"
+        }
+    }
     if ($missing.Count) { Write-Warning "Missing required commands: $($missing -join ', ')" }
     if ($drift.Count) { Write-Warning "Live harness drift: $($drift -join '; ')" }
     if (-not $missing.Count -and -not $drift.Count) { Write-Host "Neura health: ready, live harness matches source." }
@@ -60,6 +76,21 @@ Copy-Item "$repo\agent\themes\*" "$agent\themes\" -Force
 Copy-Item "$repo\agent\neura\*" "$agent\neura\" -Force
 Copy-Item "$repo\launcher\neura.cmd" "$bin\" -Force
 Copy-Item "$repo\agent\mcp.json" "$agent\" -Force  # no secrets; tokens flow via MY_PI_MCP_ENV_ALLOWLIST
+
+# Shift+Tab belongs to Neura mode cycling. Preserve every user binding while moving
+# pi's built-in thinking-level cycle to Ctrl+Shift+T.
+$keybindingsSource = Get-Content "$repo\agent\keybindings.json" -Raw | ConvertFrom-Json
+$keybindingsTarget = Join-Path $agent "keybindings.json"
+if (Test-Path $keybindingsTarget) {
+    try { $keybindings = Get-Content $keybindingsTarget -Raw | ConvertFrom-Json }
+    catch { throw "Existing keybindings.json is invalid; fix it before installing: $keybindingsTarget" }
+} else {
+    $keybindings = [PSCustomObject]@{}
+}
+$thinkingBinding = $keybindingsSource.PSObject.Properties["app.thinking.cycle"].Value
+$keybindings | Add-Member -NotePropertyName "app.thinking.cycle" -NotePropertyValue $thinkingBinding -Force
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($keybindingsTarget, ($keybindings | ConvertTo-Json -Depth 20), $utf8NoBom)
 
 # settings.json: preserve local credentials and choices unless explicitly forced
 $target = "$agent\settings.json"

@@ -11,6 +11,8 @@ import {
   runProcess,
   truncateText,
 } from "../neura/core.ts";
+import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
+import { fitLine } from "../neura/ui-tokens.ts";
 
 type HealthReport = {
   state: "ready" | "degraded";
@@ -19,6 +21,7 @@ type HealthReport = {
   context: string;
   workspace: string;
   bridges: string;
+  impact: string;
   action: string;
 };
 
@@ -49,6 +52,17 @@ function mcpSummary(): { label: string; valid: boolean } {
   }
 }
 
+function modeShortcutReady(): boolean {
+  try {
+    const config = JSON.parse(fs.readFileSync(path.join(AGENT_DIR, "keybindings.json"), "utf-8"));
+    const thinking = config?.["app.thinking.cycle"];
+    const keys = Array.isArray(thinking) ? thinking : [thinking];
+    return !keys.includes("shift+tab");
+  } catch {
+    return false;
+  }
+}
+
 async function localModelOnline(): Promise<boolean> {
   try {
     const response = await fetch("http://127.0.0.1:8080/v1/models", {
@@ -72,17 +86,20 @@ async function inspect(cwd: string): Promise<HealthReport> {
 
   const checkpoint = fs.existsSync(path.join(AGENT_DIR, "extensions", "checkpoint.ts"));
   const gate = fs.existsSync(path.join(AGENT_DIR, "extensions", "check-gate.ts"));
+  const modes = fs.existsSync(path.join(AGENT_DIR, "extensions", "modes.ts"));
+  const modeKeys = modeShortcutReady();
   const persona = fs.existsSync(path.join(AGENT_DIR, "neura", "NEURA.md"));
   const memory = fs.existsSync(path.join(AGENT_DIR, "neura", "MEMORY.md"));
   const skills = countSkills();
   const mcp = mcpSummary();
-  const requiredOk = !!piVersion && !!gitVersion && !!uvxVersion && checkpoint && gate && persona && skills > 0 && mcp.valid;
+  const requiredOk = !!piVersion && !!gitVersion && !!uvxVersion && checkpoint && gate && modes && modeKeys && persona && skills > 0 && mcp.valid;
 
   const sync = [git.ahead ? `↑${git.ahead}` : "", git.behind ? `↓${git.behind}` : ""].filter(Boolean).join(" ");
   const changes = git.changed ? `${git.changed} changes` : "clean";
   const missing = [
     !uvxVersion ? "install uv" : "",
-    !checkpoint || !gate ? "sync extensions" : "",
+    !checkpoint || !gate || !modes ? "sync extensions" : "",
+    !modeKeys ? "install mode keybindings" : "",
     !persona ? "restore persona" : "",
     !skills ? "configure skills" : "",
     !mcp.valid ? "restore mcp.json" : "",
@@ -91,15 +108,16 @@ async function inspect(cwd: string): Promise<HealthReport> {
   return {
     state: requiredOk ? "ready" : "degraded",
     core: `pi ${versionLabel(piVersion)}  ·  git ${versionLabel(gitVersion)}  ·  uvx ${versionLabel(uvxVersion)}`,
-    workflow: `${checkpoint ? "●" : "○"} checkpoint  ${gate ? "●" : "○"} proof gate  ${autogit.ok ? "●" : "○"} autogit`,
-    context: `${persona ? "●" : "○"} persona  ${memory ? "●" : "○"} memory  ${skills ? "●" : "○"} ${skills} skills`,
+    workflow: `modes ${modes && modeKeys ? "ready" : "missing"} · checkpoint ${checkpoint ? "ready" : "missing"} · proof ${gate ? "ready" : "missing"} · autogit ${autogit.ok ? "ready" : "missing"}`,
+    context: `persona ${persona ? "ready" : "missing"} · memory ${memory ? "ready" : "missing"} · skills ${skills || "missing"}`,
     workspace: git.isRepo ? `${git.branch}  ·  ${changes}${sync ? `  ·  ${sync}` : ""}` : "not a git workspace",
     bridges: `${mcp.label}  ·  local Qwen ${qwen ? "online" : "offline"}`,
+    impact: requiredOk ? "No capability loss." : "Neura will continue with the listed capability gaps.",
     action: missing.length ? missing.join("  ·  ") : "agentic harness is ready",
   };
 }
 
-function healthLines(report: HealthReport, width: number): string[] {
+export function healthLines(report: HealthReport, width: number): string[] {
   const ok = report.state === "ready";
   const stateColor = ok ? PALETTE.success : PALETTE.warning;
   const line = (label: string, value: string, color = PALETTE.text) =>
@@ -113,9 +131,10 @@ function healthLines(report: HealthReport, width: number): string[] {
     line("context", report.context),
     line("workspace", report.workspace, PALETTE.muted),
     line("bridges", report.bridges, PALETTE.muted),
+    line("impact", width < 40 ? "Terminal below 40 columns; emergency layout." : report.impact, width < 40 || !ok ? PALETTE.warning : PALETTE.muted),
     line(ok ? "status" : "next", report.action, ok ? PALETTE.success : PALETTE.warning),
     fg(PALETTE.dim, "/health close hides this panel"),
-  ];
+  ].map((value) => fitLine(value, width));
 }
 
 export default function (pi) {
@@ -131,8 +150,15 @@ export default function (pi) {
       }
 
       ctx.ui.setStatus("neura-health", "health check");
+      patchCockpit({ operation: { verb: "health", target: "inspecting capabilities", startedAt: Date.now() } });
       const report = await inspect(ctx.cwd);
       ctx.ui.setStatus("neura-health", undefined);
+      patchCockpit({ operation: undefined, phase: report.state === "degraded" ? "DEGRADED" : "READY", degraded: report.state === "degraded" ? report.action : undefined });
+      if (report.state === "degraded") {
+        addCockpitNotice({ id: "health", message: "Harness degraded", detail: report.action, tone: "warning", persistent: true });
+      } else {
+        removeCockpitNotice("health");
+      }
       ctx.ui.setWidget("neura-health", () => ({
         render: (width: number) => healthLines(report, width),
         invalidate() {},

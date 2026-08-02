@@ -1,66 +1,123 @@
-// guardrail — block-and-ask on destructive commands, confirm on secret-file reads.
-// Pi ships with no permission system; this is it. Delete file to unwire.
+// Neura guardrail v2 — mode-aware, fail-closed action mediation.
+// Plan blocks mutation. YOLO asks Rajveer for sensitive actions. Human Away sends
+// eligible actions to the isolated Headmaster, then clamps every verdict through
+// deterministic policy and queues anything not approved.
 
-const DESTRUCTIVE = [
-  { re: /\brm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r)[a-z]*\b/i, why: "recursive force delete (rm -rf)" },
-  { re: /\bgit\s+push\s+.*(--force\b|-f\b)/i, why: "git force push" },
-  { re: /\bgit\s+reset\s+--hard\b/i, why: "git reset --hard (discards local changes)" },
-  { re: /\bgit\s+clean\s+-[a-z]*f/i, why: "git clean -f (deletes untracked files)" },
-  { re: /\bgit\s+(?:checkout\s+--|restore\s+(?:--worktree\s+)?(?:\.|--source)|branch\s+-D\b|push\s+.*--delete\b)/i, why: "destructive git operation" },
-  { re: /\bdrop\s+(table|database|schema)\b/i, why: "SQL DROP" },
-  { re: /\btruncate\s+table\b/i, why: "SQL TRUNCATE" },
-  { re: /remove-item\s+(?=[^\n]*-recurse)[^\n]*-force|remove-item\s+(?=[^\n]*-force)[^\n]*-recurse/i, why: "recursive force delete (Remove-Item)" },
-  { re: /\b(rmdir|rd)\s+\/s\b|\bdel\s+\/[sf]\b/i, why: "recursive delete (cmd)" },
-  { re: /\bmkfs\b|\bformat\s+[a-z]:\b/i, why: "disk format" },
-  { re: /\bterraform\s+(?:apply\s+.*-auto-approve|destroy)\b/i, why: "unattended infrastructure mutation" },
-  { re: /\bkubectl\s+delete\s+(?:namespace|ns)\b/i, why: "Kubernetes namespace deletion" },
-  { re: /\bdocker\s+system\s+prune\b/i, why: "Docker system prune" },
-];
-
-const SECRET_FILES =
-  /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?)(?=$|[\\/\s"'`;|&])/i;
+import { getMode } from "../neura/mode-state.ts";
+import { patchCockpit } from "../neura/cockpit-state.ts";
+import { inspectAction, isPlanActionAllowed } from "../neura/action-policy.ts";
+import { consumeExactRetry, recordDecision, type ReviewDecision } from "../neura/approval-store.ts";
+import { reviewWithHeadmaster } from "../neura/headmaster.ts";
 
 export default function (pi) {
-  if (!process.env.NEURA) return; // plain `pi` stays stock
+  if (!process.env.NEURA) return;
+
+  let consecutiveStops = 0;
+  const rollingStops: boolean[] = [];
+
+  function noteOutcome(decision: ReviewDecision, ctx): boolean {
+    const stopped = decision !== "approve_once";
+    consecutiveStops = stopped ? consecutiveStops + 1 : 0;
+    rollingStops.push(stopped);
+    if (rollingStops.length > 50) rollingStops.shift();
+    const circuitOpen = consecutiveStops >= 3 || rollingStops.filter(Boolean).length >= 10;
+    if (circuitOpen) {
+      try { ctx.abort(); } catch {}
+    }
+    return circuitOpen;
+  }
+
+  pi.on("agent_start", () => { consecutiveStops = 0; });
 
   pi.on("tool_call", async (event, ctx) => {
-    const approve = async (title: string, message: string) => {
-      if (!ctx.hasUI) return false;
-      return ctx.ui.confirm(title, message);
-    };
+    const mode = getMode();
 
-    // Destructive shell commands: block-and-ask
-    if (event.toolName === "bash") {
-      const cmd = String(event.input?.command ?? "");
-      for (const { re, why } of DESTRUCTIVE) {
-        if (re.test(cmd)) {
-          const ok = await approve(
-            "Destructive command",
-            `${why}\n\n${cmd.slice(0, 300)}\n\nAllow?`
-          );
-          if (!ok) return { block: true, reason: `Blocked by guardrail: ${why}. Approval unavailable or denied.` };
-          return; // one confirm is enough
-        }
+    if (mode === "plan") {
+      if (isPlanActionAllowed(event, ctx.cwd)) return;
+      return {
+        block: true,
+        reason: `PLAN mode blocked ${event.toolName}. Use read/grep/find/ls or an exact read-only shell command; switch with Shift+Tab or /mode before implementation.`,
+      };
+    }
+
+    const action = inspectAction(event, ctx.cwd);
+    if (consumeExactRetry(action)) return;
+    if (action.route === "allow") return;
+
+    if (mode === "yolo") {
+      if (!action.requiresHumanInYolo) return;
+      if (!ctx.hasUI) {
+        return { block: true, reason: `YOLO guardrail blocked sensitive action without interactive approval: ${action.reason}` };
       }
-      // Secret file access via shell (cat .env etc.)
-      if (SECRET_FILES.test(cmd)) {
-        const ok = await approve("Secret file access", `Command touches a secret-looking file:\n\n${cmd.slice(0, 300)}\n\nAllow?`);
-        if (!ok) return { block: true, reason: "Blocked by guardrail: secret file access approval unavailable or denied." };
-      }
+      patchCockpit({
+        phase: "REVIEW",
+        approval: {
+          id: "live",
+          agent: "Neura",
+          task: action.category,
+          exactAction: action.summary,
+          boundary: action.reason,
+          fallback: action.saferPath,
+          risk: action.risk,
+          approvable: true,
+        },
+      });
+      const approved = await ctx.ui.confirm(
+        `Neura action request · ${action.risk.toUpperCase()}`,
+        `Agent: Neura\nTask: ${action.category}\nIntent / exact action: ${action.summary}\n` +
+          `Boundary: ${action.reason}\nSafe fallback: ${action.saferPath}\nGrant: this exact action once`,
+      );
+      patchCockpit({ phase: "WORK", approval: undefined });
+      if (approved) return;
+      return { block: true, reason: `YOLO guardrail denied: ${action.reason}` };
+    }
+
+    patchCockpit({ phase: "REVIEW", operation: { verb: "Headmaster reviewing", target: action.summary, startedAt: Date.now() } });
+    try { if (ctx.hasUI) ctx.ui.setStatus("neura-headmaster", "headmaster review"); } catch {}
+    const verdict = await reviewWithHeadmaster(action, {
+      provider: ctx.model?.provider,
+      modelId: ctx.model?.id,
+    });
+    try { if (ctx.hasUI) ctx.ui.setStatus("neura-headmaster", undefined); } catch {}
+
+    if (verdict.decision === "approve_once") {
+      noteOutcome(verdict.decision, ctx);
+      try { recordDecision(action, verdict, "executed", false); } catch {}
+      patchCockpit({ phase: "WORK", operation: undefined, approval: undefined });
       return;
     }
 
-    // Direct reads of secret files
-    if (event.toolName === "read" || event.toolName === "write" || event.toolName === "edit") {
-      const p = String(event.input?.path ?? event.input?.file_path ?? "");
-      if (SECRET_FILES.test(p)) {
-        const mutation = event.toolName !== "read";
-        const ok = await approve(
-          mutation ? "Secret file modification" : "Secret file read",
-          `Model wants to ${mutation ? "modify" : "read"}:\n${p}\n\nAllow?`,
-        );
-        if (!ok) return { block: true, reason: `Blocked by guardrail: secret file ${mutation ? "modification" : "read"} approval unavailable or denied.` };
-      }
+    let approvalId = "unlogged";
+    try {
+      const record = recordDecision(action, verdict, "pending", action.route !== "deny");
+      approvalId = record.id;
+      patchCockpit({
+        phase: "REVIEW",
+        operation: undefined,
+        approval: {
+          id: record.id,
+          agent: "Neura",
+          task: record.category,
+          exactAction: record.summary,
+          boundary: record.verdict.reason,
+          fallback: record.verdict.saferPath,
+          risk: record.risk,
+          approvable: record.approvable,
+        },
+      });
+    } catch (error) {
+      patchCockpit({ phase: "DEGRADED", operation: undefined, approval: undefined, degraded: "Approval audit unavailable; action denied." });
+      try { if (ctx.hasUI) ctx.ui.notify(`approval audit failed closed: ${error}`, "error"); } catch {}
     }
+    const circuitOpen = noteOutcome(verdict.decision, ctx);
+    return {
+      block: true,
+      reason:
+        `HUMAN AWAY · PREVIEW ${verdict.decision.toUpperCase()} [${approvalId}]: ${verdict.reason}\n` +
+        `Safer path: ${verdict.saferPath}\n` +
+        (circuitOpen
+          ? "Review circuit opened after repeated stops; this turn was aborted. Do not retry or route around the verdict."
+          : "Queued for Rajveer. Do not retry or rephrase this action; continue through a materially safer path."),
+    };
   });
 }

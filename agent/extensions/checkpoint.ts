@@ -7,6 +7,8 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
+import { getMode } from "../neura/mode-state.ts";
 
 type Snap = { tree: string; when: string; label: string };
 
@@ -63,16 +65,29 @@ export default function (pi) {
   });
 
   pi.on("agent_start", async (_event, ctx) => {
+    if (getMode() === "plan") return;
     try { if (ctx.hasUI) ctx.ui.setStatus("neura-checkpoint", "checkpoint"); } catch {}
+    patchCockpit({ checkpoint: "capturing", operation: { verb: "checkpoint", target: "capturing worktree", startedAt: Date.now() } });
     try {
       const tree = await snapshot(ctx.cwd);
-      if (!tree) return;
-      if (snaps.length && snaps[snaps.length - 1].tree === tree) return; // nothing changed
+      if (!tree) {
+        patchCockpit({ checkpoint: "failed" });
+        addCockpitNotice({ id: "checkpoint", message: "Checkpoint unavailable", detail: "No Git snapshot was created; work can continue.", tone: "warning", persistent: true });
+        return;
+      }
+      if (snaps.length && snaps[snaps.length - 1].tree === tree) {
+        patchCockpit({ checkpoint: "ready" });
+        removeCockpitNotice("checkpoint");
+        return;
+      }
       const when = new Date().toTimeString().slice(0, 5);
       snaps.push({ tree, when, label: lastPrompt || "(auto)" });
       if (snaps.length > 20) snaps.shift();
+      patchCockpit({ checkpoint: "ready" });
+      removeCockpitNotice("checkpoint");
     } finally {
       try { if (ctx.hasUI) ctx.ui.setStatus("neura-checkpoint", undefined); } catch {}
+      patchCockpit({ operation: undefined });
     }
   });
 
@@ -87,17 +102,22 @@ export default function (pi) {
         return;
       }
       const snap = snaps.pop();
-      if (!snap) return void ctx.ui.notify("nothing to undo — no snapshot taken this session", "warning");
+      if (!snap) return void ctx.ui.notify("nothing to undo · no snapshot taken this session", "warning");
 
       // safety: snapshot the CURRENT state first so /undo itself is reversible
+      patchCockpit({ phase: "RECOVERY", checkpoint: "restoring", operation: { verb: "restore", target: `snapshot ${snap.when}`, startedAt: Date.now() } });
       const now = await snapshot(ctx.cwd);
       const ok = await restore(ctx.cwd, snap.tree);
       if (ok) {
         if (now && now !== snap.tree) snaps.push({ tree: now, when: new Date().toTimeString().slice(0, 5), label: "(state before /undo)" });
-        ctx.ui.notify(`restored snapshot ${snap.when} "${snap.label}" — files created after it are left in place`);
+        patchCockpit({ phase: "RECOVERY", checkpoint: "restored", operation: undefined });
+        removeCockpitNotice("checkpoint");
+        ctx.ui.notify(`restored snapshot ${snap.when} "${snap.label}" · files created after it are left in place`);
       } else {
         snaps.push(snap); // restore failed, keep it available
-        ctx.ui.notify("restore failed — snapshot kept, worktree untouched", "error");
+        patchCockpit({ phase: "RECOVERY", checkpoint: "failed", operation: undefined });
+        addCockpitNotice({ id: "checkpoint", message: "Snapshot restore failed", detail: "Worktree untouched; snapshot remains available.", tone: "error", persistent: true });
+        ctx.ui.notify("restore failed · snapshot kept, worktree untouched", "error");
       }
     },
   });

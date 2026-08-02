@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Implementation plan for Neura Plan, YOLO, and Human Away modes with delegated approval review.">
+  <title>Neura Agent Modes &amp; Human Away Plan</title>
+  <style>
+    :root {
+      --bg: #0b0c0e;
+      --surface: #14171a;
+      --raised: #1c2024;
+      --line: #2c3237;
+      --line-strong: #414950;
+      --copper: #d97841;
+      --copper-soft: rgba(217, 120, 65, .12);
+      --ivory: #e8e2d8;
+      --muted: #a8a39b;
+      --dim: #72767a;
+      --ok: #69c08a;
+      --ok-soft: rgba(105, 192, 138, .11);
+      --warn: #d3a64a;
+      --warn-soft: rgba(211, 166, 74, .11);
+      --bad: #df6b63;
+      --bad-soft: rgba(223, 107, 99, .11);
+      --info: #78a9d1;
+      --info-soft: rgba(120, 169, 209, .11);
+      --radius: 13px;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; background: var(--bg); }
+    body { margin: 0; color: var(--ivory); background: var(--bg); font-family: var(--sans); line-height: 1.55; }
+    button, input, textarea { font: inherit; }
+    button { color: inherit; }
+    a { color: var(--ivory); text-decoration-color: var(--copper); text-underline-offset: 3px; }
+    code, pre { font-family: var(--mono); }
+    code { color: #f0b18e; }
+    .shell { width: min(1320px, calc(100% - 40px)); margin: auto; }
+
+    .nav {
+      position: sticky; top: 0; z-index: 30;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      background: rgba(11,12,14,.94); backdrop-filter: blur(16px);
+    }
+    .nav-inner { min-height: 62px; display: flex; align-items: center; gap: 22px; }
+    .brand { font: 800 13px var(--mono); letter-spacing: .08em; color: var(--copper); white-space: nowrap; }
+    .brand-mark { display: inline-grid; place-items: center; width: 21px; height: 21px; margin-right: 10px; border: 1px solid var(--copper); transform: rotate(45deg); }
+    .brand-mark span { transform: rotate(-45deg); }
+    .nav-links { display: flex; gap: 4px; overflow: auto; scrollbar-width: none; }
+    .nav-links a { padding: 7px 9px; border-radius: 7px; color: var(--muted); font-size: 12px; text-decoration: none; white-space: nowrap; }
+    .nav-links a:hover, .nav-links a.active { color: var(--ivory); background: var(--raised); }
+    .plan-badge { margin-left: auto; padding: 6px 9px; border: 1px solid rgba(211,166,74,.4); border-radius: 999px; color: var(--warn); font: 700 10px var(--mono); white-space: nowrap; }
+
+    main section { padding: 74px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .overview { padding-top: 68px; }
+    .eyebrow { color: var(--copper); font: 800 11px var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    h1 { max-width: 940px; margin: 14px 0 20px; font-size: clamp(42px, 6.5vw, 84px); line-height: .98; letter-spacing: -.055em; }
+    h2 { margin: 10px 0 15px; font-size: clamp(32px, 4.5vw, 58px); line-height: 1.02; letter-spacing: -.04em; }
+    h3 { margin: 0 0 8px; font-size: 21px; }
+    h4 { margin: 0 0 7px; font-size: 16px; }
+    p { margin: 0 0 14px; }
+    .lede { max-width: 900px; color: var(--muted); font-size: clamp(18px, 2.1vw, 23px); }
+    .section-head { max-width: 880px; margin-bottom: 34px; }
+    .section-head > p { color: var(--muted); font-size: 17px; }
+    .micro { color: var(--dim); font-size: 12px; }
+    .mono { font-family: var(--mono); }
+
+    .callout { padding: 18px 20px; border: 1px solid var(--line); border-left: 3px solid var(--copper); border-radius: var(--radius); background: var(--surface); }
+    .callout strong { display: block; margin-bottom: 5px; }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+    .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+    .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+    .callout.info { border-left-color: var(--info); background: var(--info-soft); }
+
+    .outcome-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; margin-top: 30px; }
+    .decision-card, .fact-card, .panel, .source, .phase, .file, .test-card, .question { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .decision-card { padding: 24px; }
+    .decision-card ul { margin: 12px 0 0; padding-left: 19px; color: var(--muted); }
+    .decision-card li { margin: 7px 0; }
+    .fact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--line); }
+    .fact-card { min-height: 118px; padding: 17px; border: 0; border-radius: 0; }
+    .fact-card b { display: block; color: var(--copper); font: 800 25px var(--mono); }
+    .fact-card span { color: var(--muted); font-size: 12px; }
+
+    .simulator { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(330px, .75fr); gap: 16px; }
+    .terminal { min-height: 610px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #0d0f11; box-shadow: 0 26px 70px rgba(0,0,0,.3); }
+    .terminal-top { height: 39px; display: flex; align-items: center; gap: 7px; padding: 0 13px; border-bottom: 1px solid var(--line); background: #121518; color: var(--dim); font: 11px var(--mono); }
+    .led { width: 8px; height: 8px; border-radius: 50%; background: #3b4146; }
+    .terminal-title { margin: auto; }
+    .terminal-body { min-height: 571px; display: flex; flex-direction: column; gap: 12px; padding: 17px; font: 12px/1.5 var(--mono); }
+    .mode-strip { display: flex; align-items: center; gap: 7px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
+    .mode-tab { padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font: 700 11px var(--mono); }
+    .mode-tab.active { color: var(--ivory); border-color: var(--copper); background: var(--copper-soft); }
+    .mode-tab:focus-visible, .scenario-btn:focus-visible, .btn:focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
+    .mode-status { margin-left: auto; color: var(--dim); }
+    .term-box { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #121519; }
+    .term-box.accent { border-color: rgba(217,120,65,.7); }
+    .term-box.warn { border-color: rgba(211,166,74,.7); }
+    .term-box.bad { border-color: rgba(223,107,99,.7); }
+    .term-box.ok { border-color: rgba(105,192,138,.65); }
+    .term-label { display: block; margin-bottom: 5px; color: var(--dim); font-size: 10px; letter-spacing: .08em; }
+    .term-row { display: grid; grid-template-columns: 92px minmax(0,1fr) auto; align-items: start; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+    .term-row:last-child { border-bottom: 0; }
+    .term-row > b { color: var(--muted); }
+    .term-spacer { flex: 1; }
+    .term-input { margin-top: auto; padding: 10px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--muted); background: var(--surface); }
+    .term-footer { display: flex; gap: 8px; align-items: center; padding-top: 9px; border-top: 1px solid var(--line); overflow: hidden; color: var(--muted); white-space: nowrap; }
+    .pill { display: inline-block; padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 10px; }
+    .pill.copper { color: var(--copper); border-color: rgba(217,120,65,.55); }
+    .pill.ok { color: var(--ok); border-color: rgba(105,192,138,.5); }
+    .pill.warn { color: var(--warn); border-color: rgba(211,166,74,.5); }
+    .pill.bad { color: var(--bad); border-color: rgba(223,107,99,.5); }
+
+    .sim-controls { display: flex; flex-direction: column; gap: 12px; }
+    .panel { padding: 18px; }
+    .panel > p { color: var(--muted); font-size: 13px; }
+    .scenario-list { display: flex; flex-direction: column; gap: 7px; }
+    .scenario-btn { width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); text-align: left; cursor: pointer; }
+    .scenario-btn.active { border-color: var(--copper); background: var(--copper-soft); }
+    .scenario-btn strong { display: block; font: 700 12px var(--mono); }
+    .scenario-btn small { color: var(--muted); }
+    .verdict { min-height: 190px; }
+    .verdict .big { display: block; margin-bottom: 10px; font: 800 22px var(--mono); }
+
+    .mode-table-wrap, .risk-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; min-width: 870px; background: var(--surface); }
+    th, td { padding: 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); background: var(--raised); font: 800 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { font-weight: 750; }
+    .yes { color: var(--ok); }
+    .ask { color: var(--warn); }
+    .no { color: var(--bad); }
+
+    .architecture { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .architecture-grid { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 30px; align-items: stretch; }
+    .lane { display: flex; flex-direction: column; gap: 10px; }
+    .lane-title { color: var(--dim); font: 800 10px var(--mono); letter-spacing: .1em; }
+    .arch-node { position: relative; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--raised); }
+    .arch-node strong { display: block; margin-bottom: 4px; font: 750 12px var(--mono); }
+    .arch-node small { display: block; color: var(--muted); }
+    .arch-node.core { border-color: var(--copper); background: var(--copper-soft); }
+    .arch-node.guard { border-color: var(--warn); background: var(--warn-soft); }
+    .arch-node.deny { border-color: var(--bad); background: var(--bad-soft); }
+    .arch-node.audit { border-color: var(--info); background: var(--info-soft); }
+    .arch-note { margin-top: 18px; color: var(--muted); font-size: 13px; }
+
+    .flow-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
+    .flow-step { position: relative; min-height: 178px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .flow-step b { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 14px; border: 1px solid var(--copper); border-radius: 50%; color: var(--copper); font: 800 12px var(--mono); }
+    .flow-step strong { display: block; margin-bottom: 7px; }
+    .flow-step p { color: var(--muted); font-size: 13px; }
+
+    .risk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+    .risk-card { padding: 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .risk-card b { display: block; margin-bottom: 8px; font: 800 19px var(--mono); }
+    .risk-card p { color: var(--muted); font-size: 13px; }
+    .risk-card.low { border-top: 3px solid var(--ok); }
+    .risk-card.review { border-top: 3px solid var(--copper); }
+    .risk-card.human { border-top: 3px solid var(--warn); }
+    .risk-card.deny { border-top: 3px solid var(--bad); }
+
+    .contract-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .code-card { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: #0d0f11; }
+    .code-head { padding: 10px 13px; border-bottom: 1px solid var(--line); color: var(--muted); background: var(--surface); font: 700 11px var(--mono); }
+    pre { margin: 0; padding: 16px; overflow: auto; color: #d8d2ca; font-size: 11.5px; line-height: 1.55; }
+
+    .queue { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
+    .queue-screen { padding: 19px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #0d0f11; font: 12px/1.5 var(--mono); }
+    .queue-item { margin-top: 9px; padding: 13px; border: 1px solid var(--line); border-radius: 8px; background: #121519; }
+    .queue-item.pending { border-color: rgba(211,166,74,.7); }
+    .queue-actions { display: flex; gap: 7px; margin-top: 10px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--raised); cursor: pointer; text-decoration: none; }
+    .btn:hover { border-color: var(--copper); }
+    .btn.primary { color: var(--bg); border-color: var(--copper); background: var(--copper); font-weight: 750; }
+    .btn.danger { border-color: rgba(223,107,99,.65); color: var(--bad); }
+
+    .file-map { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .file { padding: 15px; }
+    .file code { display: block; margin-bottom: 6px; color: var(--ivory); }
+    .file small { color: var(--muted); }
+    .file.new { border-left: 3px solid var(--ok); }
+    .file.change { border-left: 3px solid var(--copper); }
+    .file.reuse { border-left: 3px solid var(--info); }
+
+    .roadmap { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--line); }
+    .phase { min-height: 278px; padding: 18px; border: 0; border-radius: 0; }
+    .phase b { color: var(--copper); font: 800 28px var(--mono); }
+    .phase h3 { margin-top: 17px; font-size: 17px; }
+    .phase p { color: var(--muted); font-size: 13px; }
+    .phase .exit { display: block; margin-top: 14px; color: var(--ok); font: 700 10px var(--mono); }
+
+    .test-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .test-card { padding: 18px; }
+    .test-card .count { color: var(--copper); font: 800 27px var(--mono); }
+    .test-card ul { padding-left: 17px; color: var(--muted); font-size: 13px; }
+    .test-card li { margin: 6px 0; }
+
+    .research-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .source { padding: 17px; }
+    .source .source-meta { display: block; margin-bottom: 7px; color: var(--dim); font: 700 10px var(--mono); }
+    .source p { color: var(--muted); font-size: 13px; }
+    .source a { font-weight: 700; }
+
+    .questions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .question { padding: 18px; }
+    .question h3 { min-height: 50px; font-size: 17px; }
+    .option { display: flex; gap: 9px; align-items: flex-start; padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 7px; cursor: pointer; }
+    .option:has(input:checked) { border-color: var(--copper); background: var(--copper-soft); }
+    .option input { margin-top: 3px; accent-color: var(--copper); }
+    .option span { font-size: 13px; }
+    .option small { display: block; margin-top: 3px; color: var(--muted); }
+    .recommended { color: var(--ok); font: 700 9px var(--mono); }
+    .decision-actions { display: flex; align-items: center; gap: 9px; margin-top: 16px; }
+    .decision-status { color: var(--ok); font: 700 11px var(--mono); }
+
+    footer { padding: 38px 0; color: var(--muted); font-size: 12px; }
+    .footer-inner { display: flex; gap: 14px; flex-wrap: wrap; }
+    .footer-inner strong { color: var(--copper); }
+
+    .reveal { opacity: 1; transform: none; }
+    .reveal.in { opacity: 1; transform: none; }
+
+    @media (max-width: 1060px) {
+      .outcome-grid, .simulator, .queue { grid-template-columns: 1fr; }
+      .architecture-grid { grid-template-columns: 1fr; }
+      .flow-grid { grid-template-columns: repeat(2, 1fr); }
+      .risk-grid { grid-template-columns: 1fr 1fr; }
+      .roadmap { grid-template-columns: repeat(3, 1fr); }
+      .questions { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 24px, 1320px); }
+      .nav-links { display: none; }
+      main section { padding: 56px 0; }
+      h1 { font-size: 43px; }
+      .fact-grid, .contract-grid, .file-map, .test-grid, .research-grid, .risk-grid, .flow-grid, .roadmap { grid-template-columns: 1fr; }
+      .terminal { min-height: 670px; }
+      .terminal-body { min-height: 631px; padding: 12px; }
+      .mode-strip { flex-wrap: wrap; }
+      .mode-status { width: 100%; margin: 0; }
+      .term-row { grid-template-columns: 78px minmax(0,1fr); }
+      .term-row span:last-child { grid-column: 2; }
+      .queue-actions, .decision-actions { align-items: stretch; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal { opacity: 1; transform: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="shell nav-inner">
+      <div class="brand"><span class="brand-mark"><span>N</span></span>NEURA MODES</div>
+      <nav class="nav-links" aria-label="Plan sections">
+        <a href="#prototype">Prototype</a>
+        <a href="#modes">Modes</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#policy">Policy</a>
+        <a href="#queue">Return UX</a>
+        <a href="#delivery">Delivery</a>
+        <a href="#research">Research</a>
+        <a href="#questions">Decisions</a>
+      </nav>
+      <span class="plan-badge">V1 IMPLEMENTED · PREVIEW</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="shell">
+      <section class="overview">
+        <div class="eyebrow">Implemented v1 · Neura on Pi 0.83.0</div>
+        <h1>Three modes. One safety boundary.</h1>
+        <p class="lede">Add <strong>Plan</strong>, <strong>YOLO</strong>, and <strong>Human Away</strong> modes. Human Away uses a separate Headmaster agent to review eligible actions, while deterministic policy keeps secrets, broad destruction, security weakening, and untrusted external writes under human control.</p>
+
+        <div class="outcome-grid">
+          <article class="decision-card">
+            <div class="eyebrow">Recommendation</div>
+            <h3>Build Human Away as delegated review, not delegated power.</h3>
+            <ul>
+              <li>Headmaster replaces a human only for narrow, bounded, recoverable actions.</li>
+              <li>Sandbox and policy boundaries remain unchanged. Headmaster cannot add tools, paths, network access, or credentials.</li>
+              <li>Every approval covers one exact action, one workspace state, one use, and a short time window.</li>
+              <li>Suspicious or human-only actions are blocked immediately, logged safely, and surfaced when Rajveer returns.</li>
+              <li>Repeated denials stop the turn. Main agent must find a materially safer path, never a workaround.</li>
+            </ul>
+          </article>
+          <div class="fact-grid" aria-label="Plan summary metrics">
+            <div class="fact-card"><b>3</b><span>session modes</span></div>
+            <div class="fact-card"><b>4</b><span>policy outcomes</span></div>
+            <div class="fact-card"><b>1×</b><span>exact-action approval</span></div>
+            <div class="fact-card"><b>0</b><span>raw secrets in audit log</span></div>
+          </div>
+        </div>
+
+        <div class="callout bad" style="margin-top:16px">
+          <strong>Remaining release blocker: Neura has no OS-enforced sandbox on native Windows.</strong>
+          <p>V1 now mediates tool calls, holds <code>autogit.ts</code> shipping in Human Away, suppresses unattended October transcript export, and confines Headmaster to a no-tool ephemeral process. Policy cannot contain arbitrary workspace code with Windows user permissions, so Human Away remains an opt-in preview until an enforced workspace boundary exists. OpenAI likewise treats reviewer agents as complements to sandboxing, not replacements. <a href="https://developers.openai.com/codex/concepts/sandboxing/auto-review">Source</a></p>
+        </div>
+      </section>
+
+      <section id="prototype" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Concrete product behavior</div>
+          <h2>Operate proposed modes.</h2>
+          <p>Choose a mode, then inspect representative actions. Simulator shows intended terminal state, policy route, Headmaster verdict, and human-return behavior.</p>
+        </div>
+
+        <div class="simulator">
+          <div class="terminal" aria-label="Neura terminal mode simulator">
+            <div class="terminal-top"><i class="led"></i><i class="led"></i><i class="led"></i><span class="terminal-title">Neura · C:\Neura</span></div>
+            <div class="terminal-body" id="terminalBody">
+              <div class="mode-strip" role="tablist" aria-label="Agent modes">
+                <button class="mode-tab" data-mode="plan" role="tab">PLAN</button>
+                <button class="mode-tab" data-mode="yolo" role="tab">YOLO</button>
+                <button class="mode-tab active" data-mode="human-away" role="tab">HUMAN AWAY</button>
+                <span class="mode-status" id="modeStatus">Shift+Tab · 3 / 3</span>
+              </div>
+              <div class="term-box accent" id="modeSummary"></div>
+              <div id="scenarioView"></div>
+              <div class="term-input" id="termInput">› Working while Rajveer is away…</div>
+              <div class="term-footer"><span class="pill copper" id="footerMode">HUMAN AWAY</span><span>gpt-5.5</span><span>main</span><span>context 34%</span><span class="term-spacer"></span><span id="footerStatus">Headmaster ready · 0 pending</span></div>
+            </div>
+          </div>
+
+          <aside class="sim-controls">
+            <article class="panel">
+              <h3>Test action</h3>
+              <p>These cover routine work, a recoverable deletion, protected data, and irreversible remote mutation.</p>
+              <div class="scenario-list" id="scenarioList"></div>
+            </article>
+            <article class="panel verdict" id="verdictPanel" aria-live="polite"></article>
+            <div class="callout info">
+              <strong>Shortcut correction</strong>
+              <p>V1 uses <code>Shift+Tab</code> plus <code>/mode</code>. Pi previously owned Shift+Tab for thinking-level cycling; the merge-safe installer moves that action to <code>Ctrl+Shift+T</code>. <a href="https://code.claude.com/docs/en/permission-modes">Claude reference</a></p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="modes" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Mode contract</div>
+          <h2>Meaning stays precise.</h2>
+          <p>Mode changes autonomy and approval routing. It never weakens fixed protection for secrets, protected paths, broad destructive actions, production systems, or policy files.</p>
+        </div>
+
+        <div class="mode-table-wrap">
+          <table>
+            <thead><tr><th>Mode</th><th>Primary behavior</th><th>Files</th><th>Shell / tools</th><th>Sensitive boundary</th><th>Exit</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Plan</td>
+                <td>Research, inspect, ask, produce numbered implementation plan.</td>
+                <td class="no">No edits or writes.</td>
+                <td>Fixed read-only tool set. Exact allowlisted inspection commands only; unknown custom tools off.</td>
+                <td class="no">Blocked. No approval path inside Plan.</td>
+                <td>Explicit plan approval chooses YOLO or manual execution policy.</td>
+              </tr>
+              <tr>
+                <td>YOLO</td>
+                <td>Execute routine workspace work without stopping.</td>
+                <td class="yes">Workspace edits automatic.</td>
+                <td>Routine builds/tests automatic. Boundary actions ask Rajveer.</td>
+                <td class="ask">Human approval. No Headmaster substitution.</td>
+                <td><code>Shift+Tab</code>, <code>/mode</code>, or session end.</td>
+              </tr>
+              <tr>
+                <td>Human Away</td>
+                <td>Execute routine work; Headmaster reviews eligible boundary actions asynchronously.</td>
+                <td class="yes">Workspace edits automatic, protected paths excluded.</td>
+                <td>Deterministic allow, Headmaster review, human queue, or hard deny.</td>
+                <td class="ask">High/critical classes stay human-only or forbidden.</td>
+                <td>Human return, denial circuit breaker, time/cost cap, or explicit switch.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn" style="margin-top:16px">
+          <strong>Neura YOLO intentionally differs from Codex <code>--yolo</code>.</strong>
+          <p>Codex Full Access removes environment enforcement. Requested Neura behavior retains sensitive-action approval, so its actual contract is “workspace-autonomous with protected boundaries.” UI should state this once to avoid false confidence. OpenAI’s current default uses sandbox plus approval policy, and its Auto-review feature swaps the reviewer without expanding the boundary. <a href="https://alignment.openai.com/auto-review/">Research</a></p>
+        </div>
+      </section>
+
+      <section id="architecture" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Human Away architecture</div>
+          <h2>Headmaster sits inside policy.</h2>
+          <p>Main agent never sends a command directly to execution. Every action passes complete mediation. Deterministic policy has final authority even when Headmaster says allow.</p>
+        </div>
+
+        <div class="architecture" aria-label="Human Away architecture diagram">
+          <div class="architecture-grid">
+            <div class="lane">
+              <span class="lane-title">MAIN SESSION</span>
+              <div class="arch-node"><strong>User intent + mode</strong><small>Plan · YOLO · Human Away</small></div>
+              <div class="arch-node"><strong>Main agent</strong><small>Optimized to complete task; never trusted as its own approver.</small></div>
+              <div class="arch-node"><strong>Exact tool call</strong><small>Tool name, canonical input, cwd, target paths, provider.</small></div>
+              <div class="arch-node audit"><strong>Return UI</strong><small>Pending actions, verdict, rationale, safer path, human decision.</small></div>
+            </div>
+
+            <div class="lane">
+              <span class="lane-title">TRUSTED MEDIATION</span>
+              <div class="arch-node core"><strong>Mode controller</strong><small>Session state, shortcut, prompt/tool profile, safe-boundary transition.</small></div>
+              <div class="arch-node guard"><strong>Deterministic preflight</strong><small>Normalize command; resolve paths; inspect git state; detect network, secrets, protected files, destructive scope.</small></div>
+              <div class="arch-node core"><strong>Policy engine</strong><small>ALLOW · REVIEW · HUMAN · DENY. Most restrictive match wins.</small></div>
+              <div class="arch-node audit"><strong>Approval store</strong><small>Sanitized, append-only, hash-chained JSONL; queue state separated from model context.</small></div>
+              <div class="arch-node deny"><strong>Policy clamp</strong><small>Headmaster cannot approve human-only or forbidden classes.</small></div>
+            </div>
+
+            <div class="lane">
+              <span class="lane-title">ISOLATED REVIEW</span>
+              <div class="arch-node guard"><strong>Headmaster process</strong><small><code>pi -p --no-session --no-extensions --no-skills --no-context-files</code></small></div>
+              <div class="arch-node"><strong>Minimal evidence dossier</strong><small>Exact action, operator intent, policy, trusted preflight facts. No hidden reasoning; no raw tool output by default.</small></div>
+              <div class="arch-node"><strong>Read-only checks</strong><small><code>read,grep,find,ls</code> only. No bash, network, edit, write, MCP, subagents.</small></div>
+              <div class="arch-node audit"><strong>Structured verdict</strong><small>Risk, authorization, allow/defer/deny, one-sentence reason, safer alternative.</small></div>
+              <div class="arch-node"><strong>One-shot capability</strong><small>Exact action hash, current workspace fingerprint, one use, short TTL.</small></div>
+            </div>
+          </div>
+          <p class="arch-note">Role separation matters: main agent is rewarded for finishing; Headmaster has one narrow job. OpenAI’s Auto-review uses same separation and warns it is not a deterministic security guarantee. Claude Auto mode further isolates its classifier from raw tool results to reduce prompt-injection influence. Neura should combine both ideas. <a href="https://alignment.openai.com/auto-review/">OpenAI</a> · <a href="https://code.claude.com/docs/en/permission-modes">Claude</a></p>
+        </div>
+
+        <div class="flow-grid" style="margin-top:16px">
+          <article class="flow-step"><b>1</b><strong>Intercept</strong><p><code>tool_call</code> and extension-owned side effects enter one authorization function.</p></article>
+          <article class="flow-step"><b>2</b><strong>Normalize</strong><p>Resolve real paths, command parts, repo branch, remote, tracked/ignored state, target size, recovery evidence.</p></article>
+          <article class="flow-step"><b>3</b><strong>Classify</strong><p>Fixed rules return allow, reviewable, human-only, or forbidden. Unknown fails closed.</p></article>
+          <article class="flow-step"><b>4</b><strong>Review</strong><p>Only reviewable actions reach Headmaster. Invalid JSON, timeout, unavailable model, or uncertainty becomes defer.</p></article>
+          <article class="flow-step"><b>5</b><strong>Execute or queue</strong><p>Allow once under unchanged boundary; otherwise block, record, explain, and continue via safer path.</p></article>
+        </div>
+      </section>
+
+      <section id="policy" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Policy model</div>
+          <h2>Four outcomes, deny first.</h2>
+          <p>Natural-language review is reserved for ambiguity. Known safe and known dangerous classes resolve deterministically, reducing cost, latency, and approval manipulation.</p>
+        </div>
+
+        <div class="risk-grid">
+          <article class="risk-card low"><b>ALLOW</b><p>Routine, narrow, workspace-local, easy to reverse. No secrets, external writes, privilege change, security weakening, or meaningful data loss.</p></article>
+          <article class="risk-card review"><b>REVIEW</b><p>Bounded side effect needing context. Headmaster may approve once after read-only preflight proves target and recovery.</p></article>
+          <article class="risk-card human"><b>HUMAN</b><p>Sensitive data, protected configuration, production/shared systems, significant deletion, external publication, or unclear authorization.</p></article>
+          <article class="risk-card deny"><b>DENY</b><p>Credential exfiltration, broad root/home deletion, disk format, guardrail removal, audit tampering, persistent broad security weakening.</p></article>
+        </div>
+
+        <div class="risk-table-wrap">
+          <table>
+            <thead><tr><th>Action</th><th>Plan</th><th>YOLO</th><th>Human Away</th><th>Required evidence / rationale</th></tr></thead>
+            <tbody>
+              <tr><td>Read code, search, list, <code>git diff/status/log</code></td><td class="yes">Allow</td><td class="yes">Allow</td><td class="yes">Allow</td><td>Read-only command parser rejects chaining, redirection, substitution, and unknown verbs.</td></tr>
+              <tr><td>Edit normal source inside workspace</td><td class="no">Block</td><td class="yes">Allow</td><td class="yes">Allow</td><td>Resolved path inside trusted writable root; not symlink escape; not protected config.</td></tr>
+              <tr><td>Run tests/builds from exact narrow prefix</td><td class="no">Block</td><td class="yes">Allow</td><td class="yes">Allow</td><td>Known local command; no arbitrary interpreter wildcard; network off unless explicitly needed.</td></tr>
+              <tr><td>Delete one generated cache/file inside workspace</td><td class="no">Block</td><td class="ask">Human</td><td class="ask">Headmaster</td><td>Exact literal target; inside workspace; target inspected; not symlink; size bounded; checkpoint or regeneration path verified.</td></tr>
+              <tr><td>Read or modify <code>.env*</code>, auth, key, credential files</td><td class="no">Block</td><td class="ask">Human</td><td class="ask">Human queue</td><td>Secrets must not enter model or audit context automatically. Structured masked helper may become separate future capability.</td></tr>
+              <tr><td>Normal push to current feature branch</td><td class="no">Block</td><td class="ask">Human</td><td class="ask">Headmaster</td><td>Remote verified; current non-protected branch; no new private files; exact ref; user request authorizes publication.</td></tr>
+              <tr><td>Force push, protected/default branch, branch delete</td><td class="no">Block</td><td class="ask">Human</td><td class="ask">Human queue</td><td>Remote history mutation is high impact. <code>--force-with-lease</code> on verified personal feature branch may later become reviewable.</td></tr>
+              <tr><td>Production deploy/migration, IAM, infrastructure destroy</td><td class="no">Block</td><td class="ask">Human</td><td class="ask">Human queue</td><td>Shared-system blast radius, cost, and rollback require synchronous operator confirmation.</td></tr>
+              <tr><td>Upload private data or credentials to untrusted destination</td><td class="no">Block</td><td class="no">Deny</td><td class="no">Deny</td><td>Absolute source/sink rule. Human performs action outside Neura if genuinely intended.</td></tr>
+              <tr><td>Modify policy, guardrail, audit, Headmaster prompt while away</td><td class="no">Block</td><td class="ask">Human</td><td class="no">Deny</td><td>Agent cannot change its own oversight during unattended execution.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout info" style="margin-top:16px">
+          <strong>Why hard rules stay outside Headmaster</strong>
+          <p>OWASP recommends complete mediation in downstream enforcement rather than relying on an LLM to decide authorization. It also warns that decision/approval manipulation is itself an agent risk. NIST’s 2026 concept paper highlights least privilege, delegated authority, agent identity, audit, and binding actions back to human authorization. <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP LLM06</a> · <a href="https://www.nccoe.nist.gov/sites/default/files/2026-02/accelerating-the-adoption-of-software-and-ai-agent-identity-and-authorization-concept-paper.pdf">NIST</a></p>
+        </div>
+      </section>
+
+      <section id="contracts" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Data contracts</div>
+          <h2>Exact, versioned, auditable.</h2>
+          <p>Reviewer receives structured evidence. Its output is schema-validated, policy-clamped, and recorded without raw secret values.</p>
+        </div>
+
+        <div class="contract-grid">
+          <div class="code-card">
+            <div class="code-head">ApprovalRequest · canonical input</div>
+            <pre><code>{
+  "schemaVersion": 1,
+  "requestId": "apr_01J...",
+  "mode": "human-away",
+  "tool": "bash",
+  "operation": "delete",
+  "display": "Remove-Item -LiteralPath dist/cache.tmp",
+  "inputHash": "sha256:...",
+  "cwd": "C:\\Neura",
+  "workspaceId": "sha256:realpath+gitRemote",
+  "targets": [{
+    "path": "C:\\Neura\\dist\\cache.tmp",
+    "kind": "file",
+    "bytes": 18432,
+    "tracked": false,
+    "ignored": true,
+    "recoverable": "regenerate"
+  }],
+  "git": { "head": "...", "branch": "feature/modes" },
+  "authorization": { "source": "latest-user-turn", "scope": "workspace" }
+}</code></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-head">HeadmasterVerdict · untrusted model output</div>
+            <pre><code>{
+  "schemaVersion": 1,
+  "decision": "allow_once",
+  "risk": "medium",
+  "authorization": "medium",
+  "confidence": 0.91,
+  "reason": "One generated cache file inside the workspace; regeneration is verified.",
+  "saferAlternative": "Re-run the build if deletion is unnecessary.",
+  "checksUsed": ["target-stat", "workspace-boundary", "git-status"]
+}
+
+// Harness then clamps:
+// HUMAN or DENY policy class can never become allow_once.
+// Invalid/timeout/uncertain verdict becomes defer_to_human.</code></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-head">ApprovalRecord · durable sanitized queue</div>
+            <pre><code>{
+  "id": "apr_01J...",
+  "status": "pending",
+  "createdAt": "2026-08-02T16:20:00+05:30",
+  "sessionId": "...",
+  "workspaceId": "sha256:...",
+  "action": { "display": "Get-Content .env.production", "inputHash": "sha256:..." },
+  "policy": { "class": "human", "rule": "secret-file-read" },
+  "headmaster": {
+    "decision": "defer_to_human",
+    "risk": "high",
+    "reason": "Would expose production secrets to model context."
+  },
+  "previousHash": "sha256:...",
+  "entryHash": "sha256:previousHash+canonicalRecord"
+}</code></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-head">OneShotApproval · memory-only capability</div>
+            <pre><code>{
+  "approvalId": "apr_01J...",
+  "actionHash": "sha256:canonicalExactCall",
+  "workspaceFingerprint": "sha256:head+tree+targets",
+  "issuedBy": "human|headmaster",
+  "issuedAt": 1785687600000,
+  "expiresAt": 1785687660000,
+  "remainingUses": 1,
+  "mac": "hmac-sha256:sessionSecret+payload"
+}
+
+// Changed command, path, target state, cwd, or expiry = no match.
+// Durable log is tamper-evident, not claimed as non-repudiation.</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="queue" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Human return experience</div>
+          <h2>Show blocked work first.</h2>
+          <p>First interactive input after Human Away marks operator return. Neura shows pending approval count before starting another agent turn and keeps full review under <code>/approvals</code>.</p>
+        </div>
+
+        <div class="queue">
+          <div class="queue-screen" aria-label="Pending approvals mockup">
+            <div class="mode-strip"><strong style="color:var(--copper)">NEURA / HUMAN RETURNED</strong><span class="term-spacer"></span><span class="pill warn">2 PENDING</span></div>
+            <div class="queue-item pending">
+              <div><span class="pill warn">HUMAN REQUIRED</span> <span class="micro">16:20 · secret-file-read</span></div>
+              <div class="term-row"><b>ACTION</b><span><code>Get-Content .env.production</code></span><span></span></div>
+              <div class="term-row"><b>VERDICT</b><span>Defer. Would expose production secrets to model context.</span><span class="pill bad">HIGH</span></div>
+              <div class="term-row"><b>SAFER PATH</b><span>Use a masked environment-key inspector or provide the needed non-secret value manually.</span><span></span></div>
+              <div class="queue-actions"><button class="btn danger" type="button">Deny</button><button class="btn" type="button">Inspect context</button><button class="btn primary" type="button">Approve exact retry</button></div>
+            </div>
+            <div class="queue-item pending">
+              <div><span class="pill warn">HUMAN REQUIRED</span> <span class="micro">16:24 · protected-branch</span></div>
+              <div class="term-row"><b>ACTION</b><span><code>git push --force origin main</code></span><span></span></div>
+              <div class="term-row"><b>VERDICT</b><span>Deny. Protected branch history rewrite with broad irreversible impact.</span><span class="pill bad">CRITICAL</span></div>
+              <div class="term-row"><b>SAFER PATH</b><span>Push a new feature branch and open a reviewed pull request.</span><span></span></div>
+              <div class="queue-actions"><button class="btn danger" type="button">Keep denied</button><button class="btn" type="button">Create safer task</button></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="callout ok">
+              <strong>Return sequence</strong>
+              <p><code>session_start</code> restores queue. First <code>input</code> with <code>source === "interactive"</code> shows widget and notification. User message still proceeds unless review UI is opened.</p>
+            </div>
+            <div class="callout info" style="margin-top:10px">
+              <strong>Approve means retry, not replay</strong>
+              <p>Neura never executes a stale queued command directly. Human approval creates a one-shot token and asks main agent to retry. Policy re-resolves paths and workspace state before matching.</p>
+            </div>
+            <div class="callout warn" style="margin-top:10px">
+              <strong>No retry gaming</strong>
+              <p>Three consecutive Headmaster denials or ten denials within fifty reviews abort current turn. Denial reason tells agent to choose a materially safer path. This mirrors Codex’s current Auto-review circuit breaker. <a href="https://developers.openai.com/codex/concepts/sandboxing/auto-review">Source</a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="files" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Repository implementation map</div>
+          <h2>Reuse Pi primitives and Neura safeguards.</h2>
+          <p>Pi 0.83.0 already includes example Plan Mode, permission gate, protected paths, sandbox, and isolated subagent process patterns. Neura should adapt them into one coherent policy boundary.</p>
+        </div>
+
+        <div class="file-map">
+          <article class="file new"><code>agent/extensions/modes.ts</code><small>Implemented. Owns <code>Key.shift(Key.tab)</code>, <code>/mode</code>, tool profiles, prompt injection, animated transitions, return queue UI, and session persistence.</small></article>
+          <article class="file change"><code>agent/extensions/guardrail.ts</code><small>Refactor. Thin <code>tool_call</code> adapter calling shared authorization service. Keep fail-closed behavior; remove duplicated regex verdict logic after parity tests pass.</small></article>
+          <article class="file new"><code>agent/neura/mode-state.ts</code><small>New shared session-local state and typed contracts. Flat file because <code>install.ps1</code> currently copies only immediate files from <code>agent/neura</code>.</small></article>
+          <article class="file new"><code>agent/neura/action-policy.ts</code><small>Implemented deterministic classification plus canonicalization/preflight: rule precedence, protected paths, workspace containment, git tracking facts, deletion scope, safe shell allowlists, and action/workspace fingerprints.</small></article>
+          <article class="file new"><code>agent/neura/headmaster.ts</code><small>Implemented isolated Pi subprocess, minimal sanitized dossier, strict verdict parsing, 60-second fail-closed timeout, and no tools/extensions/skills/prompt templates/context files.</small></article>
+          <article class="file new"><code>agent/neura/approval-store.ts</code><small>Implemented sanitized append-only JSONL, SHA-256 hash chain, pending reducer, action hashes, 120-second one-use grants, duplicate suppression, and redaction. Stored under <code>~/.pi/agent/neura/approvals/</code>, never repo.</small></article>
+          <article class="file new"><code>agent/neura/headmaster-policy.md</code><small>New trusted policy copied by installer. Evidence handling, risk taxonomy, authorization scoring, outcome thresholds, denial behavior, output schema. Model cannot edit it in Human Away.</small></article>
+          <article class="file change"><code>agent/extensions/autogit.ts</code><small>Implemented critical mediation. Plan skips autogit; Human Away holds dirty-worktree shipping in the return queue; YOLO preserves current shipping behavior.</small></article>
+          <article class="file change"><code>agent/extensions/cockpit.ts</code><small>Implemented persistent responsive mode pill. Approval count and verdict detail live in the dedicated return widget.</small></article>
+          <article class="file reuse"><code>agent/extensions/checkpoint.ts</code><small>Reused snapshot mechanism for YOLO/Human Away recoverability; Plan skips checkpoint writes to preserve its read-only contract.</small></article>
+          <article class="file change"><code>agent/extensions/harness-health.ts</code><small>Implemented mode-controller and Shift+Tab keybinding readiness checks. Sandbox readiness remains phase 6.</small></article>
+          <article class="file change"><code>agent/neura/NEURA.md</code><small>Add mode semantics and denial discipline: no circumvention, no equivalent workaround, prefer safer path, stop after breaker.</small></article>
+          <article class="file change"><code>install.ps1</code><small>Implemented flat-file/policy copying and merge-safe keybinding update without overwriting unrelated user bindings or settings.</small></article>
+          <article class="file change"><code>scripts/verify-harness.mjs</code><small>Expanded the real-loader suite for shortcut ownership, isolated shared state, prompt/tool profiles, policy precedence, animation bounds, return UI, exact grant consumption/non-reuse, circuit breaking, and raw-secret redaction.</small></article>
+        </div>
+      </section>
+
+      <section id="delivery" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Delivery sequence</div>
+          <h2>V1 shipped. Sandbox remains.</h2>
+          <p>Phases 1–5 are implemented as a preview. Phase 6 remains the boundary for calling Human Away safe for truly unattended work.</p>
+        </div>
+
+        <div class="roadmap">
+          <article class="phase"><b>01</b><h3>Mode spine + basic Plan</h3><p>Add typed mode state, <code>Shift+Tab</code>, <code>/mode</code>, footer pill, persistence. Adapt Pi Plan Mode example; disable writes and reject unsafe/unknown shell calls.</p><span class="exit">IMPLEMENTED · PLAN CANNOT MUTATE VIA ANY ACTIVE TOOL</span></article>
+          <article class="phase"><b>02</b><h3>YOLO parity</h3><p>Restore current Neura execution behavior under named YOLO mode. Move guardrail matching into deterministic policy without weakening existing tests.</p><span class="exit">IMPLEMENTED · CURRENT SAFE WORK FLOWS; CURRENT RISKS STILL PROMPT</span></article>
+          <article class="phase"><b>03</b><h3>Queue + return UI</h3><p>Build sanitized durable records, hash chain, pending reducer, <code>/approvals</code>, first-interactive-input banner, exact retry token.</p><span class="exit">IMPLEMENTED · RESTART PRESERVES VERDICTS; NO RAW SECRETS LOGGED</span></article>
+          <article class="phase"><b>04</b><h3>Headmaster preview</h3><p>Launch isolated no-tool Pi process. Validate strict JSON. Clamp verdicts. Add timeouts, unavailable-model path, denial instructions, and circuit breaker.</p><span class="exit">IMPLEMENTED · FAILURES DEFER; HUMAN-ONLY NEVER AUTO-ALLOWS</span></article>
+          <article class="phase"><b>05</b><h3>Known-hook mediation</h3><p>Hold autogit shipping, suppress unattended transcript export, and disable unknown custom tools in Human Away. Continue auditing any newly installed extension.</p><span class="exit">IMPLEMENTED V1 · KNOWN AUTOMATIC SIDE EFFECTS MEDIATED</span></article>
+          <article class="phase"><b>06</b><h3>Sandbox + red team</h3><p>Choose enforced Windows boundary or run Neura Human Away inside WSL2/dev container. Test prompt injection, command obfuscation, path escapes, secrets, retries, and tampering.</p><span class="exit">EXIT · HUMAN AWAY UNLOCKED ONLY AFTER THREAT SUITE PASSES</span></article>
+        </div>
+
+        <div class="callout warn" style="margin-top:16px">
+          <strong>Recommended v1 sandbox path: WSL2 + bubblewrap or a dedicated dev container.</strong>
+          <p>Pi’s bundled sandbox example supports macOS <code>sandbox-exec</code> and Linux <code>bwrap</code>, not native Windows. Porting OpenAI’s native Windows sandbox is a separate systems project. Mode/queue/policy work is now shipped, but Human Away stays explicitly preview-labelled until a real boundary is active. <a href="https://openai.com/index/building-codex-windows-sandbox/">Why native Windows isolation is non-trivial</a></p>
+        </div>
+      </section>
+
+      <section id="verification" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Phase 6 unlock matrix</div>
+          <h2>Expand v1 evidence before sandbox unlock.</h2>
+          <p><code>verify-harness.mjs</code> covers the deterministic v1 subset. The full counts below remain the adversarial gate before removing the preview warning.</p>
+        </div>
+
+        <div class="test-grid">
+          <article class="test-card"><span class="count">12+</span><h3>Mode invariants</h3><ul><li>Cycle order and slash fallback</li><li>Streaming transition rules</li><li>Session resume state</li><li>Plan active-tool allowlist</li><li>Plan command separators/redirection blocked</li><li>Plain <code>pi</code> unchanged</li></ul></article>
+          <article class="test-card"><span class="count">30+</span><h3>Policy matrix</h3><ul><li>PowerShell, cmd, Bash variants</li><li>Interpreter wrappers and encoded commands</li><li>Symlink/junction/path traversal</li><li>Protected/secret paths</li><li>Git remote/branch variants</li><li>Source/sink exfiltration</li></ul></article>
+          <article class="test-card"><span class="count">18+</span><h3>Headmaster + queue</h3><ul><li>Invalid JSON and timeouts</li><li>Prompt injection in file/tool evidence</li><li>Policy clamp</li><li>Exact token and stale fingerprint</li><li>Restart/partial-line recovery</li><li>Redaction and hash chain</li></ul></article>
+          <article class="test-card"><span class="count">8+</span><h3>Bypass coverage</h3><ul><li>Autogit commit/push</li><li>MCP mutating tools</li><li>Custom extension tools</li><li>Direct user shell behavior separated</li><li>Nested subprocess inheritance</li><li>Headmaster recursion disabled</li></ul></article>
+          <article class="test-card"><span class="count">6+</span><h3>Human return UX</h3><ul><li>Pending banner before next turn</li><li>Exact sanitized action shown</li><li>Verdict and reason visible</li><li>Approve, deny, dismiss paths</li><li>Narrow retry only</li><li>24/40/80/120-column rendering</li></ul></article>
+          <article class="test-card"><span class="count">5</span><h3>End-to-end smokes</h3><ul><li>Plan research to plan approval</li><li>YOLO code edit + test</li><li>Away safe deletion approved</li><li>Away <code>.env</code> deferred</li><li>Return, review, exact retry, audit assertion</li></ul></article>
+        </div>
+
+        <div class="code-card" style="margin-top:16px">
+          <div class="code-head">V1 verification commands</div>
+          <pre><code>node scripts/verify-harness.mjs
+powershell -File .\install.ps1 -Check
+uvx --from proof-of-work-agent proof-of-work check --json --base HEAD
+neura                             # manual: /mode plan, Shift+Tab, footer, mutation attempts
+/mode human-away                 # inside Neura: queue, return UX, denial breaker, /approvals
+pi                               # manual: stock Pi remains unchanged</code></pre>
+        </div>
+      </section>
+
+      <section id="research" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Primary-source research · cutoff 02 Aug 2026</div>
+          <h2>Evidence behind design.</h2>
+          <p>Core pattern is now proven by both OpenAI and Anthropic: separate reviewer/classifier, fixed sandbox/policy boundary, narrow approvals, denial feedback, circuit breakers, and durable audit. Neither vendor claims model review is a security guarantee.</p>
+        </div>
+
+        <div class="research-grid">
+          <article class="source"><span class="source-meta">OPENAI · 30 APR 2026 · ALIGNMENT RESEARCH</span><a href="https://alignment.openai.com/auto-review/">Auto-review of agent actions without synchronous human oversight</a><p>Separate reviewer evaluates boundary-crossing actions using intent, environment, security policy, and impact. Reports about 200× fewer human stops in its internal snapshot, while explicitly warning reviewer can be misled and is not deterministic security.</p></article>
+          <article class="source"><span class="source-meta">OPENAI · CURRENT CODEX DOCS</span><a href="https://developers.openai.com/codex/concepts/sandboxing/auto-review">Codex Auto-review</a><p>Reviewer swap does not expand writable roots, network, protected paths, or sandbox. Shows compact evidence, structured denial behavior, exact retry override, and current 3-consecutive/10-in-50 denial breaker.</p></article>
+          <article class="source"><span class="source-meta">OPENAI · 08 MAY 2026 · SECURITY</span><a href="https://openai.com/index/running-codex-safely/">Running Codex safely at OpenAI</a><p>Describes bounded environment, low-risk frictionless actions, explicit high-risk review, rules, Auto-review, agent-aware OpenTelemetry, and security triage using user intent, tool actions, approvals, and results.</p></article>
+          <article class="source"><span class="source-meta">OPENAI · CURRENT OPEN SOURCE</span><a href="https://github.com/openai/codex/blob/main/codex-rs/core/src/guardian/policy_template.md">Codex guardian policy template</a><p>Useful taxonomy: evidence as untrusted, authorization scoring, low/medium/high/critical risk, read-only investigation, conservative missing-context behavior, and outcome thresholds after risk/authorization.</p></article>
+          <article class="source"><span class="source-meta">ANTHROPIC · CURRENT CLAUDE CODE DOCS</span><a href="https://code.claude.com/docs/en/permission-modes">Claude Code permission modes</a><p>Plan is read-only; Auto uses a separate classifier; protected paths remain protected except bypass mode. Auto blocks scope escalation, untrusted infrastructure, production actions, destructive pre-session files, force push, and direct main push.</p></article>
+          <article class="source"><span class="source-meta">ANTHROPIC · CURRENT CLAUDE CODE DOCS</span><a href="https://code.claude.com/docs/en/keybindings">Claude Code keyboard shortcuts</a><p>Confirms mode cycling uses <code>Shift+Tab</code>. Neura v1 now matches it and retains <code>/mode</code> as the explicit fallback.</p></article>
+          <article class="source"><span class="source-meta">OWASP · AGENT SECURITY</span><a href="https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html">AI Agent Security Cheat Sheet</a><p>Calls out tool abuse, data exfiltration, excessive autonomy, high-impact actions, decision/approval manipulation, cascading multi-agent failures, and monitoring needs.</p></article>
+          <article class="source"><span class="source-meta">OWASP · LLM06:2025</span><a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">Excessive Agency</a><p>Recommends minimal functionality/permissions/autonomy, human approval for high-impact actions, and complete mediation enforced downstream rather than by LLM judgment alone.</p></article>
+          <article class="source"><span class="source-meta">NIST NCCOE · FEB 2026 · CONCEPT PAPER</span><a href="https://www.nccoe.nist.gov/sites/default/files/2026-02/accelerating-the-adoption-of-software-and-ai-agent-identity-and-authorization-concept-paper.pdf">Software and AI Agent Identity and Authorization</a><p>Frames least privilege, dynamically scoped authorization, proof of authority, intent, delegation, binding human and agent identities, auditing, tamper resistance, non-repudiation, and prompt-injection mitigation.</p></article>
+          <article class="source"><span class="source-meta">LOCAL PRIMARY SOURCE · PI 0.83.0</span><a href="https://github.com/earendil-works/pi">Pi coding agent source</a><p>Installed package contains working examples for Plan Mode, permission gates, protected paths, sandboxing, and isolated subagent processes. <code>tool_call</code> handlers stop at first block; <code>Key.shift(Key.tab)</code>, <code>appendEntry</code>, <code>setActiveTools</code>, and <code>--no-extensions</code> are available now.</p></article>
+        </div>
+
+        <div class="callout warn" style="margin-top:16px">
+          <strong>Evidence limits</strong>
+          <p>OpenAI’s reported approval and recall numbers are internal/synthetic deployment results, not a guarantee for Neura. Headmaster model, prompt, workspace mix, Windows execution path, and tool ecosystem differ. Cheapest uncertainty reduction: replay a sanitized corpus of Neura’s real approval prompts, then adversarially augment it before unlock.</p>
+        </div>
+      </section>
+
+      <section id="questions" class="reveal">
+        <div class="section-head">
+          <div class="eyebrow">Approved v1 decisions</div>
+          <h2>Implementation defaults recorded.</h2>
+          <p>These selections now match the shipped source. Human Away remains preview-labelled until OS sandbox work completes.</p>
+        </div>
+
+        <form id="decisionForm">
+          <div class="questions">
+            <article class="question">
+              <h3>New-session default mode</h3>
+              <label class="option"><input type="radio" name="startup" value="yolo" checked><span>YOLO <small>Closest to current Neura behavior; sensitive actions still prompt.</small><span class="recommended">RECOMMENDED</span></span></label>
+              <label class="option"><input type="radio" name="startup" value="plan"><span>Plan <small>Safest start; every implementation requires explicit mode switch.</small></span></label>
+            </article>
+            <article class="question">
+              <h3>Mode shortcut</h3>
+              <label class="option"><input type="radio" name="shortcut" value="ctrl-tab"><span>Ctrl+Tab <small>Superseded during implementation.</small></span></label>
+              <label class="option"><input type="radio" name="shortcut" value="shift-tab" checked><span>Shift+Tab + /mode <small>Pi thinking-level cycling moved to Ctrl+Shift+T.</small><span class="recommended">IMPLEMENTED</span></span></label>
+            </article>
+            <article class="question">
+              <h3>Human Away unlock boundary</h3>
+              <label class="option"><input type="radio" name="unlock" value="sandbox"><span>Require sandbox + passing threat suite <small>Required before removing the preview warning.</small></span></label>
+              <label class="option"><input type="radio" name="unlock" value="policy-only" checked><span>Policy-only preview <small>Implemented v1; opaque shell and unaudited external tools remain human-bound.</small><span class="recommended">IMPLEMENTED</span></span></label>
+            </article>
+            <article class="question">
+              <h3>Headmaster model</h3>
+              <label class="option"><input type="radio" name="reviewer" value="gpt" checked><span>Configured GPT preset <small>Uses existing authenticated provider; deterministic policy limits correlated model errors.</small><span class="recommended">RECOMMENDED V1</span></span></label>
+              <label class="option"><input type="radio" name="reviewer" value="opus"><span>Opus preset <small>Model diversity, but adds billed usage and another availability dependency.</small></span></label>
+              <label class="option"><input type="radio" name="reviewer" value="local"><span>Local Qwen <small>Private and free; current 30B model needs strong evaluation before security approval duty.</small></span></label>
+            </article>
+            <article class="question">
+              <h3>Secret-file behavior while away</h3>
+              <label class="option"><input type="radio" name="secrets" value="human-only" checked><span>Always human-only <small>Block and queue every <code>.env</code>, key, auth, credential read/write.</small><span class="recommended">RECOMMENDED</span></span></label>
+              <label class="option"><input type="radio" name="secrets" value="headmaster"><span>Headmaster may approve <small>More autonomous, but secret may enter model/tool context.</small></span></label>
+            </article>
+            <article class="question">
+              <h3>Denied-action behavior</h3>
+              <label class="option"><input type="radio" name="denial" value="safer-path" checked><span>Continue only via safer path <small>Return reason to main agent; circuit-break repeated attempts; queue for human.</small><span class="recommended">RECOMMENDED</span></span></label>
+              <label class="option"><input type="radio" name="denial" value="stop"><span>Stop immediately <small>Stricter, but leaves more routine work unfinished.</small></span></label>
+            </article>
+          </div>
+          <div class="decision-actions">
+            <button class="btn primary" type="button" id="saveDecisions">Save selections locally</button>
+            <button class="btn" type="button" id="exportDecisions">Export decision receipt</button>
+            <span class="decision-status" id="decisionStatus" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner"><strong>NEURA MODES V1</strong><span>Local standalone HTML</span><span>Implementation tracked in source</span><span>C:\Neura\plans\neura-agent-modes-human-away.html</span></div>
+  </footer>
+
+  <script>
+    const modeData = {
+      plan: {
+        index: "1 / 3", label: "PLAN", tone: "warn",
+        summary: "Read-only exploration. Build a specific numbered plan; no source or system mutation.",
+        input: "› Describe what should be planned…",
+        status: "read · grep · find · ls · safe inspection only"
+      },
+      yolo: {
+        index: "2 / 3", label: "YOLO", tone: "copper",
+        summary: "Autonomous workspace execution. Normal edits, builds, and tests run; sensitive boundaries ask Rajveer.",
+        input: "› Give Neura a task…",
+        status: "workspace autonomous · protected actions ask"
+      },
+      "human-away": {
+        index: "3 / 3", label: "HUMAN AWAY", tone: "ok",
+        summary: "Unattended execution inside fixed boundary. Deterministic policy routes eligible actions to Headmaster; suspicious work waits for Rajveer.",
+        input: "› Working while Rajveer is away…",
+        status: "Headmaster ready · 0 pending"
+      }
+    };
+
+    const scenarios = [
+      {
+        id: "edit", name: "Routine source edit", detail: "edit agent/extensions/modes.ts",
+        action: "edit C:\\Neura\\agent\\extensions\\modes.ts",
+        plan: ["BLOCKED", "bad", "Plan mode cannot modify files.", "Stay in Plan and describe the change."],
+        yolo: ["ALLOWED", "ok", "Normal source edit inside trusted workspace.", "Checkpoint and proof gate remain active."],
+        "human-away": ["ALLOWED", "ok", "Normal source edit inside trusted workspace; no reviewer needed.", "Checkpoint and proof gate remain active."]
+      },
+      {
+        id: "delete", name: "Bounded deletion", detail: "Remove-Item dist/cache.tmp",
+        action: "Remove-Item -LiteralPath C:\\Neura\\dist\\cache.tmp",
+        plan: ["BLOCKED", "bad", "Plan mode cannot delete files.", "Record deletion in proposed implementation steps."],
+        yolo: ["WAITING FOR RAJVEER", "warn", "Deletion still requires human approval in YOLO.", "Allow once or deny in focused prompt."],
+        "human-away": ["HEADMASTER: ALLOW ONCE", "ok", "One generated cache file, literal workspace path, regeneration verified.", "Execute exact action once; token expires in 120 seconds."]
+      },
+      {
+        id: "secret", name: "Protected secret", detail: "Get-Content .env.production",
+        action: "Get-Content C:\\Neura\\.env.production",
+        plan: ["BLOCKED", "bad", "Protected file access is outside Plan.", "Ask user for non-secret facts needed by the plan."],
+        yolo: ["WAITING FOR RAJVEER", "warn", "Secret-file read requires direct human confirmation.", "Prefer masked environment-key inspection."],
+        "human-away": ["DEFERRED TO HUMAN", "warn", "Would expose production secrets to model context. Headmaster cannot override human-only rule.", "Queue sanitized action and continue with non-secret work."]
+      },
+      {
+        id: "force", name: "Protected branch rewrite", detail: "git push --force origin main",
+        action: "git push --force origin main",
+        plan: ["BLOCKED", "bad", "Plan mode cannot mutate remote state.", "Propose reviewed branch/PR flow."],
+        yolo: ["WAITING FOR RAJVEER", "warn", "Force push is destructive and requires human approval.", "Use a feature branch and pull request."],
+        "human-away": ["DENIED + QUEUED", "bad", "Protected branch history rewrite has broad, costly-to-reverse impact.", "Create a feature branch; do not retry or circumvent."]
+      }
+    ];
+
+    let activeMode = "human-away";
+    let activeScenario = "delete";
+    const modeButtons = [...document.querySelectorAll(".mode-tab")];
+    const scenarioList = document.getElementById("scenarioList");
+    const modeStatus = document.getElementById("modeStatus");
+    const modeSummary = document.getElementById("modeSummary");
+    const scenarioView = document.getElementById("scenarioView");
+    const verdictPanel = document.getElementById("verdictPanel");
+    const footerMode = document.getElementById("footerMode");
+    const footerStatus = document.getElementById("footerStatus");
+    const termInput = document.getElementById("termInput");
+
+    scenarios.forEach(s => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "scenario-btn";
+      button.dataset.scenario = s.id;
+      button.innerHTML = `<strong>${s.name}</strong><small>${s.detail}</small>`;
+      button.addEventListener("click", () => { activeScenario = s.id; renderSimulator(); });
+      scenarioList.appendChild(button);
+    });
+
+    modeButtons.forEach(button => button.addEventListener("click", () => {
+      activeMode = button.dataset.mode;
+      renderSimulator();
+    }));
+
+    function renderSimulator() {
+      const mode = modeData[activeMode];
+      const scenario = scenarios.find(s => s.id === activeScenario);
+      const verdict = scenario[activeMode];
+      modeButtons.forEach(button => {
+        const active = button.dataset.mode === activeMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      });
+      [...scenarioList.children].forEach(button => button.classList.toggle("active", button.dataset.scenario === activeScenario));
+      modeStatus.textContent = `Shift+Tab · ${mode.index}`;
+      modeSummary.innerHTML = `<span class="term-label">MODE CONTRACT</span><strong>${mode.label}</strong><div style="color:var(--muted);margin-top:4px">${mode.summary}</div>`;
+      scenarioView.innerHTML = `<div class="term-box ${verdict[1]}"><span class="term-label">PROPOSED ACTION</span><code>${scenario.action}</code><div class="term-row"><b>POLICY</b><span>${verdict[0]}</span><span class="pill ${verdict[1]}">${verdict[1] === "ok" ? "PASS" : verdict[1] === "warn" ? "REVIEW" : "BLOCK"}</span></div><div class="term-row"><b>WHY</b><span>${verdict[2]}</span><span></span></div><div class="term-row"><b>NEXT</b><span>${verdict[3]}</span><span></span></div></div>`;
+      verdictPanel.innerHTML = `<span class="eyebrow">Current verdict</span><span class="big" style="color:var(--${verdict[1] === "copper" ? "copper" : verdict[1]})">${verdict[0]}</span><p>${verdict[2]}</p><div class="callout ${verdict[1] === "bad" ? "bad" : verdict[1] === "warn" ? "warn" : "ok"}"><strong>Result</strong><p>${verdict[3]}</p></div>`;
+      footerMode.textContent = mode.label;
+      footerMode.className = `pill ${mode.tone}`;
+      footerStatus.textContent = activeMode === "human-away" && ["secret", "force"].includes(activeScenario) ? "Headmaster · 1 pending" : mode.status;
+      termInput.textContent = mode.input;
+    }
+    renderSimulator();
+
+    const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+      if (entry.isIntersecting) entry.target.classList.add("in");
+    }), { threshold: .06 });
+    document.querySelectorAll(".reveal").forEach(element => observer.observe(element));
+
+    const navObserver = new IntersectionObserver(entries => entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      document.querySelectorAll(".nav-links a").forEach(link => link.classList.toggle("active", link.getAttribute("href") === `#${entry.target.id}`));
+    }), { rootMargin: "-30% 0px -62% 0px" });
+    document.querySelectorAll("section[id]").forEach(element => navObserver.observe(element));
+
+    const form = document.getElementById("decisionForm");
+    const decisionStatus = document.getElementById("decisionStatus");
+    const storageKey = "neura-agent-modes-decisions-v1";
+    const selections = () => Object.fromEntries(new FormData(form).entries());
+    document.getElementById("saveDecisions").addEventListener("click", () => {
+      localStorage.setItem(storageKey, JSON.stringify(selections()));
+      decisionStatus.textContent = "Saved in this browser";
+    });
+    document.getElementById("exportDecisions").addEventListener("click", () => {
+      const d = selections();
+      const receipt = `NEURA AGENT MODES DECISION RECEIPT\n\nStartup: ${d.startup}\nShortcut: ${d.shortcut}\nHuman Away unlock: ${d.unlock}\nHeadmaster model: ${d.reviewer}\nSecrets: ${d.secrets}\nDenials: ${d.denial}\n\nSource plan: C:\\Neura\\plans\\neura-agent-modes-human-away.html\n`;
+      const url = URL.createObjectURL(new Blob([receipt], { type: "text/plain" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "neura-agent-modes-decisions.txt";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      decisionStatus.textContent = "Receipt exported";
+    });
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+      if (saved) Object.entries(saved).forEach(([name, value]) => {
+        const input = form.querySelector(`[name="${name}"][value="${value}"]`);
+        if (input) input.checked = true;
+      });
+    } catch {}
+  </script>
+</body>
+</html>

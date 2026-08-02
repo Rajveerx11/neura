@@ -34,7 +34,9 @@ bone text, and semantic colors used only for real outcomes.
 | Copper | `#d97841` | Identity, focus, primary action |
 | Bone | `#e8e2d8` | Primary text |
 | Muted steel | `#a8a39b` | Supporting metadata |
-| Dim | `#666a6d` | Inactive and historical text |
+| Dim | `#7a828b` | Inactive and historical text; 5.03:1 on canvas |
+| Plan cyan | `#76b8c4` | Read-only boundary and code structure |
+| Information blue | `#86a7d7` | Links and informational state |
 | Success | `#69c08a` | Verified outcomes only |
 | Warning | `#d3a64a` | Approval and degraded operation |
 | Error | `#df6b63` | Blocked and failed outcomes |
@@ -43,6 +45,7 @@ Color rules:
 
 - Decorative gradients, colored glows, and tinted ambient panels are not used.
 - Copper is the only brand accent.
+- Plan uses cyan. Human Away Preview and approvals use amber. Neither borrows success green.
 - Success, warning, and error never replace copper for identity or navigation.
 - Text must remain readable without relying on hue alone.
 
@@ -63,13 +66,18 @@ Color rules:
 - No emoji or Devanagari.
 - No em dash or en dash in interface copy.
 
-## Launch system: Continuity Spine
+## Launch system: ASCII identity and resume ledger
 
-Launch answers three questions in order:
+The original six-line NEURA block wordmark owns launch at 56 columns and above.
+A compact five-line ASCII fallback appears below 56 columns. It appears once per
+session, then clears when work starts.
 
-1. **LAST:** What meaningful thread did Rajveer leave?
-2. **NOW:** Which workspace and operating boundary are active?
-3. **NEXT:** What is the single recommended continuation?
+The ledger answers four questions in order:
+
+1. **READY:** Which workspace, branch, and dirty state are active?
+2. **BOUNDARY:** Which mode and safety contract govern the session?
+3. **LAST:** What meaningful thread did Rajveer leave?
+4. **NEXT:** What is the single recommended continuation and are notices waiting?
 
 Wide layout uses a one-cell copper spine connecting the three rows. Narrow
 layout stacks the same rows without losing labels. `NEXT` receives the only
@@ -94,9 +102,20 @@ Launch is continuity. Brief makes scope visible. Work shows one active step.
 Approval owns focus. Proof separates running checks from verdict. Handoff closes
 with changed scope, evidence, and one manual next action.
 
+## Modes, motion, and decisions
+
+- Shift+Tab cycles Plan, YOLO, and Human Away Preview.
+- Mode changes enforce policy first, then show a capability latch for workspace,
+  reviewer, sensitive action, and remote action boundaries.
+- Motion settles within 360 ms. Latest transition wins. Reduced motion shows only
+  the final frame.
+- Human Away is always amber and always says `PREVIEW` until OS sandboxing exists.
+- Approval is an agent action request: Neura, task, intent, exact action, evidence,
+  boundary, fallback, and one-use grant scope. Denial has default focus.
+
 ## Responsive contract
 
-- Validate at 48, 72, 92, and 120 columns.
+- Validate at 40, 56, 72, 92, and 120 columns.
 - Every widget remains within pi's ten-line cap.
 - Model, phase, active task, safety, and verdict survive longest.
 - Cost, context detail, branch detail, and secondary operation text collapse

@@ -1,21 +1,36 @@
-// neura: Rajveer's personal agent layer.
-// Continuity launch, /dash toggle, and persona injection. Delete file to unwire.
+// Neura identity and continuity: one launch wordmark, a compact resume ledger,
+// /dash, /notices, session title, and persona injection. Plain pi stays stock.
 
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
 import { truncateToWidth } from "@earendil-works/pi-tui";
+import { getCockpitState, onCockpitChange, resetCockpit } from "../neura/cockpit-state.ts";
 import { PALETTE, fg, getGitHealth, truncateText, visibleLength } from "../neura/core.ts";
+import { getMode, modeLabel, onModeChange } from "../neura/mode-state.ts";
 
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const SESSIONS_DIR = path.join(os.homedir(), ".pi", "agent", "sessions");
-const { accent: ACC, success: OK, muted: MUT, dim: DIM, text: TXT, border: BORDER } = PALETTE;
+const { accent: ACC, human: HUMAN, muted: MUT, dim: DIM, text: TXT } = PALETTE;
 
-type RecentThread = {
-  name: string;
-  updated: number;
-};
+const FULL_WORDMARK = [
+  "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
+  "████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔══██╗",
+  "██╔██╗ ██║ █████╗   ██║   ██║ ██████╔╝ ███████║",
+  "██║╚██╗██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██╔══██║",
+  "██║ ╚████║ ███████╗ ╚██████╔╝ ██║  ██║ ██║  ██║",
+  "╚═╝  ╚═══╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝",
+];
 
+const COMPACT_WORDMARK = [
+  "N   N EEEEE U   U RRRR   AAA",
+  "NN  N E     U   U R   R A   A",
+  "N N N EEEE  U   U RRRR  AAAAA",
+  "N  NN E     U   U R R   A   A",
+  "N   N EEEEE  UUU  R  RR A   A",
+];
+
+type RecentThread = { name: string; updated: number };
 type ContinuityState = {
   lastTitle: string;
   lastMeta: string;
@@ -26,12 +41,6 @@ type ContinuityState = {
 };
 
 const JUNK_PROJECT = /[0-9a-f]{8}-[0-9a-f]{4}|^Users-rajve$|^rajve$|Temp|scratchpad|worktre|\.claude/i;
-
-function greeting(): string {
-  const hour = new Date().getHours();
-  const part = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  return `${part}, Rajveer.`;
-}
 
 function projectName(raw: string): string {
   const parts = raw.replace(/^--|--$/g, "").split("--").filter(Boolean);
@@ -52,10 +61,7 @@ function recentThread(): RecentThread | null {
   try {
     const threads = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => ({
-        name: projectName(entry.name),
-        updated: latestFileTime(path.join(SESSIONS_DIR, entry.name)),
-      }))
+      .map((entry) => ({ name: projectName(entry.name), updated: latestFileTime(path.join(SESSIONS_DIR, entry.name)) }))
       .filter((thread) => thread.updated > 0 && !JUNK_PROJECT.test(thread.name))
       .sort((a, b) => b.updated - a.updated);
     return threads[0] ?? null;
@@ -67,10 +73,9 @@ function recentThread(): RecentThread | null {
 function timeLabel(timestamp: number): string {
   const date = new Date(timestamp);
   const today = new Date();
-  if (date.toDateString() === today.toDateString()) {
-    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  }
-  return date.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+  return date.toDateString() === today.toDateString()
+    ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : date.toLocaleDateString("en-US", { day: "numeric", month: "short" });
 }
 
 function initialContinuity(cwd: string): ContinuityState {
@@ -93,64 +98,60 @@ async function inspectContinuity(cwd: string): Promise<ContinuityState> {
     state.nowMeta = "Not a git workspace";
     return state;
   }
-  state.nowTitle = `${path.basename(cwd) || cwd}  ·  ${git.branch}`;
+  state.nowTitle = `${path.basename(cwd) || cwd} · ${git.branch}${git.changed ? "*" : ""}`;
   state.nowMeta = git.changed ? `${git.changed} working tree change${git.changed === 1 ? "" : "s"}` : "Working tree clean";
-  state.nextMeta = "/new starts a fresh task  ·  /health checks readiness";
+  state.nextMeta = "/new fresh task · /health readiness";
   return state;
 }
 
-function header(width: number): string {
-  const date = new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
-  const left = `${fg(ACC, "NEURA")}  ${fg(OK, "READY")}`;
-  if (width < 48) return truncateToWidth(left, width);
-  const gap = " ".repeat(Math.max(1, width - visibleLength(left) - date.length));
-  return truncateToWidth(left + gap + fg(MUT, date), width);
+function labeled(label: string, value: string, width: number, color = TXT): string {
+  const prefix = `${fg(DIM, label.padEnd(9))}`;
+  return prefix + fg(color, truncateText(value, Math.max(1, width - visibleLength(prefix))));
 }
 
-function spineLine(label: string, title: string, width: number, active = false): string {
-  const color = active ? ACC : MUT;
-  const prefix = `${fg(color, label.padEnd(5))}${fg(ACC, "│")} `;
-  return prefix + fg(active ? ACC : TXT, truncateText(title, Math.max(1, width - visibleLength(prefix))));
+export function wordmarkLines(width: number): string[] {
+  const source = width >= 56 ? FULL_WORDMARK : COMPACT_WORDMARK;
+  return source.map((line) => truncateToWidth(fg(ACC, line), width));
 }
 
-function metaLine(value: string, width: number): string {
-  const prefix = `${" ".repeat(5)}${fg(ACC, "│")} `;
-  return prefix + fg(DIM, truncateText(value, Math.max(1, width - visibleLength(prefix))));
-}
-
-function continuityLines(width: number, state: ContinuityState): string[] {
-  if (width < 48) {
-    return [
-      header(width),
-      truncateToWidth(fg(TXT, greeting()), width),
-      spineLine("LAST", state.lastTitle, width),
-      spineLine("NOW", state.nowTitle, width),
-      spineLine("NEXT", state.nextTitle, width, true),
-      truncateToWidth(fg(DIM, "Type below  ·  /new fresh task"), width),
-    ];
-  }
-  return [
-    header(width),
-    fg(BORDER, "─".repeat(Math.max(1, width))),
-    truncateToWidth(`${fg(TXT, greeting())}  ${fg(DIM, "Context restored.")}`, width),
-    spineLine("LAST", state.lastTitle, width),
-    metaLine(state.lastMeta, width),
-    spineLine("NOW", state.nowTitle, width),
-    metaLine(state.nowMeta, width),
-    spineLine("NEXT", state.nextTitle, width, true),
-    metaLine(state.nextMeta, width),
+export function continuityLines(width: number, state: ContinuityState): string[] {
+  const mode = getMode();
+  const notices = getCockpitState().notices.length;
+  const modeColor = mode === "plan" ? PALETTE.plan : mode === "human-away" ? HUMAN : ACC;
+  const lines = [
+    ...wordmarkLines(width),
+    labeled("READY", `${state.nowTitle} · ${state.nowMeta}`, width),
+    labeled("BOUNDARY", modeLabel(mode), width, modeColor),
+    labeled("LAST", `${state.lastTitle} · ${state.lastMeta}`, width, MUT),
+    labeled("NEXT", `${state.nextTitle} · ${notices} notice${notices === 1 ? "" : "s"} · /notices`, width, ACC),
   ];
+  return lines.slice(0, 10).map((line) => truncateToWidth(line, width));
+}
+
+function noticeLines(width: number): string[] {
+  const notices = getCockpitState().notices;
+  const lines = [truncateToWidth(fg(ACC, `NEURA / NOTICES  ${notices.length}`), width)];
+  if (!notices.length) return [...lines, fg(PALETTE.success, "No Neura notices.")];
+  for (const notice of notices.slice(-4)) {
+    const color = notice.tone === "error" ? PALETTE.error : notice.tone === "warning" ? HUMAN : notice.tone === "success" ? PALETTE.success : MUT;
+    lines.push(truncateToWidth(`${fg(color, notice.id)}  ${fg(TXT, notice.message)}`, width));
+    if (notice.detail) lines.push(truncateToWidth(`${" ".repeat(Math.min(10, width))}${fg(DIM, notice.detail)}`, width));
+  }
+  lines.push(truncateToWidth(fg(DIM, "/notices close hides this panel"), width));
+  return lines.slice(0, 10);
 }
 
 export default function (pi) {
   if (!process.env.NEURA) return;
 
   let visible = false;
+  let noticesVisible = false;
   let continuity: ContinuityState | null = null;
+  let activeContext: any;
   let persona = "";
-  try {
-    persona = fs.readFileSync(path.join(NEURA_DIR, "NEURA.md"), "utf-8");
-  } catch {}
+  let unsubscribeMode = () => {};
+  let unsubscribeCockpit = () => {};
+  try { persona = fs.readFileSync(path.join(NEURA_DIR, "NEURA.md"), "utf-8"); } catch {}
 
   const show = (ctx) => {
     try {
@@ -170,11 +171,27 @@ export default function (pi) {
     } catch {}
   };
 
+  const showNotices = (ctx) => {
+    ctx.ui.setWidget("neura-notices", () => ({ render: (width: number) => noticeLines(width), invalidate() {} }));
+    noticesVisible = true;
+  };
+
   pi.on("session_start", (_event, ctx) => {
+    activeContext = ctx;
+    resetCockpit();
     try {
       const theme = ctx.ui.getTheme?.("neura-dark");
       if (theme) ctx.ui.setTheme?.(theme);
+      ctx.ui.setTitle(`Neura · ${ctx.cwd}`);
     } catch {}
+
+    unsubscribeMode();
+    unsubscribeCockpit();
+    unsubscribeMode = onModeChange(() => { if (visible && activeContext) show(activeContext); });
+    unsubscribeCockpit = onCockpitChange(() => {
+      if (visible && activeContext) show(activeContext);
+      if (noticesVisible && activeContext) showNotices(activeContext);
+    });
 
     continuity = initialContinuity(ctx.cwd);
     show(ctx);
@@ -185,14 +202,24 @@ export default function (pi) {
   });
 
   pi.on("agent_start", (_event, ctx) => hide(ctx));
+  pi.on("session_shutdown", () => { unsubscribeMode(); unsubscribeCockpit(); });
 
   pi.registerCommand("dash", {
-    description: "Toggle the Neura continuity launch",
+    description: "Toggle the Neura launch identity and continuity ledger",
     handler: async (_args, ctx) => (visible ? hide(ctx) : show(ctx)),
   });
 
-  pi.on("before_agent_start", (event) => {
-    if (!persona) return;
-    return { systemPrompt: event.systemPrompt + "\n\n" + persona };
+  pi.registerCommand("notices", {
+    description: "Show Neura notices without hiding upstream Pi diagnostics",
+    handler: async (args, ctx) => {
+      if (String(args ?? "").trim().toLowerCase() === "close") {
+        ctx.ui.setWidget("neura-notices", undefined);
+        noticesVisible = false;
+        return;
+      }
+      showNotices(ctx);
+    },
   });
+
+  pi.on("before_agent_start", (event) => persona ? { systemPrompt: `${event.systemPrompt}\n\n${persona}` } : undefined);
 }

@@ -1,4 +1,5 @@
-// October context-bus extension (auto-generated — do not edit).
+// October context-bus extension (auto-generated; Neura adds one Human Away privacy gate).
+import { getMode } from '../neura/mode-state.ts'
 export default async function (pi) {
   const PORT = process.env.OCTOBER_BUS_PORT
   const CANVAS = process.env.OCTOBER_BUS_CANVAS
@@ -26,11 +27,13 @@ export default async function (pi) {
   }
 
   pi.on('session_start', async (_event, ctx) => {
+    if (getMode() === 'plan') return
     let session = ''
     try { session = ctx.sessionManager.getSessionId() || '' } catch { /* ignore */ }
     await post('/hook/session', { canvas: CANVAS, node: NODE, status: 'live', session, agent: 'pi' })
   })
   pi.on('session_shutdown', async () => {
+    if (getMode() === 'plan') return
     await post('/hook/session', { canvas: CANVAS, node: NODE, status: 'offline', agent: 'pi' })
   })
 
@@ -43,6 +46,7 @@ export default async function (pi) {
 
   // turn done → post the raw excerpt; October summarizes off the hot path
   pi.on('agent_end', async (event, ctx) => {
+    if (getMode() !== 'yolo') return // no Plan mutation or unattended transcript export, even to localhost
     try {
       const msgs = Array.isArray(event.messages) ? event.messages : []
       let userPrompt = ''

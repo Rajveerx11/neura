@@ -1,18 +1,8 @@
 import { execFile } from "node:child_process";
+import { visibleWidth } from "@earendil-works/pi-tui";
+import { PALETTE } from "./ui-tokens.ts";
 
-export const PALETTE = {
-  canvas: "#0b0c0e",
-  surface: "#14171a",
-  raised: "#1c2024",
-  accent: "#d97841",
-  text: "#e8e2d8",
-  muted: "#a8a39b",
-  dim: "#666a6d",
-  border: "#2c3237",
-  warning: "#d3a64a",
-  error: "#df6b63",
-  success: "#69c08a",
-} as const;
+export { PALETTE } from "./ui-tokens.ts";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 
@@ -26,7 +16,7 @@ export function stripAnsi(value: string): string {
 }
 
 export function visibleLength(value: string): number {
-  return Array.from(stripAnsi(value)).length;
+  return visibleWidth(stripAnsi(value));
 }
 
 export function truncateText(value: string, width: number): string {

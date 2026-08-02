@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-08-02 — v2.4 (terminal cockpit redesign)
+
+- Restored the original six-line NEURA ASCII wordmark at launch, with a five-line fallback below 56 columns. The resume ledger now keeps workspace, dirty state, active safety boundary, last work, next action, and `/notices` discoverable without the old greeting-heavy dashboard.
+- Added shared cockpit state for briefing, work, review, proof, recovery, completion, degraded capability, checkpoint, approval, and transcript-copy signals.
+- Rebuilt the footer around responsive survival order: mode always remains, then model, branch, context, and cost. Human Away is amber and always includes `PREVIEW`.
+- Replaced decorative mode rails with a seven-line capability latch. Workspace, reviewer, sensitive-action, and remote boundaries settle in reading order within 360 ms; latest transition wins; `NEURA_REDUCED_MOTION=1` renders the final state only.
+- Reframed approvals as Neura action requests: agent, task, intent, exact action, reviewer evidence, policy boundary, safer fallback, and one-use grant scope. Denial is the default focused choice.
+- Added `/clip` and Ctrl+Shift+X using Pi's supported clipboard API. Whole-answer copy preserves Markdown; code copy excludes fences; the action rail exposes block count and stable 1.2-second feedback.
+- Rethemed assistant Markdown, links, code, tools, diffs, thinking, selections, and editor surfaces with Forged Tungsten semantic tokens. No global Pi package or Windows Terminal settings are patched.
+- Reworked health into an aligned capability ledger and routed checkpoints, proof checks, autogit, failures, and recovery through the shared cockpit instead of duplicate success noise.
+- Expanded deterministic verification across the ASCII launch, title, five widths, footer collapse, transcript actions, agent-focused approval hierarchy, Human Away Preview labeling, and keybinding ownership.
+
+## 2026-08-02 — v2.3 (Plan, YOLO, and Human Away v1)
+
+- Added `modes.ts`: Shift+Tab cycles Plan → YOLO → Human Away; `/mode` supports direct selection and status. Pi's thinking-level cycle moves to Ctrl+Shift+T through a merge-safe `keybindings.json` install.
+- Added mode-specific terminal transitions within Pi's 10-line widget limit and responsive bounds; v2.4 replaces their initial decorative treatment with the final capability latch.
+- Plan mode uses a fixed read-only tool set and exact shell allowlist. Chained commands, mutations, protected reads, and unknown tools fail closed.
+- YOLO preserves autonomous workspace behavior while sensitive deletes, secret access, force-push, destructive git, protected control edits, and high-impact infrastructure actions still require interactive approval.
+- Human Away is an opt-in native-Windows preview. A separate ephemeral Pi Headmaster launches with no session, tools, extensions, skills, prompt templates, or context files. It receives only a sanitized dossier and strict JSON policy.
+- Deterministic policy clamps every Headmaster verdict. v1 auto-approval is limited to one generated, untracked file inside the workspace. Secrets, control files, opaque shell, remote mutation, and unaudited custom tools defer; broad destruction is policy-denied.
+- Added sanitized SHA-256 hash-chained approval audit, workspace-bound action fingerprints, 120-second one-use retry grants, duplicate suppression, and a three-consecutive/ten-in-fifty denial circuit breaker.
+- Added `/approvals` and return-time queue surfacing. Human approval creates an exact retry capability; stale commands are never replayed directly.
+- Closed automatic-hook bypasses: Plan skips checkpoint mutation and autogit; Human Away holds autogit shipping and suppresses October transcript export.
+- Expanded `verify-harness.mjs` across mode isolation, animation widths, Plan restrictions, YOLO fail-closed approval, Human Away queueing, cross-extension grant consumption, non-reuse, return UI, footer state, and circuit breaking.
+- Known boundary remains explicit: native Windows has no OS-enforced workspace sandbox. Human Away stays preview-labelled until that boundary and an adversarial replay suite exist.
+
 ## 2026-07-31 — v2.2 (second brain: /preset opus)
 
 - **Root cause of "I trust Claude Code more" was the model, not the harness.** `auth.json`
