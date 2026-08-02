@@ -129,6 +129,7 @@ for (const width of [40, 56, 72, 92, 120]) {
   assert.match(launchText, /BOUNDARY/, `launch boundary missing at ${width} columns`);
   assert.match(launchText, /NEXT/, `launch NEXT state missing at ${width} columns`);
   assert.match(launchText, width < 56 ? /N   N EEEEE/ : /███╗   ██╗/, `ASCII wordmark missing at ${width} columns`);
+  assert.doesNotMatch(launchText, /\b0 notices\b/, "launch shows a zero-value notice action");
   assert.doesNotMatch(launchText, /\bToday\b|\bProjects\b|\bThis week\b/, "legacy dashboard content remains");
 }
 await firstHandler(continuityExtension, "agent_start")({}, context);
@@ -139,6 +140,7 @@ assert.ok(widgets.has("neura-launch"), "/dash did not restore the continuity lau
 const theme = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "themes", "neura-dark.json"), "utf-8"));
 assert.equal(theme.colors.accent, "#d97841", "Forged Tungsten copper accent missing");
 assert.equal(theme.colors.selectedBg, "#1c2024", "Forged Tungsten raised surface missing");
+assert.equal(theme.colors.borderAccent, theme.colors.border, "editor rails still use a full-width copper accent");
 assert.equal(theme.colors.mdHeading, theme.colors.accent, "theme introduces a second heading accent");
 assert.equal(theme.colors.mdLink, "#86a7d7", "answer links lack the cool information accent");
 assert.equal(theme.colors.syntaxFunction, "#76b8c4", "code functions lack the Plan cyan accent");
@@ -199,6 +201,7 @@ for (const sample of cockpitSamples) {
     const lines = widgets.get("neura-cockpit")(null, null).render(width);
     assert.ok(lines.length <= 2, `${sample.phase} cockpit exceeds two lines at ${width}`);
     assert.ok(lines.every((line) => widthOf(line) <= width), `${sample.phase} cockpit overflows at ${width}`);
+    if (sample.phase === "READY") assert.equal(lines.length, 0, "idle cockpit duplicates footer mode and boundary");
   }
 }
 cockpitState.resetCockpit();
@@ -225,7 +228,7 @@ const footer = footerFactory(
   null,
   {
     getGitBranch: () => "feature/agentic-console-with-long-name",
-    getExtensionStatuses: () => new Map([["neura-proof", "proof full"], ["lsp", "typescript ready"]]),
+    getExtensionStatuses: () => new Map([["neura-proof", "proof full"], ["mcp", "MCP 0/3 connected"], ["lsp", "typescript ready"]]),
     onBranchChange: () => () => {},
   },
 );
@@ -234,9 +237,22 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
   assert.ok(lines.length <= 2, `footer exceeds two lines at ${width} columns`);
   assert.ok(lines.every((line) => widthOf(line) <= width), `footer overflows at ${width} columns`);
 }
-const footerText = footer.render(120).map(stripAnsi).join("\n");
-assert.match(footerText, /typescript ready/, "third-party live status disappeared from the footer");
-assert.doesNotMatch(footerText, /proof full/, "Neura proof state is duplicated in the footer");
+const launchFooterText = footer.render(120).map(stripAnsi).join("\n");
+assert.match(launchFooterText, /gpt-5\.5-engineering-preview/, "launch footer lost model identity");
+assert.doesNotMatch(launchFooterText, /YOLO|feature\/agentic/, "launch footer duplicates mode or branch already owned by the ledger");
+await continuityExtension.commands.get("dash").handler("", context);
+const idleFooterText = footer.render(120).map(stripAnsi).join("\n");
+assert.match(idleFooterText, /YOLO/, "idle footer lost the active mode");
+assert.doesNotMatch(idleFooterText, /typescript ready|MCP 0\/3|proof full/, "idle footer still renders detached extension status rows");
+cockpitState.patchCockpit({ launchVisible: false, phase: "WORK", operation: { verb: "working", startedAt: Date.now() } });
+const workingFooterText = footer.render(120).map(stripAnsi).join("\n");
+assert.match(workingFooterText, /typescript ready/, "live third-party status disappeared during work");
+assert.doesNotMatch(workingFooterText, /MCP 0\/3|proof full/, "footer retained persistent MCP noise or duplicate proof state");
+cockpitState.resetCockpit();
+
+const settings = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "settings.json"), "utf-8"));
+assert.ok(settings.skills.includes("!skills/agent-reach"), "agent-reach collision exclusion missing");
+assert.ok(settings.skills.includes("!skills/find-skills"), "find-skills collision exclusion missing");
 
 const transcript = extensionWithCommand("clip");
 assert.ok(transcript.shortcuts.has("ctrl+shift+x"), "Ctrl+Shift+X transcript chooser missing");

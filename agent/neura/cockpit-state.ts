@@ -40,6 +40,7 @@ export type CockpitCopy = {
 
 export type CockpitState = {
   phase: CockpitPhase;
+  launchVisible: boolean;
   task?: string;
   step?: string;
   operation?: CockpitOperation;
@@ -63,6 +64,7 @@ const globalRegistry = globalThis as typeof globalThis & { [STATE_KEY]?: SharedC
 function initialState(): CockpitState {
   return {
     phase: "READY",
+    launchVisible: false,
     notices: [],
     copy: { available: false, codeBlocks: 0 },
     updatedAt: Date.now(),

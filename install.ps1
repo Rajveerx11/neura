@@ -60,6 +60,24 @@ if ($Check) {
             $drift += "keybindings.json is invalid"
         }
     }
+    $desiredSettings = Get-Content "$repo\agent\settings.json" -Raw | ConvertFrom-Json
+    $desiredSkillExclusions = @($desiredSettings.skills | Where-Object { [string]$_ -like "!*" })
+    $liveSettingsPath = Join-Path $agent "settings.json"
+    if (-not (Test-Path $liveSettingsPath)) {
+        $drift += "settings.json missing"
+    } else {
+        try {
+            $liveSettings = Get-Content $liveSettingsPath -Raw | ConvertFrom-Json
+            $liveSkills = @($liveSettings.skills)
+            foreach ($exclusion in $desiredSkillExclusions) {
+                if ($liveSkills -notcontains $exclusion) {
+                    $drift += "settings.json missing skill collision exclusion $exclusion"
+                }
+            }
+        } catch {
+            $drift += "settings.json is invalid"
+        }
+    }
     if ($missing.Count) { Write-Warning "Missing required commands: $($missing -join ', ')" }
     if ($drift.Count) { Write-Warning "Live harness drift: $($drift -join '; ')" }
     if (-not $missing.Count -and -not $drift.Count) { Write-Host "Neura health: ready, live harness matches source." }
@@ -95,7 +113,25 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # settings.json: preserve local credentials and choices unless explicitly forced
 $target = "$agent\settings.json"
 if ((Test-Path $target) -and -not $ForceSettings) {
-    Write-Host "settings.json already exists at $target - NOT overwritten. Diff manually against $repo\agent\settings.json"
+    try { $liveSettings = Get-Content $target -Raw | ConvertFrom-Json }
+    catch { throw "Existing settings.json is invalid; fix it before installing: $target" }
+    $sourceSettings = Get-Content "$repo\agent\settings.json" -Raw | ConvertFrom-Json
+    $desiredSkillExclusions = @($sourceSettings.skills | Where-Object { [string]$_ -like "!*" })
+    $liveSkills = @($liveSettings.skills)
+    $settingsChanged = $false
+    foreach ($exclusion in $desiredSkillExclusions) {
+        if ($liveSkills -notcontains $exclusion) {
+            $liveSkills += $exclusion
+            $settingsChanged = $true
+        }
+    }
+    if ($settingsChanged) {
+        $liveSettings | Add-Member -NotePropertyName "skills" -NotePropertyValue @($liveSkills) -Force
+        [System.IO.File]::WriteAllText($target, ($liveSettings | ConvertTo-Json -Depth 20), $utf8NoBom)
+        Write-Host "settings.json choices preserved; duplicate-skill exclusions merged."
+    } else {
+        Write-Host "settings.json already exists at $target - choices preserved."
+    }
 } else {
     Copy-Item "$repo\agent\settings.json" $target -Force
 }

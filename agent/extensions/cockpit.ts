@@ -21,12 +21,6 @@ export function modeTag(mode = getMode()): string {
   return fg(modeColor(mode), `${modeGlyph(mode)} ${modeLabel(mode)}`);
 }
 
-function modeBoundary(mode: AgentMode): string {
-  if (mode === "plan") return "read-only · writes locked";
-  if (mode === "human-away") return "remote locked · exact retry only";
-  return "workspace autonomy · sensitive actions confirm";
-}
-
 function contextTag(ctx): string | null {
   try {
     const usage = ctx.getContextUsage?.();
@@ -75,7 +69,7 @@ function shortModel(modelId: string, width: number): string {
 
 export function footerLine(
   width: number,
-  data: { mode: AgentMode; model: string; branch?: string; context?: string | null; cost?: string | null },
+  data: { mode: AgentMode; model: string; branch?: string; context?: string | null; cost?: string | null; launchVisible?: boolean },
 ): string {
   const tier = widthTier(width);
   const separator = fg(DIM, " · ");
@@ -84,6 +78,10 @@ export function footerLine(
   const branch = data.branch ? fg(MUT, data.branch) : "";
   const context = data.context ?? "";
   const cost = data.cost ?? "";
+  if (data.launchVisible) {
+    const launchParts = tier === "micro" || tier === "narrow" ? [model] : [model, context];
+    return truncateToWidth(` ${joinFitting(launchParts, separator, Math.max(1, width - 1))}`, width);
+  }
   const parts = tier === "wide"
     ? [mode, model, branch, context, cost]
     : tier === "standard"
@@ -114,7 +112,7 @@ function phaseColor(state: CockpitState): string {
   return ACC;
 }
 
-export function cockpitLines(state: CockpitState, mode: AgentMode, width: number): string[] {
+export function cockpitLines(state: CockpitState, _mode: AgentMode, width: number): string[] {
   const lines: string[] = [];
   const phaseDetail = [state.step, state.task].filter(Boolean).join(" · ");
   if (state.phase !== "READY") {
@@ -137,8 +135,6 @@ export function cockpitLines(state: CockpitState, mode: AgentMode, width: number
   } else if (state.copy.available && width >= 48) {
     const code = state.copy.codeBlocks ? ` · Ctrl+Shift+X choose ${state.copy.codeBlocks} code block${state.copy.codeBlocks === 1 ? "" : "s"}` : "";
     lines.push(truncateToWidth(`${fg(MUT, "Ctrl+X copy answer")}${fg(DIM, code)}`, width));
-  } else if (state.phase === "READY") {
-    lines.push(truncateToWidth(`${modeTag(mode)}  ${fg(DIM, modeBoundary(mode))}`, width));
   }
 
   return lines.slice(0, 2);
@@ -186,16 +182,20 @@ export default function (pi) {
         render(width: number): string[] {
           const context = contextTag(ctx);
           const cost = sessionCost(ctx);
+          const state = getCockpitState();
           const lines = [footerLine(width, {
             mode: getMode(),
             model: ctx.model?.id ?? "no model",
             branch: footerData.getGitBranch?.(),
             context,
             cost: cost === null ? null : costTag(cost),
+            launchVisible: state.launchVisible,
           })];
           try {
+            if (state.phase !== "WORK") return lines;
             const statuses = [...(footerData.getExtensionStatuses?.()?.entries() ?? [])]
               .filter(([key]) => !String(key).startsWith("neura-"))
+              .filter(([, value]) => !/^\s*MCP\b/i.test(String(value)))
               .map(([, value]) => String(value));
             if (statuses.length) lines.push(truncateToWidth(` ${statuses.join(" · ")}`, width));
           } catch {}

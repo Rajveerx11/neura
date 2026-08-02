@@ -1,10 +1,17 @@
 # Changelog
 
+## 2026-08-02 — v2.4.1 (launch hierarchy correction)
+
+- Removed the three-way Human Away duplication across the launch ledger, idle cockpit rail, and footer. Launch now owns mode and workspace context; the footer contracts to model/context until launch clears.
+- Removed zero-value `/notices`, the redundant dirty asterisk, and persistent `MCP 0/3 connected` footer noise. Third-party status appears only while work is active.
+- Replaced full-width copper editor rails with neutral structural borders.
+- Added merge-safe settings exclusions for the skipped `~/.agents` copies of `agent-reach` and `find-skills`, preserving the active `~/.claude` copies and all local model/provider choices.
+
 ## 2026-08-02 — v2.4 (terminal cockpit redesign)
 
 - Restored the original six-line NEURA ASCII wordmark at launch, with a five-line fallback below 56 columns. The resume ledger now keeps workspace, dirty state, active safety boundary, last work, next action, and `/notices` discoverable without the old greeting-heavy dashboard.
 - Added shared cockpit state for briefing, work, review, proof, recovery, completion, degraded capability, checkpoint, approval, and transcript-copy signals.
-- Rebuilt the footer around responsive survival order: mode always remains, then model, branch, context, and cost. Human Away is amber and always includes `PREVIEW`.
+- Rebuilt the footer around responsive survival order: mode, model, branch, context, and cost. Human Away is amber and always includes `PREVIEW`; v2.4.1 removes fields already owned by the visible launch ledger.
 - Replaced decorative mode rails with a seven-line capability latch. Workspace, reviewer, sensitive-action, and remote boundaries settle in reading order within 360 ms; latest transition wins; `NEURA_REDUCED_MOTION=1` renders the final state only.
 - Reframed approvals as Neura action requests: agent, task, intent, exact action, reviewer evidence, policy boundary, safer fallback, and one-use grant scope. Denial is the default focused choice.
 - Added `/clip` and Ctrl+Shift+X using Pi's supported clipboard API. Whole-answer copy preserves Markdown; code copy excludes fences; the action rail exposes block count and stable 1.2-second feedback.

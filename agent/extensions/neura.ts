@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { getCockpitState, onCockpitChange, resetCockpit } from "../neura/cockpit-state.ts";
+import { getCockpitState, onCockpitChange, patchCockpit, resetCockpit } from "../neura/cockpit-state.ts";
 import { PALETTE, fg, getGitHealth, truncateText, visibleLength } from "../neura/core.ts";
 import { getMode, modeLabel, onModeChange } from "../neura/mode-state.ts";
 
@@ -98,7 +98,7 @@ async function inspectContinuity(cwd: string): Promise<ContinuityState> {
     state.nowMeta = "Not a git workspace";
     return state;
   }
-  state.nowTitle = `${path.basename(cwd) || cwd} · ${git.branch}${git.changed ? "*" : ""}`;
+  state.nowTitle = `${path.basename(cwd) || cwd} · ${git.branch}`;
   state.nowMeta = git.changed ? `${git.changed} working tree change${git.changed === 1 ? "" : "s"}` : "Working tree clean";
   state.nextMeta = "/new fresh task · /health readiness";
   return state;
@@ -118,12 +118,15 @@ export function continuityLines(width: number, state: ContinuityState): string[]
   const mode = getMode();
   const notices = getCockpitState().notices.length;
   const modeColor = mode === "plan" ? PALETTE.plan : mode === "human-away" ? HUMAN : ACC;
+  const next = notices
+    ? `${state.nextTitle} · ${notices} notice${notices === 1 ? "" : "s"} · /notices`
+    : `${state.nextTitle} · ${state.nextMeta}`;
   const lines = [
     ...wordmarkLines(width),
     labeled("READY", `${state.nowTitle} · ${state.nowMeta}`, width),
     labeled("BOUNDARY", modeLabel(mode), width, modeColor),
     labeled("LAST", `${state.lastTitle} · ${state.lastMeta}`, width, MUT),
-    labeled("NEXT", `${state.nextTitle} · ${notices} notice${notices === 1 ? "" : "s"} · /notices`, width, ACC),
+    labeled("NEXT", next, width, ACC),
   ];
   return lines.slice(0, 10).map((line) => truncateToWidth(line, width));
 }
@@ -161,6 +164,7 @@ export default function (pi) {
         invalidate() {},
       }));
       visible = true;
+      if (!getCockpitState().launchVisible) patchCockpit({ launchVisible: true });
     } catch {}
   };
 
@@ -168,6 +172,7 @@ export default function (pi) {
     try {
       ctx.ui.setWidget("neura-launch", undefined);
       visible = false;
+      if (getCockpitState().launchVisible) patchCockpit({ launchVisible: false });
     } catch {}
   };
 

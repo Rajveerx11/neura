@@ -53,6 +53,8 @@ Color rules:
 
 - Three elevation levels only: canvas, surface, raised.
 - One-cell borders create separation.
+- Full-width editor borders stay neutral; copper is reserved for local focus and
+  action signals, never used as an ambient rail.
 - Radius is restrained and consistent where the terminal API supports it.
 - Shadows are not part of terminal chrome.
 - Pills are reserved for compact model, phase, or verdict labels.
@@ -78,6 +80,11 @@ The ledger answers four questions in order:
 2. **BOUNDARY:** Which mode and safety contract govern the session?
 3. **LAST:** What meaningful thread did Rajveer leave?
 4. **NEXT:** What is the single recommended continuation and are notices waiting?
+
+While the launch ledger is visible, it alone owns workspace, branch, mode, and
+safety context. The footer contracts to model and context usage, and the idle
+cockpit rail renders nothing. After launch clears, the footer resumes mode and
+session metadata ownership. Persistent zero-value service rows are hidden.
 
 Wide layout uses a one-cell copper spine connecting the three rows. Narrow
 layout stacks the same rows without losing labels. `NEXT` receives the only
