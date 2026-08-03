@@ -11,3 +11,8 @@ models.json
 node_modules/
 .pi-subagents/
 .agents/
+
+# local generated state and temporary checkouts
+.proofofwork/
+.tmp-hermes-agent/
+/nul
