@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Neura Plan Mode v1 — Visual Implementation Proposal</title>
+  <style>
+    :root {
+      --page: #0b0c0e;
+      --surface: #14171a;
+      --raised: #1c2024;
+      --line: #2c3237;
+      --line-strong: #485159;
+      --text: #e8e2d8;
+      --soft: #cbc5bb;
+      --muted: #a8a39b;
+      --dim: #74787b;
+      --copper: #d97841;
+      --copper-soft: #2a1b14;
+      --plan: #76b8c4;
+      --plan-soft: #12252a;
+      --success: #69c08a;
+      --warning: #d3a64a;
+      --error: #df6b63;
+      --mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+      --sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      --content: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background: var(--page);
+      color: var(--text);
+      font: 16px/1.6 var(--sans);
+      text-rendering: optimizeLegibility;
+    }
+    a { color: var(--plan); text-underline-offset: 3px; }
+    a:hover { color: var(--text); }
+    code { color: #efa476; font: .92em/1.5 var(--mono); }
+    strong { color: var(--text); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 52px;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 12, 14, .95);
+      backdrop-filter: blur(8px);
+    }
+    .brand, .meta, .eyebrow, .section-label, .badge, .step-number {
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .11em;
+    }
+    .brand { color: var(--copper); font-size: 12px; font-weight: 700; }
+    .meta { color: var(--dim); font-size: 11px; }
+    nav { display: flex; min-width: 0; max-width: 100%; gap: 18px; overflow-x: auto; }
+    nav a { color: var(--muted); font-size: 12px; text-decoration: none; white-space: nowrap; }
+
+    main {
+      width: min(calc(100% - 36px), var(--content));
+      margin: 0 auto;
+      padding: 52px 0 88px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(260px, .6fr);
+      gap: 46px;
+      align-items: end;
+      padding: 12px 0 46px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+    .eyebrow, .section-label { margin: 0 0 12px; color: var(--copper); font-size: 11px; font-weight: 700; }
+    h1, h2, h3 { margin: 0; line-height: 1.15; }
+    h1 { max-width: 800px; overflow-wrap: anywhere; font-size: clamp(34px, 5vw, 58px); letter-spacing: -.04em; font-weight: 610; }
+    h2 { font-size: clamp(25px, 3vw, 36px); letter-spacing: -.025em; }
+    h3 { font-size: 17px; }
+    .hero p { max-width: 760px; margin: 20px 0 0; color: var(--soft); font-size: 19px; }
+    .recommendation {
+      padding: 6px 0 6px 18px;
+      border-left: 2px solid var(--copper);
+    }
+    .recommendation small { color: var(--dim); font: 700 10px/1.2 var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+    .recommendation strong { display: block; margin-top: 9px; font-size: 19px; }
+    .recommendation p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+    section { padding: 58px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 66px; }
+    .section-head {
+      display: grid;
+      grid-template-columns: 160px minmax(0, 1fr);
+      gap: 28px;
+      margin-bottom: 28px;
+    }
+    .section-head p { max-width: 760px; margin: 8px 0 0; color: var(--muted); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line);
+      background: var(--line);
+    }
+    .card { min-width: 0; padding: 21px; background: var(--page); }
+    .card p { margin: 9px 0 0; color: var(--muted); font-size: 14px; }
+    .card .badge { display: inline-block; margin-bottom: 18px; color: var(--dim); font-size: 10px; }
+    .card.target { background: var(--surface); }
+    .card.target .badge { color: var(--plan); }
+
+    .note {
+      margin-top: 24px;
+      padding: 16px 18px;
+      border-left: 2px solid var(--plan);
+      background: var(--surface);
+      color: var(--soft);
+    }
+    .note.warning { border-color: var(--warning); }
+    .note.decision { border-color: var(--copper); }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 56px 1fr;
+      align-items: stretch;
+      gap: 12px;
+    }
+    .diagram-panel {
+      padding: 22px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+    }
+    .diagram-panel h3 { margin-bottom: 17px; }
+    .diagram-panel.current { border-top: 2px solid var(--dim); }
+    .diagram-panel.target { border-top: 2px solid var(--plan); }
+    .diagram-stack { display: grid; gap: 10px; }
+    .node {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: var(--page);
+      color: var(--soft);
+      font-size: 14px;
+    }
+    .node strong { display: block; margin-bottom: 3px; }
+    .node small { color: var(--muted); }
+    .node.missing { border-style: dashed; color: var(--error); }
+    .node.active { border-color: var(--plan); background: var(--plan-soft); }
+    .down { color: var(--dim); font: 16px/1 var(--mono); text-align: center; }
+    .change-mark { display: grid; place-items: center; color: var(--copper); font: 700 22px/1 var(--mono); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+    .flow-step {
+      position: relative;
+      min-height: 142px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .flow-step:not(:last-child)::after {
+      content: ">";
+      position: absolute;
+      top: 50%;
+      right: -9px;
+      z-index: 2;
+      width: 17px;
+      color: var(--copper);
+      background: var(--page);
+      font: 700 16px/1 var(--mono);
+      text-align: center;
+    }
+    .flow-step .step-number { display: block; margin-bottom: 16px; color: var(--plan); font-size: 10px; }
+    .flow-step strong { display: block; font-size: 14px; }
+    .flow-step p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+    }
+    .boundary-group { padding: 18px; border: 1px solid var(--line); background: var(--page); }
+    .boundary-group h3 { margin-bottom: 14px; }
+    .boundary-group.center { border-color: var(--plan); background: var(--plan-soft); }
+    .pill-list { display: grid; gap: 8px; }
+    .pill { padding: 9px 11px; border: 1px solid var(--line); color: var(--soft); font-size: 13px; }
+    .pill.allow { border-color: var(--success); }
+    .pill.deny { border-color: var(--error); color: var(--muted); }
+    .boundary-caption { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+
+    .contract-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .contract { padding: 22px; border-top: 1px solid var(--line-strong); }
+    .contract h3 { margin-bottom: 13px; }
+    .contract ul, .plain-list { margin: 0; padding-left: 20px; }
+    .contract li, .plain-list li { margin: 8px 0; color: var(--soft); }
+    .contract li::marker, .plain-list li::marker { color: var(--copper); }
+
+    .file-map { width: 100%; table-layout: fixed; border-collapse: collapse; }
+    .file-map th, .file-map td { padding: 14px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .file-map th { color: var(--dim); font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .file-map td { overflow-wrap: anywhere; color: var(--soft); font-size: 14px; }
+    .file-map td:first-child { width: 35%; color: var(--text); font-family: var(--mono); font-size: 13px; }
+
+    .steps { display: grid; gap: 0; }
+    .implementation-step {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) minmax(220px, .42fr);
+      gap: 20px;
+      padding: 22px 0;
+      border-top: 1px solid var(--line);
+    }
+    .implementation-step .step-number { color: var(--copper); font-size: 11px; }
+    .implementation-step p { margin: 7px 0 0; color: var(--muted); }
+    .proof { color: var(--soft); font-size: 13px; }
+    .proof b { display: block; margin-bottom: 5px; color: var(--plan); font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+
+    .decision-table { display: grid; gap: 1px; border: 1px solid var(--line); background: var(--line); }
+    .decision-row { display: grid; grid-template-columns: .75fr 1.25fr; gap: 0; background: var(--page); }
+    .decision-row > div { padding: 16px 18px; }
+    .decision-row > div:first-child { color: var(--muted); }
+    .decision-row.recommended { background: var(--surface); }
+    .decision-row.recommended > div:first-child { color: var(--plan); }
+
+    .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; margin: 0; padding: 0; list-style: none; }
+    .checklist li { position: relative; padding: 13px 0 13px 27px; border-top: 1px solid var(--line); color: var(--soft); }
+    .checklist li::before { content: "[ ]"; position: absolute; left: 0; color: var(--success); font: 12px/1.7 var(--mono); }
+
+    .sources { margin: 0; padding-left: 22px; }
+    .sources li { margin: 11px 0; color: var(--muted); }
+    .sources span { color: var(--soft); }
+
+    .approval {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 28px;
+      align-items: center;
+      padding: 28px;
+      border: 1px solid var(--copper);
+      background: var(--copper-soft);
+    }
+    .approval p { margin: 8px 0 0; color: var(--soft); }
+    .approval-state { padding: 10px 14px; border: 1px solid var(--copper); color: var(--copper); font: 700 11px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    footer { padding-top: 32px; color: var(--dim); font: 11px/1.6 var(--mono); }
+
+    @media (max-width: 920px) {
+      .hero, .section-head, .contract-grid { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: repeat(3, 1fr); }
+      .flow-step:nth-child(3)::after { display: none; }
+      .boundary { grid-template-columns: 1fr; }
+      .boundary-caption { grid-column: 1; }
+      .implementation-step { grid-template-columns: 52px 1fr; }
+      .proof { grid-column: 2; }
+    }
+    @media (max-width: 680px) {
+      * { min-width: 0; }
+      .topbar { align-items: flex-start; flex-direction: column; max-width: 100vw; gap: 9px; overflow: hidden; padding: 14px 18px; }
+      nav { width: 100%; }
+      .meta { display: none; }
+      main { width: auto; max-width: none; margin: 0 14px; padding-top: 34px; }
+      h1, h2, h3, p, li, td { overflow-wrap: break-word; }
+      h1 { font-size: 30px; line-height: 1.18; }
+      .comparison { grid-template-columns: 1fr; }
+      .change-mark { min-height: 34px; transform: rotate(90deg); }
+      .flow { grid-template-columns: 1fr; }
+      .flow-step { min-height: 0; }
+      .flow-step:not(:last-child)::after { top: auto; right: 50%; bottom: -10px; transform: rotate(90deg); }
+      .flow-step:nth-child(3)::after { display: block; }
+      .decision-row { grid-template-columns: 1fr; }
+      .decision-row > div + div { padding-top: 0; }
+      .file-map th, .file-map td { padding: 11px 8px; }
+      .file-map td:first-child { width: 42%; font-size: 11px; }
+      .checklist { grid-template-columns: 1fr; }
+      .approval { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Neura / Plan Mode v1</div>
+    <nav aria-label="Plan sections">
+      <a href="#problem">Problem</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#contract">Plan contract</a>
+      <a href="#architecture">Safety</a>
+      <a href="#delivery">Delivery</a>
+      <a href="#approval">Approval</a>
+    </nav>
+    <div class="meta">Implemented · 2026-08-04</div>
+  </header>
+
+  <main>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Visual implementation proposal</p>
+        <h1>Make Plan mode produce understanding, not chat clutter.</h1>
+        <p>Every Plan-mode request should end with one clear, researched, self-contained HTML file inside the project’s <code>plans/</code> folder. Implementation starts only after human approval.</p>
+      </div>
+      <aside class="recommendation">
+        <small>Recommended design</small>
+        <strong>One narrow publishing tool</strong>
+        <p>Keep normal writes blocked. Allow only a schema-driven tool that renders safe HTML into <code>plans/</code>.</p>
+      </aside>
+    </header>
+
+    <section id="problem">
+      <div class="section-head">
+        <div class="section-label">01 / Problem</div>
+        <div>
+          <h2>Current safety is strong. Planning behavior is too thin.</h2>
+          <p>Neura already enforces a real read-only boundary. The missing part is a planning pipeline, a visual output contract, and a safe way to publish one plan file.</p>
+        </div>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <span class="badge">Now</span>
+          <h3>Read, inspect, reply</h3>
+          <p>Plan mode enables read tools and asks the model for a numbered plan in chat.</p>
+        </article>
+        <article class="card target">
+          <span class="badge">Target</span>
+          <h3>Research, explain, publish</h3>
+          <p>The model gathers evidence, builds a compact visual plan, then publishes local HTML.</p>
+        </article>
+        <article class="card">
+          <span class="badge">Done</span>
+          <h3>Human can approve confidently</h3>
+          <p>Opening one file explains what exists, what will change, why, how, and how success will be checked.</p>
+        </article>
+      </div>
+
+      <div class="comparison" role="img" aria-label="Current Plan mode compared with proposed Plan mode">
+        <div class="diagram-panel current">
+          <h3>Current path</h3>
+          <div class="diagram-stack">
+            <div class="node"><strong>User prompt</strong><small>Normal request enters Plan mode.</small></div>
+            <div class="down">|</div>
+            <div class="node"><strong>Read-only exploration</strong><small><code>read</code>, <code>grep</code>, <code>find</code>, <code>ls</code>, safe <code>bash</code>.</small></div>
+            <div class="down">|</div>
+            <div class="node"><strong>Numbered chat response</strong><small>No stable visual structure.</small></div>
+            <div class="down">|</div>
+            <div class="node missing"><strong>Plan artifact missing</strong><small>Nothing guaranteed inside <code>plans/</code>.</small></div>
+          </div>
+        </div>
+        <div class="change-mark" aria-hidden="true">&gt;</div>
+        <div class="diagram-panel target">
+          <h3>Proposed path</h3>
+          <div class="diagram-stack">
+            <div class="node active"><strong>Prompt becomes a brief</strong><small>Objective, scope, constraints, approval need.</small></div>
+            <div class="down">|</div>
+            <div class="node active"><strong>Evidence pass</strong><small>Code, docs, existing patterns, relevant external sources.</small></div>
+            <div class="down">|</div>
+            <div class="node active"><strong>Human-readable plan</strong><small>Simple English, useful visuals, ordered steps.</small></div>
+            <div class="down">|</div>
+            <div class="node active"><strong>Local HTML + approval gate</strong><small><code>plans/&lt;slug&gt;-plan.html</code>.</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note warning"><strong>Important conflict:</strong> Plan mode currently blocks every write. The new workflow must create HTML without re-enabling generic <code>write</code>, <code>edit</code>, or mutating shell commands.</div>
+    </section>
+
+    <section id="workflow">
+      <div class="section-head">
+        <div class="section-label">02 / Workflow</div>
+        <div>
+          <h2>Six stages, one approval point.</h2>
+          <p>The agent completes the planning loop without interrupting the human repeatedly. Unresolved choices stay inside the plan.</p>
+        </div>
+      </div>
+
+      <div class="flow" role="img" aria-label="Six stage Plan mode workflow">
+        <div class="flow-step"><span class="step-number">Stage 1</span><strong>Understand</strong><p>Turn prompt into objective, scope, constraints, and definition of done.</p></div>
+        <div class="flow-step"><span class="step-number">Stage 2</span><strong>Research</strong><p>Inspect relevant code and docs. Check primary web sources when external facts matter.</p></div>
+        <div class="flow-step"><span class="step-number">Stage 3</span><strong>Decide</strong><p>Choose a recommended approach. Expose only choices that need human judgment.</p></div>
+        <div class="flow-step"><span class="step-number">Stage 4</span><strong>Compose</strong><p>Write simple sections, real file paths, useful visuals, steps, risks, and checks.</p></div>
+        <div class="flow-step"><span class="step-number">Stage 5</span><strong>Publish</strong><p>Validated renderer creates one self-contained HTML file in <code>plans/</code>.</p></div>
+        <div class="flow-step"><span class="step-number">Stage 6</span><strong>Wait</strong><p>Show file path. Stop before implementation until Rajveer approves or requests edits.</p></div>
+      </div>
+
+      <div class="note decision"><strong>Research rule:</strong> every plan gets an evidence pass. Local code and documentation are always checked. Web research is required when the topic depends on current libraries, APIs, standards, products, or outside facts. The plan records the sources that materially changed its direction.</div>
+    </section>
+
+    <section id="contract">
+      <div class="section-head">
+        <div class="section-label">03 / Contract</div>
+        <div>
+          <h2>Every HTML plan follows the same reading order.</h2>
+          <p>Consistency makes plans fast to scan. Limits prevent a “50-paragraph document” while leaving room for genuinely complex work.</p>
+        </div>
+      </div>
+
+      <div class="contract-grid">
+        <article class="contract">
+          <h3>Required content</h3>
+          <ul>
+            <li><strong>Summary:</strong> what we are doing, why, and what “done” means.</li>
+            <li><strong>Current state:</strong> evidence from real code and documentation.</li>
+            <li><strong>Target state:</strong> recommended direction and key decisions.</li>
+            <li><strong>Visual explanation:</strong> at least one meaningful flowchart, comparison, boundary map, or infographic.</li>
+            <li><strong>Ordered steps:</strong> what changes, where, why, and proof for each step.</li>
+            <li><strong>Scope and risks:</strong> included work, deferred work, safety concerns.</li>
+            <li><strong>Verification:</strong> automated checks plus one realistic end-to-end journey.</li>
+            <li><strong>Sources and open decisions:</strong> short, final, easy to review.</li>
+          </ul>
+        </article>
+        <article class="contract">
+          <h3>Writing rules</h3>
+          <ul>
+            <li>Use simple English and one idea per paragraph.</li>
+            <li>Lead with outcome. Explain unfamiliar technical terms once.</li>
+            <li>Name actual files, symbols, commands, and existing helpers.</li>
+            <li>Use 5–8 implementation steps for normal work.</li>
+            <li>Keep the default plan near 800–1,500 words. Put deep evidence in collapsible detail when needed.</li>
+            <li>Use 1–3 visuals. Every visual must answer a real question.</li>
+            <li>No decorative hero art, fake dashboards, or repeated summaries.</li>
+            <li>Plan must stand alone without chat history.</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="note"><strong>Suggested improvement:</strong> treat word counts as a target, not a hard failure. Large migrations may need more detail. Readability, evidence, and decision clarity matter more than an arbitrary limit.</div>
+    </section>
+
+    <section id="architecture">
+      <div class="section-head">
+        <div class="section-label">04 / Safety</div>
+        <div>
+          <h2>Use structured plan data, then render trusted HTML.</h2>
+          <p>The model should not receive a general-purpose write exception. A dedicated <code>publish_plan</code> tool accepts bounded plan data and owns all filesystem work.</p>
+        </div>
+      </div>
+
+      <div class="boundary" role="img" aria-label="Plan mode safety boundary showing allowed research tools, dedicated publisher, and blocked mutations">
+        <div class="boundary-group">
+          <h3>Research side</h3>
+          <div class="pill-list">
+            <div class="pill allow">read / grep / find / ls</div>
+            <div class="pill allow">allowlisted read-only shell</div>
+            <div class="pill allow">approved research connector</div>
+            <div class="pill allow">questionnaire when essential</div>
+          </div>
+        </div>
+        <div class="boundary-group center">
+          <h3>Single write seam</h3>
+          <div class="pill-list">
+            <div class="pill allow"><strong>publish_plan</strong></div>
+            <div class="pill">Input: structured sections + visual blocks</div>
+            <div class="pill">Renderer: fixed local HTML/CSS template</div>
+            <div class="pill">Output: project root / plans / safe slug</div>
+            <div class="pill">Result: path + SHA-256 + validation summary</div>
+          </div>
+        </div>
+        <div class="boundary-group">
+          <h3>Still blocked</h3>
+          <div class="pill-list">
+            <div class="pill deny">generic write and edit</div>
+            <div class="pill deny">mutating shell commands</div>
+            <div class="pill deny">paths outside plans/</div>
+            <div class="pill deny">scripts, iframes, remote assets</div>
+          </div>
+        </div>
+        <p class="boundary-caption">Plan mode remains read-only except for one validated artifact published inside the current project.</p>
+      </div>
+
+      <div class="contract-grid" style="margin-top: 26px">
+        <article class="contract">
+          <h3>Publisher rules</h3>
+          <ul>
+            <li>Find nearest project root containing <code>.git</code>; use <code>ctx.cwd</code> only when no project root exists.</li>
+            <li>Create only <code>plans/&lt;safe-slug&gt;-plan.html</code>.</li>
+            <li>Reject absolute paths, traversal, symlink escapes, and non-HTML extensions.</li>
+            <li>Create a new file. A revision may replace only the plan created by this session.</li>
+            <li>Serialize writes with Pi’s file mutation queue and return a content hash.</li>
+          </ul>
+        </article>
+        <article class="contract">
+          <h3>Renderer rules</h3>
+          <ul>
+            <li>Static, self-contained HTML and CSS. No JavaScript needed in v1.</li>
+            <li>Escape all text fields before rendering.</li>
+            <li>Render only known blocks: prose, comparison, flow, boundary map, file map, steps, risks, checks, decisions, sources.</li>
+            <li>Require at least one visual block and one verification block.</li>
+            <li>Keep source URLs as normal links; never load remote fonts, images, or scripts.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="delivery">
+      <div class="section-head">
+        <div class="section-label">05 / Delivery</div>
+        <div>
+          <h2>Small modules, explicit policy, strong tests.</h2>
+          <p>Human Away and YOLO behavior remain unchanged. Only Plan mode’s prompt, active tools, artifact policy, and verification expand.</p>
+        </div>
+      </div>
+
+      <table class="file-map">
+        <thead><tr><th>File</th><th>Planned role</th></tr></thead>
+        <tbody>
+          <tr><td>agent/extensions/modes.ts</td><td>Replace the thin numbered-plan prompt with the six-stage contract. Add <code>publish_plan</code> to Plan-mode tools.</td></tr>
+          <tr><td>agent/extensions/plan-artifact.ts</td><td>Register the custom tool, validate structured input, publish or revise the current session’s plan, return path and hash.</td></tr>
+          <tr><td>agent/neura/plan-renderer.ts</td><td>Render the trusted static HTML template and supported diagram blocks. Keep browser content inert.</td></tr>
+          <tr><td>agent/neura/plan-policy.ts</td><td>Own project-root discovery, safe slugs, destination checks, revision ownership, size limits, and shared Plan tool names.</td></tr>
+          <tr><td>agent/neura/action-policy.ts</td><td>Allow only the audited <code>publish_plan</code> tool in Plan mode. Protect the new control-plane files.</td></tr>
+          <tr><td>scripts/verify-harness.mjs</td><td>Add contract, path-escape, overwrite, unsafe content, tool-boundary, rendering, and mode-regression tests.</td></tr>
+          <tr><td>README.md · docs/CHANGELOG.md</td><td>Document the visible workflow, output path, approval gate, and exact read-only exception.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="steps" style="margin-top: 28px">
+        <article class="implementation-step">
+          <div class="step-number">Step 01</div>
+          <div><h3>Define the plan schema</h3><p>Specify required sections, supported visual blocks, length bounds, filenames, sources, and revision behavior.</p></div>
+          <div class="proof"><b>Proof</b>Valid and invalid fixtures produce clear results.</div>
+        </article>
+        <article class="implementation-step">
+          <div class="step-number">Step 02</div>
+          <div><h3>Build the trusted renderer</h3><p>Convert structured data into responsive, accessible, self-contained HTML using Neura’s Forged Tungsten design tokens.</p></div>
+          <div class="proof"><b>Proof</b>Desktop and narrow screenshots show no clipping or overlap.</div>
+        </article>
+        <article class="implementation-step">
+          <div class="step-number">Step 03</div>
+          <div><h3>Add the narrow publisher</h3><p>Resolve project root, enforce <code>plans/</code>, handle safe creation and session-owned revision, return file evidence.</p></div>
+          <div class="proof"><b>Proof</b>Traversal, absolute paths, unsafe overwrite, and symlink escape fail closed.</div>
+        </article>
+        <article class="implementation-step">
+          <div class="step-number">Step 04</div>
+          <div><h3>Upgrade the Plan-mode contract</h3><p>Make research, simple language, visuals, real file evidence, verification, HTML publication, and approval waiting mandatory.</p></div>
+          <div class="proof"><b>Proof</b>Injected prompt names every stage and the final tool call.</div>
+        </article>
+        <article class="implementation-step">
+          <div class="step-number">Step 05</div>
+          <div><h3>Wire the policy boundary</h3><p>Activate <code>publish_plan</code> only in Plan mode. Keep every other mutation blocked by both active-tool filtering and guardrail checks.</p></div>
+          <div class="proof"><b>Proof</b>Plan can publish HTML but cannot edit source or write elsewhere.</div>
+        </article>
+        <article class="implementation-step">
+          <div class="step-number">Step 06</div>
+          <div><h3>Test the real journey</h3><p>Enter Plan mode, request a plan, inspect research evidence, open HTML, revise it once, then approve and switch to implementation.</p></div>
+          <div class="proof"><b>Proof</b>Full harness tests pass; Human Away and YOLO snapshots remain unchanged.</div>
+        </article>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head">
+        <div class="section-label">06 / Choices</div>
+        <div>
+          <h2>Recommended v1 decisions.</h2>
+          <p>These defaults keep the first version useful and safe. They can change before implementation.</p>
+        </div>
+      </div>
+
+      <div class="decision-table">
+        <div class="decision-row recommended"><div>Artifact format</div><div><strong>Self-contained static HTML.</strong> Easy to open locally, portable, no hosted dependency.</div></div>
+        <div class="decision-row recommended"><div>Write mechanism</div><div><strong>Structured <code>publish_plan</code> tool.</strong> Safer and more consistent than granting generic write access.</div></div>
+        <div class="decision-row recommended"><div>Location</div><div><strong>Nearest project root / <code>plans/</code>.</strong> Fall back to current working folder only outside a project.</div></div>
+        <div class="decision-row recommended"><div>Filename</div><div><strong><code>&lt;topic-slug&gt;-plan.html</code>.</strong> Add a numeric suffix on collision. Revise only the session-owned file.</div></div>
+        <div class="decision-row recommended"><div>Research</div><div><strong>Local evidence always; primary web sources when relevant.</strong> Do not browse merely to decorate the sources list.</div></div>
+        <div class="decision-row recommended"><div>Interaction</div><div><strong>One final approval gate.</strong> Ask earlier only when an unresolved choice would materially change architecture or scope.</div></div>
+        <div class="decision-row"><div>Later version</div><div>Optional interactive comments, richer diagram layouts, browser auto-open, and plan-to-execution progress tracking.</div></div>
+      </div>
+    </section>
+
+    <section id="verification">
+      <div class="section-head">
+        <div class="section-label">07 / Proof</div>
+        <div>
+          <h2>Verification must prove safety and usefulness.</h2>
+          <p>Passing unit tests is not enough. A human must be able to open the file and understand the proposed work quickly.</p>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li><code>node scripts/verify-harness.mjs</code> passes.</li>
+        <li>Plan mode exposes research tools plus <code>publish_plan</code> only.</li>
+        <li>Generic <code>write</code>, <code>edit</code>, and mutating shell remain blocked.</li>
+        <li>Publisher cannot escape project <code>plans/</code>.</li>
+        <li>Existing plans cannot be overwritten by a new session.</li>
+        <li>Generated HTML has summary, visual, steps, verification, and sources.</li>
+        <li>HTML opens without network access or JavaScript.</li>
+        <li>Desktop and mobile layouts remain readable.</li>
+        <li>A reviewer can explain “now, target, steps, proof” after one read.</li>
+        <li>YOLO and Human Away tests show no behavior change.</li>
+      </ul>
+    </section>
+
+    <section id="sources">
+      <div class="section-head">
+        <div class="section-label">08 / Evidence</div>
+        <div>
+          <h2>Evidence used for this proposal.</h2>
+          <p>Repository facts establish the current gap. Official Pi documentation confirms the extension points needed for the fix.</p>
+        </div>
+      </div>
+
+      <ol class="sources">
+        <li><span><code>agent/extensions/modes.ts</code></span> — current Plan prompt requests a numbered plan; active tools are fixed to read-only exploration.</li>
+        <li><span><code>agent/extensions/guardrail.ts</code> and <code>agent/neura/action-policy.ts</code></span> — Plan calls fail closed unless tool and shell action are allowlisted.</li>
+        <li><span><code>scripts/verify-harness.mjs</code></span> — existing regression checks already prove Plan restrictions and provide the right place for publisher tests.</li>
+        <li><span><code>docs/CHANGELOG.md</code> and existing <code>plans/</code></span> — this project explicitly prefers local HTML plans over the hosted Plan service.</li>
+        <li><a href="https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md" rel="noreferrer">Official Pi extension documentation</a> — <span><code>before_agent_start</code> receives the prompt; extensions can register custom tools and control active tools with <code>setActiveTools()</code>.</span></li>
+        <li><a href="https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/plan-mode/index.ts" rel="noreferrer">Official Pi Plan-mode example</a> — <span>confirms read-only tool filtering, prompt injection, state persistence, and the normal plan-to-execution handoff pattern.</span></li>
+      </ol>
+    </section>
+
+    <section id="approval" style="border-bottom: 0">
+      <div class="approval">
+        <div>
+          <h2>Implementation status</h2>
+          <p>This direction was approved and implemented. Plan mode now researches the request, publishes bounded local HTML, and waits for human approval before source implementation.</p>
+        </div>
+        <div class="approval-state">Implemented</div>
+      </div>
+    </section>
+
+    <footer>
+      Local artifact: plans/neura-plan-mode-v1-proposal.html · Status: implemented · Live Neura files synchronized
+    </footer>
+  </main>
+</body>
+</html>

@@ -71,11 +71,12 @@ function recentThread(): RecentThread | null {
 }
 
 function timeLabel(timestamp: number): string {
-  const date = new Date(timestamp);
-  const today = new Date();
-  return date.toDateString() === today.toDateString()
-    ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    : date.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+  return new Date(timestamp).toLocaleDateString("en-US", { day: "numeric", month: "short" });
 }
 
 function initialContinuity(cwd: string): ContinuityState {
@@ -83,11 +84,11 @@ function initialContinuity(cwd: string): ContinuityState {
   const workspace = path.basename(cwd) || cwd;
   return {
     lastTitle: thread?.name ?? "Fresh session",
-    lastMeta: thread ? `${timeLabel(thread.updated)} last activity` : "No previous thread found",
+    lastMeta: thread ? timeLabel(thread.updated) : "No recent work",
     nowTitle: workspace,
-    nowMeta: "Inspecting workspace",
-    nextTitle: thread ? `Continue ${thread.name}` : "Start a new task",
-    nextMeta: "Type below to continue",
+    nowMeta: "Opening workspace",
+    nextTitle: thread ? `Continue ${thread.name}` : "What are we building?",
+    nextMeta: thread ? "/new fresh task · /health readiness" : "/health readiness",
   };
 }
 
@@ -100,12 +101,15 @@ async function inspectContinuity(cwd: string): Promise<ContinuityState> {
   }
   state.nowTitle = `${path.basename(cwd) || cwd} · ${git.branch}`;
   state.nowMeta = git.changed ? `${git.changed} working tree change${git.changed === 1 ? "" : "s"}` : "Working tree clean";
-  state.nextMeta = "/new fresh task · /health readiness";
   return state;
 }
 
 function labeled(label: string, value: string, width: number, color = TXT): string {
-  const prefix = `${fg(DIM, label.padEnd(9))}`;
+  const hasSpine = width >= 72;
+  const isNext = label === "NEXT";
+  const marker = hasSpine ? fg(ACC, isNext ? "◆ " : "│ ") : "";
+  const labelColor = isNext ? ACC : DIM;
+  const prefix = `${marker}${fg(labelColor, label.padEnd(9))}`;
   return prefix + fg(color, truncateText(value, Math.max(1, width - visibleLength(prefix))));
 }
 

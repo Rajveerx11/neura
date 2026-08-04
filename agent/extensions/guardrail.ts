@@ -36,7 +36,7 @@ export default function (pi) {
       if (isPlanActionAllowed(event, ctx.cwd)) return;
       return {
         block: true,
-        reason: `PLAN mode blocked ${event.toolName}. Use read/grep/find/ls or an exact read-only shell command; switch with Shift+Tab or /mode before implementation.`,
+        reason: `PLAN mode blocked ${event.toolName}. Use research tools or publish_plan for one plans/*.html artifact; switch with Shift+Tab or /mode before implementation.`,
       };
     }
 

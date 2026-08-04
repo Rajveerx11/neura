@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-04 — v2.5 (visual Plan mode v1)
+
+- Replaced Plan mode's numbered chat-only contract with a six-stage workflow: understand, inspect, research, decide, publish, and wait for approval.
+- Added `publish_plan`, the only Plan-mode write capability. It accepts bounded structured data and renders self-contained Forged Tungsten HTML with flow, comparison, and boundary visuals.
+- Plan artifacts resolve to the nearest project root's `plans/` folder. Safe slugs, canonical path checks, symlink/junction rejection, collision suffixes, session ownership, and SHA-256 comparison prevent traversal and silent overwrite.
+- Rendered plans escape every model-controlled string and ship a restrictive CSP. Raw HTML, scripts, iframes, remote assets, private/local fetch targets, credential-bearing URLs, and non-default ports are not allowed.
+- Added bounded `web_search` and `web_fetch` access so current external facts can inform plans; generic writes, source edits, mutating shell, secrets, configuration, git state, and unrelated custom tools remain blocked.
+- Added a deterministic one-retry publication contract. A Plan turn that settles without an artifact continues once with an exact `publish_plan` reminder, then reports the missing artifact instead of looping or silently falling back to chat.
+- Expanded `verify-harness.mjs` with Plan tool activation, research policy, existing-file preservation, safe revision, external-edit conflict, traversal, symlink, CSP, URL, and HTML-injection tests. YOLO and Human Away behavior remain unchanged.
+- Added optional structured future-state previews for visible product work. Plan mode now asks for directional screen, terminal, report, deck, or workflow examples; the renderer presents escaped responsive regions without allowing raw HTML or remote assets.
+- Polished the continuity launch with human recency, calmer empty and loading states, a wide-screen continuity spine, and one explicit NEXT marker while preserving narrow layouts and the 10-line cap.
+
 ## 2026-08-02 — v2.4.2 (Gmail MCP authentication repair)
 
 - Fixed Gmail MCP HTTP 401 startup failures. The Composio project key was valid in Windows user storage, but `pi-mcp` intentionally removed it before expanding the HTTP `x-api-key` header because `COMPOSIO_API_KEY` was absent from `MY_PI_MCP_ENV_ALLOWLIST`.

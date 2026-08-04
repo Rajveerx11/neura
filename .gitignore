@@ -10,4 +10,5 @@ models.json
 **/.plan-url
 node_modules/
 .pi-subagents/
+.proofofwork/
 .agents/

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
 
 export type PolicyRoute = "allow" | "review" | "human" | "deny";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
@@ -45,11 +46,11 @@ export type InspectedAction = {
 type ToolEvent = { toolName?: unknown; input?: unknown };
 
 const READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
-const PLAN_TOOLS = new Set(["read", "grep", "find", "ls", "bash", "questionnaire"]);
+const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
 export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?)(?=$|[\\/\s"'`;|&])/i;
 
-const PROTECTED_CONTROL = /(?:^|[\\/])(?:\.git(?:[\\/]|$)|\.github[\\/]workflows(?:[\\/]|$)|agent[\\/]settings\.json$|agent[\\/]keybindings\.json$|agent[\\/]mcp\.json$|install\.ps1$|agent[\\/]extensions[\\/](?:guardrail|modes|autogit)\.ts$|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|mode-state)\.(?:ts|md)$)/i;
+const PROTECTED_CONTROL = /(?:^|[\\/])(?:\.git(?:[\\/]|$)|\.github[\\/]workflows(?:[\\/]|$)|agent[\\/]settings\.json$|agent[\\/]keybindings\.json$|agent[\\/]mcp\.json$|install\.ps1$|agent[\\/]extensions[\\/](?:guardrail|modes|autogit|plan-artifact)\.ts$|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|mode-state|plan-policy|plan-renderer)\.(?:ts|md)$)/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
 const SHELL_CONTROL = /(?:\r|\n|;|&&|\|\||(?<!\|)\|(?!\|)|>|<|`|\$\()/;
 
@@ -347,5 +348,5 @@ export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
   if (!PLAN_TOOLS.has(toolName)) return false;
   if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""));
   if (toolName === "read") return inspectAction(event, cwd).route === "allow";
-  return true;
+  return isPlanToolInputAllowed(toolName, event.input);
 }
