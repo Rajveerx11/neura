@@ -9,7 +9,7 @@ Launch with `neura` in any terminal.
 
 | Piece | File | What it does |
 |---|---|---|
-| Identity + continuity | `agent/extensions/neura.ts` | Original six-line NEURA ASCII wordmark, compact fallback, width-aware resume ledger, notice count, `/dash`, and persona injection |
+| Identity | `agent/extensions/neura.ts` | Responsive copper NEURA wordmark, compact fallback, `/dash`, and persona injection |
 | Session modes | `agent/extensions/modes.ts` | Plan, YOLO, and Human Away modes; Shift+Tab cycling; `/mode`; animated transitions; read-only Plan tool boundary; Human Away return queue and `/approvals` |
 | Mode policy core | `agent/neura/*.ts` | Shared mode state, deterministic action inspection, hash-chained approval audit, one-use exact retry grants, and isolated no-tool Headmaster reviewer |
 | Cockpit shell | `agent/extensions/cockpit.ts` | One-line responsive mode/model/branch/context/cost footer plus a quiet below-editor rail for work, review, proof, recovery, and copy state |
@@ -59,7 +59,7 @@ node scripts/verify-harness.mjs
 powershell -File .\install.ps1 -Check
 ```
 
-The Node verifier loads every TypeScript extension through Pi's real loader and tests both ASCII wordmarks, five responsive widths, cockpit and footer bounds, transcript copy discovery, capability-latch animation, mode isolation, approval evidence, one-use retries, circuit breaking, `/health`, presets, and guardrails.
+The Node verifier loads every TypeScript extension through Pi's real loader and tests the logo-only launch, both ASCII wordmarks, responsive widths, cockpit and footer bounds, transcript copy discovery, capability-latch animation, mode isolation, approval evidence, one-use retries, circuit breaking, `/health`, presets, and guardrails.
 
 ## Execution modes
 
@@ -87,7 +87,7 @@ Human Away approvals are exact-action, exact-workspace-state, one-use grants tha
 - `/approvals` opens pending Human Away work; `/approvals audit` shows recent decisions; `approve|deny|dismiss <id>` handles one record.
 - `/clip [answer|code]` copies the latest answer or chooses a fenced code block; Ctrl+Shift+X opens the same chooser.
 - `/notices` opens persistent degraded-state details; `/notices close` hides the panel.
-- `/dash` toggles the continuity launch.
+- `/dash` toggles the NEURA logo.
 - `/ship` runs the full proof-of-work gate.
 - `/undo` restores the checkpoint from before the last agent run.
 - `/preset gpt|opus|qwen` changes the execution model. `opus` needs `/login anthropic` once (Claude Pro/Max); pi bills third-party harness usage as Claude **extra usage**, per token, not against plan limits.

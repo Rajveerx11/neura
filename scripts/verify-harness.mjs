@@ -114,28 +114,27 @@ const context = {
   sessionManager: { getEntries: () => [], getBranch: () => [] },
 };
 
-const continuityExtension = extensionWithCommand("dash");
-await firstHandler(continuityExtension, "session_start")({}, context);
-assert.ok(widgets.has("neura-launch"), "continuity launch widget missing");
+const identityExtension = extensionWithCommand("dash");
+await firstHandler(identityExtension, "session_start")({}, context);
+assert.ok(widgets.has("neura-launch"), "logo widget missing");
 assert.equal(widgets.has("neura-logo"), false, "legacy logo widget still registered");
 assert.equal(widgets.has("neura-dash"), false, "legacy dashboard widget still registered");
 assert.match(title, /^Neura · /, "terminal title was not set");
 
 const launchFactory = widgets.get("neura-launch");
 for (const width of [40, 56, 72, 92, 120]) {
-  const launchText = launchFactory(null, null).render(width).map(stripAnsi).join("\n");
-  assert.match(launchText, /LAST/, `launch LAST state missing at ${width} columns`);
-  assert.match(launchText, /READY/, `launch READY state missing at ${width} columns`);
-  assert.match(launchText, /BOUNDARY/, `launch boundary missing at ${width} columns`);
-  assert.match(launchText, /NEXT/, `launch NEXT state missing at ${width} columns`);
+  const rawLines = launchFactory(null, null).render(width);
+  const launchText = rawLines.map(stripAnsi).join("\n");
+  assert.equal(rawLines.length, width < 56 ? 5 : 6, `wordmark height is wrong at ${width} columns`);
   assert.match(launchText, width < 56 ? /N   N EEEEE/ : /███╗   ██╗/, `ASCII wordmark missing at ${width} columns`);
-  assert.doesNotMatch(launchText, /\b0 notices\b/, "launch shows a zero-value notice action");
-  assert.doesNotMatch(launchText, /\bToday\b|\bProjects\b|\bThis week\b/, "legacy dashboard content remains");
+  assert.doesNotMatch(launchText, /READY|BOUNDARY|LAST|NEXT|[@#$%]/, `non-logo launch content remains at ${width} columns`);
+  assert.doesNotMatch(rawLines.join("\n"), /\x1b\[48;2;/, "logo unexpectedly paints image backgrounds");
+  assert.ok(rawLines.every((line) => widthOf(line) <= width), `wordmark overflows at ${width} columns`);
 }
-await firstHandler(continuityExtension, "agent_start")({}, context);
-assert.equal(widgets.has("neura-launch"), false, "continuity launch did not hide when work started");
-await continuityExtension.commands.get("dash").handler("", context);
-assert.ok(widgets.has("neura-launch"), "/dash did not restore the continuity launch");
+await firstHandler(identityExtension, "agent_start")({}, context);
+assert.equal(widgets.has("neura-launch"), false, "logo did not hide when work started");
+await identityExtension.commands.get("dash").handler("", context);
+assert.ok(widgets.has("neura-launch"), "/dash did not restore the logo");
 
 const theme = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "themes", "neura-dark.json"), "utf-8"));
 assert.equal(theme.colors.accent, "#d97841", "Forged Tungsten copper accent missing");
@@ -158,7 +157,6 @@ const contrast = (foreground, background) => {
 for (const token of ["text", "muted", "dim", "accent", "success", "warning", "error", "mdLink", "syntaxFunction"]) {
   assert.ok(contrast(theme.colors[token], "#0b0c0e") >= 4.5, `${token} fails 4.5:1 contrast on the Neura canvas`);
 }
-
 const healthExtension = extensionWithCommand("health");
 await healthExtension.commands.get("health").handler("", context);
 assert.equal(statuses.size, 0, "health status not cleared");
@@ -239,8 +237,8 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
 }
 const launchFooterText = footer.render(120).map(stripAnsi).join("\n");
 assert.match(launchFooterText, /gpt-5\.5-engineering-preview/, "launch footer lost model identity");
-assert.doesNotMatch(launchFooterText, /YOLO|feature\/agentic/, "launch footer duplicates mode or branch already owned by the ledger");
-await continuityExtension.commands.get("dash").handler("", context);
+assert.doesNotMatch(launchFooterText, /YOLO|feature\/agentic/, "logo view does not keep the footer quiet");
+await identityExtension.commands.get("dash").handler("", context);
 const idleFooterText = footer.render(120).map(stripAnsi).join("\n");
 assert.match(idleFooterText, /YOLO/, "idle footer lost the active mode");
 assert.doesNotMatch(idleFooterText, /typescript ready|MCP 0\/3|proof full/, "idle footer still renders detached extension status rows");
@@ -467,5 +465,5 @@ const modePrompt = await firstHandler(modes, "before_agent_start")({ systemPromp
 assert.match(modePrompt.systemPrompt, /HUMAN AWAY/, "Human Away system contract missing");
 
 console.log(
-  `Neura verify: ${loaded.extensions.length} extensions; ASCII launch, responsive cockpit, transcript actions, modes, approvals, proof state, presets, and guardrails passed.`,
+  `Neura verify: ${loaded.extensions.length} extensions; logo-only launch, responsive cockpit, transcript actions, modes, approvals, proof state, presets, and guardrails passed.`,
 );

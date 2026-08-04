@@ -11,8 +11,8 @@ bone text, and semantic colors used only for real outcomes.
 
 ## Product principles
 
-1. **Continuity before overview.** Launch restores the last meaningful thread and
-   presents one next action. It does not summarize everything.
+1. **Identity before activity.** Launch shows only the Neura wordmark. Working
+   state appears after the first task begins.
 2. **One active signal.** Copper identifies Neura, current focus, and the primary
    action. It is not decoration.
 3. **Detail on demand.** Health, memory, agents, model control, proof detail, and
@@ -44,7 +44,7 @@ bone text, and semantic colors used only for real outcomes.
 Color rules:
 
 - Decorative gradients, colored glows, and tinted ambient panels are not used.
-- Copper is the only brand accent.
+- Copper is the primary product accent and owns the launch wordmark.
 - Plan uses cyan. Human Away Preview and approvals use amber. Neither borrows success green.
 - Success, warning, and error never replace copper for identity or navigation.
 - Text must remain readable without relying on hue alone.
@@ -68,35 +68,12 @@ Color rules:
 - No emoji or Devanagari.
 - No em dash or en dash in interface copy.
 
-## Launch system: ASCII identity and resume ledger
+## Launch system: ASCII identity
 
-The original six-line NEURA block wordmark owns launch at 56 columns and above.
-A compact five-line ASCII fallback appears below 56 columns. It appears once per
-session, then clears when work starts.
-
-The ledger answers four questions in order:
-
-1. **READY:** Which workspace, branch, and dirty state are active?
-2. **BOUNDARY:** Which mode and safety contract govern the session?
-3. **LAST:** What meaningful thread did Rajveer leave?
-4. **NEXT:** What is the single recommended continuation and are notices waiting?
-
-While the launch ledger is visible, it alone owns workspace, branch, mode, and
-safety context. The footer contracts to model and context usage, and the idle
-cockpit rail renders nothing. After launch clears, the footer resumes mode and
-session metadata ownership. Persistent zero-value service rows are hidden.
-
-Wide layout uses a one-cell copper spine connecting the three rows. Narrow
-layout stacks the same rows without losing labels. `NEXT` receives the only
-strong emphasis.
-
-Default actions:
-
-- `Enter` resumes the recommended thread.
-- `N` starts a fresh task.
-- The composer remains the universal fallback.
-
-Empty history becomes: `Fresh session. What are we building?`
+`neura` opens with only the copper NEURA wordmark. The original six-line block
+mark appears at 56 columns and above; a five-line ASCII fallback handles narrow
+terminals. There is no illustration, status ledger, or launch animation. The
+wordmark clears when work begins, and `/dash` toggles it on demand.
 
 ## Lifecycle hierarchy
 
@@ -105,7 +82,7 @@ Empty history becomes: `Fresh session. What are we building?`
 3. Evidence or required decision
 4. Ambient session metadata
 
-Launch is continuity. Brief makes scope visible. Work shows one active step.
+Launch is identity. Brief makes scope visible. Work shows one active step.
 Approval owns focus. Proof separates running checks from verdict. Handoff closes
 with changed scope, evidence, and one manual next action.
 
@@ -132,9 +109,9 @@ with changed scope, evidence, and one manual next action.
 ## Direction contract
 
 <!--
-THESIS: Neura launches by restoring continuity, not by presenting a dashboard.
+THESIS: Neura launches with one unmistakable wordmark and no competing content.
 OWN-WORLD: Tungsten neutrals, burnt copper, bone text, flat one-cell rules.
-STORY: Rajveer sees where he left off, current boundary, and one next action.
-FIRST VIEWPORT: Identity and readiness above a LAST/NOW/NEXT continuity spine.
+STORY: Rajveer sees Neura, then starts work in the composer.
+FIRST VIEWPORT: The NEURA wordmark alone.
 FORM: Operate-mode terminal instrument; focused, responsive, and state-driven.
 -->
