@@ -1,0 +1,36 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install verified Pi version
+        run: npm install --global @earendil-works/pi-coding-agent@0.83.0
+
+      - name: Verify extensions
+        run: node scripts\verify-harness.mjs
+
+      - name: Verify documentation and release files
+        run: node scripts\check-docs.mjs
+
+      - name: Check whitespace
+        run: git diff --check HEAD~1 HEAD

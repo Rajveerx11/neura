@@ -13,6 +13,26 @@ function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Normalize-Text($Value) {
+    $normalized = $Value -replace "`r`n?", "`n"
+    return $normalized.TrimEnd([char[]]@([char]10))
+}
+
+function Test-SameFile($Source, $Target) {
+    $textExtensions = @(".ts", ".json", ".md", ".cmd", ".ps1", ".mjs")
+    $extension = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
+    if ($textExtensions -contains $extension) {
+        try {
+            $sourceText = Normalize-Text ([System.IO.File]::ReadAllText($Source))
+            $targetText = Normalize-Text ([System.IO.File]::ReadAllText($Target))
+            return $sourceText -ceq $targetText
+        } catch {
+            return $false
+        }
+    }
+    return (Get-FileHash $Source).Hash -eq (Get-FileHash $Target).Hash
+}
+
 if ($Check) {
     $missing = @()
     foreach ($cmd in @("pi", "git", "uvx")) {
@@ -29,7 +49,7 @@ if ($Check) {
             $live = Join-Path $pair[1] $_.Name
             if (-not (Test-Path $live)) {
                 $drift += "$($_.Name) missing"
-            } elseif ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $live).Hash) {
+            } elseif (-not (Test-SameFile $_.FullName $live)) {
                 $drift += "$($_.Name) differs"
             }
         }
@@ -40,7 +60,7 @@ if ($Check) {
     )) {
         if (-not (Test-Path $pair[1])) {
             $drift += "$(Split-Path $pair[0] -Leaf) missing"
-        } elseif ((Get-FileHash $pair[0]).Hash -ne (Get-FileHash $pair[1]).Hash) {
+        } elseif (-not (Test-SameFile $pair[0] $pair[1])) {
             $drift += "$(Split-Path $pair[0] -Leaf) differs"
         }
     }

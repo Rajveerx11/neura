@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-08-06 - v2.5.1-rc.1 (private release candidate)
+
+- Routed Plan `read`, `grep`, `find`, and `ls` through one canonical workspace
+  containment policy.
+- Matched Pi path resolution for `~`, `@`, `file://`, and Unicode-space aliases.
+  Existing targets resolve through real paths; missing targets resolve through
+  their nearest existing ancestor so junction escapes still fail closed.
+- Added positive and negative regression coverage for direct outside paths,
+  junction/symlink escapes, missing linked descendants, and aliased outside paths.
+- Replaced stale product claims with an explicit implemented/preview/remaining
+  matrix, architecture map, development guide, security policy, release process,
+  plan index, private license, and machine-readable version.
+- Added documentation validation and pinned Windows harness CI for release evidence.
+- Made `install.ps1 -Check` ignore line-ending and final-newline-only differences
+  while preserving semantic drift detection.
+- Removed unrelated ComfyUI dependency artifacts from the Neura repository.
+- Kept the release as an RC because proof/autogit ordering, unknown-tool policy,
+  approval binding, redaction, Gmail defaults, dependency pins, and OS sandboxing
+  remain incomplete.
+
 ## 2026-08-04 — v2.5 (visual Plan mode v1)
 
 - Replaced Plan mode's numbered chat-only contract with a six-stage workflow: understand, inspect, research, decide, publish, and wait for approval.
@@ -10,7 +30,9 @@
 - Added a deterministic one-retry publication contract. A Plan turn that settles without an artifact continues once with an exact `publish_plan` reminder, then reports the missing artifact instead of looping or silently falling back to chat.
 - Expanded `verify-harness.mjs` with Plan tool activation, research policy, existing-file preservation, safe revision, external-edit conflict, traversal, symlink, CSP, URL, and HTML-injection tests. YOLO and Human Away behavior remain unchanged.
 - Added optional structured future-state previews for visible product work. Plan mode now asks for directional screen, terminal, report, deck, or workflow examples; the renderer presents escaped responsive regions without allowing raw HTML or remote assets.
-- Polished the continuity launch with human recency, calmer empty and loading states, a wide-screen continuity spine, and one explicit NEXT marker while preserving narrow layouts and the 10-line cap.
+- A continuity-launch polish experiment was merged during development, then
+  superseded before final integration. Released v2.5 behavior keeps the
+  logo-only launch with no LAST/NOW/NEXT ledger.
 
 ## 2026-08-02 — v2.4.2 (Gmail MCP authentication repair)
 

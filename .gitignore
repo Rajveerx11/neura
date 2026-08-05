@@ -16,3 +16,7 @@ node_modules/
 .proofofwork/
 .tmp-hermes-agent/
 /nul
+
+# unrelated local ComfyUI dependency compilation artifacts
+/requirements.compiled
+/override.txt

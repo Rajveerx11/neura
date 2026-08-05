@@ -1,108 +1,127 @@
 # Neura
 
-Rajveer's personal engineering agent, built on top of [pi](https://pi.dev) (`@earendil-works/pi-coding-agent`).
-This repo is the source of truth for the whole harness: extensions, theme, persona, launcher, config, and the visual plans that drove each phase.
+Neura is Rajveer's private engineering-agent harness built on
+[`@earendil-works/pi-coding-agent`](https://pi.dev). It adds a focused terminal
+interface, operating modes, verification, recovery, memory, model presets, and
+guardrails around stock Pi.
 
-Launch with `neura` in any terminal.
+Current version: **2.5.1-rc.1**. This is a private release candidate. Plan mode
+is hardened for workspace-contained reads. Human Away remains a preview and is
+not safe for unattended high-impact work. See [current status](docs/STATUS.md)
+and [release notes](docs/releases/v2.5.1-rc.1.md).
 
-## What Neura adds on top of stock pi
+## What is implemented
 
-| Piece | File | What it does |
+| Area | What it does | Main files |
 |---|---|---|
-| Identity | `agent/extensions/neura.ts` | Responsive copper NEURA wordmark, compact fallback, `/dash`, and persona injection |
-| Session modes | `agent/extensions/modes.ts` | Plan, YOLO, and Human Away modes; Shift+Tab cycling; `/mode`; researched local HTML plans; Human Away return queue and `/approvals` |
-| Plan publisher | `agent/extensions/plan-artifact.ts` | Plan-only structured publisher: escaped static HTML, visual blocks, collision-safe `plans/` writes, session-owned revisions, and content hashes |
-| Mode policy core | `agent/neura/*.ts` | Shared mode state, deterministic action inspection, hash-chained approval audit, one-use exact retry grants, and isolated no-tool Headmaster reviewer |
-| Cockpit shell | `agent/extensions/cockpit.ts` | One-line responsive mode/model/branch/context/cost footer plus a quiet below-editor rail for work, review, proof, recovery, and copy state |
-| Transcript actions | `agent/extensions/transcript-actions.ts` | Uses Pi's clipboard API for `/clip` and Ctrl+Shift+X answer/code selection; preserves Markdown and copies raw fenced content without renderer patches |
-| Harness health | `agent/extensions/harness-health.ts` | `/health` readiness console for runtime tools, checkpoints, proof gate, memory, skills, git state, MCP bridges, and local Qwen |
-| Guardrails | `agent/extensions/guardrail.ts` | Mode-aware complete tool-call mediation: Plan blocks mutation, YOLO asks for sensitive actions, and Human Away clamps Headmaster verdicts through deterministic policy before exact execution or queueing |
-| Report format | `agent/extensions/ship-report.ts` | Injects the end-of-iteration report format (What / Why / Do now / Takeaway) into every turn |
-| Model presets | `agent/extensions/presets.ts` | `/preset gpt` (Codex, included in the ChatGPT sub) ↔ `/preset opus` (Claude Opus 5, billed as Claude extra usage) ↔ `/preset qwen` (local llama.cpp Qwen3-Coder-30B at `127.0.0.1:8080/v1`) |
-| Memory | `agent/extensions/neura-memory.ts` | Cross-session memory: `~/.pi/agent/neura/MEMORY.md` injected every turn; `/remember <fact>`, `/memory`; agent updates its own memory file (MEMORY.md itself is gitignored) |
-| Checkpoints | `agent/extensions/checkpoint.ts` | Silent worktree snapshot (git plumbing, throwaway index) before every agent run; `/undo` restores, `/undo list` inspects; /undo itself is reversible |
-| Check gate | `agent/extensions/check-gate.ts` | Self-verification via [proof-of-work](https://github.com/Rajveerx11/proof-of-work): quick tamper scan (`--no-tests`) after every turn that changed the working tree, failures fed back to the agent (1 retry cap); `/ship` runs the full check — real tests + signed audit-log verdict |
-| Skill doctor | `agent/extensions/skill-doctor.ts` | `/skill-doctor` scans skill dirs for Claude-only tool references that won't work in pi |
-| Autogit | `agent/extensions/autogit.ts` | Auto stage→commit→push after YOLO turns; disabled in Plan and held in the Human Away queue because `agent_end` runs outside `tool_call` mediation |
-| Theme | `agent/themes/neura-dark.json` | Forged Tungsten: tungsten neutrals, burnt copper `#d97841`, bone text, semantic outcome colors |
-| MCP bridge | `agent/mcp.json` | 6 servers via `@spences10/pi-mcp`: gfi-scout · paper · Context7 · Gmail · Supabase (read-only) · Notion. Gmail uses a Composio MCP session; credentials remain in user environment variables and never enter the file |
-| Persona | `agent/neura/NEURA.md` | Names the agent Neura, terse root-cause engineering style, **no emojis ever** |
-| Launcher | `launcher/neura.cmd` | `neura` command (goes in `~/.local/bin`, on PATH) |
-| Config | `agent/settings.json` | gpt-5.5 default, neura-dark theme, packages, skills pointed at `~/.claude/skills` |
+| Identity | Logo-only launch, Neura persona, session-only Forged Tungsten theme | `agent/extensions/neura.ts`, `agent/neura/NEURA.md`, `agent/themes/neura-dark.json` |
+| Modes | Plan, YOLO, Human Away Preview, Shift+Tab switching, persisted mode state | `agent/extensions/modes.ts`, `agent/neura/mode-state.ts` |
+| Plan | Bounded research tools and one structured HTML publisher under `plans/` | `agent/extensions/plan-artifact.ts`, `agent/neura/plan-policy.ts`, `agent/neura/plan-renderer.ts` |
+| Policy | Canonical workspace containment, action classification, interactive review, Human Away queue | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts` |
+| Recovery | In-memory Git worktree checkpoints and `/undo` | `agent/extensions/checkpoint.ts` |
+| Verification | Quick proof-of-work feedback and full `/ship` command | `agent/extensions/check-gate.ts` |
+| Cockpit | Responsive footer, active-operation state, notices, health panel, transcript copy | `agent/extensions/cockpit.ts`, `agent/extensions/harness-health.ts`, `agent/extensions/transcript-actions.ts` |
+| Personal tools | Persistent local memory, model presets, skill compatibility scan | `agent/extensions/neura-memory.ts`, `agent/extensions/presets.ts`, `agent/extensions/skill-doctor.ts` |
+| Integrations | MCP configuration for gfi-scout, Context7, Gmail, Paper, Supabase, and Notion | `agent/mcp.json` |
+| Shipping | Automatic stage/commit/push in YOLO; held in Plan and Human Away | `agent/extensions/autogit.ts` |
 
-## Skills & packages
+Exact maturity and known gaps live in [docs/STATUS.md](docs/STATUS.md). Do not
+infer a security guarantee from a feature being present.
 
-- **Skills**: pi reads Claude Code's skill format natively — `settings.json` points at `~/.claude/skills`, one source of truth for both agents. Skills themselves are NOT in this repo.
-- **Packages** (installed via `pi install`, declared in settings): `@spences10/pi-redact` (secret scrubbing before model sees output), `@spences10/pi-lsp` (language-server diagnostics), `pi-subagents` (fan-out subagents), `@ollama/pi-web-search`.
-- All third-party packages were source-vetted before install: no install scripts, no telemetry, no network exfil.
+## Modes
 
-## Restore on a fresh machine
+| Mode | Intended use | Enforced behavior |
+|---|---|---|
+| Plan | Research and design before implementation | Activates bounded read/research tools. `read`, `grep`, `find`, and `ls` must resolve inside the canonical workspace. Only `publish_plan` may write, and only under the project `plans/` directory. |
+| YOLO | Normal autonomous engineering with Rajveer present | Allows routine workspace work. Known sensitive actions ask for confirmation. Current policy still has fail-open gaps for unknown actions; see [docs/STATUS.md](docs/STATUS.md). |
+| Human Away Preview | Low-risk work while Rajveer is unavailable | Uses deterministic policy plus an isolated no-tool reviewer. Deferred work enters a local approval queue. No OS sandbox exists, so this mode stays preview-only. |
+
+Shift+Tab cycles modes. `/mode plan|yolo|human-away` selects one directly.
+Ctrl+Shift+T owns Pi's thinking-level shortcut.
+
+## Install
+
+Verified platform: Windows with PowerShell, Node.js/npm, Git, Pi `0.83.0`, and
+`uvx`. `autogit` is optional but required for automatic shipping.
 
 ```powershell
-npm install -g @earendil-works/pi-coding-agent
-git clone <this repo> C:\Neura
-powershell -File C:\Neura\install.ps1
+npm install -g @earendil-works/pi-coding-agent@0.83.0
+git clone https://github.com/Rajveerx11/neura.git C:\Neura
+Set-Location C:\Neura
+powershell -File .\install.ps1
+pi install
+neura
 ```
 
-`install.ps1` copies `agent/*` into `~/.pi/agent/` and the launcher into `~/.local/bin`. Use `install.ps1 -Check` to detect missing prerequisites or drift between this repo and the live harness.
+`install.ps1` copies repository-controlled extensions, theme, policy modules,
+MCP config, keybinding changes, and launcher into the live Pi harness. Existing
+model and credential choices in `settings.json` are preserved unless
+`-ForceSettings` is supplied.
 
-Gmail is verified against `@spences10/pi-mcp@0.0.58` and requires
-`COMPOSIO_API_KEY` as a Windows user environment variable. The
-`neura` launcher refreshes that value for already-open terminals and adds its
-name to `MY_PI_MCP_ENV_ALLOWLIST` at runtime, because `pi-mcp` only expands HTTP
-header placeholders from explicitly allowlisted variables. The key itself is
-never written to `mcp.json`, logs, or the repository.
+Never store credentials in this repository. MCP credentials belong in Windows
+user environment variables. Gmail requires `COMPOSIO_API_KEY`; other optional
+servers remain disabled until configured.
 
-## Verify changes
+## Verify
 
 ```powershell
-node scripts/verify-harness.mjs
+node scripts\verify-harness.mjs
+node scripts\check-docs.mjs
 powershell -File .\install.ps1 -Check
 ```
 
-The Node verifier loads every TypeScript extension through Pi's real loader and tests the logo-only launch, both ASCII wordmarks, responsive widths, cockpit and footer bounds, transcript copy discovery, capability-latch animation, mode isolation, visual plan publishing, path and HTML injection defenses, approval evidence, one-use retries, circuit breaking, `/health`, presets, and guardrails.
+- `verify-harness.mjs` loads all 16 extensions through Pi's real loader and
+  exercises UI bounds, mode isolation, Plan publishing, filesystem containment,
+  approvals, Gmail mediation, presets, recovery state, and guardrails.
+- `check-docs.mjs` validates required release files, local Markdown links,
+  version references, and stale launch claims.
+- `install.ps1 -Check` validates prerequisites and compares repository files
+  with the live harness while ignoring line-ending-only differences.
 
-## Execution modes
+## Commands
 
-Shift+Tab cycles `PLAN → YOLO → HUMAN AWAY`. `/mode` opens the selector; `/mode plan|yolo|human-away` switches directly. Pi's thinking-level shortcut moves to Ctrl+Shift+T so Shift+Tab has one unambiguous owner.
+| Command | Purpose |
+|---|---|
+| `/mode [plan|yolo|human-away|next|status]` | Select or inspect operating mode |
+| `/approvals` | Review Human Away requests |
+| `/approvals audit` | Show recent approval decisions |
+| `/health` | Inspect harness readiness |
+| `/ship` | Run full proof-of-work verification |
+| `/undo` | Restore the previous in-session checkpoint |
+| `/undo list` | List available checkpoints |
+| `/clip [answer|code]` | Copy the latest answer or a code block |
+| `/preset gpt|opus|qwen` | Switch model preset |
+| `/remember <fact>` | Save one local memory fact |
+| `/memory` | Show local memory |
+| `/skill-doctor` | Find skills that depend on Claude-only tools |
+| `/dash` | Toggle the Neura wordmark |
+| `/notices` | Show persistent degraded-state notices |
 
-- **Plan** — research-only tools plus one controlled `publish_plan` exception. Neura inspects local code and docs, uses bounded web search/fetch when current external facts matter, then creates one structured visual HTML plan under the nearest project root's `plans/` folder. Generic writes, source edits, mutating shell, private web targets, and paths outside `plans/` remain blocked. If a turn forgets the artifact, the harness retries once, then fails visibly. Review the file before switching modes to implement.
-- **YOLO** — autonomous workspace work. Existing sensitive boundaries still ask Rajveer; YOLO is not a guardrail bypass.
-- **Human Away (preview)** — routine workspace work continues. Reviewable actions go to a separate ephemeral Pi process with no tools, extensions, skills, context files, or session. Deterministic policy can auto-approve only one generated, untracked workspace file. Secrets, control-plane edits, remote mutation, opaque shell, and unaudited custom tools wait for Rajveer.
+## Repository map
 
-Human Away approvals are exact-action, exact-workspace-state, one-use grants that expire after 120 seconds. Deferred work is stored in a sanitized SHA-256 hash-chained JSONL audit under `~/.pi/agent/neura/approvals/`. The first interactive input after returning surfaces the queue; `/approvals` reviews it. Approval asks the main agent to retry and never replays a stale command directly.
+```text
+agent/extensions/   Pi lifecycle hooks, commands, tools, and UI
+agent/neura/        Shared policy, state, rendering, and reviewer modules
+agent/themes/       Neura terminal theme
+launcher/           Windows `neura` command
+scripts/            Deterministic verification
+docs/               Architecture, status, development, release, and history
+plans/              Historical visual plans; not current requirements
+```
 
-## Security rules
+## Documentation
 
-- No secrets in this repo, ever. Tokens live in user environment variables.
-- `auth.json`, `models.json`, session files are deliberately NOT tracked.
-- Vet any new pi package source before `pi install` (check: no postinstall scripts, no unknown network calls, explainable exec).
-- Headmaster is a reviewer, not a permission source. Deterministic policy always clamps its verdict.
-- Plan HTML is rendered from structured fields, not raw model HTML. Text is escaped, external URLs are protocol-checked, CSP blocks scripts/network loading, existing files are collision-safe, and revisions require the same session plus the expected SHA-256 hash.
-- Human Away is an opt-in preview on native Windows. Neura still lacks an OS-enforced workspace sandbox, so do not treat it as safe for truly unattended high-impact work.
-- Human Away suppresses autogit shipping and October transcript export; protected side effects wait for human return.
+- [Current feature and risk status](docs/STATUS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development workflow](docs/DEVELOPMENT.md)
+- [Security policy](SECURITY.md)
+- [Release process](docs/RELEASING.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Design system](DESIGN.md)
+- [Historical plan index](plans/README.md)
+- [Contributing](CONTRIBUTING.md)
 
-## Operator commands
+## License
 
-- `/health` checks the complete agentic harness; `/health close` hides the panel.
-- `/mode [plan|yolo|human-away|next|status]` selects or inspects the execution mode. Shift+Tab cycles modes.
-- `/approvals` opens pending Human Away work; `/approvals audit` shows recent decisions; `approve|deny|dismiss <id>` handles one record.
-- `/clip [answer|code]` copies the latest answer or chooses a fenced code block; Ctrl+Shift+X opens the same chooser.
-- `/notices` opens persistent degraded-state details; `/notices close` hides the panel.
-- `/dash` toggles the NEURA logo.
-- `/ship` runs the full proof-of-work gate.
-- `/undo` restores the checkpoint from before the last agent run.
-- `/preset gpt|opus|qwen` changes the execution model. `opus` needs `/login anthropic` once (Claude Pro/Max); pi bills third-party harness usage as Claude **extra usage**, per token, not against plan limits.
-
-## Roadmap
-
-- **Done (2026-07-21)**: Phase 1 (skills unification), packages, guardrails, cockpit v1 (Neura identity, dashboard, footer, theme, launcher)
-- **Done (2026-07-22)**: Phase 2 Part A — MCP bridge (`@spences10/pi-mcp` + `agent/mcp.json`). Context7/Supabase/Notion reach full power once their tokens are set as user env vars. Hosted plan server dropped — visual plans are always local HTML, never the hosted service.
-- **Done (2026-07-28)**: Forged Tungsten design system and Continuity Spine launch.
-- **Done (2026-07-31)**: `/preset opus` — Neura can run Claude Opus 5 for the hard 5% instead of being locked to one brain.
-- **Done (2026-08-02)**: Modes v1 — Plan, YOLO, Human Away preview, Headmaster delegated review, exact approval queue, animated Shift+Tab transitions, and side-effect mediation.
-- **Done (2026-08-02)**: Cockpit redesign — restored ASCII identity, capability-latch mode motion, agent-focused approvals, shared operation/proof/recovery state, responsive footer, transcript copy actions, and accessible semantic theme tokens.
-- **Done (2026-08-04)**: Visual Plan mode v1 — mandatory evidence pass, bounded web research, structured diagrams, safe local HTML publishing, approval gate, and adversarial path/overwrite/XSS regression tests.
-- **Next**: OS-enforced Windows/WSL sandbox and adversarial replay suite before removing the Human Away preview warning; then run scorecard and per-tool color badges.
-
-Plans for each phase are in `plans/` (self-contained HTML, open in any browser). Change history in `docs/CHANGELOG.md`.
+Private, all rights reserved. See [LICENSE](LICENSE). No open-source license has
+been granted.
