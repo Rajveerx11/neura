@@ -368,6 +368,38 @@ assert.equal((await guard({ toolName: "bash", input: { command: "Get-Content env
 assert.equal((await guard({ toolName: "bash", input: { command: "rg --pre dangerous-helper pattern" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "git diff --output=review.patch" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context))?.block, true);
+
+const planBoundaryWorkspace = path.join(scratchRoot, "plan-boundary-workspace");
+const planBoundaryOutside = path.join(scratchRoot, "plan-boundary-outside");
+const planBoundaryLink = path.join(planBoundaryWorkspace, "linked-outside");
+const planBoundaryFile = path.join(planBoundaryWorkspace, "inside.txt");
+const planBoundaryOutsideFile = path.join(planBoundaryOutside, "outside.txt");
+fs.mkdirSync(planBoundaryWorkspace, { recursive: true });
+fs.mkdirSync(planBoundaryOutside, { recursive: true });
+fs.writeFileSync(planBoundaryFile, "inside", "utf-8");
+fs.writeFileSync(planBoundaryOutsideFile, "outside", "utf-8");
+fs.symlinkSync(planBoundaryOutside, planBoundaryLink, process.platform === "win32" ? "junction" : "dir");
+const planBoundaryContext = { ...context, cwd: planBoundaryWorkspace };
+const filesystemCases = [
+  { toolName: "read", inside: { path: planBoundaryFile }, outside: { path: planBoundaryOutsideFile }, linked: { path: path.join(planBoundaryLink, "outside.txt") }, linkedMissing: { path: path.join(planBoundaryLink, "missing.txt") } },
+  { toolName: "grep", inside: { pattern: "inside", path: planBoundaryWorkspace }, outside: { pattern: "outside", path: planBoundaryOutside }, linked: { pattern: "outside", path: planBoundaryLink }, linkedMissing: { pattern: "outside", path: path.join(planBoundaryLink, "missing") } },
+  { toolName: "find", inside: { pattern: "*.txt", path: planBoundaryWorkspace }, outside: { pattern: "*.txt", path: planBoundaryOutside }, linked: { pattern: "*.txt", path: planBoundaryLink }, linkedMissing: { pattern: "*.txt", path: path.join(planBoundaryLink, "missing") } },
+  { toolName: "ls", inside: { path: planBoundaryWorkspace }, outside: { path: planBoundaryOutside }, linked: { path: planBoundaryLink }, linkedMissing: { path: path.join(planBoundaryLink, "missing") } },
+];
+for (const testCase of filesystemCases) {
+  assert.equal(await guard({ toolName: testCase.toolName, input: testCase.inside }, planBoundaryContext), undefined, `Plan blocked in-workspace ${testCase.toolName}`);
+  assert.equal((await guard({ toolName: testCase.toolName, input: testCase.outside }, planBoundaryContext))?.block, true, `Plan allowed outside-workspace ${testCase.toolName}`);
+  assert.equal((await guard({ toolName: testCase.toolName, input: testCase.linked }, planBoundaryContext))?.block, true, `Plan followed outside-workspace junction with ${testCase.toolName}`);
+  assert.equal((await guard({ toolName: testCase.toolName, input: testCase.linkedMissing }, planBoundaryContext))?.block, true, `Plan allowed a missing path beneath an outside-workspace junction with ${testCase.toolName}`);
+  for (const aliasedPath of [`@${testCase.outside.path}`, pathToFileURL(testCase.outside.path).href, "~"]) {
+    assert.equal(
+      (await guard({ toolName: testCase.toolName, input: { ...testCase.outside, path: aliasedPath } }, planBoundaryContext))?.block,
+      true,
+      `Plan allowed aliased outside-workspace ${testCase.toolName}: ${aliasedPath}`,
+    );
+  }
+}
+
 assert.equal(await guard({ toolName: "web_search", input: { query: "official pi extension documentation", max_results: 3 } }, context), undefined);
 assert.equal((await guard({ toolName: "web_search", input: { query: "x", max_results: 100 } }, context))?.block, true, "Plan web search accepted an unbounded query");
 assert.equal(await guard({ toolName: "web_fetch", input: { url: "https://github.com/earendil-works/pi" } }, context), undefined);

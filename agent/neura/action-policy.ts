@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
+import { homedir } from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
 
 export type PolicyRoute = "allow" | "review" | "human" | "deny";
@@ -116,15 +118,51 @@ function rawPath(input: Record<string, unknown>): string {
   return String(input.path ?? input.file_path ?? input.filePath ?? "").trim();
 }
 
+function resolveToolTarget(raw: string, cwd: string): string | null {
+  let normalized = raw.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
+  if (normalized.startsWith("@")) normalized = normalized.slice(1);
+  if (normalized === "~") normalized = homedir();
+  else if (normalized.startsWith("~/") || (process.platform === "win32" && normalized.startsWith("~\\"))) {
+    normalized = path.join(homedir(), normalized.slice(2));
+  }
+  if (/^file:\/\//.test(normalized)) {
+    try { normalized = fileURLToPath(normalized); } catch { return null; }
+  }
+  return path.isAbsolute(normalized) ? path.resolve(normalized) : path.resolve(cwd, normalized);
+}
+
+function canonicalTarget(target: string): string | null {
+  const unresolved: string[] = [];
+  let candidate = target;
+
+  while (true) {
+    try {
+      return path.resolve(fs.realpathSync(candidate), ...unresolved);
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code !== "ENOENT" && code !== "ENOTDIR") return null;
+      const parent = path.dirname(candidate);
+      if (parent === candidate) return null;
+      unresolved.unshift(path.basename(candidate));
+      candidate = parent;
+    }
+  }
+}
+
 function insideWorkspace(target: string, cwd: string): boolean {
   const relative = path.relative(cwd, target);
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
-function targetFacts(raw: string, cwd: string): ActionFacts {
+function targetFacts(raw: string, workspace: string, executionCwd = workspace): ActionFacts {
   if (!raw) return {};
-  const target = path.resolve(cwd, raw);
-  const facts: ActionFacts = { target, insideWorkspace: insideWorkspace(target, cwd) };
+  const lexicalTarget = resolveToolTarget(raw, executionCwd);
+  const canonical = lexicalTarget === null ? null : canonicalTarget(lexicalTarget);
+  const target = canonical ?? lexicalTarget ?? path.resolve(executionCwd, raw);
+  const facts: ActionFacts = {
+    target,
+    insideWorkspace: canonical !== null && insideWorkspace(target, workspace),
+  };
   try {
     const stat = fs.statSync(target);
     facts.exists = true;
@@ -134,11 +172,11 @@ function targetFacts(raw: string, cwd: string): ActionFacts {
   } catch {
     facts.exists = false;
   }
-  facts.generated = GENERATED_PATH.test(path.relative(cwd, target));
+  facts.generated = GENERATED_PATH.test(path.relative(workspace, target));
   if (facts.insideWorkspace) {
-    const relative = path.relative(cwd, target);
+    const relative = path.relative(workspace, target);
     const tracked = spawnSync("git", ["ls-files", "--error-unmatch", "--", relative], {
-      cwd,
+      cwd: workspace,
       encoding: "utf-8",
       windowsHide: true,
       timeout: 1_000,
@@ -197,7 +235,8 @@ function result(
 }
 
 export function inspectAction(event: ToolEvent, cwdInput: string): InspectedAction {
-  const workspace = normalizedWorkspace(cwdInput);
+  const executionCwd = typeof cwdInput === "string" && cwdInput.trim() ? path.resolve(cwdInput) : process.cwd();
+  const workspace = normalizedWorkspace(executionCwd);
   const toolName = String(event.toolName ?? "unknown");
   const input = inputRecord(event.input);
   const workspaceState = workspaceFingerprint(workspace);
@@ -210,7 +249,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
 
   if (READ_TOOLS.has(toolName)) {
     const requestedPath = rawPath(input);
-    const facts = requestedPath ? targetFacts(requestedPath, workspace) : {};
+    const facts = requestedPath ? targetFacts(requestedPath, workspace, executionCwd) : {};
     if (requestedPath && SECRET_PATH.test(requestedPath)) {
       return result(base, {
         summary: `${toolName} protected secret path`, category: "protected-data", risk: "high", route: "human",
@@ -228,7 +267,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
       });
     }
     return result(base, {
-      summary: requestedPath ? `${toolName} ${path.relative(workspace, path.resolve(workspace, requestedPath)) || "."}` : toolName,
+      summary: requestedPath ? `${toolName} ${path.relative(workspace, facts.target ?? workspace) || "."}` : toolName,
       category: "read-only", risk: "low", route: "allow", reason: "Read-only workspace inspection.",
       saferPath: "", requiresHumanInYolo: false, facts,
     });
@@ -236,8 +275,8 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
 
   if (toolName === "edit" || toolName === "write") {
     const requestedPath = rawPath(input);
-    const facts = requestedPath ? targetFacts(requestedPath, workspace) : {};
-    const relative = requestedPath ? path.relative(workspace, path.resolve(workspace, requestedPath)) : "unknown path";
+    const facts = requestedPath ? targetFacts(requestedPath, workspace, executionCwd) : {};
+    const relative = requestedPath ? path.relative(workspace, facts.target ?? workspace) : "unknown path";
     if (!requestedPath || facts.insideWorkspace === false) {
       return result(base, {
         summary: `${toolName} outside workspace: ${redactCommand(requestedPath || "unknown path")}`,
@@ -302,7 +341,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
     }
     const rawDeleteTarget = deleteTarget(command);
     if (rawDeleteTarget) {
-      const facts = targetFacts(rawDeleteTarget, workspace);
+      const facts = targetFacts(rawDeleteTarget, workspace, executionCwd);
       const automaticallyReviewable = facts.insideWorkspace === true && facts.file === true && facts.tracked === false && facts.generated === true;
       return result(base, {
         summary: `delete ${facts.insideWorkspace ? path.relative(workspace, facts.target!) : redactCommand(rawDeleteTarget)}`,
@@ -347,6 +386,8 @@ export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
   const toolName = String(event.toolName ?? "unknown");
   if (!PLAN_TOOLS.has(toolName)) return false;
   if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""));
-  if (toolName === "read") return inspectAction(event, cwd).route === "allow";
+  if (READ_TOOLS.has(toolName)) {
+    return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
+  }
   return isPlanToolInputAllowed(toolName, event.input);
 }
