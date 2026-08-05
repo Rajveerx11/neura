@@ -40,7 +40,7 @@ Every custom extension begins with `if (!process.env.NEURA) return;`. `neura.cmd
 An extension is a default-exported `function (pi)` in `agent/extensions/`. Relevant surface used here:
 - Events: `session_start`, `agent_start`, `agent_settled` (fires only when pi will not auto-continue — use it, not `agent_end`, for post-turn work), `before_agent_start` (return `{ systemPrompt }` to append — persona, ship-report format, and memory all inject this way), `input` (`event.source` distinguishes interactive vs extension-injected messages)
 - `ctx.ui.setWidget(id, lines | undefined)` — pi caps each widget at **10 lines** (`MAX_WIDGET_LINES`); that's why logo and dashboard are two separate widgets (`neura-logo`, `neura-dash`)
-- `pi.registerCommand(name, { description, handler })`; `pi.sendUserMessage(text, {deliverAs:"followUp"})` queues work back to the agent
+- `pi.registerCommand(name, { description, handler })`; `pi.registerTool(...)` adds a schema-validated model tool; `pi.sendUserMessage(text, {deliverAs:"followUp"})` queues work back to the agent
 - Full API reference: `docs/extensions.md` inside the globally installed `@earendil-works/pi-coding-agent` package
 
 Hard-won platform rules:
@@ -59,6 +59,7 @@ Hard-won platform rules:
 | `cockpit.ts` | Responsive footer: model · git branch · ctx% meter · cost; fields collapse before overflow; live extension operations use the second line |
 | `harness-health.ts` | `/health` readiness console: runtime tools, checkpoint/proof gate, memory, skills, git state, MCP bridges, and local Qwen |
 | `guardrail.ts` | Block-and-ask on destructive commands and secret-file reads — pi has no permission system; this is it. Don't weaken it |
+| `modes.ts`, `plan-artifact.ts` | Plan mode research contract and its only write seam. `publish_plan` renders structured data into safe local HTML under `plans/`; generic writes stay disabled |
 | `ship-report.ts` | Injects end-of-iteration report format into every turn |
 | `presets.ts` | `/preset gpt\|qwen`; registers local llama.cpp (Qwen3-Coder-30B) provider at `127.0.0.1:8080/v1` |
 | `skill-doctor.ts` | `/skill-doctor` flags skills using Claude-only tools |

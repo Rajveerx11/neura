@@ -5,6 +5,7 @@ import { Key, truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/cockpit-state.ts";
 import { PALETTE, fg } from "../neura/core.ts";
 import { getMode, isAgentMode, modeLabel, modePosition, nextMode, setMode, type AgentMode } from "../neura/mode-state.ts";
+import { PLAN_MODE_TOOL_NAMES, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
 import {
   findPending,
@@ -16,7 +17,7 @@ import {
 } from "../neura/approval-store.ts";
 
 const MODE_ENTRY = "neura-mode-state";
-const PLAN_TOOLS = new Set(["read", "bash", "grep", "find", "ls", "questionnaire"]);
+const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 const { accent: ACC, dim: DIM, error: ERROR, human: HUMAN, muted: MUT, plan: PLAN, success: OK, text: TXT, warning: WARN } = PALETTE;
 
 type PersistedMode = { mode?: AgentMode; changedAt?: string };
@@ -24,7 +25,18 @@ type ModeBoundary = { color: string; capabilities: Array<[string, string]>; verd
 
 const MODE_PROMPTS: Record<AgentMode, string> = {
   plan: `[NEURA MODE: PLAN]
-Read-only planning and exploration. Do not modify files, external systems, git state, configuration, or secrets. Use only the active read tools and exact read-only shell allowlist. Produce a concrete numbered plan, call out assumptions and approval points, and stop before implementation.`,
+Research the current user prompt, then publish one human-readable visual HTML plan with publish_plan.
+
+Workflow:
+1. Understand the objective, scope, constraints, and observable definition of done.
+2. Inspect relevant code, documentation, existing actions, schemas, tests, and patterns. Name real evidence.
+3. Research current external facts with web_search/web_fetch when libraries, APIs, standards, products, or outside knowledge affect the direction. Prefer primary sources.
+4. Choose one recommended approach. Ask only when an unresolved choice would materially change architecture or scope.
+5. When the planned work changes a visible product, screen, terminal, report, deck, or workflow, include a concrete future-state preview showing the proposed hierarchy, representative copy, controls, and important responsive states. Label it as directional, not already implemented. For invisible backend work, omit it rather than inventing decorative UI.
+6. Call publish_plan with simple English, 1-3 meaningful relationship visuals, 2-8 ordered steps, real files, risks, sources, realistic verification, and the future-state preview when applicable.
+7. Return the local plan path and a short review note. Stop before implementation until Rajveer approves.
+
+Safety boundary: read-only exploration plus one controlled plan artifact under the project plans/ folder. Do not modify source files, external systems, git state, configuration, or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
   yolo: `[NEURA MODE: YOLO]
 Act autonomously inside the workspace and finish the requested work. Neura guardrails still require Rajveer for destructive commands, protected data, protected control files, and other sensitive actions. Never reinterpret YOLO as permission to bypass those boundaries.`,
   "human-away": `[NEURA MODE: HUMAN AWAY · PREVIEW]
@@ -34,8 +46,8 @@ Rajveer is away. Continue useful unattended work inside the workspace. Determini
 const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
   plan: {
     color: PLAN,
-    capabilities: [["workspace", "read only"], ["reviewer", "not used"], ["sensitive", "locked"], ["remote", "locked"]],
-    verdict: "BOUNDARY APPLIED · inspection tools only · writes locked",
+    capabilities: [["workspace", "read + plan artifact"], ["publisher", "plans/*.html only"], ["sensitive", "locked"], ["remote", "research reads only"]],
+    verdict: "BOUNDARY APPLIED · research + visual plan · source writes locked",
   },
   yolo: {
     color: ACC,
@@ -183,7 +195,7 @@ export default function (pi) {
   }
 
   function applyToolBoundary(mode: AgentMode): void {
-    if (!normalTools) normalTools = pi.getActiveTools();
+    if (!normalTools) normalTools = pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL);
     pi.setActiveTools(mode === "plan" ? planToolNames() : normalTools);
   }
 
@@ -271,7 +283,7 @@ export default function (pi) {
       if (requested) return void ctx.ui.notify("usage: /mode plan | yolo | human-away | next | status", "warning");
       if (!ctx.hasUI) return;
       const selection = await ctx.ui.select(`Neura mode · ${modeLabel(getMode())} active`, [
-        "PLAN · read-only planning",
+        "PLAN · research + local plan artifact",
         "YOLO · autonomous workspace work",
         "HUMAN AWAY · PREVIEW · delegated review",
       ]);
@@ -308,7 +320,7 @@ export default function (pi) {
   });
 
   pi.on("session_start", (_event, ctx) => {
-    normalTools ??= pi.getActiveTools();
+    normalTools ??= pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL);
     returnShown = false;
     let restored: AgentMode = "yolo";
     try {

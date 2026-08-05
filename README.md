@@ -10,7 +10,8 @@ Launch with `neura` in any terminal.
 | Piece | File | What it does |
 |---|---|---|
 | Identity | `agent/extensions/neura.ts` | Responsive copper NEURA wordmark, compact fallback, `/dash`, and persona injection |
-| Session modes | `agent/extensions/modes.ts` | Plan, YOLO, and Human Away modes; Shift+Tab cycling; `/mode`; animated transitions; read-only Plan tool boundary; Human Away return queue and `/approvals` |
+| Session modes | `agent/extensions/modes.ts` | Plan, YOLO, and Human Away modes; Shift+Tab cycling; `/mode`; researched local HTML plans; Human Away return queue and `/approvals` |
+| Plan publisher | `agent/extensions/plan-artifact.ts` | Plan-only structured publisher: escaped static HTML, visual blocks, collision-safe `plans/` writes, session-owned revisions, and content hashes |
 | Mode policy core | `agent/neura/*.ts` | Shared mode state, deterministic action inspection, hash-chained approval audit, one-use exact retry grants, and isolated no-tool Headmaster reviewer |
 | Cockpit shell | `agent/extensions/cockpit.ts` | One-line responsive mode/model/branch/context/cost footer plus a quiet below-editor rail for work, review, proof, recovery, and copy state |
 | Transcript actions | `agent/extensions/transcript-actions.ts` | Uses Pi's clipboard API for `/clip` and Ctrl+Shift+X answer/code selection; preserves Markdown and copies raw fenced content without renderer patches |
@@ -59,13 +60,13 @@ node scripts/verify-harness.mjs
 powershell -File .\install.ps1 -Check
 ```
 
-The Node verifier loads every TypeScript extension through Pi's real loader and tests the logo-only launch, both ASCII wordmarks, responsive widths, cockpit and footer bounds, transcript copy discovery, capability-latch animation, mode isolation, approval evidence, one-use retries, circuit breaking, `/health`, presets, and guardrails.
+The Node verifier loads every TypeScript extension through Pi's real loader and tests the logo-only launch, both ASCII wordmarks, responsive widths, cockpit and footer bounds, transcript copy discovery, capability-latch animation, mode isolation, visual plan publishing, path and HTML injection defenses, approval evidence, one-use retries, circuit breaking, `/health`, presets, and guardrails.
 
 ## Execution modes
 
 Shift+Tab cycles `PLAN → YOLO → HUMAN AWAY`. `/mode` opens the selector; `/mode plan|yolo|human-away` switches directly. Pi's thinking-level shortcut moves to Ctrl+Shift+T so Shift+Tab has one unambiguous owner.
 
-- **Plan** — fixed read-only tool set. Shell is limited to exact inspection commands. Mutations are blocked even when requested by the model.
+- **Plan** — research-only tools plus one controlled `publish_plan` exception. Neura inspects local code and docs, uses bounded web search/fetch when current external facts matter, then creates one structured visual HTML plan under the nearest project root's `plans/` folder. Generic writes, source edits, mutating shell, private web targets, and paths outside `plans/` remain blocked. If a turn forgets the artifact, the harness retries once, then fails visibly. Review the file before switching modes to implement.
 - **YOLO** — autonomous workspace work. Existing sensitive boundaries still ask Rajveer; YOLO is not a guardrail bypass.
 - **Human Away (preview)** — routine workspace work continues. Reviewable actions go to a separate ephemeral Pi process with no tools, extensions, skills, context files, or session. Deterministic policy can auto-approve only one generated, untracked workspace file. Secrets, control-plane edits, remote mutation, opaque shell, and unaudited custom tools wait for Rajveer.
 
@@ -77,6 +78,7 @@ Human Away approvals are exact-action, exact-workspace-state, one-use grants tha
 - `auth.json`, `models.json`, session files are deliberately NOT tracked.
 - Vet any new pi package source before `pi install` (check: no postinstall scripts, no unknown network calls, explainable exec).
 - Headmaster is a reviewer, not a permission source. Deterministic policy always clamps its verdict.
+- Plan HTML is rendered from structured fields, not raw model HTML. Text is escaped, external URLs are protocol-checked, CSP blocks scripts/network loading, existing files are collision-safe, and revisions require the same session plus the expected SHA-256 hash.
 - Human Away is an opt-in preview on native Windows. Neura still lacks an OS-enforced workspace sandbox, so do not treat it as safe for truly unattended high-impact work.
 - Human Away suppresses autogit shipping and October transcript export; protected side effects wait for human return.
 
@@ -100,6 +102,7 @@ Human Away approvals are exact-action, exact-workspace-state, one-use grants tha
 - **Done (2026-07-31)**: `/preset opus` — Neura can run Claude Opus 5 for the hard 5% instead of being locked to one brain.
 - **Done (2026-08-02)**: Modes v1 — Plan, YOLO, Human Away preview, Headmaster delegated review, exact approval queue, animated Shift+Tab transitions, and side-effect mediation.
 - **Done (2026-08-02)**: Cockpit redesign — restored ASCII identity, capability-latch mode motion, agent-focused approvals, shared operation/proof/recovery state, responsive footer, transcript copy actions, and accessible semantic theme tokens.
+- **Done (2026-08-04)**: Visual Plan mode v1 — mandatory evidence pass, bounded web research, structured diagrams, safe local HTML publishing, approval gate, and adversarial path/overwrite/XSS regression tests.
 - **Next**: OS-enforced Windows/WSL sandbox and adversarial replay suite before removing the Human Away preview warning; then run scorecard and per-tool color badges.
 
 Plans for each phase are in `plans/` (self-contained HTML, open in any browser). Change history in `docs/CHANGELOG.md`.

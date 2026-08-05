@@ -54,17 +54,25 @@ assert.equal(loaded.extensions.length, files.length, "not every extension loaded
 
 // loadExtensions deliberately leaves action methods unbound. Bind the small runtime
 // surface exercised by this deterministic harness without constructing an AgentSession.
-let activeTools = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+const registeredToolNames = loaded.extensions.flatMap((extension) => [...extension.tools.keys()]);
+let activeTools = [...new Set(["read", "bash", "edit", "write", "grep", "find", "ls", ...registeredToolNames])];
 const appendedEntries = [];
+const sentUserMessages = [];
 loaded.runtime.getActiveTools = () => [...activeTools];
 loaded.runtime.setActiveTools = (names) => { activeTools = [...names]; };
-loaded.runtime.getAllTools = () => activeTools.map((name) => ({ name }));
+loaded.runtime.getAllTools = () => [...new Set([...activeTools, ...registeredToolNames, "web_search", "web_fetch"])]
+  .map((name) => ({ name }));
 loaded.runtime.appendEntry = (customType, data) => { appendedEntries.push({ customType, data }); };
-loaded.runtime.sendUserMessage = () => {};
+loaded.runtime.sendUserMessage = (content, options) => { sentUserMessages.push({ content, options }); };
 
 const extensionWithCommand = (name) => {
   const extension = loaded.extensions.find((candidate) => candidate.commands.has(name));
   assert.ok(extension, `/${name} command missing`);
+  return extension;
+};
+const extensionWithTool = (name) => {
+  const extension = loaded.extensions.find((candidate) => candidate.tools.has(name));
+  assert.ok(extension, `${name} tool missing`);
   return extension;
 };
 const firstHandler = (extension, event) => {
@@ -337,6 +345,7 @@ const modes = extensionWithCommand("mode");
 assert.ok(modes.commands.has("approvals"), "/approvals command missing");
 assert.ok(modes.shortcuts.has("shift+tab"), "Shift+Tab mode shortcut missing");
 await firstHandler(modes, "session_start")({}, context);
+assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active during YOLO startup");
 
 process.env.NEURA_REDUCED_MOTION = "1";
 await modes.commands.get("mode").handler("plan", context);
@@ -350,15 +359,170 @@ delete process.env.NEURA_REDUCED_MOTION;
 
 await modes.commands.get("mode").handler("plan", context);
 assert.ok(widgets.has("neura-mode-transition"), "Plan transition animation missing");
+assert.ok(activeTools.includes("publish_plan"), "Plan mode did not activate the bounded plan publisher");
+assert.ok(activeTools.includes("web_search") && activeTools.includes("web_fetch"), "Plan mode did not activate research tools");
+assert.equal(activeTools.includes("edit") || activeTools.includes("write"), false, "Plan mode retained generic mutation tools");
 assert.equal(await guard({ toolName: "bash", input: { command: "git status" } }, context), undefined);
 assert.equal((await guard({ toolName: "bash", input: { command: "git status; Remove-Item file.txt" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "Get-Content env:OPENAI_API_KEY" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "rg --pre dangerous-helper pattern" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "git diff --output=review.patch" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context))?.block, true);
+assert.equal(await guard({ toolName: "web_search", input: { query: "official pi extension documentation", max_results: 3 } }, context), undefined);
+assert.equal((await guard({ toolName: "web_search", input: { query: "x", max_results: 100 } }, context))?.block, true, "Plan web search accepted an unbounded query");
+assert.equal(await guard({ toolName: "web_fetch", input: { url: "https://github.com/earendil-works/pi" } }, context), undefined);
+assert.equal((await guard({ toolName: "web_fetch", input: { url: "http://127.0.0.1/admin" } }, context))?.block, true, "Plan web fetch allowed a private target");
+assert.equal((await guard({ toolName: "web_fetch", input: { url: "http://[::1]/admin" } }, context))?.block, true, "Plan web fetch allowed IPv6 localhost");
+assert.equal((await guard({ toolName: "web_fetch", input: { url: "https://user:pass@example.com/" } }, context))?.block, true, "Plan web fetch allowed URL credentials");
+assert.equal((await guard({ toolName: "web_fetch", input: { url: "https://example.com:8443/" } }, context))?.block, true, "Plan web fetch allowed a non-default port");
+assert.equal(await guard({ toolName: "publish_plan", input: { slug: "plan-mode-v1" } }, context), undefined);
+assert.equal((await guard({ toolName: "publish_plan", input: { slug: "../escape" } }, context))?.block, true, "Plan publisher accepted path traversal");
+
+// Plan publication: structured input, escaped browser output, collision-safe creation,
+// session-owned revision, external-edit protection, and symlink fail-closed behavior.
+const planArtifact = extensionWithTool("publish_plan");
+await firstHandler(planArtifact, "session_start")({}, context);
+sentUserMessages.length = 0;
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan this change" }, context);
+await firstHandler(planArtifact, "agent_settled")({}, context);
+assert.equal(sentUserMessages.length, 1, "Missing Plan artifact did not trigger one automatic retry");
+assert.match(sentUserMessages[0].content, /call publish_plan/, "Plan retry did not name the required publisher");
+await firstHandler(planArtifact, "agent_settled")({}, context);
+assert.equal(sentUserMessages.length, 1, "Missing Plan artifact exceeded the one-retry cap");
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan this change again" }, context);
+const publishPlan = planArtifact.tools.get("publish_plan").definition.execute;
+const planWorkspace = path.join(scratchRoot, "plan-workspace");
+fs.mkdirSync(path.join(planWorkspace, ".git"), { recursive: true });
+fs.mkdirSync(path.join(planWorkspace, "plans"), { recursive: true });
+const existingPlan = path.join(planWorkspace, "plans", "plan-mode-v1-plan.html");
+fs.writeFileSync(existingPlan, "human-owned plan", "utf-8");
+const publishContext = { ...context, cwd: planWorkspace };
+const planFixture = {
+  slug: "plan-mode-v1",
+  title: "Plan mode visual publishing",
+  brief: "Create one researched visual HTML plan while keeping every normal source mutation blocked.",
+  current: "Plan mode researches safely but returns only a numbered chat response.",
+  target: "Plan mode publishes one validated local HTML artifact after an evidence pass.",
+  done: "A reviewer can open the plan, understand the work, and approve it without reading chat history.",
+  evidence: [
+    { source: "agent/extensions/modes.ts", finding: "Current prompt requests a numbered plan and stops before implementation." },
+    { source: "<script>alert(1)</script>", finding: "Untrusted plan text must be escaped before browser rendering." },
+  ],
+  preview: {
+    title: "Proposed Plan review cockpit",
+    caption: "Directional preview for review before implementation.",
+    regions: [
+      { title: "Evidence", tone: "neutral", items: ["Files and primary sources", "Current constraints"] },
+      { title: "Future state", tone: "accent", detail: "What the completed surface may look like.", items: ["Visible hierarchy", "<img src=x onerror=alert(1)>"] },
+      { title: "Approval", tone: "success", items: ["Proof checklist", "Approve or refine"] },
+    ],
+  },
+  visuals: [{
+    kind: "flow",
+    title: "Planning workflow",
+    caption: "Research precedes publication and approval.",
+    groups: [
+      { title: "Research", tone: "neutral", items: ["Read code", "Check primary sources"] },
+      { title: "Publish", tone: "accent", items: ["Render safe HTML", "Write only inside plans/"] },
+      { title: "Review", tone: "success", items: ["Open artifact", "Approve or refine"] },
+    ],
+  }],
+  steps: [
+    { title: "Add publisher", what: "Register a structured Plan-only publication tool.", why: "Generic write access would weaken the boundary.", files: ["agent/extensions/plan-artifact.ts"], proof: "Only publish_plan can create a file in Plan mode." },
+    { title: "Verify safety", what: "Exercise path, overwrite, escaping, and mode boundaries.", why: "The exception must fail closed under hostile input.", files: ["scripts/verify-harness.mjs"], proof: "Negative tests pass and normal writes stay blocked." },
+  ],
+  included: ["Structured local HTML plans", "Research and approval workflow"],
+  deferred: ["Hosted plans", "Interactive browser comments"],
+  risks: [{ risk: "A plan could overwrite human work.", mitigation: "Use collision-safe creation and session hash ownership." }],
+  verification: ["Run node scripts/verify-harness.mjs.", "Open the generated plan at desktop and compact widths."],
+  decisions: [{ decision: "Write boundary", direction: "Use publish_plan instead of generic write or edit." }],
+  sources: [
+    { label: "Official Pi extensions", note: "Confirms custom tools and active-tool filtering.", url: "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md" },
+    { label: "Unsafe URL example", note: "Must render as text, never a clickable link.", url: "javascript:alert(1)" },
+  ],
+};
+await assert.rejects(
+  publishPlan("plan-invalid-comparison", {
+    ...planFixture,
+    slug: "invalid-comparison-plan",
+    visuals: [{ ...planFixture.visuals[0], kind: "comparison", groups: [...planFixture.visuals[0].groups] }],
+  }, undefined, undefined, publishContext),
+  /Comparison visuals require exactly two groups/,
+  "Plan renderer accepted a comparison visual that the tool schema rejects",
+);
+const firstPublication = await publishPlan("plan-create", planFixture, undefined, undefined, publishContext);
+const messagesAfterPublication = sentUserMessages.length;
+await firstHandler(planArtifact, "agent_settled")({}, publishContext);
+assert.equal(sentUserMessages.length, messagesAfterPublication, "Published Plan incorrectly triggered a retry");
+assert.equal(firstPublication.details.revision, false, "First Plan publication was marked as a revision");
+assert.equal(path.basename(firstPublication.details.path), "plan-mode-v1-plan-2.html", "Publisher overwrote or ignored an existing human plan");
+assert.equal(fs.readFileSync(existingPlan, "utf-8"), "human-owned plan", "Existing human plan was overwritten");
+const firstHtml = fs.readFileSync(firstPublication.details.path, "utf-8");
+assert.match(firstHtml, /Content-Security-Policy/, "Published plan lacks a restrictive CSP");
+assert.match(firstHtml, /name="viewport"/, "Published plan lacks responsive viewport metadata");
+assert.match(firstHtml, /@media\(max-width:620px\)/, "Published plan lacks compact layout rules");
+assert.match(firstHtml, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, "Published plan did not escape untrusted HTML text");
+assert.doesNotMatch(firstHtml, /<script\b/i, "Published plan contains executable script markup");
+assert.doesNotMatch(firstHtml, /href="javascript:/i, "Published plan rendered an unsafe source URL");
+assert.match(firstHtml, /href="#preview"/, "Published plan lacks preview navigation");
+assert.match(firstHtml, /class="future-preview"/, "Published plan lacks the future-state preview");
+assert.match(firstHtml, /Proposed Plan review cockpit/, "Published plan lost the preview title");
+assert.match(firstHtml, /&lt;img src=x onerror=alert\(1\)&gt;/, "Published plan did not escape preview content");
+assert.doesNotMatch(firstHtml, /<img src=x/i, "Published plan rendered preview content as executable markup");
+assert.match(firstHtml, /\.future-preview\{grid-template-columns:1fr\}/, "Published preview lacks compact layout rules");
+assert.match(firstHtml, /visual-flow/, "Published plan lacks the required visual block");
+assert.match(firstHtml, /flow-link/, "Published flow visual lacks connectors");
+assert.match(firstHtml, /prefers-reduced-motion:reduce/, "Published plan lacks reduced-motion handling");
+
+const noPreviewPublication = await publishPlan(
+  "plan-no-preview",
+  { ...planFixture, slug: "backend-only-plan", preview: undefined },
+  undefined,
+  undefined,
+  publishContext,
+);
+const noPreviewHtml = fs.readFileSync(noPreviewPublication.details.path, "utf-8");
+assert.doesNotMatch(noPreviewHtml, /href="#preview"|class="future-preview"/, "Backend-only plan rendered an omitted preview");
+assert.doesNotMatch(noPreviewHtml, /preview above/, "Backend-only plan refers to a missing preview");
+
+const revisedFixture = { ...planFixture, target: "Plan mode publishes a revised, validated local HTML artifact after research." };
+const secondPublication = await publishPlan("plan-revise", revisedFixture, undefined, undefined, publishContext);
+assert.equal(secondPublication.details.path, firstPublication.details.path, "Session-owned revision created a second file");
+assert.equal(secondPublication.details.revision, true, "Session-owned update was not marked as a revision");
+fs.writeFileSync(secondPublication.details.path, "external human edit", "utf-8");
+await assert.rejects(
+  publishPlan("plan-conflict", revisedFixture, undefined, undefined, publishContext),
+  /changed outside this session/,
+  "Publisher overwrote an external edit",
+);
+await assert.rejects(
+  publishPlan("plan-traversal", { ...planFixture, slug: "../escape" }, undefined, undefined, publishContext),
+  /slug must use/,
+  "Publisher accepted a traversal slug",
+);
+
+const symlinkWorkspace = path.join(scratchRoot, "plan-symlink-workspace");
+const externalPlans = path.join(scratchRoot, "external-plans");
+fs.mkdirSync(path.join(symlinkWorkspace, ".git"), { recursive: true });
+fs.mkdirSync(externalPlans, { recursive: true });
+fs.symlinkSync(externalPlans, path.join(symlinkWorkspace, "plans"), process.platform === "win32" ? "junction" : "dir");
+await assert.rejects(
+  publishPlan("plan-symlink", { ...planFixture, slug: "symlink-test" }, undefined, undefined, { ...context, cwd: symlinkWorkspace }),
+  /symbolic link or junction/,
+  "Publisher followed a symlinked plans directory",
+);
 
 await modes.commands.get("mode").handler("yolo", context);
+assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active outside Plan mode");
 assert.equal(await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context), undefined);
+assert.equal(
+  (await guard(
+    { toolName: "edit", input: { path: path.join(repoRoot, "agent", "extensions", "plan-artifact.ts") } },
+    { ...context, hasUI: false },
+  ))?.block,
+  true,
+  "New Plan control-plane files were not protected",
+);
 
 const generatedDir = path.join(scratchRoot, "workspace", "dist");
 fs.mkdirSync(generatedDir, { recursive: true });
@@ -465,5 +629,5 @@ const modePrompt = await firstHandler(modes, "before_agent_start")({ systemPromp
 assert.match(modePrompt.systemPrompt, /HUMAN AWAY/, "Human Away system contract missing");
 
 console.log(
-  `Neura verify: ${loaded.extensions.length} extensions; logo-only launch, responsive cockpit, transcript actions, modes, approvals, proof state, presets, and guardrails passed.`,
+  `Neura verify: ${loaded.extensions.length} extensions; logo-only launch, responsive cockpit, transcript actions, visual Plan publishing, modes, approvals, proof state, presets, and guardrails passed.`,
 );
