@@ -38,7 +38,7 @@ Workflow:
 
 Safety boundary: read-only exploration plus one controlled plan artifact under the project plans/ folder. Do not modify source files, external systems, git state, configuration, or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
   yolo: `[NEURA MODE: YOLO]
-Act autonomously inside the workspace and finish the requested work. Neura guardrails still require Rajveer for destructive commands, protected data, protected control files, and other sensitive actions. Never reinterpret YOLO as permission to bypass those boundaries.`,
+Full access is active. Neura application guardrails do not block tool calls or ask for approval, and native Windows provides no OS sandbox. Filesystem, network, and external-tool access follow the Neura process and signed-in user's permissions. This changes execution permissions, not task scope: perform only requested work and obey higher-priority instructions. Do not stage, commit, push, publish, deploy, or create unrelated external side effects unless the user requested them.`,
   "human-away": `[NEURA MODE: HUMAN AWAY · PREVIEW]
 Rajveer is away. Continue useful unattended work inside the workspace. Deterministic policy may send eligible bounded actions to the isolated Headmaster reviewer. If an action is deferred or denied, do not retry, rephrase, split, encode, or route around the verdict. Choose the documented safer path and continue elsewhere. Pending actions will be shown when Rajveer returns. Native Windows still lacks an OS-enforced sandbox, so opaque shell commands and unaudited external tools remain human-bound.`,
 };
@@ -51,8 +51,8 @@ const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
   },
   yolo: {
     color: ACC,
-    capabilities: [["workspace", "read + write"], ["reviewer", "not used"], ["sensitive", "confirm"], ["remote", "confirm"]],
-    verdict: "BOUNDARY APPLIED · workspace autonomy · guardrails active",
+    capabilities: [["filesystem", "full access"], ["network", "full access"], ["approvals", "disabled"], ["autogit", "off"]],
+    verdict: "DANGER FULL ACCESS · no sandbox · no approvals",
   },
   "human-away": {
     color: HUMAN,
@@ -284,7 +284,7 @@ export default function (pi) {
       if (!ctx.hasUI) return;
       const selection = await ctx.ui.select(`Neura mode · ${modeLabel(getMode())} active`, [
         "PLAN · research + local plan artifact",
-        "YOLO · autonomous workspace work",
+        "YOLO · full access · no approvals",
         "HUMAN AWAY · PREVIEW · delegated review",
       ]);
       const selected = selection?.startsWith("PLAN") ? "plan" : selection?.startsWith("YOLO") ? "yolo" : selection?.startsWith("HUMAN") ? "human-away" : null;

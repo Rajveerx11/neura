@@ -47,6 +47,11 @@ const extensionDir = path.join(repoRoot, "agent", "extensions");
 const files = fs.readdirSync(extensionDir)
   .filter((name) => name.endsWith(".ts"))
   .map((name) => path.join(extensionDir, name));
+assert.equal(files.some((file) => file.endsWith(`${path.sep}autogit.ts`)), false, "retired autogit extension still loads");
+const installerSource = fs.readFileSync(path.join(repoRoot, "install.ps1"), "utf-8");
+assert.match(installerSource, /\$retiredExtensions\s*=\s*@\("autogit\.ts"\)/, "installer does not retire the old autogit hook");
+assert.match(installerSource, /Remove-Item -LiteralPath \$retiredPath -Force/, "installer does not remove the retired autogit hook");
+assert.match(installerSource, /is retired but remains installed/, "drift check does not detect the retired autogit hook");
 const loaded = await loadExtensions(files, repoRoot);
 
 assert.deepEqual(loaded.errors, [], `extension load errors: ${JSON.stringify(loaded.errors)}`);
@@ -271,15 +276,21 @@ assert.doesNotMatch(`${JSON.stringify(mcpConfig)}\n${launcher}`, /\b(?:ak|sk)_[A
 const gmailGuardrail = loaded.extensions.find((extension) => extension.resolvedPath.endsWith(`${path.sep}gmail-guardrail.ts`));
 assert.ok(gmailGuardrail, "Gmail guardrail extension missing");
 const gmailGuard = firstHandler(gmailGuardrail, "tool_call");
+const modeState = await import(pathToFileURL(path.join(repoRoot, "agent", "neura", "mode-state.ts")).href);
 let gmailPrompts = 0;
 const deniedGmailContext = {
   ...context,
   ui: { ...ui, confirm: async () => { gmailPrompts++; return false; } },
 };
+modeState.setMode("human-away");
 assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_GET_PROFILE", input: { user_id: "me" } }, deniedGmailContext), undefined, "harmless Gmail profile read was blocked");
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: { recipient_email: "test@example.com", subject: "Test" } }, deniedGmailContext))?.block, true, "denied Gmail send was not blocked");
 assert.equal(gmailPrompts, 1, "Gmail send did not request exactly one human confirmation");
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, { ...context, hasUI: false }))?.block, true, "headless Gmail send did not fail closed");
+modeState.setMode("yolo");
+assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, deniedGmailContext), undefined, "YOLO retained Gmail approval mediation");
+assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_DELETE_MESSAGE", input: {} }, { ...context, hasUI: false }), undefined, "headless YOLO blocked a Gmail mutation");
+assert.equal(gmailPrompts, 1, "YOLO requested a Gmail confirmation");
 
 const transcript = extensionWithCommand("clip");
 assert.ok(transcript.shortcuts.has("ctrl+shift+x"), "Ctrl+Shift+X transcript chooser missing");
@@ -328,17 +339,19 @@ const guardrail = loaded.extensions.find((extension) => extension.resolvedPath.e
 assert.ok(guardrail, "guardrail extension missing");
 const guard = firstHandler(guardrail, "tool_call");
 const headless = { hasUI: false, ui: { confirm: async () => true } };
-const approved = { hasUI: true, ui: { confirm: async () => true } };
+let yoloPrompts = 0;
+const deniedInYolo = { hasUI: true, ui: { confirm: async () => { yoloPrompts++; return false; } } };
 assert.equal(await guard({ toolName: "bash", input: { command: "git status" } }, headless), undefined);
 assert.equal(
-  (await guard({ toolName: "bash", input: { command: "git reset --hard HEAD" } }, headless))?.block,
-  true,
+  await guard({ toolName: "bash", input: { command: "git reset --hard HEAD" } }, headless),
+  undefined,
 );
 assert.equal(
-  (await guard({ toolName: "edit", input: { path: "C:/project/.env.local" } }, headless))?.block,
-  true,
+  await guard({ toolName: "edit", input: { path: "C:/project/.env.local" } }, headless),
+  undefined,
 );
-assert.equal(await guard({ toolName: "bash", input: { command: "terraform destroy" } }, approved), undefined);
+assert.equal(await guard({ toolName: "bash", input: { command: "terraform destroy" } }, deniedInYolo), undefined);
+assert.equal(yoloPrompts, 0, "YOLO requested approval for a sensitive action");
 
 // Mode spine: persisted default, direct /mode, exact Plan tool boundary, and Shift+Tab.
 const modes = extensionWithCommand("mode");
@@ -355,6 +368,8 @@ assert.doesNotMatch(reducedTransition, /APPLYING POLICY/, "reduced motion retain
 await modes.commands.get("mode").handler("yolo", context);
 reducedTransition = widgets.get("neura-mode-transition")(null, null).render(92).map(stripAnsi).join("\n");
 assert.match(reducedTransition, /YOLO/, "latest rapid mode switch did not own the transition");
+assert.match(reducedTransition, /FULL ACCESS/, "YOLO transition does not expose full access");
+assert.match(reducedTransition, /no sandbox · no approvals/, "YOLO transition does not expose disabled safety boundaries");
 delete process.env.NEURA_REDUCED_MOTION;
 
 await modes.commands.get("mode").handler("plan", context);
@@ -548,13 +563,17 @@ await modes.commands.get("mode").handler("yolo", context);
 assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active outside Plan mode");
 assert.equal(await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context), undefined);
 assert.equal(
-  (await guard(
+  await guard(
     { toolName: "edit", input: { path: path.join(repoRoot, "agent", "extensions", "plan-artifact.ts") } },
     { ...context, hasUI: false },
-  ))?.block,
-  true,
-  "New Plan control-plane files were not protected",
+  ),
+  undefined,
+  "YOLO blocked a protected control-plane file",
 );
+const yoloPrompt = await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
+assert.match(yoloPrompt.systemPrompt, /no OS sandbox/i, "YOLO system contract omits sandbox bypass");
+assert.match(yoloPrompt.systemPrompt, /do not block tool calls or ask for approval/i, "YOLO system contract omits approval bypass");
+assert.match(yoloPrompt.systemPrompt, /changes execution permissions, not task scope/i, "YOLO system contract expands task scope");
 
 const generatedDir = path.join(scratchRoot, "workspace", "dist");
 fs.mkdirSync(generatedDir, { recursive: true });
@@ -567,9 +586,9 @@ const headlessSensitive = {
   ui: { confirm: async () => true, setStatus() {}, notify() {} },
 };
 assert.equal(
-  (await guard({ toolName: "bash", input: { command: `Remove-Item -LiteralPath \"${generatedFile}\"` } }, headlessSensitive))?.block,
-  true,
-  "YOLO sensitive action did not fail closed without UI",
+  await guard({ toolName: "bash", input: { command: `Remove-Item -LiteralPath \"${generatedFile}\"` } }, headlessSensitive),
+  undefined,
+  "headless YOLO blocked a sensitive action",
 );
 
 await modes.commands.get("mode").handler("human-away", context);

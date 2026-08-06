@@ -12,7 +12,6 @@ back later. The live harness is an installation target, not source.
 - Git.
 - Pi `0.83.0` for the current release candidate.
 - `uvx` for proof-of-work.
-- `autogit` only when automatic shipping is wanted.
 
 ## Change loop
 

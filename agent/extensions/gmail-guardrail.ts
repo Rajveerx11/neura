@@ -1,5 +1,7 @@
 // Gmail guardrail — current human approval for outbound and irreversible actions.
 
+import { getMode } from "../neura/mode-state.ts";
+
 const CONFIRM: Record<string, string> = {
   GMAIL_SEND_EMAIL: "send an email",
   GMAIL_SEND_DRAFT: "send a draft",
@@ -43,6 +45,7 @@ export default function (pi) {
   pi.on("tool_call", async (event, ctx) => {
     const prefix = "mcp__gmail__";
     if (!event.toolName.startsWith(prefix)) return;
+    if (getMode() === "yolo") return;
 
     const action = event.toolName.slice(prefix.length).toUpperCase();
     const description = CONFIRM[action];

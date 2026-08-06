@@ -1,7 +1,7 @@
-// Neura guardrail v2 — mode-aware, fail-closed action mediation.
-// Plan blocks mutation. YOLO asks Rajveer for sensitive actions. Human Away sends
-// eligible actions to the isolated Headmaster, then clamps every verdict through
-// deterministic policy and queues anything not approved.
+// Neura guardrail v2 — mode-aware action mediation.
+// Plan blocks mutation. YOLO deliberately bypasses Neura application guardrails.
+// Human Away sends eligible actions to the isolated Headmaster, then clamps every
+// verdict through deterministic policy and queues anything not approved.
 
 import { getMode } from "../neura/mode-state.ts";
 import { patchCockpit } from "../neura/cockpit-state.ts";
@@ -40,37 +40,13 @@ export default function (pi) {
       };
     }
 
+    // Match Codex --yolo: no sandbox and no approval prompts. Scope still comes
+    // from the user's request and higher-priority instructions, not this hook.
+    if (mode === "yolo") return;
+
     const action = inspectAction(event, ctx.cwd);
     if (consumeExactRetry(action)) return;
     if (action.route === "allow") return;
-
-    if (mode === "yolo") {
-      if (!action.requiresHumanInYolo) return;
-      if (!ctx.hasUI) {
-        return { block: true, reason: `YOLO guardrail blocked sensitive action without interactive approval: ${action.reason}` };
-      }
-      patchCockpit({
-        phase: "REVIEW",
-        approval: {
-          id: "live",
-          agent: "Neura",
-          task: action.category,
-          exactAction: action.summary,
-          boundary: action.reason,
-          fallback: action.saferPath,
-          risk: action.risk,
-          approvable: true,
-        },
-      });
-      const approved = await ctx.ui.confirm(
-        `Neura action request · ${action.risk.toUpperCase()}`,
-        `Agent: Neura\nTask: ${action.category}\nIntent / exact action: ${action.summary}\n` +
-          `Boundary: ${action.reason}\nSafe fallback: ${action.saferPath}\nGrant: this exact action once`,
-      );
-      patchCockpit({ phase: "WORK", approval: undefined });
-      if (approved) return;
-      return { block: true, reason: `YOLO guardrail denied: ${action.reason}` };
-    }
 
     patchCockpit({ phase: "REVIEW", operation: { verb: "Headmaster reviewing", target: action.summary, startedAt: Date.now() } });
     try { if (ctx.hasUI) ctx.ui.setStatus("neura-headmaster", "headmaster review"); } catch {}

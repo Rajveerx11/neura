@@ -23,8 +23,7 @@ All items must pass:
 - [ ] `git diff --check` passes.
 - [ ] `powershell -File .\install.ps1 -Check` passes after an intentional live sync.
 - [ ] Pi and every runtime package are pinned and audited.
-- [ ] Proof completes before autogit and blocks push on failure/unavailability.
-- [ ] Unknown tools, approvals, redaction, and Gmail policy meet the gates in `STATUS.md`.
+- [ ] Approvals, redaction, and Gmail policy meet the gates in `STATUS.md`.
 - [ ] No credential, private memory, approval audit, session file, or local path secret is tracked.
 - [ ] Release notes state user-visible changes, limits, migration, verification, and rollback.
 - [ ] Worktree is clean and local `main` matches `origin/main`.
@@ -48,7 +47,7 @@ stable or describe preview boundaries as production-safe.
 
 ## Rollback
 
-1. Stop automatic shipping.
+1. Stop Neura and any active external automation.
 2. Check out the previous known-good tag in a separate worktree.
 3. Run its verifier.
 4. Install that tag with `install.ps1`.
