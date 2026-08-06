@@ -8,7 +8,6 @@ import {
   commandVersion,
   fg,
   getGitHealth,
-  runProcess,
   truncateText,
 } from "../neura/core.ts";
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
@@ -75,11 +74,10 @@ async function localModelOnline(): Promise<boolean> {
 }
 
 async function inspect(cwd: string): Promise<HealthReport> {
-  const [piVersion, gitVersion, uvxVersion, autogit, git, qwen] = await Promise.all([
+  const [piVersion, gitVersion, uvxVersion, git, qwen] = await Promise.all([
     commandVersion("pi"),
     commandVersion("git"),
     commandVersion("uvx"),
-    runProcess(process.platform === "win32" ? "where.exe" : "which", ["autogit"]),
     getGitHealth(cwd),
     localModelOnline(),
   ]);
@@ -108,7 +106,7 @@ async function inspect(cwd: string): Promise<HealthReport> {
   return {
     state: requiredOk ? "ready" : "degraded",
     core: `pi ${versionLabel(piVersion)}  ·  git ${versionLabel(gitVersion)}  ·  uvx ${versionLabel(uvxVersion)}`,
-    workflow: `modes ${modes && modeKeys ? "ready" : "missing"} · checkpoint ${checkpoint ? "ready" : "missing"} · proof ${gate ? "ready" : "missing"} · autogit ${autogit.ok ? "ready" : "missing"}`,
+    workflow: `modes ${modes && modeKeys ? "ready" : "missing"} · checkpoint ${checkpoint ? "ready" : "missing"} · proof ${gate ? "ready" : "missing"}`,
     context: `persona ${persona ? "ready" : "missing"} · memory ${memory ? "ready" : "missing"} · skills ${skills || "missing"}`,
     workspace: git.isRepo ? `${git.branch}  ·  ${changes}${sync ? `  ·  ${sync}` : ""}` : "not a git workspace",
     bridges: `${mcp.label}  ·  local Qwen ${qwen ? "online" : "offline"}`,

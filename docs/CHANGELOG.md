@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Matched OpenAI Codex `--yolo` semantics: Neura YOLO now has no application
+  approval prompts or tool blocking and relies on native process/user access.
+- Kept YOLO scoped to the user's request in its system contract while clearly
+  surfacing the no-sandbox, no-approval boundary in the mode transition.
+- Bypassed Gmail confirmations in YOLO while preserving non-YOLO mediation.
+- Removed automatic stage/commit/push from the turn lifecycle. Installation now
+  removes the retired `autogit.ts` extension and drift checks detect stale copies.
+- Added positive YOLO bypass tests and negative Plan/Human Away regression tests.
+
 ## 2026-08-06 - v2.5.1-rc.1 (private release candidate)
 
 - Routed Plan `read`, `grep`, `find`, and `ls` through one canonical workspace

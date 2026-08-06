@@ -39,15 +39,11 @@ tool_call
 
 agent_end
   cockpit completion
-  YOLO autogit currently starts here
 
 agent_settled
   Plan publication check
   proof-of-work quick check currently starts here
 ```
-
-The `agent_end`/`agent_settled` order is a known release blocker: autogit can push
-before proof returns. See [STATUS.md](STATUS.md).
 
 ## Extension map
 
@@ -55,14 +51,13 @@ before proof returns. See [STATUS.md](STATUS.md).
 |---|---|---|
 | `neura.ts` | Identity, theme, `/dash`, `/notices`, persona injection | `NEURA.md`, cockpit state |
 | `modes.ts` | Mode switching, active-tool boundary, approval UI | Session entries, approval store |
-| `guardrail.ts` | Tool-call policy for Plan, YOLO, Human Away | Action policy, Headmaster |
+| `guardrail.ts` | Plan and Human Away tool-call policy; explicit YOLO bypass | Action policy, Headmaster |
 | `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
 | `plan-artifact.ts` | Controlled Plan HTML publication | `plans/`, renderer/policy |
 | `checkpoint.ts` | Pre-turn Git tree snapshots and `/undo` | Git object database, temp index |
 | `check-gate.ts` | Quick proof feedback and `/ship` | `uvx`, proof-of-work |
-| `autogit.ts` | YOLO stage/commit/push | `autogit`, Git remote |
 | `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |
-| `harness-health.ts` | Runtime readiness panel | Pi, Git, uvx, autogit, MCP config, local Qwen |
+| `harness-health.ts` | Runtime readiness panel | Pi, Git, uvx, MCP config, local Qwen |
 | `transcript-actions.ts` | Answer/code copy | Pi clipboard API |
 | `neura-memory.ts` | Local cross-session facts | `~/.pi/agent/neura/MEMORY.md` |
 | `presets.ts` | GPT, Opus, local Qwen switching | Provider login or llama.cpp |
@@ -100,6 +95,8 @@ before proof returns. See [STATUS.md](STATUS.md).
 ## Trust model
 
 - Deterministic policy is authoritative. Headmaster output cannot widen policy.
+- YOLO bypasses Neura application policy by design; user intent and higher-priority
+  instructions remain its scope boundary, but no Neura hook technically enforces it.
 - Plan text is untrusted and rendered through structured escaped fields.
 - Credentials stay outside source and must be redacted before model or audit use.
 - Application guardrails reduce mistakes but do not replace an OS sandbox.

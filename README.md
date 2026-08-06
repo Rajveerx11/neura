@@ -17,13 +17,12 @@ and [release notes](docs/releases/v2.5.1-rc.1.md).
 | Identity | Logo-only launch, Neura persona, session-only Forged Tungsten theme | `agent/extensions/neura.ts`, `agent/neura/NEURA.md`, `agent/themes/neura-dark.json` |
 | Modes | Plan, YOLO, Human Away Preview, Shift+Tab switching, persisted mode state | `agent/extensions/modes.ts`, `agent/neura/mode-state.ts` |
 | Plan | Bounded research tools and one structured HTML publisher under `plans/` | `agent/extensions/plan-artifact.ts`, `agent/neura/plan-policy.ts`, `agent/neura/plan-renderer.ts` |
-| Policy | Canonical workspace containment, action classification, interactive review, Human Away queue | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts` |
+| Policy | Plan containment, Human Away action classification and review queue, explicit YOLO bypass | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts` |
 | Recovery | In-memory Git worktree checkpoints and `/undo` | `agent/extensions/checkpoint.ts` |
 | Verification | Quick proof-of-work feedback and full `/ship` command | `agent/extensions/check-gate.ts` |
 | Cockpit | Responsive footer, active-operation state, notices, health panel, transcript copy | `agent/extensions/cockpit.ts`, `agent/extensions/harness-health.ts`, `agent/extensions/transcript-actions.ts` |
 | Personal tools | Persistent local memory, model presets, skill compatibility scan | `agent/extensions/neura-memory.ts`, `agent/extensions/presets.ts`, `agent/extensions/skill-doctor.ts` |
 | Integrations | MCP configuration for gfi-scout, Context7, Gmail, Paper, Supabase, and Notion | `agent/mcp.json` |
-| Shipping | Automatic stage/commit/push in YOLO; held in Plan and Human Away | `agent/extensions/autogit.ts` |
 
 Exact maturity and known gaps live in [docs/STATUS.md](docs/STATUS.md). Do not
 infer a security guarantee from a feature being present.
@@ -33,7 +32,7 @@ infer a security guarantee from a feature being present.
 | Mode | Intended use | Enforced behavior |
 |---|---|---|
 | Plan | Research and design before implementation | Activates bounded read/research tools. `read`, `grep`, `find`, and `ls` must resolve inside the canonical workspace. Only `publish_plan` may write, and only under the project `plans/` directory. |
-| YOLO | Normal autonomous engineering with Rajveer present | Allows routine workspace work. Known sensitive actions ask for confirmation. Current policy still has fail-open gaps for unknown actions; see [docs/STATUS.md](docs/STATUS.md). |
+| YOLO | Codex-style dangerous full access | Disables Neura application approvals and tool blocking. Native Windows provides no OS sandbox, so filesystem, network, and external tools inherit the signed-in user's permissions. YOLO expands execution permission, not task scope. |
 | Human Away Preview | Low-risk work while Rajveer is unavailable | Uses deterministic policy plus an isolated no-tool reviewer. Deferred work enters a local approval queue. No OS sandbox exists, so this mode stays preview-only. |
 
 Shift+Tab cycles modes. `/mode plan|yolo|human-away` selects one directly.
@@ -42,7 +41,7 @@ Ctrl+Shift+T owns Pi's thinking-level shortcut.
 ## Install
 
 Verified platform: Windows with PowerShell, Node.js/npm, Git, Pi `0.83.0`, and
-`uvx`. `autogit` is optional but required for automatic shipping.
+`uvx`.
 
 ```powershell
 npm install -g @earendil-works/pi-coding-agent@0.83.0
@@ -70,7 +69,7 @@ node scripts\check-docs.mjs
 powershell -File .\install.ps1 -Check
 ```
 
-- `verify-harness.mjs` loads all 16 extensions through Pi's real loader and
+- `verify-harness.mjs` loads all 15 extensions through Pi's real loader and
   exercises UI bounds, mode isolation, Plan publishing, filesystem containment,
   approvals, Gmail mediation, presets, recovery state, and guardrails.
 - `check-docs.mjs` validates required release files, local Markdown links,

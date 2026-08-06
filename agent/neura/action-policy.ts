@@ -39,7 +39,6 @@ export type InspectedAction = {
   route: PolicyRoute;
   reason: string;
   saferPath: string;
-  requiresHumanInYolo: boolean;
   actionFingerprint: string;
   workspaceFingerprint: string;
   facts: ActionFacts;
@@ -52,7 +51,7 @@ const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
 export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?)(?=$|[\\/\s"'`;|&])/i;
 
-const PROTECTED_CONTROL = /(?:^|[\\/])(?:\.git(?:[\\/]|$)|\.github[\\/]workflows(?:[\\/]|$)|agent[\\/]settings\.json$|agent[\\/]keybindings\.json$|agent[\\/]mcp\.json$|install\.ps1$|agent[\\/]extensions[\\/](?:guardrail|modes|autogit|plan-artifact)\.ts$|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|mode-state|plan-policy|plan-renderer)\.(?:ts|md)$)/i;
+const PROTECTED_CONTROL = /(?:^|[\\/])(?:\.git(?:[\\/]|$)|\.github[\\/]workflows(?:[\\/]|$)|agent[\\/]settings\.json$|agent[\\/]keybindings\.json$|agent[\\/]mcp\.json$|install\.ps1$|agent[\\/]extensions[\\/](?:guardrail|modes|plan-artifact)\.ts$|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|mode-state|plan-policy|plan-renderer)\.(?:ts|md)$)/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
 const SHELL_CONTROL = /(?:\r|\n|;|&&|\|\||(?<!\|)\|(?!\|)|>|<|`|\$\()/;
 
@@ -66,12 +65,12 @@ const HARD_DENY = [
 ];
 
 const HUMAN_ONLY_SHELL = [
-  { re: /\bgit\s+push\b[^\r\n]*(?:--force(?:-with-lease)?\b|-f\b)/i, why: "force-push can rewrite shared history", yolo: true },
-  { re: /\bgit\s+reset\s+--hard\b/i, why: "hard reset discards local work", yolo: true },
-  { re: /\bgit\s+clean\s+-[a-z]*f/i, why: "git clean deletes untracked work", yolo: true },
-  { re: /\bgit\s+(?:checkout\s+--|restore\s+(?:--worktree\s+)?(?:\.|--source)|branch\s+-D\b)/i, why: "destructive git operation can discard work", yolo: true },
-  { re: /\bgit\s+push\b/i, why: "command mutates a remote repository", yolo: false },
-  { re: /\b(?:npm\s+publish|pnpm\s+publish|yarn\s+npm\s+publish|gh\s+pr\s+merge|terraform\s+apply|kubectl\s+(?:apply|delete)|vercel\s+deploy|netlify\s+deploy)\b/i, why: "command mutates a remote or production-like system", yolo: true },
+  { re: /\bgit\s+push\b[^\r\n]*(?:--force(?:-with-lease)?\b|-f\b)/i, why: "force-push can rewrite shared history" },
+  { re: /\bgit\s+reset\s+--hard\b/i, why: "hard reset discards local work" },
+  { re: /\bgit\s+clean\s+-[a-z]*f/i, why: "git clean deletes untracked work" },
+  { re: /\bgit\s+(?:checkout\s+--|restore\s+(?:--worktree\s+)?(?:\.|--source)|branch\s+-D\b)/i, why: "destructive git operation can discard work" },
+  { re: /\bgit\s+push\b/i, why: "command mutates a remote repository" },
+  { re: /\b(?:npm\s+publish|pnpm\s+publish|yarn\s+npm\s+publish|gh\s+pr\s+merge|terraform\s+apply|kubectl\s+(?:apply|delete)|vercel\s+deploy|netlify\s+deploy)\b/i, why: "command mutates a remote or production-like system" },
 ];
 
 function inputRecord(input: unknown): Record<string, unknown> {
@@ -255,7 +254,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         summary: `${toolName} protected secret path`, category: "protected-data", risk: "high", route: "human",
         reason: "Protected credentials must never enter unattended model context.",
         saferPath: "Use a masked key-name inspector or provide the required non-secret value manually.",
-        requiresHumanInYolo: true, facts,
+        facts,
       });
     }
     if (requestedPath && facts.insideWorkspace === false) {
@@ -263,13 +262,13 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         summary: `${toolName} outside workspace: ${redactCommand(requestedPath)}`, category: "protected-control", risk: "high", route: "human",
         reason: "The requested path is outside Neura's active workspace boundary.",
         saferPath: "Copy a non-sensitive artifact into the workspace or inspect it with Rajveer present.",
-        requiresHumanInYolo: true, facts,
+        facts,
       });
     }
     return result(base, {
       summary: requestedPath ? `${toolName} ${path.relative(workspace, facts.target ?? workspace) || "."}` : toolName,
       category: "read-only", risk: "low", route: "allow", reason: "Read-only workspace inspection.",
-      saferPath: "", requiresHumanInYolo: false, facts,
+      saferPath: "", facts,
     });
   }
 
@@ -282,26 +281,26 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         summary: `${toolName} outside workspace: ${redactCommand(requestedPath || "unknown path")}`,
         category: "protected-control", risk: "high", route: "human",
         reason: "Unattended writes are limited to the active workspace.",
-        saferPath: "Move the target into the workspace or wait for Rajveer.", requiresHumanInYolo: true, facts,
+        saferPath: "Move the target into the workspace or wait for Rajveer.", facts,
       });
     }
     if (SECRET_PATH.test(requestedPath)) {
       return result(base, {
         summary: `${toolName} protected secret path: ${relative}`, category: "protected-data", risk: "critical", route: "human",
         reason: "Secret-bearing files stay under direct human control.",
-        saferPath: "Edit a checked-in example file or ask Rajveer to apply the secret value.", requiresHumanInYolo: true, facts,
+        saferPath: "Edit a checked-in example file or ask Rajveer to apply the secret value.", facts,
       });
     }
     if (PROTECTED_CONTROL.test(relative)) {
       return result(base, {
         summary: `${toolName} protected control file: ${relative}`, category: "protected-control", risk: "high", route: "human",
         reason: "This file controls Neura's safety boundary, credentials, or deployment behavior.",
-        saferPath: "Prepare a patch for human review instead of changing the control plane unattended.", requiresHumanInYolo: true, facts,
+        saferPath: "Prepare a patch for human review instead of changing the control plane unattended.", facts,
       });
     }
     return result(base, {
       summary: `${toolName} ${relative}`, category: "workspace-change", risk: "low", route: "allow",
-      reason: "Routine change inside the active workspace.", saferPath: "", requiresHumanInYolo: false, facts,
+      reason: "Routine change inside the active workspace.", saferPath: "", facts,
     });
   }
 
@@ -311,7 +310,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
       return result(base, {
         summary: "empty shell command", category: "unclassified-shell", risk: "high", route: "deny",
         reason: "An empty command cannot be meaningfully reviewed.", saferPath: "Provide one explicit command.",
-        requiresHumanInYolo: true, facts: {},
+        facts: {},
       });
     }
     if (SECRET_PATH.test(command)) {
@@ -319,7 +318,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         summary: "shell command touching a protected secret path", category: "protected-data", risk: "critical", route: "human",
         reason: "The action may expose or modify credentials.",
         saferPath: "Use a masked inspector or wait for Rajveer to handle the secret-bearing file.",
-        requiresHumanInYolo: true, facts: {},
+        facts: {},
       });
     }
     const hard = HARD_DENY.find(({ re }) => re.test(command));
@@ -327,7 +326,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
       return result(base, {
         summary: redactCommand(command), category: "broad-destruction", risk: "critical", route: "deny",
         reason: hard.why, saferPath: "Narrow the action to one literal, recoverable workspace target.",
-        requiresHumanInYolo: true, facts: {},
+        facts: {},
       });
     }
     const humanOnly = HUMAN_ONLY_SHELL.find(({ re }) => re.test(command));
@@ -336,7 +335,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         summary: redactCommand(command), category: /push|publish|merge|apply|deploy/i.test(command) ? "remote-mutation" : "protected-control",
         risk: "critical", route: "human", reason: humanOnly.why,
         saferPath: "Use a reversible local operation or wait for Rajveer to approve the exact command.",
-        requiresHumanInYolo: humanOnly.yolo, facts: {},
+        facts: {},
       });
     }
     const rawDeleteTarget = deleteTarget(command);
@@ -351,26 +350,26 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
           ? "One untracked generated file can be reviewed for exact-action approval."
           : "Deletion is not proven generated, untracked, literal, and bounded to one workspace file.",
         saferPath: "Regenerate or archive the target; otherwise wait for exact human approval.",
-        requiresHumanInYolo: true, facts,
+        facts,
       });
     }
     if (isPlanSafeShellCommand(command)) {
       return result(base, {
         summary: redactCommand(command), category: "read-only", risk: "low", route: "allow",
-        reason: "Command matches Neura's exact read-only allowlist.", saferPath: "", requiresHumanInYolo: false, facts: {},
+        reason: "Command matches Neura's exact read-only allowlist.", saferPath: "", facts: {},
       });
     }
     if (isKnownDevelopmentCommand(command)) {
       return result(base, {
         summary: redactCommand(command), category: "workspace-change", risk: "medium", route: "allow",
-        reason: "Known local build, test, validation, or git-recording command.", saferPath: "", requiresHumanInYolo: false, facts: {},
+        reason: "Known local build, test, validation, or git-recording command.", saferPath: "", facts: {},
       });
     }
     return result(base, {
       summary: redactCommand(command), category: "unclassified-shell", risk: "high", route: "human",
       reason: "Opaque shell execution cannot be bounded reliably without an OS sandbox.",
       saferPath: "Use built-in read/edit/write tools or one command from the documented development allowlist.",
-      requiresHumanInYolo: false, facts: {},
+      facts: {},
     });
   }
 
@@ -378,7 +377,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
     summary: `${toolName} external tool call`, category: "external-tool", risk: "high", route: "human",
     reason: "This custom tool has no audited unattended policy yet.",
     saferPath: "Use a built-in workspace tool or wait for Rajveer to approve the external action.",
-    requiresHumanInYolo: false, facts: {},
+    facts: {},
   });
 }
 

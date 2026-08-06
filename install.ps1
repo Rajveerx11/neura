@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $repo = $PSScriptRoot
 $agent = Join-Path $HOME ".pi\agent"
 $bin = Join-Path $HOME ".local\bin"
+$retiredExtensions = @("autogit.ts")
 
 function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
@@ -52,6 +53,11 @@ if ($Check) {
             } elseif (-not (Test-SameFile $_.FullName $live)) {
                 $drift += "$($_.Name) differs"
             }
+        }
+    }
+    foreach ($name in $retiredExtensions) {
+        if (Test-Path (Join-Path "$agent\extensions" $name)) {
+            $drift += "$name is retired but remains installed"
         }
     }
     foreach ($pair in @(
@@ -121,6 +127,10 @@ if (-not (Test-Command "pi")) {
 }
 
 New-Item -ItemType Directory -Force "$agent\extensions", "$agent\themes", "$agent\neura", $bin | Out-Null
+foreach ($name in $retiredExtensions) {
+    $retiredPath = Join-Path "$agent\extensions" $name
+    if (Test-Path $retiredPath) { Remove-Item -LiteralPath $retiredPath -Force }
+}
 Copy-Item "$repo\agent\extensions\*" "$agent\extensions\" -Force
 Copy-Item "$repo\agent\themes\*" "$agent\themes\" -Force
 Copy-Item "$repo\agent\neura\*" "$agent\neura\" -Force
@@ -169,5 +179,4 @@ if ((Test-Path $target) -and -not $ForceSettings) {
 }
 
 if (-not (Test-Command "uvx")) { Write-Warning "uvx missing: proof-of-work verification will be unavailable." }
-if (-not (Test-Command "autogit")) { Write-Warning "autogit missing: automatic commit/push will be unavailable." }
 Write-Host "Neura installed. Run 'pi install', then 'neura' and '/health'."
