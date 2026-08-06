@@ -1,7 +1,7 @@
 # Neura status
 
-Last audited: 2026-08-06  
-Target: `2.5.1` stable  
+Last audited: 2026-08-06
+Target: `2.5.1` stable
 Current: `2.5.1-rc.1` private release candidate
 
 ## Release decision
