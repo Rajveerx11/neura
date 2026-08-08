@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -376,13 +376,35 @@ assert.match(reducedTransition, /no sandbox · no approvals/, "YOLO transition d
 delete process.env.NEURA_REDUCED_MOTION;
 
 await modes.commands.get("mode").handler("plan", context);
+const planGit = "git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false -c log.mailmap=false -c format.pretty=medium";
+const hookProbeRoot = path.join(scratchRoot, "git-hook-probe");
+const hookProbeMarker = path.join(hookProbeRoot, "hook-ran.txt");
+fs.mkdirSync(hookProbeRoot, { recursive: true });
+execFileSync("git", ["init", "--quiet"], { cwd: hookProbeRoot, windowsHide: true });
+const hookProbePath = path.join(hookProbeRoot, ".git", "hooks", "pre-commit");
+fs.writeFileSync(hookProbePath, `#!/bin/sh\nprintf hook-ran > "${hookProbeMarker.replaceAll("\\", "/")}"\n`, "utf-8");
+fs.chmodSync(hookProbePath, 0o755);
+assert.equal(spawnSync("git", ["hook", "run", "pre-commit"], { cwd: hookProbeRoot, windowsHide: true }).status, 0, "safe hook probe did not establish the hostile-repository baseline");
+assert.equal(fs.existsSync(hookProbeMarker), true, "safe hook probe did not create its baseline marker");
+fs.rmSync(hookProbeMarker);
+const hardenedHookProbe = spawnSync("git", [
+  "--no-pager", "--no-optional-locks", "--no-lazy-fetch",
+  "-c", "core.fsmonitor=false",
+  "-c", "core.hooksPath=/dev/null",
+  "-c", "log.showSignature=false",
+  "-c", "log.mailmap=false",
+  "-c", "format.pretty=medium",
+  "hook", "run", "pre-commit",
+], { cwd: hookProbeRoot, windowsHide: true });
+assert.notEqual(hardenedHookProbe.status, 0, "Git found a repository hook beneath the /dev/null no-op hook path");
+assert.equal(fs.existsSync(hookProbeMarker), false, "Git executed a repository hook despite the hardened hook path");
 assert.ok(widgets.has("neura-mode-transition"), "Plan transition animation missing");
 assert.ok(activeTools.includes("publish_plan"), "Plan mode did not activate the bounded plan publisher");
 assert.ok(activeTools.includes("plan_request"), "Plan mode did not activate the deterministic request lifecycle tool");
 assert.ok(activeTools.includes("web_search"), "Plan mode did not activate bounded web search");
 assert.equal(activeTools.includes("web_fetch"), false, "Plan mode activated web_fetch without enforceable DNS and redirect validation");
 assert.equal(activeTools.includes("edit") || activeTools.includes("write"), false, "Plan mode retained generic mutation tools");
-assert.equal(await guard({ toolName: "bash", input: { command: "git status" } }, context), undefined);
+assert.equal(await guard({ toolName: "bash", input: { command: `${planGit} branch --show-current` } }, context), undefined);
 assert.equal((await guard({ toolName: "bash", input: { command: "git status; Remove-Item file.txt" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "Get-Content env:OPENAI_API_KEY" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "rg --pre dangerous-helper pattern" } }, context))?.block, true);
@@ -448,13 +470,18 @@ const planShellAllowed = [
   "rg \"inside,outside\" .",
   "rg \"@args\" .",
   "rg --files ./",
-  "git status --short",
-  "git diff -- inside.txt",
-  "git log --oneline -- inside.txt",
-  "git show HEAD",
-  "git rev-parse --show-toplevel",
-  "git ls-files -- inside.txt",
-  "git branch --show-current",
+  `${planGit} diff --no-ext-diff --no-textconv --cached -- inside.txt`,
+  `${planGit} diff --no-ext-diff --no-textconv --cached --stat HEAD`,
+  `${planGit} diff --no-ext-diff --no-textconv HEAD~1..HEAD --`,
+  `${planGit} log --no-ext-diff --no-textconv --no-use-mailmap --oneline -- inside.txt`,
+  `${planGit} log --no-ext-diff --no-textconv --no-use-mailmap --oneline HEAD~2..HEAD`,
+  `${planGit} log --no-ext-diff --no-textconv --no-use-mailmap --oneline refs/heads/main`,
+  `${planGit} show --no-ext-diff --no-textconv --no-use-mailmap HEAD`,
+  `${planGit} show --no-ext-diff --no-textconv --no-use-mailmap HEAD:inside.txt`,
+  `${planGit} rev-parse --show-toplevel`,
+  `${planGit} ls-files -- inside.txt`,
+  `${planGit} ls-files --stage -- inside.txt`,
+  `${planGit} branch --show-current`,
 ];
 for (const command of planShellAllowed) {
   assert.equal(
@@ -479,9 +506,53 @@ const planShellDenied = [
   "Select-String outside -Path .\\linked-outside\\outside.txt",
   "rg outside .\\linked-outside",
   "rg --follow outside .",
-  `git diff -- "${planBoundaryOutsideFile}"`,
-  `git status "${planBoundaryOutside}"`,
-  `git rev-parse --resolve-git-dir "${planBoundaryOutside}"`,
+  `${planGit} diff --no-ext-diff --no-textconv HEAD~1..HEAD -- "${planBoundaryOutsideFile}"`,
+  `${planGit} status "${planBoundaryOutside}"`,
+  `${planGit} ls-files -- "${planBoundaryOutsideFile}"`,
+  `${planGit} rev-parse --resolve-git-dir "${planBoundaryOutside}"`,
+  "git status --short",
+  "git diff --ext-diff",
+  "git diff --textconv",
+  "git --paginate log --oneline",
+  "git -p log --oneline",
+  "git -c core.fsmonitor=malicious-helper status",
+  "git --no-pager --no-optional-locks -c core.fsmonitor=false status",
+  "git -c diff.external=malicious-helper diff --ext-diff",
+  "git -c diff.binary.textconv=malicious-helper show --textconv HEAD",
+  "git -c core.pager=malicious-helper log --oneline",
+  `${planGit} -c diff.external=malicious-helper diff --no-ext-diff --no-textconv`,
+  `${planGit} --paginate status`,
+  `${planGit} -c log.showSignature=true show --no-ext-diff --no-textconv --no-use-mailmap HEAD`,
+  `${planGit} -c log.mailmap=true log --no-ext-diff --no-textconv --no-use-mailmap HEAD`,
+  `${planGit} -c format.pretty=%G? log --no-ext-diff --no-textconv --no-use-mailmap HEAD`,
+  `${planGit} -c core.hooksPath=.git/hooks status`,
+  `${planGit} -c filter.hostile.process=malicious-helper ls-files --modified`,
+  "git --exec-path=malicious-helper status",
+  `${planGit} diff --no-textconv --ext-diff`,
+  `${planGit} diff --no-ext-diff --textconv`,
+  `${planGit} diff --no-ext-diff --no-textconv -O ..\\outside-order`,
+  `${planGit} log --no-ext-diff --no-textconv --no-use-mailmap --show-signature`,
+  `${planGit} log --no-ext-diff --no-textconv --no-use-mailmap --format=%G?`,
+  `${planGit} log --no-ext-diff --no-textconv HEAD`,
+  `${planGit} log --no-ext-diff --no-textconv --use-mailmap HEAD`,
+  `${planGit} rev-parse --parseopt`,
+  `${planGit} status --short`,
+  `${planGit} diff --no-ext-diff --no-textconv`,
+  `${planGit} diff --no-ext-diff --no-textconv HEAD`,
+  `${planGit} diff --no-ext-diff --no-textconv dead beef`,
+  `${planGit} diff --no-ext-diff --no-textconv HEAD~1..HEAD`,
+  `${planGit} diff --no-ext-diff --no-textconv dead..beef`,
+  `${planGit} diff --no-ext-diff --no-textconv inside.txt`,
+  `${planGit} show --no-ext-diff --no-textconv --no-use-mailmap main`,
+  `${planGit} log --no-ext-diff --no-textconv --no-use-mailmap ..\\outside`,
+  `${planGit} show --no-ext-diff --no-textconv --no-use-mailmap HEAD:../outside.txt`,
+  `${planGit} show --no-ext-diff --no-textconv --no-use-mailmap HEAD:.env`,
+  `${planGit} ls-files --modified`,
+  `${planGit} ls-files --deleted`,
+  `${planGit} ls-files --others`,
+  `${planGit} ls-files --ignored`,
+  `${planGit} ls-files --killed`,
+  `${planGit} ls-files --eol`,
   `Get-Content "${path.join(repoRoot, "README.md")}"`,
   "Get-Content -Pa:C:/Windows/win.ini",
   "Get-Content -DefinitelyNotAParameter .\\inside.txt",

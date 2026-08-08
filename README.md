@@ -31,7 +31,7 @@ infer a security guarantee from a feature being present.
 
 | Mode | Intended use | Enforced behavior |
 |---|---|---|
-| Plan | Research and design before implementation | Activates bounded workspace reads and `web_search`; direct `web_fetch` stays disabled because its delegated backend does not expose DNS, connection-IP, or redirect-hop validation. `read`, `grep`, `find`, and `ls` must resolve inside the canonical workspace. `plan_request` records waiting, revision, and separate-request transitions; only `publish_plan` may write, and only under the project `plans/` directory. |
+| Plan | Research and design before implementation | Activates bounded workspace reads and `web_search`; direct `web_fetch` stays disabled because its delegated backend does not expose DNS, connection-IP, or redirect-hop validation. Filesystem tools resolve inside the canonical workspace. Git inspection is limited to objects, refs, and index-only views under fixed process-blocking options; history disables mailmaps, unstaged diff requires explicit range-plus-separator syntax, and worktree-aware modes are denied. `plan_request` records waiting, revision, and separate-request transitions; only `publish_plan` may write, and only under the project `plans/` directory. |
 | YOLO | Codex-style dangerous full access | Disables Neura application approvals and tool blocking. Native Windows provides no OS sandbox, so filesystem, network, and external tools inherit the signed-in user's permissions. YOLO expands execution permission, not task scope. |
 | Human Away Preview | Low-risk work while Rajveer is unavailable | Uses deterministic policy plus an isolated no-tool reviewer. Deferred work enters a local approval queue. No OS sandbox exists, so this mode stays preview-only. |
 

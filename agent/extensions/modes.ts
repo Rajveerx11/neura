@@ -39,7 +39,7 @@ Research the current user prompt, then publish one human-readable visual HTML pl
 
 Workflow:
 1. Understand the objective, scope, constraints, and observable definition of done.
-2. Inspect relevant code, documentation, existing actions, schemas, tests, and patterns. Name real evidence.
+2. Inspect relevant code, documentation, existing actions, schemas, tests, and patterns. Name real evidence. Git inspection is limited to objects, refs, and the index: use \`git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false -c log.mailmap=false -c format.pretty=medium <command>\`. For \`diff\`, pass \`--no-ext-diff --no-textconv\`; unstaged comparisons require one explicit \`A..B\` or \`A...B\` range followed by \`--\`. For \`log\` or \`show\`, also pass \`--no-ext-diff --no-textconv --no-use-mailmap\`. Worktree status/diff and worktree-aware index modes are blocked.
 3. Research current external facts with web_search when libraries, APIs, standards, products, or outside knowledge affect the direction. Prefer primary sources. Direct web_fetch is unavailable because its backend does not expose DNS, connection-IP, or redirect-hop validation.
 4. Choose one recommended approach. Ask only when an unresolved choice would materially change architecture or scope.
    - Prefer questionnaire when its interactive UI can resolve the choice immediately.

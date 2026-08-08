@@ -22,6 +22,14 @@ fix. Never include a real credential or private user data.
 ## Current security model
 
 - Plan uses a fixed tool set and canonical workspace containment.
+- Plan Git inspection accepts only command-specific read options. Every Git call
+  disables paging, optional locks, lazy fetching, configured filesystem monitors,
+  repository hooks, configured or custom signature display, and mailmaps; diff,
+  log, and show also disable external diff and text-conversion drivers. Git reads
+  are limited to objects, refs, and the index because worktree inspection can
+  invoke configured clean or process filters. Unstaged diff requires one explicit
+  revision range followed by `--` so filename-like tokens cannot select the
+  worktree form.
 - Plan permits bounded `web_search` but denies direct `web_fetch`; its delegated
   backend does not expose DNS answers, connection IPs, or redirect hops needed
   for SSRF-safe enforcement.
