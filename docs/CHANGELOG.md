@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Audited and synced the generated live harness through `install.ps1`. All nine
+  semantically drifted tracked files matched older repository blobs, while local
+  settings, keybindings, and unrelated local-only files were preserved. The
+  installer removed retired `autogit.ts`, and `install.ps1 -Check` now passes.
 - Extended Plan publication enforcement to TUI, print, JSON, and RPC input.
   Missing artifacts now queue one retry from Pi's continuation-safe `agent_end`
   hook without a UI dependency. Exhausted requests emit a versioned
