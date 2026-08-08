@@ -16,7 +16,7 @@ and [release notes](docs/releases/v2.5.1-rc.1.md).
 |---|---|---|
 | Identity | Logo-only launch, Neura persona, session-only Forged Tungsten theme | `agent/extensions/neura.ts`, `agent/neura/NEURA.md`, `agent/themes/neura-dark.json` |
 | Modes | Plan, YOLO, Human Away Preview, Shift+Tab switching, persisted mode state | `agent/extensions/modes.ts`, `agent/neura/mode-state.ts` |
-| Plan | Bounded web search and one structured HTML publisher under `plans/` | `agent/extensions/plan-artifact.ts`, `agent/neura/plan-policy.ts`, `agent/neura/plan-renderer.ts` |
+| Plan | Bounded web search, explicit request lifecycle, and one structured HTML publisher under `plans/` | `agent/extensions/plan-artifact.ts`, `agent/neura/plan-policy.ts`, `agent/neura/plan-renderer.ts` |
 | Policy | Plan containment, Human Away action classification and review queue, explicit YOLO bypass | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts` |
 | Recovery | In-memory Git worktree checkpoints and `/undo` | `agent/extensions/checkpoint.ts` |
 | Verification | Quick proof-of-work feedback and full `/ship` command | `agent/extensions/check-gate.ts` |
@@ -31,7 +31,7 @@ infer a security guarantee from a feature being present.
 
 | Mode | Intended use | Enforced behavior |
 |---|---|---|
-| Plan | Research and design before implementation | Activates bounded workspace reads and `web_search`; direct `web_fetch` stays disabled because its delegated backend does not expose DNS, connection-IP, or redirect-hop validation. Filesystem tools resolve inside the canonical workspace. Git inspection is limited to objects, refs, and index-only views under fixed process-blocking options; history disables mailmaps, unstaged diff requires explicit range-plus-separator syntax, and worktree-aware modes are denied. Only `publish_plan` may write, and only under the project `plans/` directory. |
+| Plan | Research and design before implementation | Activates bounded workspace reads and `web_search`; direct `web_fetch` stays disabled because its delegated backend does not expose DNS, connection-IP, or redirect-hop validation. Filesystem tools resolve inside the canonical workspace. Git inspection is limited to objects, refs, and index-only views under fixed process-blocking options; history disables mailmaps, unstaged diff requires explicit range-plus-separator syntax, and worktree-aware modes are denied. `plan_request` records waiting, revision, and separate-request transitions; only `publish_plan` may write, and only under the project `plans/` directory. |
 | YOLO | Codex-style dangerous full access | Disables Neura application approvals and tool blocking. Native Windows provides no OS sandbox, so filesystem, network, and external tools inherit the signed-in user's permissions. YOLO expands execution permission, not task scope. |
 | Human Away Preview | Low-risk work while Rajveer is unavailable | Uses deterministic policy plus an isolated no-tool reviewer. Deferred work enters a local approval queue. No OS sandbox exists, so this mode stays preview-only. |
 

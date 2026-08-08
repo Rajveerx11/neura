@@ -400,6 +400,7 @@ assert.notEqual(hardenedHookProbe.status, 0, "Git found a repository hook beneat
 assert.equal(fs.existsSync(hookProbeMarker), false, "Git executed a repository hook despite the hardened hook path");
 assert.ok(widgets.has("neura-mode-transition"), "Plan transition animation missing");
 assert.ok(activeTools.includes("publish_plan"), "Plan mode did not activate the bounded plan publisher");
+assert.ok(activeTools.includes("plan_request"), "Plan mode did not activate the deterministic request lifecycle tool");
 assert.ok(activeTools.includes("web_search"), "Plan mode did not activate bounded web search");
 assert.equal(activeTools.includes("web_fetch"), false, "Plan mode activated web_fetch without enforceable DNS and redirect validation");
 assert.equal(activeTools.includes("edit") || activeTools.includes("write"), false, "Plan mode retained generic mutation tools");
@@ -604,20 +605,38 @@ for (const url of deniedPlanFetchUrls) {
 }
 assert.equal(await guard({ toolName: "publish_plan", input: { slug: "plan-mode-v1" } }, context), undefined);
 assert.equal((await guard({ toolName: "publish_plan", input: { slug: "../escape" } }, context))?.block, true, "Plan publisher accepted path traversal");
+assert.equal(await guard({ toolName: "plan_request", input: { action: "wait_for_input" } }, context), undefined);
+assert.equal((await guard({ toolName: "plan_request", input: { action: "guess_from_text" } }, context))?.block, true, "Plan lifecycle accepted an unknown semantic transition");
 
 // Plan publication: structured input, escaped browser output, collision-safe creation,
-// one-artifact-per-request binding, session-owned revision, external-edit protection,
-// and symlink fail-closed behavior.
+// explicit clarification/new/revision lifecycle, one-artifact-per-request binding,
+// session-owned revision, external-edit protection, and symlink fail-closed behavior.
 const planArtifact = extensionWithTool("publish_plan");
 await firstHandler(planArtifact, "session_start")({}, context);
 sentUserMessages.length = 0;
 await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan this change" }, context);
+const planRequest = planArtifact.tools.get("plan_request").definition.execute;
+await planRequest("plan-wait-steer", { action: "wait_for_input" }, undefined, undefined, context);
 await firstHandler(planArtifact, "agent_settled")({}, context);
-assert.equal(sentUserMessages.length, 1, "Missing Plan artifact did not trigger one automatic retry");
+assert.equal(sentUserMessages.length, 0, "Material clarification triggered a publication retry before the user could answer");
+await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "steer", text: "Questionnaire answer: keep compatibility" }, context);
+await planRequest("plan-wait-follow-up", { action: "wait_for_input" }, undefined, undefined, context);
+await firstHandler(planArtifact, "agent_settled")({}, context);
+assert.equal(sentUserMessages.length, 0, "Steered clarification answer did not preserve a deliberate second wait");
+await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "followUp", text: "Follow-up answer: preserve the current API" }, context);
+await firstHandler(planArtifact, "agent_settled")({}, context);
+assert.equal(sentUserMessages.length, 1, "Queued clarification answer did not resume the request's one-retry publication contract");
 assert.match(sentUserMessages[0].content, /call publish_plan/, "Plan retry did not name the required publisher");
+await firstHandler(planArtifact, "session_start")({}, {
+  ...context,
+  sessionManager: {
+    getBranch: () => appendedEntries.map((entry) => ({ type: "custom", ...entry })),
+  },
+});
+await planRequest("plan-wait-after-retry", { action: "wait_for_input" }, undefined, undefined, context);
+await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "followUp", text: "Final clarification answer" }, context);
 await firstHandler(planArtifact, "agent_settled")({}, context);
-assert.equal(sentUserMessages.length, 1, "Missing Plan artifact exceeded the one-retry cap");
-await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan this change again" }, context);
+assert.equal(sentUserMessages.length, 1, "Session restart allowed a second publication retry for one request");
 const publishPlan = planArtifact.tools.get("publish_plan").definition.execute;
 const planWorkspace = path.join(scratchRoot, "plan-workspace");
 fs.mkdirSync(path.join(planWorkspace, ".git"), { recursive: true });
@@ -682,6 +701,11 @@ const firstPublication = await publishPlan("plan-create", planFixture, undefined
 const messagesAfterPublication = sentUserMessages.length;
 await firstHandler(planArtifact, "agent_settled")({}, publishContext);
 assert.equal(sentUserMessages.length, messagesAfterPublication, "Published Plan incorrectly triggered a retry");
+for (const text of ["Approved", "What is the status?", "Hand this plan off for implementation"]) {
+  await firstHandler(planArtifact, "input")({ source: "interactive", text }, publishContext);
+  await firstHandler(planArtifact, "agent_settled")({}, publishContext);
+}
+assert.equal(sentUserMessages.length, messagesAfterPublication, "Approval, status, or handoff reply restarted the publication contract");
 assert.equal(firstPublication.details.revision, false, "First Plan publication was marked as a revision");
 assert.equal(path.basename(firstPublication.details.path), "plan-mode-v1-plan-2.html", "Publisher overwrote or ignored an existing human plan");
 assert.equal(fs.readFileSync(existingPlan, "utf-8"), "human-owned plan", "Existing human plan was overwritten");
@@ -703,6 +727,8 @@ assert.match(firstHtml, /flow-link/, "Published flow visual lacks connectors");
 assert.match(firstHtml, /prefers-reduced-motion:reduce/, "Published plan lacks reduced-motion handling");
 
 const revisedFixture = { ...planFixture, target: "Plan mode publishes a revised, validated local HTML artifact after research." };
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Revise the target wording" }, publishContext);
+await planRequest("plan-revision", { action: "revise_published" }, undefined, undefined, publishContext);
 const secondPublication = await publishPlan("plan-revise", revisedFixture, undefined, undefined, publishContext);
 assert.equal(secondPublication.details.path, firstPublication.details.path, "Session-owned revision created a second file");
 assert.equal(secondPublication.details.revision, true, "Session-owned update was not marked as a revision");
@@ -712,7 +738,10 @@ for (const streamingBehavior of ["steer", "followUp"]) {
     { source: "interactive", streamingBehavior, text: "Also publish a separate backend plan" },
     publishContext,
   );
+  await firstHandler(planArtifact, "agent_settled")({}, publishContext);
 }
+assert.equal(sentUserMessages.length, messagesAfterPublication, "Steered or queued reply restarted a published Plan request");
+await planRequest("plan-revision-binding", { action: "revise_published" }, undefined, undefined, publishContext);
 await assert.rejects(
   publishPlan(
     "plan-second-slug",
@@ -746,6 +775,7 @@ const restartedRevision = await publishPlan("plan-revise-after-restart", revised
 assert.equal(restartedRevision.details.path, firstPublication.details.path, "Session reload changed the same-slug revision path");
 assert.equal(restartedRevision.details.revision, true, "Session reload lost same-slug revision ownership");
 fs.writeFileSync(secondPublication.details.path, "external human edit", "utf-8");
+await planRequest("plan-conflict-revision", { action: "revise_published" }, undefined, undefined, publishContext);
 await assert.rejects(
   publishPlan("plan-conflict", revisedFixture, undefined, undefined, publishContext),
   /changed outside this session/,
@@ -757,7 +787,27 @@ await assert.rejects(
   "Publisher accepted a traversal slug",
 );
 
+const originalArtifactPath = restartedRevision.details.path;
+const originalArtifactContent = fs.readFileSync(originalArtifactPath, "utf-8");
+await planRequest("plan-new-reused-slug", { action: "start_new" }, undefined, undefined, publishContext);
+const reusedSlugPublication = await publishPlan(
+  "plan-reused-slug",
+  { ...revisedFixture, target: "A separate request may reuse a slug without overwriting the earlier artifact." },
+  undefined,
+  undefined,
+  publishContext,
+);
+assert.equal(reusedSlugPublication.details.revision, false, "Separate request with a reused slug was treated as a revision");
+assert.notEqual(reusedSlugPublication.details.path, originalArtifactPath, "Separate request reused the previous artifact path");
+assert.equal(fs.readFileSync(originalArtifactPath, "utf-8"), originalArtifactContent, "Separate request overwrote the previous artifact");
+
 await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan a separate backend change" }, publishContext);
+await planRequest("plan-new-request", { action: "start_new" }, undefined, undefined, publishContext);
+const messagesBeforeNewRequestRetry = sentUserMessages.length;
+await firstHandler(planArtifact, "agent_settled")({}, publishContext);
+assert.equal(sentUserMessages.length, messagesBeforeNewRequestRetry + 1, "Separate Plan request lost the one-retry publication contract");
+await firstHandler(planArtifact, "agent_settled")({}, publishContext);
+assert.equal(sentUserMessages.length, messagesBeforeNewRequestRetry + 1, "Separate Plan request exceeded the one-retry cap");
 await firstHandler(planArtifact, "session_start")({}, {
   ...publishContext,
   sessionManager: {
@@ -776,6 +826,7 @@ assert.doesNotMatch(noPreviewHtml, /href="#preview"|class="future-preview"/, "Ba
 assert.doesNotMatch(noPreviewHtml, /preview above/, "Backend-only plan refers to a missing preview");
 
 await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan the symlink boundary" }, publishContext);
+await planRequest("plan-new-symlink-request", { action: "start_new" }, undefined, undefined, publishContext);
 const symlinkWorkspace = path.join(scratchRoot, "plan-symlink-workspace");
 const externalPlans = path.join(scratchRoot, "external-plans");
 fs.mkdirSync(path.join(symlinkWorkspace, ".git"), { recursive: true });
@@ -789,7 +840,79 @@ await assert.rejects(
 
 await modes.commands.get("mode").handler("yolo", context);
 assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active outside Plan mode");
+assert.equal(activeTools.includes("plan_request"), false, "Plan lifecycle tool remained active outside Plan mode");
 assert.equal(activeTools.includes("web_fetch"), true, "Leaving Plan for YOLO did not restore web_fetch");
+
+// Late MCP registration may refresh and activate tools after Plan has already
+// applied its boundary. Preserve that live non-Plan selection while keeping the
+// tool unavailable in Plan, and do not resurrect user-disabled tools on exit.
+activeTools = activeTools.filter((name) => name !== "write");
+await modes.commands.get("mode").handler("plan", context);
+const lateMcpTool = "mcp__late__mutate";
+const enabledMcpTool = "mcp__enabled__read";
+registeredToolNames.push(lateMcpTool, enabledMcpTool);
+activeTools = [...activeTools, lateMcpTool, enabledMcpTool];
+await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
+activeTools = [...activeTools, lateMcpTool, enabledMcpTool];
+const lateProviderPayload = await firstHandler(modes, "before_provider_request")({
+  payload: {
+    model: "gpt-5.5",
+    tools: [
+      { type: "function", name: "read", parameters: {} },
+      { type: "function", name: lateMcpTool, parameters: {} },
+      { type: "function", name: enabledMcpTool, parameters: {} },
+      { type: "unknown-provider-tool" },
+    ],
+  },
+}, context);
+assert.equal(activeTools.includes(lateMcpTool), false, "Late MCP activation escaped the Plan tool boundary");
+assert.equal(activeTools.includes(enabledMcpTool), false, "Second late MCP activation escaped the Plan tool boundary");
+assert.equal(activeTools.includes("write"), false, "Plan re-enabled a user-disabled tool");
+assert.deepEqual(
+  lateProviderPayload.tools.map((tool) => tool.name),
+  ["read"],
+  "Plan provider payload exposed a late or unrecognized tool schema",
+);
+const anthropicPlanPayload = await firstHandler(modes, "before_provider_request")({
+  payload: {
+    model: "claude-sonnet",
+    tools: [
+      { name: "Read", input_schema: {} },
+      { name: "Bash", input_schema: {} },
+      { name: "Grep", input_schema: {} },
+      { name: "Edit", input_schema: {} },
+    ],
+  },
+}, context);
+assert.deepEqual(
+  anthropicPlanPayload.tools.map((tool) => tool.name),
+  ["Read", "Bash", "Grep"],
+  "Plan payload filtering rejected Anthropic canonical names or retained Edit",
+);
+const openAiCompletionsPayload = await firstHandler(modes, "before_provider_request")({
+  payload: {
+    model: "gpt-5.5",
+    tools: [
+      { type: "function", function: { name: "read", parameters: {} } },
+      { type: "function", function: { name: lateMcpTool, parameters: {} } },
+    ],
+  },
+}, context);
+assert.deepEqual(
+  openAiCompletionsPayload.tools.map((tool) => tool.function.name),
+  ["read"],
+  "Plan payload filtering exposed a forbidden OpenAI Completions function",
+);
+const lateMcpWorkspace = path.join(scratchRoot, "late-mcp-workspace");
+fs.mkdirSync(lateMcpWorkspace, { recursive: true });
+fs.writeFileSync(path.join(lateMcpWorkspace, "mcp.json"), JSON.stringify({
+  mcpServers: { late: { url: "https://example.com/mcp", disabled: true } },
+}));
+await modes.commands.get("mode").handler("yolo", { ...context, cwd: lateMcpWorkspace });
+assert.equal(activeTools.includes(lateMcpTool), false, "Leaving Plan restored an MCP server disabled while hidden");
+assert.equal(activeTools.includes(enabledMcpTool), true, "Leaving Plan lost an enabled late MCP activation");
+assert.equal(activeTools.includes("write"), false, "Leaving Plan restored a stale tool selection");
+
 assert.equal(await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context), undefined);
 assert.equal(
   await guard(
