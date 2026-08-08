@@ -1,6 +1,9 @@
 // Neura modes v1: Plan, YOLO, and Human Away Preview. Shift+Tab cycles modes.
 // Motion visualizes enforced capability changes; deterministic policy remains authoritative.
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Key, truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/cockpit-state.ts";
 import { PALETTE, fg } from "../neura/core.ts";
@@ -18,10 +21,17 @@ import {
 
 const MODE_ENTRY = "neura-mode-state";
 const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
+const PLAN_ONLY_TOOLS = new Set([PUBLISH_PLAN_TOOL, PLAN_REQUEST_TOOL]);
+const PROVIDER_PLAN_TOOL_ALIASES = new Map([
+  ["Read", "read"],
+  ["Bash", "bash"],
+  ["Grep", "grep"],
+]);
 const { accent: ACC, dim: DIM, error: ERROR, human: HUMAN, muted: MUT, plan: PLAN, success: OK, text: TXT, warning: WARN } = PALETTE;
 
 type PersistedMode = { mode?: AgentMode; changedAt?: string };
 type ModeBoundary = { color: string; capabilities: Array<[string, string]>; verdict: string };
+type McpServerEntry = { disabled?: unknown; enabled?: unknown };
 
 const MODE_PROMPTS: Record<AgentMode, string> = {
   plan: `[NEURA MODE: PLAN]
@@ -133,7 +143,9 @@ export function approvalLines(records: ApprovalRecord[], width: number, audit = 
 export default function (pi) {
   if (!process.env.NEURA) return;
 
-  let normalTools: string[] | undefined;
+  let nonPlanTools: string[] | undefined;
+  let enforcedPlanTools: string[] = [];
+  let planBoundaryActive = false;
   let transitionGeneration = 0;
   let returnShown = false;
 
@@ -196,14 +208,118 @@ export default function (pi) {
     }, { placement: "belowEditor" });
   }
 
-  function planToolNames(): string[] {
-    try { return pi.getAllTools().map((tool) => tool.name).filter((name) => PLAN_TOOLS.has(name)); }
-    catch { return (normalTools ?? pi.getActiveTools()).filter((name) => PLAN_TOOLS.has(name)); }
+  function uniqueToolNames(names: string[]): string[] {
+    return [...new Set(names)];
   }
 
-  function applyToolBoundary(mode: AgentMode): void {
-    if (!normalTools) normalTools = pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL && name !== PLAN_REQUEST_TOOL);
-    pi.setActiveTools(mode === "plan" ? planToolNames() : normalTools);
+  function availableToolNames(): Set<string> {
+    try { return new Set(pi.getAllTools().map((tool) => tool.name)); }
+    catch { return new Set(pi.getActiveTools()); }
+  }
+
+  function rememberNonPlanSelection(names = pi.getActiveTools()): void {
+    nonPlanTools = uniqueToolNames(names.filter((name) => !PLAN_ONLY_TOOLS.has(name)));
+  }
+
+  function observePlanSelectionChanges(): void {
+    if (!nonPlanTools) rememberNonPlanSelection();
+    const current = uniqueToolNames(pi.getActiveTools());
+    const currentSet = new Set(current);
+    const enforcedSet = new Set(enforcedPlanTools);
+    const removedPlanTools = new Set(
+      enforcedPlanTools.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !currentSet.has(name)),
+    );
+    const retained = nonPlanTools!.filter((name) => !removedPlanTools.has(name));
+    const additions = current.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !enforcedSet.has(name));
+    nonPlanTools = uniqueToolNames([...retained, ...additions]);
+  }
+
+  function planToolNames(): string[] {
+    const available = availableToolNames();
+    const selected = (nonPlanTools ?? []).filter((name) => available.has(name) && PLAN_TOOLS.has(name));
+    for (const name of PLAN_ONLY_TOOLS) {
+      if (available.has(name)) selected.push(name);
+    }
+    return uniqueToolNames(selected);
+  }
+
+  function setActiveTools(names: string[]): void {
+    const current = pi.getActiveTools();
+    if (current.length === names.length && current.every((name, index) => name === names[index])) return;
+    pi.setActiveTools(names);
+  }
+
+  function readMcpServers(configPath: string): Record<string, McpServerEntry> {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (!parsed?.mcpServers || typeof parsed.mcpServers !== "object" || Array.isArray(parsed.mcpServers)) return {};
+      return parsed.mcpServers;
+    } catch {
+      return {};
+    }
+  }
+
+  function disabledMcpServers(cwd: string): Set<string> {
+    const globalServers = readMcpServers(path.join(getAgentDir(), "mcp.json"));
+    const projectConfig = [path.join(cwd, "mcp.json"), path.join(cwd, ".mcp.json")]
+      .find((candidate) => fs.existsSync(candidate));
+    const projectServers = projectConfig ? readMcpServers(projectConfig) : {};
+    const merged = { ...globalServers, ...projectServers };
+    return new Set(Object.entries(merged)
+      .filter(([, entry]) => entry?.disabled === true || entry?.enabled === false)
+      .map(([name]) => name));
+  }
+
+  function isDisabledMcpTool(toolName: string, disabledServers: Set<string>): boolean {
+    for (const server of disabledServers) {
+      if (toolName.startsWith(`mcp__${server}__`)) return true;
+    }
+    return false;
+  }
+
+  function providerToolName(value: unknown): string | undefined {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const tool = value as { name?: unknown; function?: { name?: unknown } };
+    if (typeof tool.name === "string") return tool.name;
+    return typeof tool.function?.name === "string" ? tool.function.name : undefined;
+  }
+
+  function filterPlanProviderPayload(payload: unknown): unknown {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+    const record = payload as Record<string, unknown>;
+    if (!("tools" in record)) return record;
+    if (!Array.isArray(record.tools)) return { ...record, tools: [] };
+    return {
+      ...record,
+      tools: record.tools.filter((tool) => {
+        const name = providerToolName(tool);
+        if (name === undefined) return false;
+        return enforcedPlanTools.includes(PROVIDER_PLAN_TOOL_ALIASES.get(name) ?? name);
+      }),
+    };
+  }
+
+  function applyToolBoundary(mode: AgentMode, cwd: string): void {
+    if (mode === "plan") {
+      if (planBoundaryActive) observePlanSelectionChanges();
+      else rememberNonPlanSelection();
+      enforcedPlanTools = planToolNames();
+      planBoundaryActive = true;
+      setActiveTools(enforcedPlanTools);
+      return;
+    }
+
+    if (planBoundaryActive) observePlanSelectionChanges();
+    else rememberNonPlanSelection();
+    const available = availableToolNames();
+    const disabledServers = disabledMcpServers(cwd);
+    const restored = (nonPlanTools ?? []).filter(
+      (name) => available.has(name) && !isDisabledMcpTool(name, disabledServers),
+    );
+    nonPlanTools = restored;
+    planBoundaryActive = false;
+    enforcedPlanTools = [];
+    setActiveTools(restored);
   }
 
   function persistMode(): void {
@@ -220,7 +336,7 @@ export default function (pi) {
       return;
     }
     setMode(next, source);
-    applyToolBoundary(next);
+    applyToolBoundary(next, ctx.cwd);
     persistMode();
     returnShown = false;
     patchCockpit({ approval: undefined });
@@ -327,7 +443,6 @@ export default function (pi) {
   });
 
   pi.on("session_start", (_event, ctx) => {
-    normalTools ??= pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL && name !== PLAN_REQUEST_TOOL);
     returnShown = false;
     let restored: AgentMode = "yolo";
     try {
@@ -337,10 +452,11 @@ export default function (pi) {
       if (isAgentMode(entry?.data?.mode)) restored = entry.data.mode;
     } catch {}
     setMode(restored, "restore");
-    applyToolBoundary(restored);
+    applyToolBoundary(restored, ctx.cwd);
   });
 
   pi.on("input", (event, ctx) => {
+    if (getMode() === "plan") applyToolBoundary("plan", ctx.cwd);
     if (event.source !== "interactive" || getMode() !== "human-away" || returnShown) return;
     let pending: ApprovalRecord[] = [];
     try { pending = listPending(ctx.cwd); }
@@ -354,5 +470,16 @@ export default function (pi) {
     ctx.ui.notify(`${pending.length} Neura action request${pending.length === 1 ? " is" : "s are"} waiting · /approvals`, "warning");
   });
 
-  pi.on("before_agent_start", (event) => ({ systemPrompt: `${event.systemPrompt}\n\n${MODE_PROMPTS[getMode()]}` }));
+  pi.on("before_agent_start", (event, ctx) => {
+    applyToolBoundary(getMode(), ctx.cwd);
+    return { systemPrompt: `${event.systemPrompt}\n\n${MODE_PROMPTS[getMode()]}` };
+  });
+
+  // Async extensions can register and activate tools after before_agent_start.
+  // Reconcile at the provider boundary and filter its already-snapshotted tool
+  // schemas; the deterministic tool-call guard remains defense in depth.
+  pi.on("before_provider_request", (event, ctx) => {
+    applyToolBoundary(getMode(), ctx.cwd);
+    return getMode() === "plan" ? filterPlanProviderPayload(event.payload) : event.payload;
+  });
 }
