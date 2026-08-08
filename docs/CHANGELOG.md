@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Restricted Plan-mode Git inspection to exact read-only command options with
+  paging, optional locks, lazy fetching, configured filesystem monitors,
+  repository hooks, signature display/format, external diff drivers, and
+  text-conversion filters disabled. Disabled mailmap reads. Limited Git reads to
+  objects, refs, and the index; unstaged diff requires one explicit revision
+  range followed by `--`, while worktree status/diff and worktree-aware index
+  modes fail closed.
+  Added explicit revision/object parsing and negative regression coverage for
+  process-launching Git options and config overrides.
 - Replaced Plan's per-message publication reset with an explicit request lifecycle.
   Material clarification can wait without an automatic retry; its answer resumes
   the same request. Approval, status, and handoff replies keep published plans
