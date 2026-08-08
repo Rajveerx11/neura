@@ -6,6 +6,7 @@ import * as path from "node:path";
 export const PUBLISH_PLAN_TOOL = "publish_plan";
 export const PLAN_REQUEST_TOOL = "plan_request";
 export const PLAN_ARTIFACT_ENTRY = "neura-plan-artifact";
+export const PLAN_CONTRACT_ENTRY = "neura-plan-contract";
 export const MAX_PLAN_HTML_BYTES = 512 * 1024;
 export const MAX_PLAN_INPUT_BYTES = 256 * 1024;
 

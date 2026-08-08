@@ -9,6 +9,7 @@ import {
   MAX_PLAN_HTML_BYTES,
   MAX_PLAN_INPUT_BYTES,
   PLAN_ARTIFACT_ENTRY,
+  PLAN_CONTRACT_ENTRY,
   PLAN_REQUEST_TOOL,
   PUBLISH_PLAN_TOOL,
   assertOwnedPlanPath,
@@ -30,6 +31,9 @@ type PlanLifecycle = "idle" | "planning" | "waiting" | "published";
 const PLAN_REQUEST_RESET_ENTRY = "neura-plan-request-reset";
 const PLAN_LIFECYCLE_ENTRY = "neura-plan-lifecycle";
 const PLAN_RETRY_ENTRY = "neura-plan-publication-retry";
+const MAX_PUBLICATION_RETRIES = 1;
+const PLAN_CONTRACT_VERSION = 1;
+const MISSING_ARTIFACT_CODE = "PLAN_ARTIFACT_MISSING";
 
 const Text = (description: string, minLength: number, maxLength: number) => Type.String({ description, minLength, maxLength });
 const TextList = (description: string, minItems: number, maxItems: number, maxLength = 300) => Type.Array(
@@ -131,6 +135,25 @@ function isPlanLifecycle(value: unknown): value is { state: Exclude<PlanLifecycl
     && (record.resetRetry === undefined || typeof record.resetRetry === "boolean");
 }
 
+function isFailedPlanContract(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.version === PLAN_CONTRACT_VERSION
+    && record.status === "failed"
+    && record.code === MISSING_ARTIFACT_CODE;
+}
+
+function completedAssistantRun(messages: unknown): boolean {
+  if (!Array.isArray(messages)) return false;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message || typeof message !== "object" || Array.isArray(message)) continue;
+    const record = message as Record<string, unknown>;
+    if (record.role === "assistant") return record.stopReason === "stop";
+  }
+  return false;
+}
+
 function aborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Plan publication aborted.");
 }
@@ -160,6 +183,8 @@ export default function (pi): void {
   let planForPrompt: PromptPlanIdentity | undefined;
   let lifecycle: PlanLifecycle = "idle";
   let publicationRetries = 0;
+  let contractFailureRecorded = false;
+  let lastAttemptCompleted = false;
 
   function persistLifecycle(state: "planning" | "waiting", resetRetry = false): void {
     try { pi.appendEntry(PLAN_LIFECYCLE_ENTRY, resetRetry ? { state, resetRetry: true } : { state }); }
@@ -170,6 +195,8 @@ export default function (pi): void {
     planForPrompt = undefined;
     lifecycle = "planning";
     publicationRetries = 0;
+    contractFailureRecorded = false;
+    lastAttemptCompleted = false;
     try { pi.appendEntry(PLAN_REQUEST_RESET_ENTRY); }
     catch {}
   }
@@ -203,6 +230,8 @@ export default function (pi): void {
         }
         lifecycle = "planning";
         publicationRetries = 0;
+        contractFailureRecorded = false;
+        lastAttemptCompleted = false;
         persistLifecycle("planning", true);
         return { content: [{ type: "text", text: `Revision opened for slug "${planForPrompt.slug}". Publish the update with that same slug.` }] };
       }
@@ -211,6 +240,14 @@ export default function (pi): void {
       }
       lifecycle = "waiting";
       persistLifecycle("waiting");
+      try {
+        pi.appendEntry(PLAN_CONTRACT_ENTRY, {
+          version: PLAN_CONTRACT_VERSION,
+          status: "waiting",
+          retries: publicationRetries,
+          maxRetries: MAX_PUBLICATION_RETRIES,
+        });
+      } catch {}
       return { content: [{ type: "text", text: "Planning request is waiting for material user input. Ask the question and stop; no publication retry will run." }] };
     },
   });
@@ -291,16 +328,29 @@ export default function (pi): void {
       planForPrompt = ownership;
       lifecycle = "published";
       publicationRetries = 0;
+      contractFailureRecorded = false;
       let persisted = true;
       try { pi.appendEntry(PLAN_ARTIFACT_ENTRY, ownership); }
       catch { persisted = false; }
       const relative = path.relative(projectRoot, destination!);
+      let contractPersisted = true;
+      try {
+        pi.appendEntry(PLAN_CONTRACT_ENTRY, {
+          version: PLAN_CONTRACT_VERSION,
+          status: "published",
+          slug: ownership.slug,
+          path: ownership.path,
+          relativePath: relative,
+          sha256: ownership.sha256,
+          revision,
+        });
+      } catch { contractPersisted = false; }
       return {
         content: [{
           type: "text",
           text: `${revision ? "Revised" : "Created"} ${relative}\nSHA-256 ${nextHash}\nStop and ask Rajveer to review this plan before implementation.`,
         }],
-        details: { ...ownership, relativePath: relative, bytes: htmlBytes, revision, ownershipPersisted: persisted },
+        details: { ...ownership, relativePath: relative, bytes: htmlBytes, revision, ownershipPersisted: persisted, contractPersisted },
       };
     },
   });
@@ -310,6 +360,8 @@ export default function (pi): void {
     planForPrompt = undefined;
     lifecycle = "idle";
     publicationRetries = 0;
+    contractFailureRecorded = false;
+    lastAttemptCompleted = false;
     let entries: Array<{ type?: string; customType?: string; data?: unknown }> = [];
     try { entries = ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries?.() ?? []; }
     catch { return; }
@@ -318,15 +370,25 @@ export default function (pi): void {
         planForPrompt = undefined;
         lifecycle = "planning";
         publicationRetries = 0;
+        contractFailureRecorded = false;
+        lastAttemptCompleted = false;
         continue;
       }
       if (entry.type === "custom" && entry.customType === PLAN_LIFECYCLE_ENTRY && isPlanLifecycle(entry.data)) {
         lifecycle = entry.data.state;
-        if (entry.data.resetRetry) publicationRetries = 0;
+        if (entry.data.resetRetry) {
+          publicationRetries = 0;
+          contractFailureRecorded = false;
+          lastAttemptCompleted = false;
+        }
         continue;
       }
       if (entry.type === "custom" && entry.customType === PLAN_RETRY_ENTRY) {
-        publicationRetries = 1;
+        publicationRetries = MAX_PUBLICATION_RETRIES;
+        continue;
+      }
+      if (entry.type === "custom" && entry.customType === PLAN_CONTRACT_ENTRY && isFailedPlanContract(entry.data)) {
+        contractFailureRecorded = true;
         continue;
       }
       if (entry.type !== "custom" || entry.customType !== PLAN_ARTIFACT_ENTRY || !isOwnedPlan(entry.data)) continue;
@@ -334,11 +396,13 @@ export default function (pi): void {
       planForPrompt = entry.data;
       lifecycle = "published";
       publicationRetries = 0;
+      contractFailureRecorded = false;
     }
   });
 
   pi.on("input", (event) => {
-    if (event.source !== "interactive" || getMode() !== "plan") return;
+    if (event.source === "extension" || getMode() !== "plan") return;
+    lastAttemptCompleted = false;
     if (lifecycle === "idle") {
       startNewRequest();
       return;
@@ -349,19 +413,47 @@ export default function (pi): void {
     }
   });
 
-  pi.on("agent_settled", (_event, ctx) => {
-    if (getMode() !== "plan" || lifecycle !== "planning") return;
-    if (publicationRetries < 1 && ctx.hasUI) {
+  pi.on("agent_end", (event) => {
+    lastAttemptCompleted = completedAssistantRun(event.messages);
+    if (!lastAttemptCompleted) return;
+    if (getMode() !== "plan" || lifecycle !== "planning" || contractFailureRecorded) return;
+    if (publicationRetries < MAX_PUBLICATION_RETRIES) {
       publicationRetries++;
       try { pi.appendEntry(PLAN_RETRY_ENTRY); }
       catch {}
+      try {
+        pi.appendEntry(PLAN_CONTRACT_ENTRY, {
+          version: PLAN_CONTRACT_VERSION,
+          status: "retrying",
+          code: MISSING_ARTIFACT_CODE,
+          retry: publicationRetries,
+          maxRetries: MAX_PUBLICATION_RETRIES,
+        });
+      } catch {}
       pi.sendUserMessage(
         "[PLAN CONTRACT RETRY] No HTML plan was published for the active request. Complete any missing evidence, call publish_plan, return its local path, and stop for approval. Do not implement source changes.",
         { deliverAs: "followUp" },
       );
-      return;
     }
-    try { ctx.ui.notify("Plan mode ended without an HTML artifact. No source changes were allowed.", "warning"); }
-    catch {}
+  });
+
+  pi.on("agent_settled", (_event, ctx) => {
+    if (getMode() !== "plan" || lifecycle !== "planning" || contractFailureRecorded) return;
+    contractFailureRecorded = true;
+    try {
+      pi.appendEntry(PLAN_CONTRACT_ENTRY, {
+        version: PLAN_CONTRACT_VERSION,
+        status: "failed",
+        code: MISSING_ARTIFACT_CODE,
+        attempts: publicationRetries + 1,
+        retries: publicationRetries,
+        maxRetries: MAX_PUBLICATION_RETRIES,
+        message: "Plan mode ended without an HTML artifact. No source changes were allowed.",
+      });
+    } catch {}
+    if (ctx.hasUI) {
+      try { ctx.ui.notify("Plan mode ended without an HTML artifact. No source changes were allowed.", "warning"); }
+      catch {}
+    }
   });
 }

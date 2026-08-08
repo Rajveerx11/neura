@@ -541,38 +541,107 @@ assert.equal((await guard({ toolName: "plan_request", input: { action: "guess_fr
 // explicit clarification/new/revision lifecycle, one-artifact-per-request binding,
 // session-owned revision, external-edit protection, and symlink fail-closed behavior.
 const planArtifact = extensionWithTool("publish_plan");
-await firstHandler(planArtifact, "session_start")({}, context);
+const headlessPlanContext = { ...context, mode: "json", hasUI: false };
+const planContractEntries = () => appendedEntries.filter((entry) => entry.customType === "neura-plan-contract");
+const completedPlanRun = { messages: [{ role: "assistant", stopReason: "stop" }] };
+const failedPlanRun = { messages: [{ role: "assistant", stopReason: "error" }] };
+const abortedPlanRun = { messages: [{ role: "assistant", stopReason: "aborted" }] };
+await firstHandler(planArtifact, "session_start")({}, headlessPlanContext);
 sentUserMessages.length = 0;
-await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan this change" }, context);
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan this change" }, headlessPlanContext);
 const planRequest = planArtifact.tools.get("plan_request").definition.execute;
-await planRequest("plan-wait-steer", { action: "wait_for_input" }, undefined, undefined, context);
-await firstHandler(planArtifact, "agent_settled")({}, context);
+await planRequest("plan-wait-steer", { action: "wait_for_input" }, undefined, undefined, headlessPlanContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, headlessPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
 assert.equal(sentUserMessages.length, 0, "Material clarification triggered a publication retry before the user could answer");
-await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "steer", text: "Questionnaire answer: keep compatibility" }, context);
-await planRequest("plan-wait-follow-up", { action: "wait_for_input" }, undefined, undefined, context);
-await firstHandler(planArtifact, "agent_settled")({}, context);
+assert.equal(planContractEntries().filter((entry) => entry.data?.status === "failed").length, 0, "Waiting headless Plan request reported a contract failure");
+await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "steer", text: "Questionnaire answer: keep compatibility" }, headlessPlanContext);
+const retriesBeforeNativeRecovery = sentUserMessages.length;
+for (const incompleteRun of [failedPlanRun, abortedPlanRun]) {
+  await firstHandler(planArtifact, "agent_end")(incompleteRun, headlessPlanContext);
+}
+assert.equal(sentUserMessages.length, retriesBeforeNativeRecovery, "Provider recovery consumed the Plan publication retry");
+await planRequest("plan-wait-follow-up", { action: "wait_for_input" }, undefined, undefined, headlessPlanContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, headlessPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
 assert.equal(sentUserMessages.length, 0, "Steered clarification answer did not preserve a deliberate second wait");
-await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "followUp", text: "Follow-up answer: preserve the current API" }, context);
-await firstHandler(planArtifact, "agent_settled")({}, context);
-assert.equal(sentUserMessages.length, 1, "Queued clarification answer did not resume the request's one-retry publication contract");
+await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "followUp", text: "Follow-up answer: preserve the current API" }, headlessPlanContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, headlessPlanContext);
+assert.equal(sentUserMessages.length, 1, "Headless clarification answer did not resume the request's one-retry publication contract");
 assert.match(sentUserMessages[0].content, /call publish_plan/, "Plan retry did not name the required publisher");
 await firstHandler(planArtifact, "session_start")({}, {
-  ...context,
+  ...headlessPlanContext,
   sessionManager: {
     getBranch: () => appendedEntries.map((entry) => ({ type: "custom", ...entry })),
   },
 });
-await planRequest("plan-wait-after-retry", { action: "wait_for_input" }, undefined, undefined, context);
-await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "followUp", text: "Final clarification answer" }, context);
-await firstHandler(planArtifact, "agent_settled")({}, context);
+await planRequest("plan-wait-after-retry", { action: "wait_for_input" }, undefined, undefined, headlessPlanContext);
+await firstHandler(planArtifact, "input")({ source: "interactive", streamingBehavior: "followUp", text: "Final clarification answer" }, headlessPlanContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, headlessPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
 assert.equal(sentUserMessages.length, 1, "Session restart allowed a second publication retry for one request");
+const missingPlanFailures = planContractEntries().filter((entry) => entry.data?.status === "failed");
+assert.equal(missingPlanFailures.length, 1, "Headless missing publication did not emit exactly one machine-readable failure");
+assert.deepEqual(
+  missingPlanFailures[0].data,
+  {
+    version: 1,
+    status: "failed",
+    code: "PLAN_ARTIFACT_MISSING",
+    attempts: 2,
+    retries: 1,
+    maxRetries: 1,
+    message: "Plan mode ended without an HTML artifact. No source changes were allowed.",
+  },
+  "Headless missing-publication contract changed",
+);
+await firstHandler(planArtifact, "session_start")({}, {
+  ...headlessPlanContext,
+  sessionManager: {
+    getBranch: () => appendedEntries.map((entry) => ({ type: "custom", ...entry })),
+  },
+});
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
+assert.equal(planContractEntries().filter((entry) => entry.data?.status === "failed").length, 1, "Session restart duplicated a terminal Plan contract failure");
+const rpcPlanContext = { ...context, mode: "rpc", hasUI: true };
+const retriesBeforeRpcWait = sentUserMessages.length;
+const failuresBeforeRpcWait = planContractEntries().filter((entry) => entry.data?.status === "failed").length;
+await firstHandler(planArtifact, "session_start")({}, rpcPlanContext);
+await firstHandler(planArtifact, "input")({ source: "rpc", text: "Plan an RPC change" }, rpcPlanContext);
+await planRequest("plan-rpc-wait", { action: "wait_for_input" }, undefined, undefined, rpcPlanContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, rpcPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, rpcPlanContext);
+assert.equal(sentUserMessages.length, retriesBeforeRpcWait, "Waiting RPC Plan request triggered a publication retry");
+assert.equal(planContractEntries().filter((entry) => entry.data?.status === "failed").length, failuresBeforeRpcWait, "Waiting RPC Plan request reported a contract failure");
+await firstHandler(planArtifact, "session_start")({}, headlessPlanContext);
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan after provider recovery" }, headlessPlanContext);
+const retriesBeforeTerminalFailure = sentUserMessages.length;
+const failuresBeforeTerminalFailure = planContractEntries().filter((entry) => entry.data?.status === "failed").length;
+await firstHandler(planArtifact, "agent_end")(failedPlanRun, headlessPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
+const terminalFailure = planContractEntries().at(-1);
+assert.equal(sentUserMessages.length, retriesBeforeTerminalFailure, "Terminal provider failure consumed the Plan retry");
+assert.equal(terminalFailure?.data?.status, "failed", "Terminal provider failure did not emit a machine-readable Plan failure");
+assert.equal(terminalFailure?.data?.retries, 0, "Terminal provider failure reported an unused Plan retry as consumed");
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Continue after the terminal failure" }, headlessPlanContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, headlessPlanContext);
+await firstHandler(planArtifact, "agent_settled")({}, headlessPlanContext);
+assert.equal(sentUserMessages.length, retriesBeforeTerminalFailure, "Later input reopened a terminal Plan retry without an explicit request reset");
+assert.equal(planContractEntries().filter((entry) => entry.data?.status === "failed").length, failuresBeforeTerminalFailure + 1, "Later input duplicated a terminal Plan failure");
+assert.equal(planContractEntries().at(-1), terminalFailure, "Later input replaced terminal failure with a nonterminal contract state");
 const publishPlan = planArtifact.tools.get("publish_plan").definition.execute;
 const planWorkspace = path.join(scratchRoot, "plan-workspace");
 fs.mkdirSync(path.join(planWorkspace, ".git"), { recursive: true });
 fs.mkdirSync(path.join(planWorkspace, "plans"), { recursive: true });
 const existingPlan = path.join(planWorkspace, "plans", "plan-mode-v1-plan.html");
 fs.writeFileSync(existingPlan, "human-owned plan", "utf-8");
-const publishContext = { ...context, cwd: planWorkspace };
+const publishContext = { ...headlessPlanContext, mode: "print", cwd: planWorkspace };
+await firstHandler(planArtifact, "session_start")({}, publishContext);
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Publish a headless Plan artifact" }, publishContext);
+const messagesBeforeRecoveredPublication = sentUserMessages.length;
+await firstHandler(planArtifact, "agent_end")(failedPlanRun, publishContext);
+assert.equal(sentUserMessages.length, messagesBeforeRecoveredPublication, "Provider error queued a stale retry before successful publication");
 const planFixture = {
   slug: "plan-mode-v1",
   title: "Plan mode visual publishing",
@@ -628,8 +697,14 @@ await assert.rejects(
 );
 const firstPublication = await publishPlan("plan-create", planFixture, undefined, undefined, publishContext);
 const messagesAfterPublication = sentUserMessages.length;
+const failuresBeforePublishedSettlement = planContractEntries().filter((entry) => entry.data?.status === "failed").length;
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, publishContext);
 await firstHandler(planArtifact, "agent_settled")({}, publishContext);
 assert.equal(sentUserMessages.length, messagesAfterPublication, "Published Plan incorrectly triggered a retry");
+assert.equal(planContractEntries().filter((entry) => entry.data?.status === "failed").length, failuresBeforePublishedSettlement, "Published headless Plan reported a contract failure");
+const publishedContract = planContractEntries().at(-1)?.data;
+assert.equal(publishedContract?.status, "published", "Headless Plan publication did not emit a machine-readable success state");
+assert.equal(publishedContract?.path, firstPublication.details.path, "Published contract path disagrees with tool details");
 for (const text of ["Approved", "What is the status?", "Hand this plan off for implementation"]) {
   await firstHandler(planArtifact, "input")({ source: "interactive", text }, publishContext);
   await firstHandler(planArtifact, "agent_settled")({}, publishContext);
@@ -733,8 +808,9 @@ assert.equal(fs.readFileSync(originalArtifactPath, "utf-8"), originalArtifactCon
 await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan a separate backend change" }, publishContext);
 await planRequest("plan-new-request", { action: "start_new" }, undefined, undefined, publishContext);
 const messagesBeforeNewRequestRetry = sentUserMessages.length;
-await firstHandler(planArtifact, "agent_settled")({}, publishContext);
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, publishContext);
 assert.equal(sentUserMessages.length, messagesBeforeNewRequestRetry + 1, "Separate Plan request lost the one-retry publication contract");
+await firstHandler(planArtifact, "agent_end")(completedPlanRun, publishContext);
 await firstHandler(planArtifact, "agent_settled")({}, publishContext);
 assert.equal(sentUserMessages.length, messagesBeforeNewRequestRetry + 1, "Separate Plan request exceeded the one-retry cap");
 await firstHandler(planArtifact, "session_start")({}, {

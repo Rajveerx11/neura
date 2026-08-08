@@ -26,7 +26,7 @@ all October bus environment variables are present.
 session_start
   restore mode, apply theme, show logo, activate tools
 
-interactive input
+interactive, print, JSON, or RPC input
   start or resume an explicit Plan request lifecycle
   surface Human Away queue when needed
 
@@ -39,10 +39,11 @@ tool_call
   execute only when hooks allow
 
 agent_end
+  queue at most one missing-publication Plan retry
   cockpit completion
 
 agent_settled
-  Plan publication check
+  emit final machine-readable Plan contract failure when still unpublished
   proof-of-work quick check currently starts here
 ```
 
@@ -90,6 +91,7 @@ agent_settled
 | Memory | `~/.pi/agent/neura/MEMORY.md` | No |
 | Approval audit | `~/.pi/agent/neura/approvals/audit.jsonl` | No |
 | Session mode | Pi session custom entry | No |
+| Plan contract outcome | Pi `neura-plan-contract` custom entry | No |
 | Checkpoints | Process memory plus Git objects | No |
 | Plan artifacts | Project `plans/` directory | Usually yes |
 
