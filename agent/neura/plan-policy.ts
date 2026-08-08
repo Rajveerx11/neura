@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import * as path from "node:path";
 
 export const PUBLISH_PLAN_TOOL = "publish_plan";
+export const PLAN_REQUEST_TOOL = "plan_request";
 export const PLAN_ARTIFACT_ENTRY = "neura-plan-artifact";
 export const MAX_PLAN_HTML_BYTES = 512 * 1024;
 export const MAX_PLAN_INPUT_BYTES = 256 * 1024;
@@ -16,6 +17,7 @@ export const PLAN_MODE_TOOL_NAMES = Object.freeze([
   "ls",
   "questionnaire",
   "web_search",
+  PLAN_REQUEST_TOOL,
   PUBLISH_PLAN_TOOL,
 ]);
 
@@ -155,6 +157,9 @@ export function isSafeExternalUrl(value: unknown): value is string {
 export function isPlanToolInputAllowed(toolName: string, input: unknown): boolean {
   const data = inputRecord(input);
   if (toolName === PUBLISH_PLAN_TOOL) return isSafePlanSlug(data.slug);
+  if (toolName === PLAN_REQUEST_TOOL) {
+    return ["wait_for_input", "revise_published", "start_new"].includes(String(data.action));
+  }
   if (toolName === "web_search") {
     const query = data.query;
     const maxResults = data.max_results;

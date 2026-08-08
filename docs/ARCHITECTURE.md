@@ -27,7 +27,8 @@ session_start
   restore mode, apply theme, show logo, activate tools
 
 interactive input
-  reset retry state, surface Human Away queue when needed
+  start or resume an explicit Plan request lifecycle
+  surface Human Away queue when needed
 
 agent_start
   hide logo, capture checkpoint, record initial worktree state
@@ -53,7 +54,7 @@ agent_settled
 | `modes.ts` | Mode switching, active-tool boundary, approval UI | Session entries, approval store |
 | `guardrail.ts` | Plan and Human Away tool-call policy; explicit YOLO bypass | Action policy, Headmaster |
 | `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
-| `plan-artifact.ts` | Controlled Plan HTML publication | `plans/`, renderer/policy |
+| `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
 | `checkpoint.ts` | Pre-turn Git tree snapshots and `/undo` | Git object database, temp index |
 | `check-gate.ts` | Quick proof feedback and `/ship` | `uvx`, proof-of-work |
 | `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |

@@ -9,6 +9,7 @@ import {
   MAX_PLAN_HTML_BYTES,
   MAX_PLAN_INPUT_BYTES,
   PLAN_ARTIFACT_ENTRY,
+  PLAN_REQUEST_TOOL,
   PUBLISH_PLAN_TOOL,
   assertOwnedPlanPath,
   nextAvailablePlanPath,
@@ -24,8 +25,11 @@ type OwnedPlan = {
 };
 
 type PromptPlanIdentity = Pick<OwnedPlan, "slug" | "projectRoot" | "path">;
+type PlanLifecycle = "idle" | "planning" | "waiting" | "published";
 
 const PLAN_REQUEST_RESET_ENTRY = "neura-plan-request-reset";
+const PLAN_LIFECYCLE_ENTRY = "neura-plan-lifecycle";
+const PLAN_RETRY_ENTRY = "neura-plan-publication-retry";
 
 const Text = (description: string, minLength: number, maxLength: number) => Type.String({ description, minLength, maxLength });
 const TextList = (description: string, minItems: number, maxItems: number, maxLength = 300) => Type.Array(
@@ -120,6 +124,13 @@ function isOwnedPlan(value: unknown): value is OwnedPlan {
   return [record.slug, record.projectRoot, record.path, record.sha256].every((item) => typeof item === "string");
 }
 
+function isPlanLifecycle(value: unknown): value is { state: Exclude<PlanLifecycle, "idle" | "published">; resetRetry?: boolean } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (record.state === "planning" || record.state === "waiting")
+    && (record.resetRetry === undefined || typeof record.resetRetry === "boolean");
+}
+
 function aborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Plan publication aborted.");
 }
@@ -147,8 +158,62 @@ export default function (pi): void {
 
   const ownedPlans = new Map<string, OwnedPlan>();
   let planForPrompt: PromptPlanIdentity | undefined;
-  let publishedForPrompt = false;
+  let lifecycle: PlanLifecycle = "idle";
   let publicationRetries = 0;
+
+  function persistLifecycle(state: "planning" | "waiting", resetRetry = false): void {
+    try { pi.appendEntry(PLAN_LIFECYCLE_ENTRY, resetRetry ? { state, resetRetry: true } : { state }); }
+    catch {}
+  }
+
+  function startNewRequest(): void {
+    planForPrompt = undefined;
+    lifecycle = "planning";
+    publicationRetries = 0;
+    try { pi.appendEntry(PLAN_REQUEST_RESET_ENTRY); }
+    catch {}
+  }
+
+  pi.registerTool({
+    name: PLAN_REQUEST_TOOL,
+    label: "Plan request lifecycle",
+    description:
+      "Record an explicit Plan request transition. Use wait_for_input before ending with a material clarification question, " +
+      "revise_published before updating the active published artifact, or start_new before planning a separate objective. " +
+      "Do not call this tool for approval, status, or handoff replies after publication.",
+    promptSnippet: "Mark a Plan request as waiting, revising, or new",
+    promptGuidelines: [
+      "Use wait_for_input only when a material answer is required before a safe plan can be published.",
+      "Use revise_published only for a requested change to the active artifact; retain its slug.",
+      "Use start_new only for a separate planning objective after the current request is published or abandoned.",
+    ],
+    parameters: Type.Object({
+      action: StringEnum(["wait_for_input", "revise_published", "start_new"] as const),
+    }, { additionalProperties: false }),
+    executionMode: "sequential",
+    async execute(_toolCallId, params) {
+      if (getMode() !== "plan") throw new Error("plan_request is available only while Neura Plan mode is active.");
+      if (params.action === "start_new") {
+        startNewRequest();
+        return { content: [{ type: "text", text: "Started a separate planning request. Publish one artifact for this request." }] };
+      }
+      if (params.action === "revise_published") {
+        if (!planForPrompt || lifecycle !== "published") {
+          throw new Error("No published plan is active. Use start_new for a separate planning request.");
+        }
+        lifecycle = "planning";
+        publicationRetries = 0;
+        persistLifecycle("planning", true);
+        return { content: [{ type: "text", text: `Revision opened for slug "${planForPrompt.slug}". Publish the update with that same slug.` }] };
+      }
+      if (lifecycle !== "planning") {
+        throw new Error("No planning request is active. Use start_new before waiting for input on a separate request.");
+      }
+      lifecycle = "waiting";
+      persistLifecycle("waiting");
+      return { content: [{ type: "text", text: "Planning request is waiting for material user input. Ask the question and stop; no publication retry will run." }] };
+    },
+  });
 
   pi.registerTool({
     name: PUBLISH_PLAN_TOOL,
@@ -157,11 +222,11 @@ export default function (pi): void {
       "Publish the researched implementation plan as safe, self-contained HTML inside the current project's plans folder. " +
       "Use only after inspecting relevant code and documentation. Include at least one meaningful visual and realistic verification. " +
       "When work changes a visible surface, include a directional future-state preview. " +
-      "Each interactive request may publish one artifact; calling again with the same slug revises only that session-owned artifact.",
+      "Each planning request may publish one artifact; open requested revisions with plan_request and retain the same slug.",
     promptSnippet: "Publish a structured visual HTML plan to the local project plans folder",
     promptGuidelines: [
       "Use publish_plan only in Neura Plan mode, after completing the evidence pass.",
-      "Publish one artifact per interactive request. Revise it with the same slug instead of choosing another slug.",
+      "Publish one artifact per planning request. Use plan_request before a requested revision, then retain the same slug.",
       "For visible product work, include preview with representative regions, copy, controls, states, and responsive variants; omit it for invisible backend work rather than inventing UI.",
       "Use simple English in publish_plan fields; name real files and checks; stop for human approval after publication.",
     ],
@@ -169,10 +234,13 @@ export default function (pi): void {
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       if (getMode() !== "plan") throw new Error("publish_plan is available only while Neura Plan mode is active.");
+      if (lifecycle !== "planning") {
+        throw new Error("No planning publication is active. Use plan_request before revising a published artifact or starting a separate plan.");
+      }
       aborted(signal);
       assertPlanDocument(params);
       if (planForPrompt && params.slug !== planForPrompt.slug) {
-        throw new Error(`This planning request already published slug "${planForPrompt.slug}". Revise it with the same slug or start a new interactive request.`);
+        throw new Error(`This planning request already published slug "${planForPrompt.slug}". Revise it with the same slug or use plan_request start_new for a separate objective.`);
       }
       if (Buffer.byteLength(JSON.stringify(params), "utf-8") > MAX_PLAN_INPUT_BYTES) {
         throw new Error("Plan input exceeds the 256 KiB structured-data limit.");
@@ -184,10 +252,10 @@ export default function (pi): void {
       const nextHash = sha256(html);
       const { projectRoot, plansDir } = await preparePlanDirectory(ctx.cwd);
       if (planForPrompt && projectRoot !== planForPrompt.projectRoot) {
-        throw new Error("This planning request already published an artifact in another project. Revise that artifact or start a new interactive request.");
+        throw new Error("This planning request already published an artifact in another project. Revise that artifact or use plan_request start_new for a separate objective.");
       }
       const key = ownershipKey(projectRoot, params.slug);
-      const owned = ownedPlans.get(key);
+      const owned = planForPrompt ? ownedPlans.get(key) : undefined;
       let destination = owned?.path;
       let revision = false;
 
@@ -221,7 +289,8 @@ export default function (pi): void {
       const ownership: OwnedPlan = { slug: params.slug, projectRoot, path: destination!, sha256: nextHash };
       ownedPlans.set(key, ownership);
       planForPrompt = ownership;
-      publishedForPrompt = true;
+      lifecycle = "published";
+      publicationRetries = 0;
       let persisted = true;
       try { pi.appendEntry(PLAN_ARTIFACT_ENTRY, ownership); }
       catch { persisted = false; }
@@ -239,7 +308,7 @@ export default function (pi): void {
   pi.on("session_start", (_event, ctx) => {
     ownedPlans.clear();
     planForPrompt = undefined;
-    publishedForPrompt = false;
+    lifecycle = "idle";
     publicationRetries = 0;
     let entries: Array<{ type?: string; customType?: string; data?: unknown }> = [];
     try { entries = ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries?.() ?? []; }
@@ -247,28 +316,45 @@ export default function (pi): void {
     for (const entry of entries) {
       if (entry.type === "custom" && entry.customType === PLAN_REQUEST_RESET_ENTRY) {
         planForPrompt = undefined;
+        lifecycle = "planning";
+        publicationRetries = 0;
+        continue;
+      }
+      if (entry.type === "custom" && entry.customType === PLAN_LIFECYCLE_ENTRY && isPlanLifecycle(entry.data)) {
+        lifecycle = entry.data.state;
+        if (entry.data.resetRetry) publicationRetries = 0;
+        continue;
+      }
+      if (entry.type === "custom" && entry.customType === PLAN_RETRY_ENTRY) {
+        publicationRetries = 1;
         continue;
       }
       if (entry.type !== "custom" || entry.customType !== PLAN_ARTIFACT_ENTRY || !isOwnedPlan(entry.data)) continue;
       ownedPlans.set(ownershipKey(entry.data.projectRoot, entry.data.slug), entry.data);
       planForPrompt = entry.data;
+      lifecycle = "published";
+      publicationRetries = 0;
     }
-    publishedForPrompt = planForPrompt !== undefined;
   });
 
   pi.on("input", (event) => {
-    if (event.source !== "interactive" || event.streamingBehavior !== undefined) return;
-    planForPrompt = undefined;
-    publishedForPrompt = false;
-    publicationRetries = 0;
-    try { pi.appendEntry(PLAN_REQUEST_RESET_ENTRY); }
-    catch {}
+    if (event.source !== "interactive" || getMode() !== "plan") return;
+    if (lifecycle === "idle") {
+      startNewRequest();
+      return;
+    }
+    if (lifecycle === "waiting") {
+      lifecycle = "planning";
+      persistLifecycle("planning");
+    }
   });
 
   pi.on("agent_settled", (_event, ctx) => {
-    if (getMode() !== "plan" || publishedForPrompt) return;
+    if (getMode() !== "plan" || lifecycle !== "planning") return;
     if (publicationRetries < 1 && ctx.hasUI) {
       publicationRetries++;
+      try { pi.appendEntry(PLAN_RETRY_ENTRY); }
+      catch {}
       pi.sendUserMessage(
         "[PLAN CONTRACT RETRY] No HTML plan was published for the active request. Complete any missing evidence, call publish_plan, return its local path, and stop for approval. Do not implement source changes.",
         { deliverAs: "followUp" },
