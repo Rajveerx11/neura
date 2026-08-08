@@ -387,13 +387,20 @@ assert.equal((await guard({ toolName: "edit", input: { path: path.join(repoRoot,
 const planBoundaryWorkspace = path.join(scratchRoot, "plan-boundary-workspace");
 const planBoundaryOutside = path.join(scratchRoot, "plan-boundary-outside");
 const planBoundaryLink = path.join(planBoundaryWorkspace, "linked-outside");
+const planBoundaryQuotedAtLink = path.join(planBoundaryWorkspace, "@quoted-link");
+const planBoundaryUnaliasedSibling = path.join(planBoundaryWorkspace, "quoted-link");
 const planBoundaryFile = path.join(planBoundaryWorkspace, "inside.txt");
+const planBoundaryQuotedAtFile = path.join(planBoundaryWorkspace, "@inside.txt");
 const planBoundaryOutsideFile = path.join(planBoundaryOutside, "outside.txt");
 fs.mkdirSync(planBoundaryWorkspace, { recursive: true });
 fs.mkdirSync(planBoundaryOutside, { recursive: true });
+fs.mkdirSync(planBoundaryUnaliasedSibling, { recursive: true });
 fs.writeFileSync(planBoundaryFile, "inside", "utf-8");
+fs.writeFileSync(planBoundaryQuotedAtFile, "inside", "utf-8");
+fs.writeFileSync(path.join(planBoundaryUnaliasedSibling, "outside.txt"), "safe sibling", "utf-8");
 fs.writeFileSync(planBoundaryOutsideFile, "outside", "utf-8");
 fs.symlinkSync(planBoundaryOutside, planBoundaryLink, process.platform === "win32" ? "junction" : "dir");
+fs.symlinkSync(planBoundaryOutside, planBoundaryQuotedAtLink, process.platform === "win32" ? "junction" : "dir");
 const planBoundaryContext = { ...context, cwd: planBoundaryWorkspace };
 const filesystemCases = [
   { toolName: "read", inside: { path: planBoundaryFile }, outside: { path: planBoundaryOutsideFile }, linked: { path: path.join(planBoundaryLink, "outside.txt") }, linkedMissing: { path: path.join(planBoundaryLink, "missing.txt") } },
@@ -413,6 +420,89 @@ for (const testCase of filesystemCases) {
       `Plan allowed aliased outside-workspace ${testCase.toolName}: ${aliasedPath}`,
     );
   }
+}
+
+const planBoundaryOutsideRelative = path.join("..", path.basename(planBoundaryOutside), "outside.txt");
+const planShellAllowed = [
+  "pwd",
+  "Get-Location",
+  "Get-ChildItem .",
+  "Get-Content .\\inside.txt",
+  "Get-Content \"@inside.txt\"",
+  "Get-Content \".\\inside,name.txt\"",
+  "Get-Content \".\\@args\"",
+  "Get-Content -TotalCount 1 -LiteralPath .\\inside.txt",
+  `Get-Content "${planBoundaryFile}"`,
+  `Get-Content "${pathToFileURL(planBoundaryFile).href}"`,
+  "Get-Content .\\nested\\..\\inside.txt",
+  "Select-String -SimpleMatch -Pattern inside -Path .\\inside.txt",
+  "Resolve-Path .\\inside.txt",
+  "Test-Path -Path .\\missing.txt -PathType Leaf",
+  "Measure-Object",
+  "rg inside .",
+  "rg \"inside,outside\" .",
+  "rg \"@args\" .",
+  "rg --files ./",
+  "git status --short",
+  "git diff -- inside.txt",
+  "git log --oneline -- inside.txt",
+  "git show HEAD",
+  "git rev-parse --show-toplevel",
+  "git ls-files -- inside.txt",
+  "git branch --show-current",
+];
+for (const command of planShellAllowed) {
+  assert.equal(
+    await guard({ toolName: "bash", input: { command } }, planBoundaryContext),
+    undefined,
+    `Plan blocked ordinary read-only shell command: ${command}`,
+  );
+}
+
+const planShellDenied = [
+  `Get-Content .\\${planBoundaryOutsideRelative}`,
+  `Get-Content .\\nested\\..\\..\\${path.basename(planBoundaryOutside)}\\outside.txt`,
+  `rg outside ${planBoundaryOutsideRelative.replaceAll("\\", "/")}`,
+  `Get-Content "${planBoundaryOutsideFile}"`,
+  `Get-Content "${pathToFileURL(planBoundaryOutsideFile).href}"`,
+  `Get-Content "@${planBoundaryOutsideFile}"`,
+  "Get-Content ~",
+  "Get-Content .\\linked-outside\\outside.txt",
+  "Get-Content .\\linked-outside\\missing.txt",
+  "Get-Content \"@quoted-link\\outside.txt\"",
+  "Get-Content \"@quoted-link\\missing.txt\"",
+  "Select-String outside -Path .\\linked-outside\\outside.txt",
+  "rg outside .\\linked-outside",
+  "rg --follow outside .",
+  `git diff -- "${planBoundaryOutsideFile}"`,
+  `git status "${planBoundaryOutside}"`,
+  `git rev-parse --resolve-git-dir "${planBoundaryOutside}"`,
+  `Get-Content "${path.join(repoRoot, "README.md")}"`,
+  "Get-Content -Pa:C:/Windows/win.ini",
+  "Get-Content -DefinitelyNotAParameter .\\inside.txt",
+  "Get-Content -LiteralPath FileSystem::C:/Windows/win.ini",
+  "Get-Content -LiteralPath Microsoft.PowerShell.Core\\FileSystem::C:/Windows/win.ini",
+  "Get-Content -LiteralPath CustomProvider::outside",
+  "Get-Content CustomDrive:\\outside",
+  "Get-Content C:outside.txt",
+  "Get-Content README.md,C:/Windows/win.ini",
+  "Get-Content '..'+'/outside.txt'",
+  "Get-Content .\\inside.txt & whoami",
+  "Measure-Object -InputObject (& whoami)",
+  "rg @args",
+  "rg outside @paths",
+  "git status @paths",
+  `rg outside . ,${planBoundaryOutsideRelative}`,
+  `git status inside.txt,${planBoundaryOutsideRelative}`,
+  "rg outside CustomDrive:/outside",
+  "git status CustomDrive:/outside",
+];
+for (const command of planShellDenied) {
+  assert.equal(
+    (await guard({ toolName: "bash", input: { command } }, planBoundaryContext))?.block,
+    true,
+    `Plan allowed unsafe shell command: ${command}`,
+  );
 }
 
 assert.equal(await guard({ toolName: "web_search", input: { query: "official pi extension documentation", max_results: 3 } }, context), undefined);
