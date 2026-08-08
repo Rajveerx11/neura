@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Disabled direct `web_fetch` in Plan mode because the delegated Ollama executor
+  does not expose DNS answers, connection IPs, or redirect hops needed for
+  SSRF-safe enforcement. Bounded `web_search` remains available; `web_fetch`
+  remains available outside Plan under each mode's existing policy.
+- Normalized trailing-dot plan source hostnames and added Plan regression
+  coverage for IPv4, IPv6, trailing-dot localhost, DNS aliases, mixed addresses,
+  and redirects.
 - Matched OpenAI Codex `--yolo` semantics: Neura YOLO now has no application
   approval prompts or tool blocking and relies on native process/user access.
 - Kept YOLO scoped to the user's request in its system contract while clearly

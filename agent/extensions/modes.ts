@@ -30,7 +30,7 @@ Research the current user prompt, then publish one human-readable visual HTML pl
 Workflow:
 1. Understand the objective, scope, constraints, and observable definition of done.
 2. Inspect relevant code, documentation, existing actions, schemas, tests, and patterns. Name real evidence.
-3. Research current external facts with web_search/web_fetch when libraries, APIs, standards, products, or outside knowledge affect the direction. Prefer primary sources.
+3. Research current external facts with web_search when libraries, APIs, standards, products, or outside knowledge affect the direction. Prefer primary sources. Direct web_fetch is unavailable because its backend does not expose DNS, connection-IP, or redirect-hop validation.
 4. Choose one recommended approach. Ask only when an unresolved choice would materially change architecture or scope.
 5. When the planned work changes a visible product, screen, terminal, report, deck, or workflow, include a concrete future-state preview showing the proposed hierarchy, representative copy, controls, and important responsive states. Label it as directional, not already implemented. For invisible backend work, omit it rather than inventing decorative UI.
 6. Call publish_plan with simple English, 1-3 meaningful relationship visuals, 2-8 ordered steps, real files, risks, sources, realistic verification, and the future-state preview when applicable.
