@@ -8,7 +8,7 @@ import { Key, truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/cockpit-state.ts";
 import { PALETTE, fg } from "../neura/core.ts";
 import { getMode, isAgentMode, modeLabel, modePosition, nextMode, setMode, type AgentMode } from "../neura/mode-state.ts";
-import { PLAN_MODE_TOOL_NAMES, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
+import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
 import {
   findPending,
@@ -21,6 +21,7 @@ import {
 
 const MODE_ENTRY = "neura-mode-state";
 const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
+const PLAN_ONLY_TOOLS = new Set([PUBLISH_PLAN_TOOL, PLAN_REQUEST_TOOL]);
 const PROVIDER_PLAN_TOOL_ALIASES = new Map([
   ["Read", "read"],
   ["Bash", "bash"],
@@ -41,9 +42,16 @@ Workflow:
 2. Inspect relevant code, documentation, existing actions, schemas, tests, and patterns. Name real evidence.
 3. Research current external facts with web_search when libraries, APIs, standards, products, or outside knowledge affect the direction. Prefer primary sources. Direct web_fetch is unavailable because its backend does not expose DNS, connection-IP, or redirect-hop validation.
 4. Choose one recommended approach. Ask only when an unresolved choice would materially change architecture or scope.
+   - Prefer questionnaire when its interactive UI can resolve the choice immediately.
+   - If you must return a question and wait for a later reply, call plan_request with wait_for_input first. That reply continues the same planning request and must not be treated as a new plan.
 5. When the planned work changes a visible product, screen, terminal, report, deck, or workflow, include a concrete future-state preview showing the proposed hierarchy, representative copy, controls, and important responsive states. Label it as directional, not already implemented. For invisible backend work, omit it rather than inventing decorative UI.
 6. Call publish_plan with simple English, 1-3 meaningful relationship visuals, 2-8 ordered steps, real files, risks, sources, realistic verification, and the future-state preview when applicable.
 7. Return the local plan path and a short review note. Stop before implementation until Rajveer approves.
+
+Request lifecycle:
+- After publication, approval, status, and handoff replies do not start another plan and require no publication.
+- Before changing the published artifact at Rajveer's request, call plan_request with revise_published, then revise it with the same slug.
+- Before planning a separate objective while another request is active, call plan_request with start_new. A genuine new request retains the one-retry publication contract.
 
 Safety boundary: read-only exploration plus one controlled plan artifact under the project plans/ folder. Do not modify source files, external systems, git state, configuration, or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
   yolo: `[NEURA MODE: YOLO]
@@ -210,7 +218,7 @@ export default function (pi) {
   }
 
   function rememberNonPlanSelection(names = pi.getActiveTools()): void {
-    nonPlanTools = uniqueToolNames(names.filter((name) => name !== PUBLISH_PLAN_TOOL));
+    nonPlanTools = uniqueToolNames(names.filter((name) => !PLAN_ONLY_TOOLS.has(name)));
   }
 
   function observePlanSelectionChanges(): void {
@@ -219,17 +227,19 @@ export default function (pi) {
     const currentSet = new Set(current);
     const enforcedSet = new Set(enforcedPlanTools);
     const removedPlanTools = new Set(
-      enforcedPlanTools.filter((name) => name !== PUBLISH_PLAN_TOOL && !currentSet.has(name)),
+      enforcedPlanTools.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !currentSet.has(name)),
     );
     const retained = nonPlanTools!.filter((name) => !removedPlanTools.has(name));
-    const additions = current.filter((name) => name !== PUBLISH_PLAN_TOOL && !enforcedSet.has(name));
+    const additions = current.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !enforcedSet.has(name));
     nonPlanTools = uniqueToolNames([...retained, ...additions]);
   }
 
   function planToolNames(): string[] {
     const available = availableToolNames();
     const selected = (nonPlanTools ?? []).filter((name) => available.has(name) && PLAN_TOOLS.has(name));
-    if (available.has(PUBLISH_PLAN_TOOL)) selected.push(PUBLISH_PLAN_TOOL);
+    for (const name of PLAN_ONLY_TOOLS) {
+      if (available.has(name)) selected.push(name);
+    }
     return uniqueToolNames(selected);
   }
 

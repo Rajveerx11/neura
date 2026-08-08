@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Replaced Plan's per-message publication reset with an explicit request lifecycle.
+  Material clarification can wait without an automatic retry; its answer resumes
+  the same request. Approval, status, and handoff replies keep published plans
+  settled, while requested revisions and separate objectives use deterministic
+  `plan_request` transitions. Retry consumption survives session restart, and a
+  separate request reusing a slug creates a collision-safe artifact instead of
+  overwriting the prior request's plan.
 - Disabled direct `web_fetch` in Plan mode because the delegated Ollama executor
   does not expose DNS answers, connection IPs, or redirect hops needed for
   SSRF-safe enforcement. Bounded `web_search` remains available; `web_fetch`
