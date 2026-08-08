@@ -719,6 +719,77 @@ await assert.rejects(
 await modes.commands.get("mode").handler("yolo", context);
 assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active outside Plan mode");
 assert.equal(activeTools.includes("web_fetch"), true, "Leaving Plan for YOLO did not restore web_fetch");
+
+// Late MCP registration may refresh and activate tools after Plan has already
+// applied its boundary. Preserve that live non-Plan selection while keeping the
+// tool unavailable in Plan, and do not resurrect user-disabled tools on exit.
+activeTools = activeTools.filter((name) => name !== "write");
+await modes.commands.get("mode").handler("plan", context);
+const lateMcpTool = "mcp__late__mutate";
+const enabledMcpTool = "mcp__enabled__read";
+registeredToolNames.push(lateMcpTool, enabledMcpTool);
+activeTools = [...activeTools, lateMcpTool, enabledMcpTool];
+await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
+activeTools = [...activeTools, lateMcpTool, enabledMcpTool];
+const lateProviderPayload = await firstHandler(modes, "before_provider_request")({
+  payload: {
+    model: "gpt-5.5",
+    tools: [
+      { type: "function", name: "read", parameters: {} },
+      { type: "function", name: lateMcpTool, parameters: {} },
+      { type: "function", name: enabledMcpTool, parameters: {} },
+      { type: "unknown-provider-tool" },
+    ],
+  },
+}, context);
+assert.equal(activeTools.includes(lateMcpTool), false, "Late MCP activation escaped the Plan tool boundary");
+assert.equal(activeTools.includes(enabledMcpTool), false, "Second late MCP activation escaped the Plan tool boundary");
+assert.equal(activeTools.includes("write"), false, "Plan re-enabled a user-disabled tool");
+assert.deepEqual(
+  lateProviderPayload.tools.map((tool) => tool.name),
+  ["read"],
+  "Plan provider payload exposed a late or unrecognized tool schema",
+);
+const anthropicPlanPayload = await firstHandler(modes, "before_provider_request")({
+  payload: {
+    model: "claude-sonnet",
+    tools: [
+      { name: "Read", input_schema: {} },
+      { name: "Bash", input_schema: {} },
+      { name: "Grep", input_schema: {} },
+      { name: "Edit", input_schema: {} },
+    ],
+  },
+}, context);
+assert.deepEqual(
+  anthropicPlanPayload.tools.map((tool) => tool.name),
+  ["Read", "Bash", "Grep"],
+  "Plan payload filtering rejected Anthropic canonical names or retained Edit",
+);
+const openAiCompletionsPayload = await firstHandler(modes, "before_provider_request")({
+  payload: {
+    model: "gpt-5.5",
+    tools: [
+      { type: "function", function: { name: "read", parameters: {} } },
+      { type: "function", function: { name: lateMcpTool, parameters: {} } },
+    ],
+  },
+}, context);
+assert.deepEqual(
+  openAiCompletionsPayload.tools.map((tool) => tool.function.name),
+  ["read"],
+  "Plan payload filtering exposed a forbidden OpenAI Completions function",
+);
+const lateMcpWorkspace = path.join(scratchRoot, "late-mcp-workspace");
+fs.mkdirSync(lateMcpWorkspace, { recursive: true });
+fs.writeFileSync(path.join(lateMcpWorkspace, "mcp.json"), JSON.stringify({
+  mcpServers: { late: { url: "https://example.com/mcp", disabled: true } },
+}));
+await modes.commands.get("mode").handler("yolo", { ...context, cwd: lateMcpWorkspace });
+assert.equal(activeTools.includes(lateMcpTool), false, "Leaving Plan restored an MCP server disabled while hidden");
+assert.equal(activeTools.includes(enabledMcpTool), true, "Leaving Plan lost an enabled late MCP activation");
+assert.equal(activeTools.includes("write"), false, "Leaving Plan restored a stale tool selection");
+
 assert.equal(await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context), undefined);
 assert.equal(
   await guard(
