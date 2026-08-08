@@ -53,7 +53,7 @@ export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed2
 
 const PROTECTED_CONTROL = /(?:^|[\\/])(?:\.git(?:[\\/]|$)|\.github[\\/]workflows(?:[\\/]|$)|agent[\\/]settings\.json$|agent[\\/]keybindings\.json$|agent[\\/]mcp\.json$|install\.ps1$|agent[\\/]extensions[\\/](?:guardrail|modes|plan-artifact)\.ts$|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|mode-state|plan-policy|plan-renderer)\.(?:ts|md)$)/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
-const SHELL_CONTROL = /(?:\r|\n|;|&&|\|\||(?<!\|)\|(?!\|)|>|<|`|\$\()/;
+const SHELL_CONTROL = /(?:\r|\n|[;&|><`()]|\$\()/;
 
 const HARD_DENY = [
   { re: /\b(?:mkfs(?:\.[\w-]+)?|format\s+[a-z]:)(?:\s|$)/i, why: "disk formatting can destroy data outside the workspace" },
@@ -117,17 +117,25 @@ function rawPath(input: Record<string, unknown>): string {
   return String(input.path ?? input.file_path ?? input.filePath ?? "").trim();
 }
 
-function resolveToolTarget(raw: string, cwd: string): string | null {
+function resolveTarget(raw: string, cwd: string, stripToolAlias: boolean): string | null {
   let normalized = raw.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
-  if (normalized.startsWith("@")) normalized = normalized.slice(1);
+  if (stripToolAlias && normalized.startsWith("@")) normalized = normalized.slice(1);
   if (normalized === "~") normalized = homedir();
   else if (normalized.startsWith("~/") || (process.platform === "win32" && normalized.startsWith("~\\"))) {
     normalized = path.join(homedir(), normalized.slice(2));
   }
-  if (/^file:\/\//.test(normalized)) {
+  if (/^file:\/\//i.test(normalized)) {
     try { normalized = fileURLToPath(normalized); } catch { return null; }
   }
   return path.isAbsolute(normalized) ? path.resolve(normalized) : path.resolve(cwd, normalized);
+}
+
+function resolveToolTarget(raw: string, cwd: string): string | null {
+  return resolveTarget(raw, cwd, true);
+}
+
+function resolvePlanShellTarget(raw: string, cwd: string): string | null {
+  return resolveTarget(raw, cwd, false);
 }
 
 function canonicalTarget(target: string): string | null {
@@ -200,18 +208,338 @@ function deleteTarget(command: string): string | null {
   return posix ? posix[1] ?? posix[2] ?? posix[3] ?? null : null;
 }
 
-export function isPlanSafeShellCommand(command: string): boolean {
+function shellTokens(command: string): string[] | null {
+  const tokens: string[] = [];
+  let token = "";
+  let quote = "";
+  let started = false;
+
+  for (const character of command) {
+    if (quote) {
+      if (character === quote) quote = "";
+      else token += character;
+      started = true;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      started = true;
+    } else if (/\s/.test(character)) {
+      if (started) {
+        tokens.push(token);
+        token = "";
+        started = false;
+      }
+    } else {
+      token += character;
+      started = true;
+    }
+  }
+  if (quote) return null;
+  if (started) tokens.push(token);
+  return tokens;
+}
+
+function hasUnquotedPowerShellOperator(command: string): boolean {
+  let quote = "";
+  for (const character of command) {
+    if (quote) {
+      if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'") quote = character;
+    else if (character === "+" || /[\u2010-\u2015\u2212]/.test(character)) return true;
+  }
+  return false;
+}
+
+function hasUnquotedPowerShellExpansion(command: string): boolean {
+  let quote = "";
+  let tokenStart = true;
+  for (let index = 0; index < command.length; index++) {
+    const character = command[index];
+    if (quote) {
+      if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      tokenStart = false;
+    } else if (/\s/.test(character)) {
+      tokenStart = true;
+    } else {
+      if (character === ",") return true;
+      if (tokenStart && character === "@" && /[A-Za-z_({]/.test(command[index + 1] ?? "")) return true;
+      tokenStart = false;
+    }
+  }
+  return false;
+}
+
+function attachedOptionValue(argument: string, option: string): string | null {
+  const lower = argument.toLowerCase();
+  const normalizedOption = option.toLowerCase();
+  for (const separator of ["=", ":"]) {
+    const prefix = `${normalizedOption}${separator}`;
+    if (lower.startsWith(prefix)) return argument.slice(prefix.length);
+  }
+  return null;
+}
+
+const POWERSHELL_ARGUMENTS = {
+  "get-childitem": {
+    flags: ["-directory", "-file", "-force", "-hidden", "-name", "-readonly", "-recurse", "-system"],
+    values: ["-attributes", "-depth", "-exclude", "-filter", "-include"],
+    pathValues: ["-path", "-literalpath"],
+  },
+  "get-content": {
+    flags: ["-force", "-raw", "-wait"],
+    values: ["-delimiter", "-encoding", "-readcount", "-stream", "-tail", "-totalcount"],
+    pathValues: ["-path", "-literalpath"],
+  },
+  "get-item": {
+    flags: ["-force"],
+    values: ["-exclude", "-filter", "-include"],
+    pathValues: ["-path", "-literalpath"],
+  },
+  "resolve-path": {
+    flags: ["-relative"],
+    values: [],
+    pathValues: ["-path", "-literalpath", "-relativebasepath"],
+  },
+  "select-string": {
+    flags: ["-allmatches", "-casesensitive", "-list", "-noemphasis", "-notmatch", "-quiet", "-raw", "-simplematch"],
+    values: ["-context", "-culture", "-encoding"],
+    pathValues: ["-path"],
+  },
+  "test-path": {
+    flags: ["-isvalid"],
+    values: ["-olderthan", "-newerthan", "-pathtype"],
+    pathValues: ["-path", "-literalpath"],
+  },
+} as const;
+
+function splitOption(argument: string): { name: string; attached: string | null } {
+  const separator = argument.search(/[:=]/);
+  return separator === -1
+    ? { name: argument.toLowerCase(), attached: null }
+    : { name: argument.slice(0, separator).toLowerCase(), attached: argument.slice(separator + 1) };
+}
+
+function ambiguousPowerShellArgument(argument: string): boolean {
+  return argument === "--%";
+}
+
+function powershellFilesystemArguments(command: string, args: string[]): string[] | null {
+  if (command === "measure-object") return args.length === 0 ? [] : null;
+  const normalizedCommand = command === "ls" ? "get-childitem" : command;
+  const spec = POWERSHELL_ARGUMENTS[normalizedCommand as keyof typeof POWERSHELL_ARGUMENTS];
+  if (!spec) return null;
+
+  const flags = new Set<string>(spec.flags);
+  const values = new Set<string>(spec.values);
+  const pathValues = new Set<string>(spec.pathValues);
+  const paths: string[] = [];
+  let patternSupplied = normalizedCommand !== "select-string";
+  let options = true;
+
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index];
+    // Commas form PowerShell arrays before cmdlet binding. Splatting and the
+    // stop-parsing token also make literal argument recovery ambiguous.
+    if (ambiguousPowerShellArgument(argument)) return null;
+    if (options && argument === "--") {
+      options = false;
+      continue;
+    }
+    if (options && argument.startsWith("-")) {
+      const { name, attached } = splitOption(argument);
+      if (pathValues.has(name)) {
+        const pathArgument = attached ?? args[++index];
+        if (!pathArgument || ambiguousPowerShellArgument(pathArgument)) return null;
+        paths.push(pathArgument);
+      } else if (normalizedCommand === "select-string" && name === "-pattern") {
+        const pattern = attached ?? args[++index];
+        if (pattern === undefined || ambiguousPowerShellArgument(pattern)) return null;
+        patternSupplied = true;
+      } else if (flags.has(name)) {
+        if (attached !== null) return null;
+      } else if (values.has(name)) {
+        const value = attached ?? args[++index];
+        if (value === undefined || ambiguousPowerShellArgument(value)) return null;
+      } else {
+        // PowerShell accepts abbreviated parameter names, but resolving those
+        // safely would require the full PowerShell binder. Exact names only.
+        return null;
+      }
+      continue;
+    }
+    if (!patternSupplied) patternSupplied = true;
+    else paths.push(argument);
+  }
+  return patternSupplied ? paths : null;
+}
+
+const RG_FLAGS = new Set([
+  "--all", "--block-buffered", "--byte-offset", "--case-sensitive", "--column",
+  "--count", "--count-matches", "--crlf", "--debug", "--files", "--files-with-matches",
+  "--files-without-match", "--fixed-strings", "--heading", "--hidden", "--ignore-case",
+  "--include-zero", "--invert-match", "--json", "--line-buffered", "--line-number",
+  "--messages", "--mmap", "--multiline", "--multiline-dotall", "--no-config", "--no-filename",
+  "--no-heading", "--no-ignore", "--no-ignore-dot", "--no-ignore-exclude", "--no-ignore-files",
+  "--no-ignore-global", "--no-ignore-messages", "--no-ignore-parent", "--no-ignore-vcs", "--no-line-number",
+  "--no-messages", "--no-mmap", "--no-require-git", "--null", "--null-data", "--one-file-system",
+  "--only-matching", "--passthru", "--pcre2", "--pcre2-unicode", "--pretty", "--quiet",
+  "--smart-case", "--stats", "--stop-on-nonmatch", "--text", "--trim", "--type-list",
+  "--unrestricted", "--version", "--vimgrep", "--with-filename", "--word-regexp", "--line-regexp",
+  "-0", "-a", "-b", "-c", "-f", "-h", "-i", "-j", "-l", "-m", "-n", "-o", "-p", "-q",
+  "-s", "-u", "-v", "-w", "-x",
+]);
+const RG_VALUE_OPTIONS = new Set([
+  "--after-context", "--before-context", "--color", "--colors", "--context", "--context-separator",
+  "--dfa-size-limit", "--encoding", "--engine", "--field-context-separator", "--field-match-separator",
+  "--glob", "--iglob", "--max-columns", "--max-count", "--max-depth", "--max-filesize",
+  "--path-separator", "--regex-size-limit", "--replace", "--sort", "--sortr", "--type", "--type-add",
+  "--type-clear", "-A", "-B", "-C", "-E", "-g", "-M", "-m", "-r", "-t", "-T",
+]);
+const RG_PATTERN_OPTIONS = new Set(["--regexp", "-e"]);
+const RG_PATH_OPTIONS = new Set(["--file", "--ignore-file", "-f"]);
+
+function ripgrepFilesystemArguments(args: string[]): string[] | null {
+  const paths: string[] = [];
+  let patternSupplied = false;
+  let filesMode = false;
+  let options = true;
+
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index];
+    if (options && argument === "--") {
+      options = false;
+      continue;
+    }
+    if (options && argument.startsWith("-")) {
+      if (/^(?:-L|--follow)$/.test(argument)) return null;
+      const equals = argument.indexOf("=");
+      const option = equals === -1 ? argument : argument.slice(0, equals);
+      const attached = equals === -1 ? null : argument.slice(equals + 1);
+      if (RG_PATH_OPTIONS.has(option)) {
+        const value = attached ?? args[++index];
+        if (!value) return null;
+        paths.push(value);
+        patternSupplied = true;
+      } else if (RG_PATTERN_OPTIONS.has(option)) {
+        const value = attached ?? args[++index];
+        if (value === undefined) return null;
+        patternSupplied = true;
+      } else if (RG_VALUE_OPTIONS.has(option)) {
+        const value = attached ?? args[++index];
+        if (value === undefined) return null;
+      } else if (RG_FLAGS.has(argument)) {
+        filesMode ||= argument === "--files";
+      } else if (/^-[egftT].+/.test(argument)) {
+        const shortOption = argument.slice(0, 2);
+        const value = argument.slice(2);
+        if (RG_PATH_OPTIONS.has(shortOption)) {
+          paths.push(value);
+          patternSupplied = true;
+        } else if (RG_PATTERN_OPTIONS.has(shortOption)) patternSupplied = true;
+      } else {
+        return null;
+      }
+      continue;
+    }
+    if (!filesMode && !patternSupplied) patternSupplied = true;
+    else paths.push(argument);
+  }
+  return filesMode || patternSupplied ? paths : null;
+}
+
+function gitFilesystemArguments(args: string[]): string[] | null {
+  const subcommand = args[0]?.toLowerCase();
+  if (!subcommand) return null;
+  const commandArgs = args.slice(1);
+  if (subcommand === "branch") {
+    return commandArgs.every((argument) => /^(?:--show-current|-a|-r|--all|--remotes)$/.test(argument)) ? [] : null;
+  }
+  if (subcommand === "rev-parse") {
+    const paths: string[] = [];
+    for (let index = 0; index < commandArgs.length; index++) {
+      const argument = commandArgs[index];
+      const attached = attachedOptionValue(argument, "--resolve-git-dir");
+      if (attached !== null) {
+        if (!attached) return null;
+        paths.push(attached);
+      } else if (argument === "--resolve-git-dir") {
+        const pathArgument = commandArgs[++index];
+        if (!pathArgument) return null;
+        paths.push(pathArgument);
+      }
+    }
+    return paths;
+  }
+  if (!["status", "diff", "log", "show", "ls-files"].includes(subcommand)) return null;
+
+  const separator = commandArgs.indexOf("--");
+  const paths = separator === -1 ? [] : commandArgs.slice(separator + 1);
+  const options = separator === -1 ? commandArgs : commandArgs.slice(0, separator);
+  for (let index = 0; index < options.length; index++) {
+    const argument = options[index];
+    const attachedPathspec = attachedOptionValue(argument, "--pathspec-from-file")
+      ?? attachedOptionValue(argument, "--exclude-from")
+      ?? attachedOptionValue(argument, "--relative");
+    if (attachedPathspec !== null) {
+      if (!attachedPathspec) return null;
+      paths.push(attachedPathspec);
+      continue;
+    }
+    if (argument === "--pathspec-from-file" || argument === "--exclude-from") {
+      const pathArgument = options[++index];
+      if (!pathArgument) return null;
+      paths.push(pathArgument);
+    } else if (!argument.startsWith("-")) {
+      paths.push(argument);
+    }
+  }
+  return paths;
+}
+
+function planShellFilesystemArguments(tokens: string[]): string[] | null {
+  const command = tokens[0]?.toLowerCase();
+  const args = tokens.slice(1);
+  if (!command) return null;
+  if (command === "pwd" || command === "get-location") return args.length === 0 ? [] : null;
+  if (["ls", "get-childitem", "get-item", "get-content", "select-string", "resolve-path", "test-path", "measure-object"].includes(command)) {
+    return powershellFilesystemArguments(command, args);
+  }
+  if (command === "rg") return ripgrepFilesystemArguments(args);
+  if (command === "git") return gitFilesystemArguments(args);
+  return null;
+}
+
+function isContainedPlanShellPath(raw: string, workspace: string): boolean {
+  if (!raw || /[\0*?\[\]{}]/.test(raw)) return false;
+  const fileUrl = /^file:\/\//i.test(raw);
+  const localDrivePath = /^[A-Za-z]:[\\/]/.test(raw);
+  if (!fileUrl && !localDrivePath && (/^[^\\/\s]+:/.test(raw) || raw.includes("::"))) return false;
+  const lexical = resolvePlanShellTarget(raw, workspace);
+  const canonical = lexical === null ? null : canonicalTarget(lexical);
+  return canonical !== null && insideWorkspace(canonical, workspace);
+}
+
+export function isPlanSafeShellCommand(command: string, cwdInput = process.cwd()): boolean {
   const value = command.trim();
   if (!value || SHELL_CONTROL.test(value) || SECRET_PATH.test(value)) return false;
-  if (/(?:^|\s)(?:\.\.[\\/]|~[\\/]|[a-z]:[\\/]|\\\\)|\b(?:env|variable|function|cert|registry|hklm|hkcu):/i.test(value)) return false;
+  if (/\$(?!\()|%[^%\s]+%|@\(|\b(?:env|variable|function|cert|registry|hklm|hkcu):/i.test(value)) return false;
   if (/--(?:pre(?:-glob)?|output)(?:=|\s|$)/i.test(value)) return false;
-  return [
-    /^(?:pwd|get-location)\b/i,
-    /^(?:ls|get-childitem|get-item|get-content|select-string|resolve-path|test-path|measure-object)\b/i,
-    /^rg\b/i,
-    /^git\s+(?:status|diff|log|show|rev-parse|ls-files)\b/i,
-    /^git\s+branch(?:\s+(?:--show-current|-a|-r|--all|--remotes))*\s*$/i,
-  ].some((pattern) => pattern.test(value));
+  if (hasUnquotedPowerShellExpansion(value)) return false;
+  const tokens = shellTokens(value);
+  const shellCommand = tokens?.[0]?.toLowerCase();
+  if (shellCommand && ["ls", "get-childitem", "get-item", "get-content", "select-string", "resolve-path", "test-path", "measure-object"].includes(shellCommand)
+      && hasUnquotedPowerShellOperator(value)) return false;
+  const filesystemArguments = tokens === null ? null : planShellFilesystemArguments(tokens);
+  if (filesystemArguments === null) return false;
+  const workspace = normalizedWorkspace(cwdInput);
+  return filesystemArguments.every((argument) => isContainedPlanShellPath(argument, workspace));
 }
 
 function isKnownDevelopmentCommand(command: string): boolean {
@@ -353,7 +681,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         facts,
       });
     }
-    if (isPlanSafeShellCommand(command)) {
+    if (isPlanSafeShellCommand(command, executionCwd)) {
       return result(base, {
         summary: redactCommand(command), category: "read-only", risk: "low", route: "allow",
         reason: "Command matches Neura's exact read-only allowlist.", saferPath: "", facts: {},
@@ -384,7 +712,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
 export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
   const toolName = String(event.toolName ?? "unknown");
   if (!PLAN_TOOLS.has(toolName)) return false;
-  if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""));
+  if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""), cwd);
   if (READ_TOOLS.has(toolName)) {
     return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
   }
