@@ -16,7 +16,7 @@ mode has canonical workspace containment. Human Away remains preview-only.
 | Logo-only launch and persona | Ready | `neura.ts` renders only the responsive wordmark, then hides it when work starts. |
 | Responsive cockpit and theme | Ready | Harness checks 24-120 column layouts and the ten-line widget cap. |
 | Plan tool boundary | Ready | Plan activates a fixed tool set and blocks normal mutation tools. |
-| Plan filesystem containment | Ready | `read`, `grep`, `find`, and `ls` resolve aliases, real paths, symlinks, junctions, and missing descendants before workspace comparison. |
+| Plan filesystem containment | Ready | Filesystem tools resolve aliases, real paths, symlinks, junctions, and missing descendants before workspace comparison. Git inspection is limited to objects, refs, and index-only views under exact options that disable config-driven process and mailmap paths; unstaged diff requires explicit range-plus-separator syntax and worktree-aware modes are denied. |
 | Plan external research | Ready with limits | Bounded `web_search` remains available. Direct `web_fetch` is disabled because the delegated Ollama backend does not expose DNS answers, connection IPs, or redirect hops for policy enforcement. |
 | Visual Plan publisher | Ready | Structured input, escaped output, restrictive CSP, collision-safe creation, session-owned revisions, and external-edit detection. |
 | Checkpoints and `/undo` | Ready with limits | Snapshots are in memory, exclude ignored files, and do not delete files created after a snapshot. |
