@@ -23,6 +23,10 @@ type OwnedPlan = {
   sha256: string;
 };
 
+type PromptPlanIdentity = Pick<OwnedPlan, "slug" | "projectRoot" | "path">;
+
+const PLAN_REQUEST_RESET_ENTRY = "neura-plan-request-reset";
+
 const Text = (description: string, minLength: number, maxLength: number) => Type.String({ description, minLength, maxLength });
 const TextList = (description: string, minItems: number, maxItems: number, maxLength = 300) => Type.Array(
   Text(description, 1, maxLength),
@@ -142,6 +146,7 @@ export default function (pi): void {
   if (!process.env.NEURA) return;
 
   const ownedPlans = new Map<string, OwnedPlan>();
+  let planForPrompt: PromptPlanIdentity | undefined;
   let publishedForPrompt = false;
   let publicationRetries = 0;
 
@@ -152,10 +157,11 @@ export default function (pi): void {
       "Publish the researched implementation plan as safe, self-contained HTML inside the current project's plans folder. " +
       "Use only after inspecting relevant code and documentation. Include at least one meaningful visual and realistic verification. " +
       "When work changes a visible surface, include a directional future-state preview. " +
-      "Calling again with the same slug revises only the artifact owned by this session.",
+      "Each interactive request may publish one artifact; calling again with the same slug revises only that session-owned artifact.",
     promptSnippet: "Publish a structured visual HTML plan to the local project plans folder",
     promptGuidelines: [
       "Use publish_plan only in Neura Plan mode, after completing the evidence pass.",
+      "Publish one artifact per interactive request. Revise it with the same slug instead of choosing another slug.",
       "For visible product work, include preview with representative regions, copy, controls, states, and responsive variants; omit it for invisible backend work rather than inventing UI.",
       "Use simple English in publish_plan fields; name real files and checks; stop for human approval after publication.",
     ],
@@ -165,6 +171,9 @@ export default function (pi): void {
       if (getMode() !== "plan") throw new Error("publish_plan is available only while Neura Plan mode is active.");
       aborted(signal);
       assertPlanDocument(params);
+      if (planForPrompt && params.slug !== planForPrompt.slug) {
+        throw new Error(`This planning request already published slug "${planForPrompt.slug}". Revise it with the same slug or start a new interactive request.`);
+      }
       if (Buffer.byteLength(JSON.stringify(params), "utf-8") > MAX_PLAN_INPUT_BYTES) {
         throw new Error("Plan input exceeds the 256 KiB structured-data limit.");
       }
@@ -174,6 +183,9 @@ export default function (pi): void {
       if (htmlBytes > MAX_PLAN_HTML_BYTES) throw new Error("Rendered plan exceeds the 512 KiB HTML limit.");
       const nextHash = sha256(html);
       const { projectRoot, plansDir } = await preparePlanDirectory(ctx.cwd);
+      if (planForPrompt && projectRoot !== planForPrompt.projectRoot) {
+        throw new Error("This planning request already published an artifact in another project. Revise that artifact or start a new interactive request.");
+      }
       const key = ownershipKey(projectRoot, params.slug);
       const owned = ownedPlans.get(key);
       let destination = owned?.path;
@@ -208,6 +220,7 @@ export default function (pi): void {
 
       const ownership: OwnedPlan = { slug: params.slug, projectRoot, path: destination!, sha256: nextHash };
       ownedPlans.set(key, ownership);
+      planForPrompt = ownership;
       publishedForPrompt = true;
       let persisted = true;
       try { pi.appendEntry(PLAN_ARTIFACT_ENTRY, ownership); }
@@ -225,21 +238,31 @@ export default function (pi): void {
 
   pi.on("session_start", (_event, ctx) => {
     ownedPlans.clear();
+    planForPrompt = undefined;
     publishedForPrompt = false;
     publicationRetries = 0;
     let entries: Array<{ type?: string; customType?: string; data?: unknown }> = [];
     try { entries = ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries?.() ?? []; }
     catch { return; }
     for (const entry of entries) {
+      if (entry.type === "custom" && entry.customType === PLAN_REQUEST_RESET_ENTRY) {
+        planForPrompt = undefined;
+        continue;
+      }
       if (entry.type !== "custom" || entry.customType !== PLAN_ARTIFACT_ENTRY || !isOwnedPlan(entry.data)) continue;
       ownedPlans.set(ownershipKey(entry.data.projectRoot, entry.data.slug), entry.data);
+      planForPrompt = entry.data;
     }
+    publishedForPrompt = planForPrompt !== undefined;
   });
 
   pi.on("input", (event) => {
-    if (event.source !== "interactive") return;
+    if (event.source !== "interactive" || event.streamingBehavior !== undefined) return;
+    planForPrompt = undefined;
     publishedForPrompt = false;
     publicationRetries = 0;
+    try { pi.appendEntry(PLAN_REQUEST_RESET_ENTRY); }
+    catch {}
   });
 
   pi.on("agent_settled", (_event, ctx) => {
