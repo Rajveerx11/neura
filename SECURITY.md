@@ -22,6 +22,9 @@ fix. Never include a real credential or private user data.
 ## Current security model
 
 - Plan uses a fixed tool set and canonical workspace containment.
+- Plan permits bounded `web_search` but denies direct `web_fetch`; its delegated
+  backend does not expose DNS answers, connection IPs, or redirect hops needed
+  for SSRF-safe enforcement.
 - Plan HTML uses structured input, escaping, CSP, safe URL checks, collision-safe
   creation, and session-owned revision hashes.
 - YOLO intentionally disables Neura application approvals and tool blocking. On
