@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Extended Plan publication enforcement to TUI, print, JSON, and RPC input.
+  Missing artifacts now queue one retry from Pi's continuation-safe `agent_end`
+  hook without a UI dependency. Exhausted requests emit a versioned
+  `neura-plan-contract` failure entry; waiting and published lifecycle states
+  remain exempt, and successful publications emit a matching success entry.
 - Restricted Plan-mode Git inspection to exact read-only command options with
   paging, optional locks, lazy fetching, configured filesystem monitors,
   repository hooks, signature display/format, external diff drivers, and
