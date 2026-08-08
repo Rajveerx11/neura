@@ -7,7 +7,8 @@ Current: `2.5.1-rc.1` private release candidate
 ## Release decision
 
 **Not ready for a stable tag.** Normal supervised engineering is usable. Plan
-mode has canonical workspace containment. Human Away remains preview-only.
+mode has canonical workspace containment, and the generated live harness matches
+the current release-candidate source. Human Away remains preview-only.
 
 ## Capability matrix
 
@@ -25,6 +26,7 @@ mode has canonical workspace containment. Human Away remains preview-only.
 | MCP configuration | Optional | gfi-scout, Context7, and Gmail are enabled when credentials exist. Paper, Supabase, and Notion ship disabled. |
 | Proof-of-work gate | Preview | Quick proof starts at `agent_settled`; unavailable proof fails soft. Full `/ship` verification remains explicit. |
 | Automatic Git shipping | Removed | No lifecycle hook stages, commits, or pushes. The installer removes the retired `autogit.ts`; Git changes occur only through requested tool calls. |
+| Live harness sync | Ready | The generated install was audited, synced through `install.ps1`, and rechecked against source. Local settings, keybindings, and unrelated local-only files remain preserved; retired `autogit.ts` is absent. |
 | YOLO policy | Ready with explicit risk | Matches Codex dangerous-full-access semantics: no Neura application approvals or tool blocking and no native-Windows OS sandbox. Harness tests cover sensitive shell, protected-file, and Gmail bypass. |
 | Human Away | Preview | Deterministic review and queue exist, but there is no OS sandbox and approval binding is incomplete. |
 | Gmail mutation policy | Preview | Outside YOLO, named mutations confirm. Unknown Gmail actions currently pass instead of using a read-only allowlist. YOLO intentionally bypasses this mediation. |
@@ -41,7 +43,6 @@ mode has canonical workspace containment. Human Away remains preview-only.
    allowlist. Confirm or block every other Gmail tool.
 4. Pin Pi and every package used by `agent/settings.json`; record update policy.
 5. Add TypeScript typechecking, dependency audit, and complete Windows CI.
-6. Sync the repository into the live harness and make `install.ps1 -Check` pass.
 
 ## Required before expanding Human Away
 
