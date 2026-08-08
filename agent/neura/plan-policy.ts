@@ -16,7 +16,6 @@ export const PLAN_MODE_TOOL_NAMES = Object.freeze([
   "ls",
   "questionnaire",
   "web_search",
-  "web_fetch",
   PUBLISH_PLAN_TOOL,
 ]);
 
@@ -132,7 +131,7 @@ export function isSafeExternalUrl(value: unknown): value is string {
     const url = new URL(value);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;
     if (url.port && !((url.protocol === "http:" && url.port === "80") || (url.protocol === "https:" && url.port === "443"))) return false;
-    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
     const ipv6 = isIP(hostname) === 6;
     if (!hostname
       || !hostname.includes(".") && !ipv6
@@ -164,6 +163,9 @@ export function isPlanToolInputAllowed(toolName: string, input: unknown): boolea
       && query.length <= 500
       && (maxResults === undefined || (Number.isInteger(maxResults) && Number(maxResults) >= 1 && Number(maxResults) <= 10));
   }
-  if (toolName === "web_fetch") return isSafeExternalUrl(data.url);
+  // The installed web_fetch package delegates the URL to Ollama's local API.
+  // This hook cannot observe DNS answers, the connected IP, or redirect hops,
+  // so no URL input can be proven safe here. Keep it denied in Plan mode.
+  if (toolName === "web_fetch") return false;
   return true;
 }

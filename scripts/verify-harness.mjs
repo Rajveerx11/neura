@@ -43,6 +43,9 @@ process.env.NEURA = "1";
 
 const { loadExtensions } = await import(pathToFileURL(loaderPath).href);
 const { visibleWidth } = await import(pathToFileURL(tuiPath).href);
+const { isSafeExternalUrl, isPlanToolInputAllowed } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "neura", "plan-policy.ts")).href
+);
 const extensionDir = path.join(repoRoot, "agent", "extensions");
 const files = fs.readdirSync(extensionDir)
   .filter((name) => name.endsWith(".ts"))
@@ -60,7 +63,7 @@ assert.equal(loaded.extensions.length, files.length, "not every extension loaded
 // loadExtensions deliberately leaves action methods unbound. Bind the small runtime
 // surface exercised by this deterministic harness without constructing an AgentSession.
 const registeredToolNames = loaded.extensions.flatMap((extension) => [...extension.tools.keys()]);
-let activeTools = [...new Set(["read", "bash", "edit", "write", "grep", "find", "ls", ...registeredToolNames])];
+let activeTools = [...new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "web_search", "web_fetch", ...registeredToolNames])];
 const appendedEntries = [];
 const sentUserMessages = [];
 loaded.runtime.getActiveTools = () => [...activeTools];
@@ -375,7 +378,8 @@ delete process.env.NEURA_REDUCED_MOTION;
 await modes.commands.get("mode").handler("plan", context);
 assert.ok(widgets.has("neura-mode-transition"), "Plan transition animation missing");
 assert.ok(activeTools.includes("publish_plan"), "Plan mode did not activate the bounded plan publisher");
-assert.ok(activeTools.includes("web_search") && activeTools.includes("web_fetch"), "Plan mode did not activate research tools");
+assert.ok(activeTools.includes("web_search"), "Plan mode did not activate bounded web search");
+assert.equal(activeTools.includes("web_fetch"), false, "Plan mode activated web_fetch without enforceable DNS and redirect validation");
 assert.equal(activeTools.includes("edit") || activeTools.includes("write"), false, "Plan mode retained generic mutation tools");
 assert.equal(await guard({ toolName: "bash", input: { command: "git status" } }, context), undefined);
 assert.equal((await guard({ toolName: "bash", input: { command: "git status; Remove-Item file.txt" } }, context))?.block, true);
@@ -417,11 +421,26 @@ for (const testCase of filesystemCases) {
 
 assert.equal(await guard({ toolName: "web_search", input: { query: "official pi extension documentation", max_results: 3 } }, context), undefined);
 assert.equal((await guard({ toolName: "web_search", input: { query: "x", max_results: 100 } }, context))?.block, true, "Plan web search accepted an unbounded query");
-assert.equal(await guard({ toolName: "web_fetch", input: { url: "https://github.com/earendil-works/pi" } }, context), undefined);
-assert.equal((await guard({ toolName: "web_fetch", input: { url: "http://127.0.0.1/admin" } }, context))?.block, true, "Plan web fetch allowed a private target");
-assert.equal((await guard({ toolName: "web_fetch", input: { url: "http://[::1]/admin" } }, context))?.block, true, "Plan web fetch allowed IPv6 localhost");
-assert.equal((await guard({ toolName: "web_fetch", input: { url: "https://user:pass@example.com/" } }, context))?.block, true, "Plan web fetch allowed URL credentials");
-assert.equal((await guard({ toolName: "web_fetch", input: { url: "https://example.com:8443/" } }, context))?.block, true, "Plan web fetch allowed a non-default port");
+assert.equal(isSafeExternalUrl("http://localhost./admin"), false, "Plan source URL normalization allowed trailing-dot localhost");
+assert.equal(isSafeExternalUrl("https://example.com./docs"), true, "Plan source URL normalization rejected a public trailing-dot host");
+assert.equal(isPlanToolInputAllowed("web_fetch", { url: "https://example.com" }), false, "Plan input policy allowed web_fetch");
+const deniedPlanFetchUrls = [
+  "https://github.com/earendil-works/pi",
+  "http://127.0.0.1/admin",
+  "http://[::1]/admin",
+  "http://[fe80::1]/admin",
+  "http://localhost./admin",
+  "http://127.0.0.1.nip.io/admin",
+  "https://mixed-address.example/admin",
+  "https://example.com/redirect-to-private",
+];
+for (const url of deniedPlanFetchUrls) {
+  assert.equal(
+    (await guard({ toolName: "web_fetch", input: { url } }, context))?.block,
+    true,
+    `Plan web fetch reached an executor-owned DNS/redirect boundary: ${url}`,
+  );
+}
 assert.equal(await guard({ toolName: "publish_plan", input: { slug: "plan-mode-v1" } }, context), undefined);
 assert.equal((await guard({ toolName: "publish_plan", input: { slug: "../escape" } }, context))?.block, true, "Plan publisher accepted path traversal");
 
@@ -561,6 +580,7 @@ await assert.rejects(
 
 await modes.commands.get("mode").handler("yolo", context);
 assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active outside Plan mode");
+assert.equal(activeTools.includes("web_fetch"), true, "Leaving Plan for YOLO did not restore web_fetch");
 assert.equal(await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context), undefined);
 assert.equal(
   await guard(
@@ -592,6 +612,7 @@ assert.equal(
 );
 
 await modes.commands.get("mode").handler("human-away", context);
+assert.equal(activeTools.includes("web_fetch"), true, "Human Away did not retain the normal web_fetch tool set");
 const transitionFactory = widgets.get("neura-mode-transition");
 assert.equal(typeof transitionFactory, "function", "Human Away transition is not animated");
 const transition = transitionFactory({ requestRender() {} }, null);
