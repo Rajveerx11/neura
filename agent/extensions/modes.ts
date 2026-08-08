@@ -5,7 +5,7 @@ import { Key, truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/cockpit-state.ts";
 import { PALETTE, fg } from "../neura/core.ts";
 import { getMode, isAgentMode, modeLabel, modePosition, nextMode, setMode, type AgentMode } from "../neura/mode-state.ts";
-import { PLAN_MODE_TOOL_NAMES, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
+import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
 import {
   findPending,
@@ -32,9 +32,16 @@ Workflow:
 2. Inspect relevant code, documentation, existing actions, schemas, tests, and patterns. Name real evidence.
 3. Research current external facts with web_search when libraries, APIs, standards, products, or outside knowledge affect the direction. Prefer primary sources. Direct web_fetch is unavailable because its backend does not expose DNS, connection-IP, or redirect-hop validation.
 4. Choose one recommended approach. Ask only when an unresolved choice would materially change architecture or scope.
+   - Prefer questionnaire when its interactive UI can resolve the choice immediately.
+   - If you must return a question and wait for a later reply, call plan_request with wait_for_input first. That reply continues the same planning request and must not be treated as a new plan.
 5. When the planned work changes a visible product, screen, terminal, report, deck, or workflow, include a concrete future-state preview showing the proposed hierarchy, representative copy, controls, and important responsive states. Label it as directional, not already implemented. For invisible backend work, omit it rather than inventing decorative UI.
 6. Call publish_plan with simple English, 1-3 meaningful relationship visuals, 2-8 ordered steps, real files, risks, sources, realistic verification, and the future-state preview when applicable.
 7. Return the local plan path and a short review note. Stop before implementation until Rajveer approves.
+
+Request lifecycle:
+- After publication, approval, status, and handoff replies do not start another plan and require no publication.
+- Before changing the published artifact at Rajveer's request, call plan_request with revise_published, then revise it with the same slug.
+- Before planning a separate objective while another request is active, call plan_request with start_new. A genuine new request retains the one-retry publication contract.
 
 Safety boundary: read-only exploration plus one controlled plan artifact under the project plans/ folder. Do not modify source files, external systems, git state, configuration, or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
   yolo: `[NEURA MODE: YOLO]
@@ -195,7 +202,7 @@ export default function (pi) {
   }
 
   function applyToolBoundary(mode: AgentMode): void {
-    if (!normalTools) normalTools = pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL);
+    if (!normalTools) normalTools = pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL && name !== PLAN_REQUEST_TOOL);
     pi.setActiveTools(mode === "plan" ? planToolNames() : normalTools);
   }
 
@@ -320,7 +327,7 @@ export default function (pi) {
   });
 
   pi.on("session_start", (_event, ctx) => {
-    normalTools ??= pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL);
+    normalTools ??= pi.getActiveTools().filter((name) => name !== PUBLISH_PLAN_TOOL && name !== PLAN_REQUEST_TOOL);
     returnShown = false;
     let restored: AgentMode = "yolo";
     try {

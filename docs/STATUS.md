@@ -1,6 +1,6 @@
 # Neura status
 
-Last audited: 2026-08-06
+Last audited: 2026-08-08
 Target: `2.5.1` stable
 Current: `2.5.1-rc.1` private release candidate
 
@@ -18,7 +18,7 @@ mode has canonical workspace containment. Human Away remains preview-only.
 | Plan tool boundary | Ready | Plan activates a fixed tool set and blocks normal mutation tools. |
 | Plan filesystem containment | Ready | `read`, `grep`, `find`, and `ls` resolve aliases, real paths, symlinks, junctions, and missing descendants before workspace comparison. |
 | Plan external research | Ready with limits | Bounded `web_search` remains available. Direct `web_fetch` is disabled because the delegated Ollama backend does not expose DNS answers, connection IPs, or redirect hops for policy enforcement. |
-| Visual Plan publisher | Ready | Structured input, escaped output, restrictive CSP, collision-safe creation, session-owned revisions, and external-edit detection. |
+| Visual Plan publisher | Ready | Structured input, escaped output, restrictive CSP, collision-safe creation, explicit waiting/new/revision lifecycle, session-owned revisions, and external-edit detection. |
 | Checkpoints and `/undo` | Ready with limits | Snapshots are in memory, exclude ignored files, and do not delete files created after a snapshot. |
 | Persistent memory | Ready for personal use | Local Markdown file under the live harness; no encryption or multi-user isolation. |
 | Transcript copy and model presets | Ready | Covered by deterministic harness tests. External model login and local Qwen remain operator dependencies. |
