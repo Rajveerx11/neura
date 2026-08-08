@@ -445,7 +445,8 @@ assert.equal(await guard({ toolName: "publish_plan", input: { slug: "plan-mode-v
 assert.equal((await guard({ toolName: "publish_plan", input: { slug: "../escape" } }, context))?.block, true, "Plan publisher accepted path traversal");
 
 // Plan publication: structured input, escaped browser output, collision-safe creation,
-// session-owned revision, external-edit protection, and symlink fail-closed behavior.
+// one-artifact-per-request binding, session-owned revision, external-edit protection,
+// and symlink fail-closed behavior.
 const planArtifact = extensionWithTool("publish_plan");
 await firstHandler(planArtifact, "session_start")({}, context);
 sentUserMessages.length = 0;
@@ -540,21 +541,49 @@ assert.match(firstHtml, /visual-flow/, "Published plan lacks the required visual
 assert.match(firstHtml, /flow-link/, "Published flow visual lacks connectors");
 assert.match(firstHtml, /prefers-reduced-motion:reduce/, "Published plan lacks reduced-motion handling");
 
-const noPreviewPublication = await publishPlan(
-  "plan-no-preview",
-  { ...planFixture, slug: "backend-only-plan", preview: undefined },
-  undefined,
-  undefined,
-  publishContext,
-);
-const noPreviewHtml = fs.readFileSync(noPreviewPublication.details.path, "utf-8");
-assert.doesNotMatch(noPreviewHtml, /href="#preview"|class="future-preview"/, "Backend-only plan rendered an omitted preview");
-assert.doesNotMatch(noPreviewHtml, /preview above/, "Backend-only plan refers to a missing preview");
-
 const revisedFixture = { ...planFixture, target: "Plan mode publishes a revised, validated local HTML artifact after research." };
 const secondPublication = await publishPlan("plan-revise", revisedFixture, undefined, undefined, publishContext);
 assert.equal(secondPublication.details.path, firstPublication.details.path, "Session-owned revision created a second file");
 assert.equal(secondPublication.details.revision, true, "Session-owned update was not marked as a revision");
+const rejectedSecondPlan = path.join(planWorkspace, "plans", "backend-only-plan-plan.html");
+for (const streamingBehavior of ["steer", "followUp"]) {
+  await firstHandler(planArtifact, "input")(
+    { source: "interactive", streamingBehavior, text: "Also publish a separate backend plan" },
+    publishContext,
+  );
+}
+await assert.rejects(
+  publishPlan(
+    "plan-second-slug",
+    { ...planFixture, slug: "backend-only-plan", preview: undefined },
+    undefined,
+    undefined,
+    publishContext,
+  ),
+  /already published slug "plan-mode-v1"/,
+  "Publisher accepted a second slug for one interactive planning request",
+);
+assert.equal(fs.existsSync(rejectedSecondPlan), false, "Rejected second slug created a plan file");
+await firstHandler(planArtifact, "session_start")({}, {
+  ...publishContext,
+  sessionManager: {
+    getBranch: () => appendedEntries.map((entry) => ({ type: "custom", ...entry })),
+  },
+});
+await assert.rejects(
+  publishPlan(
+    "plan-second-slug-after-restart",
+    { ...planFixture, slug: "backend-only-plan", preview: undefined },
+    undefined,
+    undefined,
+    publishContext,
+  ),
+  /already published slug "plan-mode-v1"/,
+  "Session reload lost the active planning request's artifact binding",
+);
+const restartedRevision = await publishPlan("plan-revise-after-restart", revisedFixture, undefined, undefined, publishContext);
+assert.equal(restartedRevision.details.path, firstPublication.details.path, "Session reload changed the same-slug revision path");
+assert.equal(restartedRevision.details.revision, true, "Session reload lost same-slug revision ownership");
 fs.writeFileSync(secondPublication.details.path, "external human edit", "utf-8");
 await assert.rejects(
   publishPlan("plan-conflict", revisedFixture, undefined, undefined, publishContext),
@@ -567,6 +596,25 @@ await assert.rejects(
   "Publisher accepted a traversal slug",
 );
 
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan a separate backend change" }, publishContext);
+await firstHandler(planArtifact, "session_start")({}, {
+  ...publishContext,
+  sessionManager: {
+    getBranch: () => appendedEntries.map((entry) => ({ type: "custom", ...entry })),
+  },
+});
+const noPreviewPublication = await publishPlan(
+  "plan-no-preview",
+  { ...planFixture, slug: "backend-only-plan", preview: undefined },
+  undefined,
+  undefined,
+  publishContext,
+);
+const noPreviewHtml = fs.readFileSync(noPreviewPublication.details.path, "utf-8");
+assert.doesNotMatch(noPreviewHtml, /href="#preview"|class="future-preview"/, "Backend-only plan rendered an omitted preview");
+assert.doesNotMatch(noPreviewHtml, /preview above/, "Backend-only plan refers to a missing preview");
+
+await firstHandler(planArtifact, "input")({ source: "interactive", text: "Plan the symlink boundary" }, publishContext);
 const symlinkWorkspace = path.join(scratchRoot, "plan-symlink-workspace");
 const externalPlans = path.join(scratchRoot, "external-plans");
 fs.mkdirSync(path.join(symlinkWorkspace, ".git"), { recursive: true });
