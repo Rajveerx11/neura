@@ -2,14 +2,14 @@
 
 Last audited: 2026-08-09
 Target: `2.5.1` stable
-Current: `2.5.1` stable source; tag/release waits for green CI on the release commit
+Current: `2.5.1` stable; release commit passed GitHub Windows CI and live drift validation
 
 ## Release decision
 
-**Ready for a stable tag after release-commit CI passes.** Named security,
-dependency, typecheck, Windows CI, and live-sync gates are implemented; their
-equivalent local checks pass. Normal supervised engineering is usable. Human Away remains
-preview-labelled per project policy even with its new WSL2 boundary.
+**Approved for the `v2.5.1` stable tag.** Named security, dependency, typecheck,
+Windows CI, and live-sync gates passed on the release path. Normal supervised
+engineering is usable. Human Away remains preview-labelled per project policy
+even with its new WSL2 boundary.
 
 ## Capability matrix
 
