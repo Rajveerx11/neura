@@ -55,6 +55,7 @@ agent_settled
 | `modes.ts` | Mode switching, active-tool boundary, approval UI | Session entries, approval store |
 | `guardrail.ts` | Plan and Human Away tool-call policy; explicit YOLO bypass | Action policy, Headmaster |
 | `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
+| `human-away-sandbox.ts` | Registers the only Human Away execution tool | WSL2, bubblewrap |
 | `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
 | `checkpoint.ts` | Pre-turn Git tree snapshots and `/undo` | Git object database, temp index |
 | `check-gate.ts` | Quick proof feedback and `/ship` | `uvx`, proof-of-work |
@@ -78,6 +79,8 @@ agent_settled
 | `plan-policy.ts` | Plan tool list, URL policy, plan directory rules |
 | `plan-renderer.ts` | Escaped static HTML generation |
 | `cockpit-state.ts` | Shared UI state and subscribers |
+| `human-away-sandbox.ts` | Workspace link checks, minimal WSL host bridge, bubblewrap namespace/mount contract |
+| `redaction.ts` | Central secret-shaped text and structured-value redaction |
 | `core.ts` | Process, Git, ANSI, palette, and layout helpers |
 | `ui-tokens.ts` | Shared terminal tokens, glyphs, motion values, width fitting |
 
@@ -102,5 +105,7 @@ agent_settled
   instructions remain its scope boundary, but no Neura hook technically enforces it.
 - Plan text is untrusted and rendered through structured escaped fields.
 - Credentials stay outside source and must be redacted before model or audit use.
-- Application guardrails reduce mistakes but do not replace an OS sandbox.
+- Plan guardrails reduce mistakes but do not replace an OS sandbox. Human Away
+  adds a WSL2 bubblewrap boundary and exposes no normal or MCP tools; YOLO remains
+  intentionally unsandboxed.
 - Repository and live harness are separate states; drift checks matter.

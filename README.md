@@ -5,10 +5,11 @@ Neura is Rajveer's private engineering-agent harness built on
 interface, operating modes, verification, recovery, memory, model presets, and
 guardrails around stock Pi.
 
-Current version: **2.5.1-rc.1**. This is a private release candidate. Plan mode
-is hardened for workspace-contained reads. Human Away remains a preview and is
-not safe for unattended high-impact work. See [current status](docs/STATUS.md)
-and [release notes](docs/releases/v2.5.1-rc.1.md).
+Current version: **2.5.1**. This is the stable private release. Plan mode is
+hardened for workspace-contained reads. Human Away remains preview-labelled and
+runs only through its WSL2 bubblewrap tool boundary; it is still not intended
+for unattended high-impact work. See [current status](docs/STATUS.md) and
+[release notes](docs/releases/v2.5.1.md).
 
 ## What is implemented
 
@@ -17,7 +18,8 @@ and [release notes](docs/releases/v2.5.1-rc.1.md).
 | Identity | Logo-only launch, Neura persona, session-only Forged Tungsten theme | `agent/extensions/neura.ts`, `agent/neura/NEURA.md`, `agent/themes/neura-dark.json` |
 | Modes | Plan, YOLO, Human Away Preview, Shift+Tab switching, persisted mode state | `agent/extensions/modes.ts`, `agent/neura/mode-state.ts` |
 | Plan | Bounded web search, explicit request lifecycle, one structured HTML publisher under `plans/`, and a headless publication contract | `agent/extensions/plan-artifact.ts`, `agent/neura/plan-policy.ts`, `agent/neura/plan-renderer.ts` |
-| Policy | Plan containment, Human Away action classification and review queue, explicit YOLO bypass | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts` |
+| Policy | Plan containment, state-bound approvals, centralized redaction, Gmail default-deny mediation, Human Away review queue, explicit YOLO bypass | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts`, `agent/neura/redaction.ts` |
+| Sandbox | Human Away WSL2 bubblewrap executor with workspace-only writable mount, cleared host environment, and no network namespace | `agent/extensions/human-away-sandbox.ts`, `agent/neura/human-away-sandbox.ts` |
 | Recovery | In-memory Git worktree checkpoints and `/undo` | `agent/extensions/checkpoint.ts` |
 | Verification | Quick proof-of-work feedback and full `/ship` command | `agent/extensions/check-gate.ts` |
 | Cockpit | Responsive footer, active-operation state, notices, health panel, transcript copy | `agent/extensions/cockpit.ts`, `agent/extensions/harness-health.ts`, `agent/extensions/transcript-actions.ts` |
@@ -33,7 +35,7 @@ infer a security guarantee from a feature being present.
 |---|---|---|
 | Plan | Research and design before implementation | Activates bounded workspace reads and `web_search`; direct `web_fetch` stays disabled because its delegated backend does not expose DNS, connection-IP, or redirect-hop validation. Filesystem tools resolve inside the canonical workspace. Git inspection is limited to objects, refs, and index-only views under fixed process-blocking options; history disables mailmaps, unstaged diff requires explicit range-plus-separator syntax, and worktree-aware modes are denied. `plan_request` records waiting, revision, and separate-request transitions; only `publish_plan` may write, and only under the project `plans/` directory. |
 | YOLO | Codex-style dangerous full access | Disables Neura application approvals and tool blocking. Native Windows provides no OS sandbox, so filesystem, network, and external tools inherit the signed-in user's permissions. YOLO expands execution permission, not task scope. |
-| Human Away Preview | Low-risk work while Rajveer is unavailable | Uses deterministic policy plus an isolated no-tool reviewer. Deferred work enters a local approval queue. No OS sandbox exists, so this mode stays preview-only. |
+| Human Away Preview | Low-risk work while Rajveer is unavailable | Exposes only `human_away_exec`, backed by WSL2 bubblewrap. Windows drives and WSL home are hidden, the host environment is cleared, network is unshared, and only the active workspace is writable. Deterministic policy and the isolated reviewer still apply. |
 
 Plan publication is supported in TUI, print, JSON, and RPC runs. Every active
 request gets at most one automatic `publish_plan` retry. Waiting requests and
@@ -48,15 +50,15 @@ Ctrl+Shift+T owns Pi's thinking-level shortcut.
 
 ## Install
 
-Verified platform: Windows with PowerShell, Node.js/npm, Git, Pi `0.83.0`, and
+Verified platform: Windows with PowerShell, Node.js/npm, Git, Pi `0.84.1`, and
 `uvx`.
 
 ```powershell
-npm install -g @earendil-works/pi-coding-agent@0.83.0
+npm install -g @earendil-works/pi-coding-agent@0.84.1
 git clone https://github.com/Rajveerx11/neura.git C:\Neura
 Set-Location C:\Neura
 powershell -File .\install.ps1
-pi install
+pi update --extensions --approve
 neura
 ```
 
@@ -72,16 +74,22 @@ servers remain disabled until configured.
 ## Verify
 
 ```powershell
+npm ci --ignore-scripts
+npm run typecheck
+npm audit --audit-level=high
 node scripts\verify-harness.mjs
+node scripts\verify-sandbox.mjs
 node scripts\check-docs.mjs
 powershell -File .\install.ps1 -Check
 ```
 
-- `verify-harness.mjs` loads all 15 extensions through Pi's real loader and
+- `verify-harness.mjs` loads all 16 extensions through Pi's real loader and
   exercises UI bounds, mode isolation, Plan publishing, filesystem containment,
   approvals, Gmail mediation, presets, recovery state, and guardrails.
 - `check-docs.mjs` validates required release files, local Markdown links,
   version references, and stale launch claims.
+- `verify-sandbox.mjs` exercises the live WSL2 bubblewrap mount, environment,
+  network, system-write, redaction, and junction boundaries.
 - `install.ps1 -Check` validates prerequisites and compares repository files
   with the live harness while ignoring line-ending-only differences.
 
@@ -121,6 +129,7 @@ plans/              Historical visual plans; not current requirements
 - [Current feature and risk status](docs/STATUS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development workflow](docs/DEVELOPMENT.md)
+- [Dependency policy and review](docs/DEPENDENCIES.md)
 - [Security policy](SECURITY.md)
 - [Release process](docs/RELEASING.md)
 - [Changelog](docs/CHANGELOG.md)

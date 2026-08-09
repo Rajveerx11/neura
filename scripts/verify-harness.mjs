@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -46,6 +47,18 @@ const { visibleWidth } = await import(pathToFileURL(tuiPath).href);
 const { isSafeExternalUrl, isPlanToolInputAllowed } = await import(
   pathToFileURL(path.join(repoRoot, "agent", "neura", "plan-policy.ts")).href
 );
+const { inspectAction, isApprovalRetryEligible } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "neura", "action-policy.ts")).href
+);
+const { GRANT_TTL_MS, consumeExactRetry, grantExactRetry, listPending } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "neura", "approval-store.ts")).href
+);
+const { redactSensitiveText } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "neura", "redaction.ts")).href
+);
+const { HUMAN_AWAY_SANDBOX_TOOL, assertWorkspaceHasNoLinks, bubblewrapArguments } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "neura", "human-away-sandbox.ts")).href
+);
 const extensionDir = path.join(repoRoot, "agent", "extensions");
 const files = fs.readdirSync(extensionDir)
   .filter((name) => name.endsWith(".ts"))
@@ -55,6 +68,9 @@ const installerSource = fs.readFileSync(path.join(repoRoot, "install.ps1"), "utf
 assert.match(installerSource, /\$retiredExtensions\s*=\s*@\("autogit\.ts"\)/, "installer does not retire the old autogit hook");
 assert.match(installerSource, /Remove-Item -LiteralPath \$retiredPath -Force/, "installer does not remove the retired autogit hook");
 assert.match(installerSource, /is retired but remains installed/, "drift check does not detect the retired autogit hook");
+assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot reconcile exact runtime package pins");
+assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
+assert.match(installerSource, /\$requiredPiVersion\s*=\s*"0\.84\.1"/, "installer does not enforce the verified Pi version");
 const loaded = await loadExtensions(files, repoRoot);
 
 assert.deepEqual(loaded.errors, [], `extension load errors: ${JSON.stringify(loaded.errors)}`);
@@ -227,6 +243,14 @@ await firstHandler(cockpit, "tool_execution_start")({ toolName: "bash", input: {
 const redactedOperation = widgets.get("neura-cockpit")(null, null).render(120).map(stripAnsi).join("\n");
 assert.doesNotMatch(redactedOperation, /cockpit-secret-value/, "cockpit operation leaked an inline secret");
 assert.match(redactedOperation, /\[REDACTED\]/, "cockpit operation lost the secret redaction marker");
+cockpitState.addCockpitNotice({
+  id: "redaction-probe",
+  message: "Provider warning",
+  detail: "https://example.test/failure?token=notice-secret-value",
+  tone: "warning",
+});
+assert.doesNotMatch(JSON.stringify(cockpitState.getCockpitState().notices), /notice-secret-value/,
+  "cockpit notice bypassed central redaction");
 await firstHandler(cockpit, "agent_end")({}, cockpitContext);
 assert.equal(workingMessage, "", "working message was not restored after completion");
 cockpitState.resetCockpit();
@@ -268,6 +292,19 @@ const settings = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "settin
 assert.ok(settings.skills.includes("!skills/agent-reach"), "agent-reach collision exclusion missing");
 assert.ok(settings.skills.includes("!skills/find-skills"), "find-skills collision exclusion missing");
 assert.ok(settings.packages.includes("npm:@spences10/pi-mcp@0.0.58"), "verified pi-mcp version is not pinned");
+assert.ok(settings.packages.every((entry) => /^npm:(?:@[^/]+\/[^@]+|[^@]+)@\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(entry)), "runtime package is not exactly pinned");
+
+const syntheticProviderToken = ["github", "pat", "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"].join("_");
+const syntheticJwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "syntheticSignatureValue1234567890"].join(".");
+const redactionProbe = redactSensitiveText(
+  "Authorization: Bearer synthetic-bearer-secret\nhttps://example.test/path?token=secret&view=full\n" +
+  "postgres://user:synthetic-password@db.test/app\n" +
+  `${syntheticProviderToken}\n${syntheticJwt}\n` +
+  "z9Y8x7W6v5U4t3S2r1Q0p9O8n7M6l5K4",
+);
+assert.doesNotMatch(redactionProbe, /synthetic-bearer-secret|secret&view|synthetic-password|github_pat_|eyJhbGci|z9Y8x7W6/,
+  "central redaction missed a required secret shape");
+assert.match(redactionProbe, /\[REDACTED\]/, "central redaction marker missing");
 
 const mcpConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "mcp.json"), "utf-8"));
 assert.equal(mcpConfig.mcpServers.gmail.headers["x-api-key"], "${COMPOSIO_API_KEY}", "Gmail MCP header lost its environment placeholder");
@@ -290,10 +327,13 @@ assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_GET_PROFILE", input
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: { recipient_email: "test@example.com", subject: "Test" } }, deniedGmailContext))?.block, true, "denied Gmail send was not blocked");
 assert.equal(gmailPrompts, 1, "Gmail send did not request exactly one human confirmation");
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, { ...context, hasUI: false }))?.block, true, "headless Gmail send did not fail closed");
+assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_NEW_UNCLASSIFIED_ACTION", input: {} }, deniedGmailContext))?.block, true, "unknown Gmail action did not require confirmation");
+assert.equal(gmailPrompts, 2, "unknown Gmail action did not request exactly one confirmation");
+assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_NEW_UNCLASSIFIED_ACTION", input: {} }, { ...context, hasUI: false }))?.block, true, "headless unknown Gmail action did not fail closed");
 modeState.setMode("yolo");
 assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, deniedGmailContext), undefined, "YOLO retained Gmail approval mediation");
 assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_DELETE_MESSAGE", input: {} }, { ...context, hasUI: false }), undefined, "headless YOLO blocked a Gmail mutation");
-assert.equal(gmailPrompts, 1, "YOLO requested a Gmail confirmation");
+assert.equal(gmailPrompts, 2, "YOLO requested a Gmail confirmation");
 
 const transcript = extensionWithCommand("clip");
 assert.ok(transcript.shortcuts.has("ctrl+shift+x"), "Ctrl+Shift+X transcript chooser missing");
@@ -1020,7 +1060,28 @@ assert.equal(
 );
 
 await modes.commands.get("mode").handler("human-away", context);
-assert.equal(activeTools.includes("web_fetch"), true, "Human Away did not retain the normal web_fetch tool set");
+assert.deepEqual(activeTools, [HUMAN_AWAY_SANDBOX_TOOL], "Human Away exposed tools outside its WSL2 sandbox boundary");
+const humanProviderPayload = await firstHandler(modes, "before_provider_request")({ payload: {
+  tools: [
+    { type: "function", function: { name: "read", parameters: {} } },
+    { type: "function", function: { name: HUMAN_AWAY_SANDBOX_TOOL, parameters: {} } },
+    { type: "function", function: { name: "mcp__gmail__GMAIL_GET_PROFILE", parameters: {} } },
+  ],
+} }, context);
+assert.deepEqual(humanProviderPayload.tools.map((tool) => tool.function.name), [HUMAN_AWAY_SANDBOX_TOOL],
+  "Human Away provider payload leaked a non-sandbox tool");
+const sandboxArgs = bubblewrapArguments("/mnt/c/Neura", "node --version");
+assert.ok(sandboxArgs.includes("--unshare-all"), "Human Away sandbox does not unshare host namespaces");
+assert.ok(sandboxArgs.includes("--clearenv"), "Human Away sandbox does not clear host environment variables");
+assert.deepEqual(sandboxArgs.slice(-3), ["sh", "-lc", "node --version"], "Human Away sandbox command boundary changed");
+assert.equal(sandboxArgs.includes("/mnt/c"), false, "Human Away sandbox mounted the broad Windows drive");
+const linkedWorkspace = path.join(scratchRoot, "linked-workspace");
+const linkedOutside = path.join(scratchRoot, "linked-outside");
+fs.mkdirSync(linkedWorkspace, { recursive: true });
+fs.mkdirSync(linkedOutside, { recursive: true });
+fs.symlinkSync(linkedOutside, path.join(linkedWorkspace, "escape"), "junction");
+assert.throws(() => assertWorkspaceHasNoLinks(linkedWorkspace), /refused linked workspace entry/,
+  "Human Away sandbox accepted a junction escape");
 const transitionFactory = widgets.get("neura-mode-transition");
 assert.equal(typeof transitionFactory, "function", "Human Away transition is not animated");
 const transition = transitionFactory({ requestRender() {} }, null);
@@ -1034,12 +1095,28 @@ for (const width of [24, 40, 80, 120]) {
 }
 transition.dispose?.();
 
+process.env.NEURA_HEADMASTER = "off";
+assert.equal(await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "node --test" } }, context), undefined,
+  "Human Away blocked a known development command inside the sandbox");
+assert.equal((await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "printf updated > src/generated.txt" } }, context))?.block, true,
+  "Human Away auto-allowed an opaque workspace edit command");
+assert.equal((await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "shred README.md" } }, context))?.block, true,
+  "Human Away auto-allowed opaque file destruction with shred");
+assert.equal((await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "truncate -s 0 README.md" } }, context))?.block, true,
+  "Human Away auto-allowed opaque file destruction with truncate");
+assert.equal((await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "git push origin main" } }, context))?.block, true,
+  "Human Away sandbox bypassed remote-mutation policy");
+assert.equal((await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "sed -i s/a/b/ agent/neura/action-policy.ts" } }, context))?.block, true,
+  "Human Away sandbox bypassed protected-control policy");
+assert.equal((await guard({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: "rm -r ." } }, context))?.block, true,
+  "Human Away sandbox allowed recursive workspace deletion");
+await firstHandler(guardrail, "agent_start")({}, context);
 assert.equal(await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context), undefined);
 const denied = await guard({ toolName: "bash", input: { command: "format C:" } }, context);
 assert.equal(denied?.block, true, "Human Away broad destruction was not blocked");
 assert.match(denied.reason, /Queued for Rajveer/, "Human Away denial did not queue for return");
 const auditLines = fs.readFileSync(path.join(process.env.NEURA_APPROVAL_DIR, "audit.jsonl"), "utf-8").trim().split(/\r?\n/);
-const queuedId = JSON.parse(auditLines[0]).record.id;
+const queuedId = auditLines.map((line) => JSON.parse(line)).filter((event) => event.kind === "decision").at(-1).record.id;
 await modes.commands.get("approvals").handler("audit", context);
 assert.ok(widgets.has("neura-approvals"), "/approvals audit widget missing");
 await firstHandler(modes, "input")({ source: "interactive", text: "I am back" }, context);
@@ -1081,6 +1158,81 @@ await modes.commands.get("approvals").handler(`approve ${protectedDecision.recor
 assert.equal(await guard(protectedEvent, protectedContext), undefined, "exact retry grant was not consumed across extensions");
 assert.equal((await guard(protectedEvent, protectedContext))?.block, true, "exact retry grant was reusable");
 
+const protectedAction = inspectAction(protectedEvent, protectedContext.cwd);
+const stateBoundDecision = listPending(protectedContext.cwd)
+  .find((record) => record.actionFingerprint === protectedAction.actionFingerprint);
+assert.ok(stateBoundDecision?.approvalBindingFingerprint, "approval audit omitted state binding evidence");
+const messagesBeforeStateGrant = sentUserMessages.length;
+await modes.commands.get("approvals").handler(`approve ${stateBoundDecision.id}`, protectedContext);
+assert.equal(sentUserMessages.length, messagesBeforeStateGrant + 1, "fresh state-bound grant was not created");
+fs.appendFileSync(protectedFile, "CHANGED_AFTER_APPROVAL=1\n");
+assert.equal((await guard(protectedEvent, protectedContext))?.block, true,
+  "approval grant survived a relevant target content change");
+
+const bindingWorkspace = path.join(scratchRoot, "binding-workspace");
+fs.mkdirSync(path.join(bindingWorkspace, "agent"), { recursive: true });
+fs.writeFileSync(path.join(bindingWorkspace, "agent", "settings.json"), "{}\n");
+fs.writeFileSync(path.join(bindingWorkspace, "tracked.txt"), "one\n");
+fs.writeFileSync(path.join(bindingWorkspace, ".gitignore"), "ignored.txt\n");
+execFileSync("git", ["init", "--initial-branch=main"], { cwd: bindingWorkspace, windowsHide: true });
+execFileSync("git", ["config", "core.autocrlf", "false"], { cwd: bindingWorkspace, windowsHide: true });
+execFileSync("git", ["config", "user.email", "neura-test@example.invalid"], { cwd: bindingWorkspace, windowsHide: true });
+execFileSync("git", ["config", "user.name", "Neura Test"], { cwd: bindingWorkspace, windowsHide: true });
+execFileSync("git", ["add", "."], { cwd: bindingWorkspace, windowsHide: true });
+execFileSync("git", ["commit", "-m", "initial"], { cwd: bindingWorkspace, windowsHide: true });
+fs.writeFileSync(path.join(bindingWorkspace, "ignored.txt"), "one\n");
+const opaqueEvent = { toolName: "bash", input: { command: "custom-cli --config ignored.txt" } };
+const opaqueAction = inspectAction(opaqueEvent, bindingWorkspace);
+assert.equal(isApprovalRetryEligible(opaqueAction), false,
+  "opaque command without a canonical target remained approval-retry eligible");
+await firstHandler(guardrail, "agent_start")({}, context);
+assert.equal((await guard(opaqueEvent, { ...context, cwd: bindingWorkspace }))?.block, true,
+  "opaque command without a canonical target was not denied");
+const opaqueDecision = listPending(bindingWorkspace)
+  .find((record) => record.actionFingerprint === opaqueAction.actionFingerprint);
+assert.equal(opaqueDecision?.approvable, false,
+  "opaque command without a canonical target was queued as approvable");
+const messagesBeforeOpaqueApproval = sentUserMessages.length;
+await modes.commands.get("approvals").handler(`approve ${opaqueDecision.id}`, { ...context, cwd: bindingWorkspace });
+assert.equal(sentUserMessages.length, messagesBeforeOpaqueApproval,
+  "policy-denied opaque command received an exact retry grant");
+fs.writeFileSync(path.join(bindingWorkspace, "ignored.txt"), "two\n");
+assert.equal((await guard(opaqueEvent, { ...context, cwd: bindingWorkspace }))?.block, true,
+  "opaque command bypassed denial after ignored workspace content changed");
+const bindingEvent = { toolName: "edit", input: { path: path.join(bindingWorkspace, "agent", "settings.json") } };
+const initialBinding = inspectAction(bindingEvent, bindingWorkspace).approvalBinding;
+fs.writeFileSync(path.join(bindingWorkspace, "tracked.txt"), "two\n");
+execFileSync("git", ["add", "tracked.txt"], { cwd: bindingWorkspace, windowsHide: true });
+const indexedBinding = inspectAction(bindingEvent, bindingWorkspace).approvalBinding;
+assert.notEqual(indexedBinding.indexFingerprint, initialBinding.indexFingerprint, "approval binding ignored index changes");
+execFileSync("git", ["commit", "-m", "index change"], { cwd: bindingWorkspace, windowsHide: true });
+const headBinding = inspectAction(bindingEvent, bindingWorkspace).approvalBinding;
+assert.notEqual(headBinding.head, initialBinding.head, "approval binding ignored HEAD changes");
+fs.writeFileSync(path.join(bindingWorkspace, "agent", "settings.json"), "{\"changed\":true}\n");
+const targetBinding = inspectAction(bindingEvent, bindingWorkspace).approvalBinding;
+assert.notEqual(targetBinding.targetStateFingerprint, headBinding.targetStateFingerprint,
+  "approval binding ignored target content changes");
+const expiringAction = inspectAction(bindingEvent, bindingWorkspace);
+grantExactRetry({
+  id: "expiry-test",
+  createdAt: new Date(0).toISOString(),
+  workspace: expiringAction.workspace,
+  actionFingerprint: expiringAction.actionFingerprint,
+  workspaceFingerprint: expiringAction.workspaceFingerprint,
+  approvalBindingFingerprint: createHash("sha256").update(JSON.stringify(Object.fromEntries(
+    Object.entries(expiringAction.approvalBinding).sort(([left], [right]) => left.localeCompare(right)),
+  ))).digest("hex"),
+  toolName: expiringAction.toolName,
+  summary: expiringAction.summary,
+  category: expiringAction.category,
+  risk: expiringAction.risk,
+  verdict: { decision: "defer", reason: "expiry test", saferPath: "wait", reviewer: "policy" },
+  approvable: true,
+  status: "pending",
+}, 1_000);
+assert.equal(consumeExactRetry(expiringAction, 1_000 + GRANT_TTL_MS + 1), false,
+  "approval grant survived its expiry");
+
 await firstHandler(guardrail, "agent_start")({}, context);
 const syntheticSecret = "neura-test-secret-value-should-never-be-logged";
 assert.equal((await guard({ toolName: "bash", input: { command: `custom-cli --token ${syntheticSecret}` } }, protectedContext))?.block, true);
@@ -1089,6 +1241,15 @@ assert.doesNotMatch(
   new RegExp(syntheticSecret),
   "approval audit stored a raw inline secret",
 );
+const approvalDirectory = process.env.NEURA_APPROVAL_DIR;
+const corruptApprovalDirectory = path.join(scratchRoot, "corrupt-approvals");
+fs.mkdirSync(corruptApprovalDirectory, { recursive: true });
+fs.writeFileSync(path.join(corruptApprovalDirectory, "audit.jsonl"), "{}\n");
+process.env.NEURA_APPROVAL_DIR = corruptApprovalDirectory;
+const auditFailure = await guard({ toolName: "bash", input: { command: "custom-cli inspect" } }, protectedContext);
+assert.equal(auditFailure?.block, true, "Human Away approval audit failure did not fail closed");
+assert.equal(cockpitState.getCockpitState().phase, "DEGRADED", "approval audit failure was not surfaced as degraded");
+process.env.NEURA_APPROVAL_DIR = approvalDirectory;
 delete process.env.NEURA_HEADMASTER;
 
 await firstHandler(guardrail, "agent_start")({}, context);

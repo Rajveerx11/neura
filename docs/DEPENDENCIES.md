@@ -1,0 +1,45 @@
+# Dependency policy and review
+
+Last reviewed: 2026-08-09
+
+Neura uses exact runtime and development pins. `package-lock.json` is the
+reproducible development graph. Pi-managed runtime extensions are pinned in
+`agent/settings.json`; `install.ps1` merges those exact pins into the live
+harness without replacing unrelated local packages or model choices.
+
+## Reviewed runtime surface
+
+| Package | Pin | Source and lifecycle review | Privileged behavior |
+|---|---:|---|---|
+| `@earendil-works/pi-coding-agent` | `0.84.1` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v0.84.1); published manifest has build and `prepublishOnly`, but no install hook. Registry integrity and signature verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
+| `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
+| `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
+| `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
+| `pi-subagents` | `0.41.0` | [Source](https://github.com/nicobailon/pi-subagents); exposes a manual CLI installer but no npm install lifecycle hook. Registry signature verified. | Starts isolated Pi child processes and manages local delegation state. Human Away does not expose this tool. |
+| `@spences10/pi-mcp` | `0.0.58` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-mcp); no install hook. Registry signature verified. | Starts configured MCP processes or HTTP clients, filters child environment, and stores oversized responses through `pi-context`. Human Away removes MCP tools. |
+| `@spences10/pi-context` | `0.1.15` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-context); no install hook. Registry signature verified. | Writes a local SQLite context sidecar under the live harness. |
+
+## Development graph
+
+`package.json` pins Pi `0.84.1`, Pi API/TUI types `0.84.1`, Typebox `1.3.7`,
+TypeScript `7.0.2`, and Node types `26.2.0`. Installation uses `npm ci` in CI.
+The 2026-08-09 review found zero known npm vulnerabilities; all 262 audited
+packages had verified registry signatures and 54 had attestations.
+
+Pi `0.83.0` was rejected for stable release because its locked `undici` and
+`brace-expansion` versions had current moderate/high advisories. Pi `0.84.1`
+updates those dependencies and passed Neura's loader, harness, typecheck, and
+sandbox tests.
+
+## Update policy
+
+1. Change one direct pin at a time.
+2. Review repository ownership, published files, dependency changes, and every
+   lifecycle script before installation.
+3. Install with scripts disabled when package operation does not require them.
+4. Run `npm audit --audit-level=high` and `npm audit signatures`.
+5. Run typecheck, harness verification, sandbox replay, docs validation, and the
+   Windows live-drift check.
+6. Record behavior, migration, and rollback in the changelog and release notes.
+
+Never use `*`, `latest`, caret, or tilde ranges for Neura runtime packages.

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { InspectedAction, RiskLevel } from "./action-policy.ts";
+import { redactSensitiveText } from "./redaction.ts";
 
 export type ReviewDecision = "approve_once" | "defer" | "deny";
 export type ReviewVerdict = {
@@ -20,6 +21,7 @@ export type ApprovalRecord = {
   workspace: string;
   actionFingerprint: string;
   workspaceFingerprint: string;
+  approvalBindingFingerprint?: string;
   toolName: string;
   summary: string;
   category: string;
@@ -48,7 +50,13 @@ type ResolutionEvent = {
 };
 
 type AuditEvent = DecisionEvent | ResolutionEvent;
-type Grant = { id: string; actionFingerprint: string; workspaceFingerprint: string; expiresAt: number };
+type Grant = {
+  id: string;
+  actionFingerprint: string;
+  workspaceFingerprint: string;
+  bindingFingerprint: string;
+  expiresAt: number;
+};
 
 const GRANTS_KEY = Symbol.for("neura.approval-grants.v1");
 const globalRegistry = globalThis as typeof globalThis & { [GRANTS_KEY]?: Map<string, Grant> };
@@ -83,11 +91,7 @@ function withoutHash<T extends AuditEvent>(event: T): Omit<T, "hash"> {
 }
 
 function sanitize(value: string, limit = 500): string {
-  return value
-    .replace(/\b(authorization\s*[:=]\s*bearer\s+)[^\s"']+/ig, "$1[REDACTED]")
-    .replace(/\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/g, "$1[REDACTED]")
-    .replace(/(--?(?:password|token|api-key|secret)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, "$1[REDACTED]")
-    .slice(0, limit);
+  return redactSensitiveText(value, limit);
 }
 
 function readEvents(): AuditEvent[] {
@@ -125,7 +129,11 @@ function materialize(events = readEvents()): ApprovalRecord[] {
   const records = new Map<string, ApprovalRecord>();
   for (const event of events) {
     if (event.kind === "decision") {
-      records.set(event.record.id, { ...event.record, status: event.status });
+      records.set(event.record.id, {
+        ...event.record,
+        approvable: event.record.approvalBindingFingerprint ? event.record.approvable : false,
+        status: event.status,
+      });
     } else {
       const record = records.get(event.id);
       if (record) record.status = event.resolution;
@@ -143,7 +151,8 @@ export function recordDecision(
   if (status === "pending") {
     const duplicate = listPending(action.workspace).find((record) =>
       record.actionFingerprint === action.actionFingerprint &&
-      record.workspaceFingerprint === action.workspaceFingerprint,
+      record.workspaceFingerprint === action.workspaceFingerprint &&
+      record.approvalBindingFingerprint === digest(action.approvalBinding),
     );
     if (duplicate) return duplicate;
   }
@@ -154,6 +163,7 @@ export function recordDecision(
     workspace: action.workspace,
     actionFingerprint: action.actionFingerprint,
     workspaceFingerprint: action.workspaceFingerprint,
+    approvalBindingFingerprint: digest(action.approvalBinding),
     toolName: action.toolName,
     summary: sanitize(action.summary, 300),
     category: action.category,
@@ -191,10 +201,12 @@ export function resolveApproval(id: string, resolution: "approved" | "denied" | 
 
 export function grantExactRetry(record: ApprovalRecord, now = Date.now()): Grant {
   if (!record.approvable || record.status !== "pending") throw new Error("approval is not eligible for exact retry");
+  if (!record.approvalBindingFingerprint) throw new Error("legacy approval lacks a state-bound retry grant");
   const grant = {
     id: record.id,
     actionFingerprint: record.actionFingerprint,
     workspaceFingerprint: record.workspaceFingerprint,
+    bindingFingerprint: record.approvalBindingFingerprint,
     expiresAt: now + GRANT_TTL_MS,
   };
   grants.set(record.actionFingerprint, grant);
@@ -205,7 +217,9 @@ export function consumeExactRetry(action: InspectedAction, now = Date.now()): bo
   const grant = grants.get(action.actionFingerprint);
   if (!grant) return false;
   grants.delete(action.actionFingerprint);
-  return grant.expiresAt >= now && grant.workspaceFingerprint === action.workspaceFingerprint;
+  return grant.expiresAt >= now &&
+    grant.workspaceFingerprint === action.workspaceFingerprint &&
+    grant.bindingFingerprint === digest(action.approvalBinding);
 }
 
 export function verifyApprovalAudit(): { valid: true; events: number } {

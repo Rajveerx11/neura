@@ -1,14 +1,15 @@
 # Neura status
 
-Last audited: 2026-08-08
+Last audited: 2026-08-09
 Target: `2.5.1` stable
-Current: `2.5.1-rc.1` private release candidate
+Current: `2.5.1` stable source; tag/release waits for green CI on the release commit
 
 ## Release decision
 
-**Not ready for a stable tag.** Normal supervised engineering is usable. Plan
-mode has canonical workspace containment, and the generated live harness matches
-the current release-candidate source. Human Away remains preview-only.
+**Ready for a stable tag after release-commit CI passes.** Named security,
+dependency, typecheck, Windows CI, and live-sync gates are implemented; their
+equivalent local checks pass. Normal supervised engineering is usable. Human Away remains
+preview-labelled per project policy even with its new WSL2 boundary.
 
 ## Capability matrix
 
@@ -28,28 +29,35 @@ the current release-candidate source. Human Away remains preview-only.
 | Automatic Git shipping | Removed | No lifecycle hook stages, commits, or pushes. The installer removes the retired `autogit.ts`; Git changes occur only through requested tool calls. |
 | Live harness sync | Ready | The generated install was audited, synced through `install.ps1`, and rechecked against source. Local settings, keybindings, and unrelated local-only files remain preserved; retired `autogit.ts` is absent. |
 | YOLO policy | Ready with explicit risk | Matches Codex dangerous-full-access semantics: no Neura application approvals or tool blocking and no native-Windows OS sandbox. Harness tests cover sensitive shell, protected-file, and Gmail bypass. |
-| Human Away | Preview | Deterministic review and queue exist, but there is no OS sandbox and approval binding is incomplete. |
-| Gmail mutation policy | Preview | Outside YOLO, named mutations confirm. Unknown Gmail actions currently pass instead of using a read-only allowlist. YOLO intentionally bypasses this mediation. |
-| Release reproducibility | Incomplete | Pi is pinned in CI/install docs; most extension packages in `settings.json` remain unpinned. No typecheck job exists. |
+| Approval grants | Ready | One-use grants bind canonical target identity, target content/state, exact input, workspace state, `HEAD`, index state, and 120-second expiry. Legacy pending records cannot grant retries. |
+| Central redaction | Ready with limits | One implementation covers action summaries, approval text, cockpit notices, reviewer dossiers, Gmail summaries, and sandbox output. Pattern matching remains defense in depth, not permission to handle raw secrets. |
+| Human Away | Preview | Only `human_away_exec` reaches the provider. WSL2 bubblewrap exposes one writable workspace mount, read-only system runtime, cleared host environment, hidden Windows/WSL user paths, no network, and link preflight. Missing prerequisites fail closed. |
+| Gmail mutation policy | Ready | Outside YOLO, only exact read-only actions pass. Every other known or unknown Gmail action confirms interactively or blocks headless. YOLO intentionally bypasses mediation. |
+| Release reproducibility | Ready | Pi `0.84.1`, all runtime packages, TypeScript, and type dependencies are exact-pinned. Lockfile install, typecheck, vulnerability/signature audit, harness/docs checks, and Windows install/drift checks run in CI. |
 
-## Required before `2.5.1` stable
+## Completed for `2.5.1` stable
 
-1. Bind approval grants to canonical target identity, relevant content/state hash,
-   `HEAD`, index state, action input, and expiry.
-2. Centralize redaction across action summaries, approval records, notices, and
-   reviewer dossiers. Cover URL queries, headers, provider tokens, JWTs,
-   connection strings, and high-entropy values.
-3. Replace Gmail's non-YOLO mutation-name confirmation list with an explicit read-only
-   allowlist. Confirm or block every other Gmail tool.
-4. Pin Pi and every package used by `agent/settings.json`; record update policy.
-5. Add TypeScript typechecking, dependency audit, and complete Windows CI.
+1. Approval grants are target/content/Git/input/expiry bound with positive and
+   replay-negative tests.
+2. Central redaction covers URL queries, headers, provider tokens, JWTs,
+   connection strings, high-entropy values, notices, audits, and reviewer input.
+3. Gmail uses an explicit read-only allowlist and fails closed for unknown
+   headless actions.
+4. Pi and every `agent/settings.json` package are exact-pinned with reviewed
+   sources, lifecycle behavior, update policy, registry signatures, and audit.
+5. TypeScript, dependency audit, harness/docs verification, and install/drift
+   validation run in pinned Windows CI.
 
-## Required before expanding Human Away
+## Human Away preview evidence
 
-1. Run tools inside a WSL2 or container boundary with workspace-only mounts.
-2. Add adversarial replay for path races, symlink swaps, shell parsing, custom
-   tools, MCP mutations, secret-shaped values, approval reuse, and audit failure.
-3. Keep Human Away labelled `PREVIEW` until both items pass.
+1. WSL2 bubblewrap is the only Human Away execution route; normal and MCP tools
+   are filtered from active tools and provider payloads.
+2. Deterministic and live replay covers linked-path swaps between calls, shell
+   parsing, custom/MCP tool removal, secret-shaped values, approval reuse,
+   target/`HEAD`/index changes, audit corruption, host environment, network,
+   system writes, and Windows/WSL path visibility.
+3. Human Away remains labelled `PREVIEW` for field validation and because Plan
+   and YOLO retain their documented application-only/unsandboxed boundaries.
 
 ## Deferred until evidence supports them
 

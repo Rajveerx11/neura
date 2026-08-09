@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+No unreleased changes.
+
+## 2026-08-09 - v2.5.1 (private stable release)
+
+- Bound one-use Human Away approval retries to canonical target identity,
+  target content/state, exact input, workspace state, `HEAD`, index state, and
+  120-second expiry. Legacy approvals fail closed, changed state invalidates a
+  grant, and audit corruption remains blocking.
+- Added one central redaction module for action summaries, approval text,
+  cockpit notices, reviewer dossiers, Gmail summaries, and sandbox output. It
+  covers URL queries, sensitive headers and CLI/env fields, provider tokens,
+  JWTs, credential-bearing connection strings, and high-entropy values.
+- Replaced Gmail's named-mutation policy with an explicit read-only allowlist.
+  Every other known or unknown action confirms interactively or blocks
+  headless; YOLO retains its documented bypass.
+- Added Human Away's WSL2 bubblewrap executor and removed every normal/MCP tool
+  from that mode. The boundary clears host environment variables, hides Windows
+  drives and WSL home, unshares network, exposes read-only system runtime, and
+  makes only the active workspace writable. Workspace links fail closed.
+- Added adversarial replay across sandbox mounts/network/environment, linked
+  paths, shell and remote-mutation policy, provider tool filtering, secret
+  shapes, approval reuse/state changes, and audit failure. Human Away remains
+  preview-labelled for field validation.
+- Upgraded Pi from `0.83.0` to `0.84.1` after npm audit found vulnerable locked
+  `undici` and `brace-expansion` versions. Exact-pinned every runtime package,
+  documented source/lifecycle review, and taught the installer to merge pins
+  without overwriting unrelated local choices.
+- Added a locked development graph, TypeScript `7.0.2` typechecking, dependency
+  vulnerability/signature audit, pinned GitHub Actions, Node `24.16.0`, and a
+  Windows install/drift smoke test. Local audits report zero known npm
+  vulnerabilities.
+
 - Audited and synced the generated live harness through `install.ps1`. All nine
   semantically drifted tracked files matched older repository blobs, while local
   settings, keybindings, and unrelated local-only files were preserved. The

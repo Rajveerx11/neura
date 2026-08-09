@@ -11,6 +11,7 @@ import {
   truncateText,
 } from "../neura/core.ts";
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
+import { humanAwaySandboxAvailable } from "../neura/human-away-sandbox.ts";
 import { fitLine } from "../neura/ui-tokens.ts";
 
 type HealthReport = {
@@ -74,12 +75,13 @@ async function localModelOnline(): Promise<boolean> {
 }
 
 async function inspect(cwd: string): Promise<HealthReport> {
-  const [piVersion, gitVersion, uvxVersion, git, qwen] = await Promise.all([
+  const [piVersion, gitVersion, uvxVersion, git, qwen, sandbox] = await Promise.all([
     commandVersion("pi"),
     commandVersion("git"),
     commandVersion("uvx"),
     getGitHealth(cwd),
     localModelOnline(),
+    humanAwaySandboxAvailable(),
   ]);
 
   const checkpoint = fs.existsSync(path.join(AGENT_DIR, "extensions", "checkpoint.ts"));
@@ -90,7 +92,7 @@ async function inspect(cwd: string): Promise<HealthReport> {
   const memory = fs.existsSync(path.join(AGENT_DIR, "neura", "MEMORY.md"));
   const skills = countSkills();
   const mcp = mcpSummary();
-  const requiredOk = !!piVersion && !!gitVersion && !!uvxVersion && checkpoint && gate && modes && modeKeys && persona && skills > 0 && mcp.valid;
+  const requiredOk = !!piVersion && !!gitVersion && !!uvxVersion && checkpoint && gate && modes && modeKeys && persona && skills > 0 && mcp.valid && sandbox;
 
   const sync = [git.ahead ? `↑${git.ahead}` : "", git.behind ? `↓${git.behind}` : ""].filter(Boolean).join(" ");
   const changes = git.changed ? `${git.changed} changes` : "clean";
@@ -101,12 +103,13 @@ async function inspect(cwd: string): Promise<HealthReport> {
     !persona ? "restore persona" : "",
     !skills ? "configure skills" : "",
     !mcp.valid ? "restore mcp.json" : "",
+    !sandbox ? "install WSL2 + bubblewrap" : "",
   ].filter(Boolean);
 
   return {
     state: requiredOk ? "ready" : "degraded",
     core: `pi ${versionLabel(piVersion)}  ·  git ${versionLabel(gitVersion)}  ·  uvx ${versionLabel(uvxVersion)}`,
-    workflow: `modes ${modes && modeKeys ? "ready" : "missing"} · checkpoint ${checkpoint ? "ready" : "missing"} · proof ${gate ? "ready" : "missing"}`,
+    workflow: `modes ${modes && modeKeys ? "ready" : "missing"} · sandbox ${sandbox ? "ready" : "missing"} · proof ${gate ? "ready" : "missing"}`,
     context: `persona ${persona ? "ready" : "missing"} · memory ${memory ? "ready" : "missing"} · skills ${skills || "missing"}`,
     workspace: git.isRepo ? `${git.branch}  ·  ${changes}${sync ? `  ·  ${sync}` : ""}` : "not a git workspace",
     bridges: `${mcp.label}  ·  local Qwen ${qwen ? "online" : "offline"}`,
@@ -118,7 +121,7 @@ async function inspect(cwd: string): Promise<HealthReport> {
 export function healthLines(report: HealthReport, width: number): string[] {
   const ok = report.state === "ready";
   const stateColor = ok ? PALETTE.success : PALETTE.warning;
-  const line = (label: string, value: string, color = PALETTE.text) =>
+  const line = (label: string, value: string, color: string = PALETTE.text) =>
     `${fg(PALETTE.dim, label.padEnd(10))}${fg(color, truncateText(value, Math.max(12, width - 10)))}`;
 
   return [

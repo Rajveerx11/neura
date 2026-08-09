@@ -18,6 +18,9 @@ All items must pass:
 
 - [ ] `docs/STATUS.md` says stable-ready and has no required stable blockers.
 - [ ] `node scripts\verify-harness.mjs` passes.
+- [ ] `node scripts\verify-sandbox.mjs` passes on the release workstation.
+- [ ] `npm run typecheck`, `npm audit --audit-level=high`, and
+      `npm audit signatures` pass from a clean lockfile install.
 - [ ] `node scripts\check-docs.mjs` passes.
 - [ ] Windows CI passes on the release commit.
 - [ ] `git diff --check` passes.

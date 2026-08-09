@@ -2,8 +2,8 @@
 
 ## Supported version
 
-Only current `main` receives security fixes. `2.5.1-rc.1` is a private release
-candidate, not a production security boundary.
+Only current `main` receives security fixes. `2.5.1` is a private stable
+release, not a general production or multi-user security boundary.
 
 ## Report a vulnerability
 
@@ -39,7 +39,15 @@ fix. Never include a real credential or private user data.
   native Windows it has no OS sandbox; tool access follows the process and
   signed-in user's permissions.
 - Human Away combines deterministic policy with an isolated no-tool reviewer and
-  a local hash-chained approval audit.
+  a local hash-chained approval audit. Its only provider-visible tool executes
+  through WSL2 bubblewrap with a workspace-only writable mount, cleared host
+  environment, hidden Windows/WSL user paths, and an unshared network namespace.
+- One-use approval retries bind canonical target identity, target content/state,
+  exact input, workspace state, `HEAD`, index state, and a 120-second expiry.
+- Action summaries, cockpit notices, approval text, reviewer dossiers, Gmail
+  summaries, and sandbox output use one central redaction implementation.
+- Outside YOLO, Gmail permits only explicitly allowlisted reads without a prompt;
+  every other action confirms interactively or blocks headless.
 - Headmaster cannot widen deterministic policy.
 - Application policy reduces mistakes in Plan and Human Away but does not provide
   OS isolation. YOLO bypasses that policy by design.
@@ -49,11 +57,12 @@ fix. Never include a real credential or private user data.
 - YOLO can read or modify files outside the workspace, use the network, invoke
   external tools, and trigger destructive or remote side effects without a
   confirmation prompt. Misuse can cause data loss or account impact.
-- Plan and Human Away have no WSL2/container sandbox.
-- Approval grants do not yet bind every relevant target/content/Git state.
-- Redaction is pattern-based and incomplete.
-- Outside YOLO, Gmail confirms known mutation names instead of allowing only
-  explicit reads. YOLO intentionally bypasses this confirmation.
+- Plan uses application-level canonical containment rather than an OS sandbox.
+- Human Away requires Windows, WSL2, and `bubblewrap`; tool execution fails closed
+  when they are unavailable or a linked workspace entry is detected. It remains
+  preview-labelled while field evidence accumulates.
+- Redaction is pattern-based. Unknown secret formats can evade detection, so raw
+  credentials must never be placed in prompts, commands, filenames, or output.
 - Optional MCP and model providers expand the network and credential surface.
 
 Full release gates are tracked in [docs/STATUS.md](docs/STATUS.md). Do not remove

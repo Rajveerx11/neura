@@ -19,6 +19,7 @@ const required = [
   "docs/ARCHITECTURE.md",
   "docs/CHANGELOG.md",
   "docs/DEVELOPMENT.md",
+  "docs/DEPENDENCIES.md",
   "docs/RELEASING.md",
   "docs/STATUS.md",
   "plans/README.md",
@@ -67,7 +68,7 @@ assert.doesNotMatch(readme, /continuity launch|LAST\/NOW\/NEXT/i, "README contai
 assert.match(readme, /logo-only launch/i, "README does not state current logo-only launch");
 assert.match(fs.readFileSync(path.join(repoRoot, "plans", "README.md"), "utf-8"), /polish-neura-launch-screen-plan\.html[^\n]*Superseded/i, "launch-polish plan is not marked superseded");
 
-for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json"]) {
+for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "package.json", "package-lock.json", "tsconfig.json"]) {
   JSON.parse(fs.readFileSync(path.join(repoRoot, relative), "utf-8"));
 }
 
@@ -75,6 +76,6 @@ assert.equal(fs.existsSync(path.join(repoRoot, "requirements.compiled")), false,
 assert.equal(fs.existsSync(path.join(repoRoot, "override.txt")), false, "unrelated ComfyUI override remains in repository root");
 
 const extensionCount = fs.readdirSync(path.join(repoRoot, "agent", "extensions")).filter((name) => name.endsWith(".ts")).length;
-assert.equal(extensionCount, 15, `expected 15 extensions, found ${extensionCount}`);
+assert.equal(extensionCount, 16, `expected 16 extensions, found ${extensionCount}`);
 
 console.log(`Neura docs: ${markdownFiles.length} Markdown files, required release files, links, version ${version}, and repository claims passed.`);

@@ -1,8 +1,35 @@
 // Gmail guardrail — current human approval for outbound and irreversible actions.
 
 import { getMode } from "../neura/mode-state.ts";
+import { redactSensitiveText } from "../neura/redaction.ts";
 
-const CONFIRM: Record<string, string> = {
+const READ_ONLY = new Set([
+  "GMAIL_GET_PROFILE",
+  "GMAIL_GET_MESSAGE",
+  "GMAIL_GET_THREAD",
+  "GMAIL_GET_DRAFT",
+  "GMAIL_GET_LABEL",
+  "GMAIL_GET_FILTER",
+  "GMAIL_GET_SEND_AS",
+  "GMAIL_GET_IMAP_SETTINGS",
+  "GMAIL_GET_POP_SETTINGS",
+  "GMAIL_GET_VACATION_SETTINGS",
+  "GMAIL_GET_AUTO_FORWARDING",
+  "GMAIL_GET_FORWARDING_ADDRESS",
+  "GMAIL_LIST_MESSAGES",
+  "GMAIL_LIST_THREADS",
+  "GMAIL_LIST_DRAFTS",
+  "GMAIL_LIST_LABELS",
+  "GMAIL_LIST_FILTERS",
+  "GMAIL_LIST_SEND_AS",
+  "GMAIL_LIST_FORWARDING_ADDRESSES",
+  "GMAIL_SEARCH_EMAILS",
+  "GMAIL_SEARCH_MESSAGES",
+  "GMAIL_FETCH_EMAILS",
+  "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
+]);
+
+const MUTATION_DESCRIPTIONS: Record<string, string> = {
   GMAIL_SEND_EMAIL: "send an email",
   GMAIL_SEND_DRAFT: "send a draft",
   GMAIL_REPLY_TO_THREAD: "send a reply",
@@ -35,7 +62,7 @@ function summarize(input: Record<string, unknown> | undefined): string {
   ];
   const lines = useful
     .filter((key) => input[key] !== undefined)
-    .map((key) => `${key}: ${JSON.stringify(input[key]).slice(0, 180)}`);
+    .map((key) => `${key}: ${redactSensitiveText(JSON.stringify(input[key]), 180)}`);
   return lines.length ? lines.join("\n") : "Review the Gmail tool arguments before allowing this action.";
 }
 
@@ -48,8 +75,8 @@ export default function (pi) {
     if (getMode() === "yolo") return;
 
     const action = event.toolName.slice(prefix.length).toUpperCase();
-    const description = CONFIRM[action];
-    if (!description) return;
+    if (READ_ONLY.has(action)) return;
+    const description = MUTATION_DESCRIPTIONS[action] ?? `run unclassified Gmail action ${action}`;
 
     if (!ctx.hasUI) {
       return {

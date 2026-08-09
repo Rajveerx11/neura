@@ -9,6 +9,7 @@ $repo = $PSScriptRoot
 $agent = Join-Path $HOME ".pi\agent"
 $bin = Join-Path $HOME ".local\bin"
 $retiredExtensions = @("autogit.ts")
+$requiredPiVersion = "0.84.1"
 
 function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
@@ -17,6 +18,20 @@ function Test-Command($Name) {
 function Normalize-Text($Value) {
     $normalized = $Value -replace "`r`n?", "`n"
     return $normalized.TrimEnd([char[]]@([char]10))
+}
+
+function Get-PackageIdentity($Spec) {
+    $value = [string]$Spec
+    if (-not $value.StartsWith("npm:")) { return $value }
+    $package = $value.Substring(4)
+    if ($package.StartsWith("@")) {
+        $slash = $package.IndexOf("/")
+        $versionAt = if ($slash -ge 0) { $package.IndexOf("@", $slash) } else { -1 }
+    } else {
+        $versionAt = $package.LastIndexOf("@")
+    }
+    if ($versionAt -gt 0) { $package = $package.Substring(0, $versionAt) }
+    return "npm:$package"
 }
 
 function Test-SameFile($Source, $Target) {
@@ -36,15 +51,20 @@ function Test-SameFile($Source, $Target) {
 
 if ($Check) {
     $missing = @()
+    $drift = @()
+    $credentialWarnings = @()
     foreach ($cmd in @("pi", "git", "uvx")) {
         if (-not (Test-Command $cmd)) { $missing += $cmd }
+    }
+    if (Test-Command "pi") {
+        $piVersion = (& pi --version).Trim()
+        if ($piVersion -ne $requiredPiVersion) { $drift += "Pi $piVersion installed; required $requiredPiVersion" }
     }
     $pairs = @(
         @("$repo\agent\extensions", "$agent\extensions"),
         @("$repo\agent\themes", "$agent\themes"),
         @("$repo\agent\neura", "$agent\neura")
     )
-    $drift = @()
     foreach ($pair in $pairs) {
         Get-ChildItem $pair[0] -File | ForEach-Object {
             $live = Join-Path $pair[1] $_.Name
@@ -88,6 +108,7 @@ if ($Check) {
     }
     $desiredSettings = Get-Content "$repo\agent\settings.json" -Raw | ConvertFrom-Json
     $desiredSkillExclusions = @($desiredSettings.skills | Where-Object { [string]$_ -like "!*" })
+    $desiredPackages = @($desiredSettings.packages)
     $liveSettingsPath = Join-Path $agent "settings.json"
     if (-not (Test-Path $liveSettingsPath)) {
         $drift += "settings.json missing"
@@ -100,6 +121,14 @@ if ($Check) {
                     $drift += "settings.json missing skill collision exclusion $exclusion"
                 }
             }
+            $livePackages = @($liveSettings.packages)
+            foreach ($desiredPackage in $desiredPackages) {
+                $identity = Get-PackageIdentity $desiredPackage
+                $sameIdentity = @($livePackages | Where-Object { (Get-PackageIdentity $_) -eq $identity })
+                if ($sameIdentity.Count -ne 1 -or $sameIdentity[0] -ne $desiredPackage) {
+                    $drift += "settings.json runtime package is not exactly pinned: $identity"
+                }
+            }
         } catch {
             $drift += "settings.json is invalid"
         }
@@ -110,7 +139,7 @@ if ($Check) {
         if ($gmail -and $gmail.Value.disabled -ne $true) {
             $composioKey = [Environment]::GetEnvironmentVariable("COMPOSIO_API_KEY", "User")
             if ([string]::IsNullOrWhiteSpace($composioKey)) {
-                $drift += "COMPOSIO_API_KEY missing from Windows user environment (Gmail MCP unavailable)"
+                $credentialWarnings += "COMPOSIO_API_KEY missing from Windows user environment (optional Gmail MCP unavailable)"
             }
         }
     } catch {
@@ -118,12 +147,17 @@ if ($Check) {
     }
     if ($missing.Count) { Write-Warning "Missing required commands: $($missing -join ', ')" }
     if ($drift.Count) { Write-Warning "Live harness drift: $($drift -join '; ')" }
+    if ($credentialWarnings.Count) { Write-Warning ($credentialWarnings -join '; ') }
     if (-not $missing.Count -and -not $drift.Count) { Write-Host "Neura health: ready, live harness matches source." }
     exit $(if ($missing.Count -or $drift.Count) { 1 } else { 0 })
 }
 
 if (-not (Test-Command "pi")) {
-    throw "pi is not installed. Run: npm install -g @earendil-works/pi-coding-agent"
+    throw "pi is not installed. Run: npm install -g @earendil-works/pi-coding-agent@$requiredPiVersion"
+}
+$piVersion = (& pi --version).Trim()
+if ($piVersion -ne $requiredPiVersion) {
+    throw "Pi $piVersion is installed; Neura requires $requiredPiVersion. Run: npm install -g @earendil-works/pi-coding-agent@$requiredPiVersion"
 }
 
 New-Item -ItemType Directory -Force "$agent\extensions", "$agent\themes", "$agent\neura", $bin | Out-Null
@@ -159,7 +193,9 @@ if ((Test-Path $target) -and -not $ForceSettings) {
     catch { throw "Existing settings.json is invalid; fix it before installing: $target" }
     $sourceSettings = Get-Content "$repo\agent\settings.json" -Raw | ConvertFrom-Json
     $desiredSkillExclusions = @($sourceSettings.skills | Where-Object { [string]$_ -like "!*" })
+    $desiredPackages = @($sourceSettings.packages)
     $liveSkills = @($liveSettings.skills)
+    $livePackages = @($liveSettings.packages)
     $settingsChanged = $false
     foreach ($exclusion in $desiredSkillExclusions) {
         if ($liveSkills -notcontains $exclusion) {
@@ -167,10 +203,19 @@ if ((Test-Path $target) -and -not $ForceSettings) {
             $settingsChanged = $true
         }
     }
+    foreach ($desiredPackage in $desiredPackages) {
+        $identity = Get-PackageIdentity $desiredPackage
+        $sameIdentity = @($livePackages | Where-Object { (Get-PackageIdentity $_) -eq $identity })
+        if ($sameIdentity.Count -ne 1 -or $sameIdentity[0] -ne $desiredPackage) {
+            $livePackages = @($livePackages | Where-Object { (Get-PackageIdentity $_) -ne $identity }) + $desiredPackage
+            $settingsChanged = $true
+        }
+    }
     if ($settingsChanged) {
         $liveSettings | Add-Member -NotePropertyName "skills" -NotePropertyValue @($liveSkills) -Force
+        $liveSettings | Add-Member -NotePropertyName "packages" -NotePropertyValue @($livePackages) -Force
         [System.IO.File]::WriteAllText($target, ($liveSettings | ConvertTo-Json -Depth 20), $utf8NoBom)
-        Write-Host "settings.json choices preserved; duplicate-skill exclusions merged."
+        Write-Host "settings.json choices preserved; Neura exclusions and exact package pins merged."
     } else {
         Write-Host "settings.json already exists at $target - choices preserved."
     }
@@ -179,4 +224,4 @@ if ((Test-Path $target) -and -not $ForceSettings) {
 }
 
 if (-not (Test-Command "uvx")) { Write-Warning "uvx missing: proof-of-work verification will be unavailable." }
-Write-Host "Neura installed. Run 'pi install', then 'neura' and '/health'."
+Write-Host "Neura installed. Run 'pi update --extensions --approve', then 'neura' and '/health'."
