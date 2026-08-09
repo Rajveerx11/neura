@@ -86,7 +86,8 @@ export function getCockpitState(): CockpitState {
 }
 
 export function patchCockpit(patch: Partial<Omit<CockpitState, "updatedAt">>): CockpitState {
-  return publish({ ...shared.state, ...patch, updatedAt: Date.now() });
+  const sanitized = redactSensitiveValue(patch) as Partial<Omit<CockpitState, "updatedAt">>;
+  return publish({ ...shared.state, ...sanitized, updatedAt: Date.now() });
 }
 
 export function resetCockpit(): CockpitState {
@@ -106,3 +107,4 @@ export function onCockpitChange(listener: (state: CockpitState) => void): () => 
   shared.listeners.add(listener);
   return () => shared.listeners.delete(listener);
 }
+import { redactSensitiveValue } from "./redaction.ts";

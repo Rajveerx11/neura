@@ -5,7 +5,7 @@
 
 import { getMode } from "../neura/mode-state.ts";
 import { patchCockpit } from "../neura/cockpit-state.ts";
-import { inspectAction, isPlanActionAllowed } from "../neura/action-policy.ts";
+import { inspectAction, isApprovalRetryEligible, isPlanActionAllowed } from "../neura/action-policy.ts";
 import { consumeExactRetry, recordDecision, type ReviewDecision } from "../neura/approval-store.ts";
 import { reviewWithHeadmaster } from "../neura/headmaster.ts";
 
@@ -65,7 +65,7 @@ export default function (pi) {
 
     let approvalId = "unlogged";
     try {
-      const record = recordDecision(action, verdict, "pending", action.route !== "deny");
+      const record = recordDecision(action, verdict, "pending", isApprovalRetryEligible(action));
       approvalId = record.id;
       patchCockpit({
         phase: "REVIEW",

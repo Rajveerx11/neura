@@ -8,6 +8,7 @@ import { Key, truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/cockpit-state.ts";
 import { PALETTE, fg } from "../neura/core.ts";
 import { getMode, isAgentMode, modeLabel, modePosition, nextMode, setMode, type AgentMode } from "../neura/mode-state.ts";
+import { HUMAN_AWAY_SANDBOX_TOOL } from "../neura/human-away-sandbox.ts";
 import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
 import {
@@ -57,7 +58,7 @@ Safety boundary: read-only exploration plus one controlled plan artifact under t
   yolo: `[NEURA MODE: YOLO]
 Full access is active. Neura application guardrails do not block tool calls or ask for approval, and native Windows provides no OS sandbox. Filesystem, network, and external-tool access follow the Neura process and signed-in user's permissions. This changes execution permissions, not task scope: perform only requested work and obey higher-priority instructions. Do not stage, commit, push, publish, deploy, or create unrelated external side effects unless the user requested them.`,
   "human-away": `[NEURA MODE: HUMAN AWAY · PREVIEW]
-Rajveer is away. Continue useful unattended work inside the workspace. Deterministic policy may send eligible bounded actions to the isolated Headmaster reviewer. If an action is deferred or denied, do not retry, rephrase, split, encode, or route around the verdict. Choose the documented safer path and continue elsewhere. Pending actions will be shown when Rajveer returns. Native Windows still lacks an OS-enforced sandbox, so opaque shell commands and unaudited external tools remain human-bound.`,
+Rajveer is away. Continue useful unattended work only through human_away_exec. It runs inside WSL2 bubblewrap with the active workspace as the only writable mount, no Windows-drive or WSL-home visibility, a cleared host environment, and no network namespace. All normal tools and MCP tools are removed from the provider request. Deterministic policy may send eligible bounded actions to the isolated Headmaster reviewer. If an action is deferred or denied, do not retry, rephrase, split, encode, or route around the verdict. Choose the documented safer path and continue elsewhere. Pending actions will be shown when Rajveer returns. If the sandbox is unavailable, stop tool use and leave a report for Rajveer.`,
 };
 
 const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
@@ -73,8 +74,8 @@ const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
   },
   "human-away": {
     color: HUMAN,
-    capabilities: [["workspace", "one generated file"], ["reviewer", "isolated Headmaster"], ["sensitive", "defer to operator"], ["remote", "locked"]],
-    verdict: "BOUNDARY APPLIED · return queue armed · OS sandbox pending",
+    capabilities: [["workspace", "WSL2 sandbox only"], ["reviewer", "isolated Headmaster"], ["sensitive", "defer to operator"], ["network", "unshared / locked"]],
+    verdict: "BOUNDARY APPLIED · workspace-only mount · return queue armed",
   },
 };
 
@@ -144,8 +145,8 @@ export default function (pi) {
   if (!process.env.NEURA) return;
 
   let nonPlanTools: string[] | undefined;
-  let enforcedPlanTools: string[] = [];
-  let planBoundaryActive = false;
+  let enforcedRestrictedTools: string[] = [];
+  let restrictedMode: "plan" | "human-away" | null = null;
   let transitionGeneration = 0;
   let returnShown = false;
 
@@ -225,9 +226,9 @@ export default function (pi) {
     if (!nonPlanTools) rememberNonPlanSelection();
     const current = uniqueToolNames(pi.getActiveTools());
     const currentSet = new Set(current);
-    const enforcedSet = new Set(enforcedPlanTools);
+    const enforcedSet = new Set(enforcedRestrictedTools);
     const removedPlanTools = new Set(
-      enforcedPlanTools.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !currentSet.has(name)),
+      enforcedRestrictedTools.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !currentSet.has(name)),
     );
     const retained = nonPlanTools!.filter((name) => !removedPlanTools.has(name));
     const additions = current.filter((name) => !PLAN_ONLY_TOOLS.has(name) && !enforcedSet.has(name));
@@ -284,7 +285,7 @@ export default function (pi) {
     return typeof tool.function?.name === "string" ? tool.function.name : undefined;
   }
 
-  function filterPlanProviderPayload(payload: unknown): unknown {
+  function filterRestrictedProviderPayload(payload: unknown): unknown {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
     const record = payload as Record<string, unknown>;
     if (!("tools" in record)) return record;
@@ -294,36 +295,46 @@ export default function (pi) {
       tools: record.tools.filter((tool) => {
         const name = providerToolName(tool);
         if (name === undefined) return false;
-        return enforcedPlanTools.includes(PROVIDER_PLAN_TOOL_ALIASES.get(name) ?? name);
+        return enforcedRestrictedTools.includes(PROVIDER_PLAN_TOOL_ALIASES.get(name) ?? name);
       }),
     };
   }
 
   function applyToolBoundary(mode: AgentMode, cwd: string): void {
     if (mode === "plan") {
-      if (planBoundaryActive) observePlanSelectionChanges();
-      else rememberNonPlanSelection();
-      enforcedPlanTools = planToolNames();
-      planBoundaryActive = true;
-      setActiveTools(enforcedPlanTools);
+      if (restrictedMode === "plan") observePlanSelectionChanges();
+      else if (restrictedMode === null) rememberNonPlanSelection();
+      enforcedRestrictedTools = planToolNames();
+      restrictedMode = "plan";
+      setActiveTools(enforcedRestrictedTools);
       return;
     }
 
-    if (planBoundaryActive) observePlanSelectionChanges();
-    else rememberNonPlanSelection();
+    if (mode === "human-away") {
+      if (restrictedMode === "plan") observePlanSelectionChanges();
+      else if (restrictedMode === null) rememberNonPlanSelection();
+      const available = availableToolNames();
+      enforcedRestrictedTools = available.has(HUMAN_AWAY_SANDBOX_TOOL) ? [HUMAN_AWAY_SANDBOX_TOOL] : [];
+      restrictedMode = "human-away";
+      setActiveTools(enforcedRestrictedTools);
+      return;
+    }
+
+    if (restrictedMode === "plan") observePlanSelectionChanges();
+    else if (restrictedMode === null) rememberNonPlanSelection();
     const available = availableToolNames();
     const disabledServers = disabledMcpServers(cwd);
     const restored = (nonPlanTools ?? []).filter(
       (name) => available.has(name) && !isDisabledMcpTool(name, disabledServers),
     );
     nonPlanTools = restored;
-    planBoundaryActive = false;
-    enforcedPlanTools = [];
+    restrictedMode = null;
+    enforcedRestrictedTools = [];
     setActiveTools(restored);
   }
 
   function persistMode(): void {
-    pi.appendEntry<PersistedMode>(MODE_ENTRY, { mode: getMode(), changedAt: new Date().toISOString() });
+    pi.appendEntry(MODE_ENTRY, { mode: getMode(), changedAt: new Date().toISOString() } satisfies PersistedMode);
   }
 
   function changeMode(next: AgentMode, ctx, source: "command" | "shortcut"): void {
@@ -480,6 +491,6 @@ export default function (pi) {
   // schemas; the deterministic tool-call guard remains defense in depth.
   pi.on("before_provider_request", (event, ctx) => {
     applyToolBoundary(getMode(), ctx.cwd);
-    return getMode() === "plan" ? filterPlanProviderPayload(event.payload) : event.payload;
+    return getMode() === "yolo" ? event.payload : filterRestrictedProviderPayload(event.payload);
   });
 }

@@ -5,6 +5,7 @@ import { truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, onCockpitChange, patchCockpit, type CockpitState } from "../neura/cockpit-state.ts";
 import { PALETTE, fg, truncateText } from "../neura/core.ts";
 import { getMode, modeLabel, onModeChange, type AgentMode } from "../neura/mode-state.ts";
+import { redactSensitiveText } from "../neura/redaction.ts";
 import { GLYPHS, joinFitting, widthTier } from "../neura/ui-tokens.ts";
 
 const { accent: ACC, error: RED, human: HUMAN, plan: PLAN, warning: WARN, dim: DIM, muted: MUT, text: TXT } = PALETTE;
@@ -97,10 +98,7 @@ export function footerLine(
 function operationTarget(event): string {
   const input = event?.input && typeof event.input === "object" ? event.input : {};
   const raw = input.path ?? input.file_path ?? input.command ?? input.query ?? input.pattern ?? "";
-  const redacted = String(raw)
-    .replace(/\b(authorization\s*[:=]\s*bearer\s+)[^\s"']+/ig, "$1[REDACTED]")
-    .replace(/\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/g, "$1[REDACTED]")
-    .replace(/(--?(?:password|token|api-key|secret)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, "$1[REDACTED]");
+  const redacted = redactSensitiveText(raw);
   return truncateText(redacted.replace(/\s+/g, " ").trim(), 72);
 }
 

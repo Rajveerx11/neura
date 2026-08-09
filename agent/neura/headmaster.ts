@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { InspectedAction } from "./action-policy.ts";
 import type { ReviewVerdict } from "./approval-store.ts";
+import { redactSensitiveValue } from "./redaction.ts";
 
 type RawVerdict = {
   decision: "approve_once" | "defer" | "deny";
@@ -99,7 +100,7 @@ function runHeadmaster(action: InspectedAction, options: HeadmasterOptions): Pro
   const entry = piEntry();
   if (!entry) return Promise.resolve(null);
 
-  const dossier = JSON.stringify({
+  const dossier = JSON.stringify(redactSensitiveValue({
     version: 1,
     tool: action.toolName,
     summary: action.summary,
@@ -111,7 +112,7 @@ function runHeadmaster(action: InspectedAction, options: HeadmasterOptions): Pro
     facts: action.facts,
     workspaceFingerprint: action.workspaceFingerprint,
     actionFingerprint: action.actionFingerprint,
-  });
+  }));
   const args = [
     entry,
     "--print",
@@ -132,7 +133,7 @@ function runHeadmaster(action: InspectedAction, options: HeadmasterOptions): Pro
   }
   args.push(dossier);
 
-  const env = { ...process.env, NEURA_HEADMASTER: "1" };
+  const env: NodeJS.ProcessEnv = { ...process.env, NEURA_HEADMASTER: "1" };
   delete env.NEURA;
   return new Promise((resolve) => {
     execFile(process.execPath, args, {

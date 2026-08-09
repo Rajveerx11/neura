@@ -5,6 +5,8 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
+import { HUMAN_AWAY_SANDBOX_TOOL } from "./human-away-sandbox.ts";
+import { redactSensitiveText } from "./redaction.ts";
 
 export type PolicyRoute = "allow" | "review" | "human" | "deny";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
@@ -41,7 +43,18 @@ export type InspectedAction = {
   saferPath: string;
   actionFingerprint: string;
   workspaceFingerprint: string;
+  approvalBinding: ApprovalBinding;
   facts: ActionFacts;
+};
+
+export type ApprovalBinding = {
+  version: 2;
+  canonicalTarget: string | null;
+  targetStateFingerprint: string;
+  head: string;
+  indexFingerprint: string;
+  worktreeFingerprint: string;
+  inputFingerprint: string;
 };
 
 type ToolEvent = { toolName?: unknown; input?: unknown };
@@ -51,7 +64,7 @@ const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
 export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?)(?=$|[\\/\s"'`;|&])/i;
 
-const PROTECTED_CONTROL = /(?:^|[\\/])(?:\.git(?:[\\/]|$)|\.github[\\/]workflows(?:[\\/]|$)|agent[\\/]settings\.json$|agent[\\/]keybindings\.json$|agent[\\/]mcp\.json$|install\.ps1$|agent[\\/]extensions[\\/](?:guardrail|modes|plan-artifact)\.ts$|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|mode-state|plan-policy|plan-renderer)\.(?:ts|md)$)/i;
+const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction)\.(?:ts|md)(?:[\s"']|$))/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
 const SHELL_CONTROL = /(?:\r|\n|[;&|><`()]|\$\()/;
 
@@ -62,6 +75,7 @@ const HARD_DENY = [
   { re: /\bkubectl\s+delete\s+(?:namespace|ns)\b/i, why: "namespace deletion has broad cluster impact" },
   { re: /\bdocker\s+system\s+prune\b/i, why: "system-wide Docker pruning is broader than the workspace" },
   { re: /\brm\s+(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*|--recursive[^\r\n]*--force|--force[^\r\n]*--recursive)\b|remove-item\b[^\r\n]*-recurse[^\r\n]*-force|remove-item\b[^\r\n]*-force[^\r\n]*-recurse|\b(?:rmdir|rd)\s+\/s\b|\bdel\s+\/[sf]\b/i, why: "recursive forced deletion is too broad for unattended approval" },
+  { re: /\brm\s+(?:-[a-z]*r[a-z]*|--recursive)(?:\s|$)|\bfind\b[^\r\n]*\s-delete(?:\s|$)/i, why: "recursive or discovered-set deletion is too broad for unattended approval" },
 ];
 
 const HUMAN_ONLY_SHELL = [
@@ -91,22 +105,94 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function hashFile(file: string): string {
+  const hash = createHash("sha256");
+  const descriptor = fs.openSync(file, "r");
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  try {
+    while (true) {
+      const bytes = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+      if (!bytes) break;
+      hash.update(buffer.subarray(0, bytes));
+    }
+    return hash.digest("hex");
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function pathState(target: string | undefined): string {
+  if (!target) return sha256("no-target");
+  try {
+    const stat = fs.lstatSync(target, { bigint: true });
+    if (stat.isSymbolicLink()) return sha256(`symlink\0${fs.readlinkSync(target)}`);
+    if (stat.isFile()) return sha256(`file\0${stat.size}\0${hashFile(target)}`);
+    return sha256(`node\0${stat.mode}\0${stat.size}\0${stat.mtimeNs}`);
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "unknown";
+    return sha256(`missing\0${code}`);
+  }
+}
+
+function git(workspace: string, args: string[], encoding: BufferEncoding | null = "utf-8") {
+  return spawnSync("git", [
+    "--no-pager", "--no-optional-locks", "--no-lazy-fetch",
+    "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+    ...args,
+  ], {
+    cwd: workspace,
+    encoding,
+    windowsHide: true,
+    timeout: 2_500,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+}
+
+type WorkspaceState = {
+  head: string;
+  indexFingerprint: string;
+  worktreeFingerprint: string;
+  fingerprint: string;
+};
+
+function captureWorkspaceState(cwd: string): WorkspaceState {
+  const workspace = normalizedWorkspace(cwd);
+  const headResult = git(workspace, ["rev-parse", "--verify", "HEAD"]);
+  const head = headResult.status === 0 ? String(headResult.stdout ?? "").trim() : "no-head";
+  const indexResult = git(workspace, ["ls-files", "--stage", "-z"], null);
+  const indexBytes = indexResult.status === 0 && Buffer.isBuffer(indexResult.stdout)
+    ? indexResult.stdout
+    : Buffer.from("no-index");
+  const indexFingerprint = createHash("sha256").update(indexBytes).digest("hex");
+  const statusResult = git(workspace, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=all"], null);
+  const statusBytes = statusResult.status === 0 && Buffer.isBuffer(statusResult.stdout)
+    ? statusResult.stdout
+    : Buffer.from("not-a-git-workspace");
+  const statusEntries = statusBytes.toString("utf-8").split("\0").filter(Boolean);
+  const changedState: string[] = [];
+  for (let index = 0; index < statusEntries.length; index++) {
+    const entry = statusEntries[index];
+    const code = entry.slice(0, 2);
+    const relative = entry.slice(3);
+    if (relative) changedState.push(`${relative}\0${pathState(path.resolve(workspace, relative))}`);
+    if (/[RC]/.test(code) && statusEntries[index + 1]) index++;
+  }
+  const worktreeFingerprint = sha256(`${statusBytes.toString("base64")}\n${changedState.sort().join("\n")}`);
+  return {
+    head,
+    indexFingerprint,
+    worktreeFingerprint,
+    fingerprint: sha256(`${workspace}\n${head}\n${indexFingerprint}\n${worktreeFingerprint}`),
+  };
+}
+
 function normalizedWorkspace(cwd: string): string {
   cwd = typeof cwd === "string" && cwd.trim() ? cwd : process.cwd();
   try { return fs.realpathSync(cwd); } catch { return path.resolve(cwd); }
 }
 
 export function workspaceFingerprint(cwd: string): string {
-  const workspace = normalizedWorkspace(cwd);
-  const git = spawnSync("git", ["status", "--porcelain=v1", "--branch"], {
-    cwd: workspace,
-    encoding: "utf-8",
-    windowsHide: true,
-    timeout: 1_500,
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  const state = git.status === 0 ? String(git.stdout ?? "") : "not-a-git-workspace";
-  return sha256(`${workspace}\n${state}`);
+  return captureWorkspaceState(cwd).fingerprint;
 }
 
 function actionFingerprint(toolName: string, input: Record<string, unknown>, workspace: string): string {
@@ -194,11 +280,7 @@ function targetFacts(raw: string, workspace: string, executionCwd = workspace): 
 }
 
 function redactCommand(command: string): string {
-  return command
-    .replace(/\b(authorization\s*[:=]\s*bearer\s+)[^\s"']+/ig, "$1[REDACTED]")
-    .replace(/\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/g, "$1[REDACTED]")
-    .replace(/(--?(?:password|token|api-key|secret)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, "$1[REDACTED]")
-    .slice(0, 280);
+  return redactSensitiveText(command, 280);
 }
 
 function deleteTarget(command: string): string | null {
@@ -721,10 +803,27 @@ function isKnownDevelopmentCommand(command: string): boolean {
 }
 
 function result(
-  base: Pick<InspectedAction, "toolName" | "workspace" | "actionFingerprint" | "workspaceFingerprint">,
-  details: Omit<InspectedAction, "toolName" | "workspace" | "actionFingerprint" | "workspaceFingerprint">,
+  base: Pick<InspectedAction, "toolName" | "workspace" | "actionFingerprint" | "workspaceFingerprint"> & {
+    input: Record<string, unknown>;
+    workspaceState: WorkspaceState;
+  },
+  details: Omit<InspectedAction, "toolName" | "workspace" | "actionFingerprint" | "workspaceFingerprint" | "approvalBinding">,
 ): InspectedAction {
-  return { ...base, ...details };
+  const { input, workspaceState, ...publicBase } = base;
+  const canonicalTarget = details.facts.target ? path.normalize(details.facts.target) : null;
+  return {
+    ...publicBase,
+    ...details,
+    approvalBinding: {
+      version: 2,
+      canonicalTarget,
+      targetStateFingerprint: pathState(details.facts.target),
+      head: workspaceState.head,
+      indexFingerprint: workspaceState.indexFingerprint,
+      worktreeFingerprint: workspaceState.worktreeFingerprint,
+      inputFingerprint: sha256(JSON.stringify(stableValue(input))),
+    },
+  };
 }
 
 export function inspectAction(event: ToolEvent, cwdInput: string): InspectedAction {
@@ -732,12 +831,14 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
   const workspace = normalizedWorkspace(executionCwd);
   const toolName = String(event.toolName ?? "unknown");
   const input = inputRecord(event.input);
-  const workspaceState = workspaceFingerprint(workspace);
+  const workspaceState = captureWorkspaceState(workspace);
   const base = {
     toolName,
     workspace,
     actionFingerprint: actionFingerprint(toolName, input, workspace),
-    workspaceFingerprint: workspaceState,
+    workspaceFingerprint: workspaceState.fingerprint,
+    input,
+    workspaceState,
   };
 
   if (READ_TOOLS.has(toolName)) {
@@ -798,7 +899,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
     });
   }
 
-  if (toolName === "bash") {
+  if (toolName === "bash" || toolName === HUMAN_AWAY_SANDBOX_TOOL) {
     const command = String(input.command ?? "").trim();
     if (!command) {
       return result(base, {
@@ -812,6 +913,14 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         summary: "shell command touching a protected secret path", category: "protected-data", risk: "critical", route: "human",
         reason: "The action may expose or modify credentials.",
         saferPath: "Use a masked inspector or wait for Rajveer to handle the secret-bearing file.",
+        facts: {},
+      });
+    }
+    if (toolName === HUMAN_AWAY_SANDBOX_TOOL && PROTECTED_CONTROL.test(command)) {
+      return result(base, {
+        summary: redactCommand(command), category: "protected-control", risk: "high", route: "human",
+        reason: "The sandbox command touches Neura's safety, credential, Git, or deployment control plane.",
+        saferPath: "Prepare a patch for Rajveer instead of changing protected control files unattended.",
         facts: {},
       });
     }
@@ -859,6 +968,14 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         reason: "Known local build, test, validation, or git-recording command.", saferPath: "", facts: {},
       });
     }
+    if (toolName === HUMAN_AWAY_SANDBOX_TOOL) {
+      return result(base, {
+        summary: redactCommand(command), category: "unclassified-shell", risk: "high", route: "human",
+        reason: "The OS sandbox limits reach, but an opaque command can still destroy writable workspace contents.",
+        saferPath: "Use one command from the deterministic read-only or development allowlist; otherwise wait for Rajveer.",
+        facts: {},
+      });
+    }
     return result(base, {
       summary: redactCommand(command), category: "unclassified-shell", risk: "high", route: "human",
       reason: "Opaque shell execution cannot be bounded reliably without an OS sandbox.",
@@ -883,4 +1000,10 @@ export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
     return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
   }
   return isPlanToolInputAllowed(toolName, event.input);
+}
+
+export function isApprovalRetryEligible(action: InspectedAction): boolean {
+  if (action.route === "deny") return false;
+  if (action.approvalBinding.canonicalTarget !== null) return true;
+  return action.category === "remote-mutation";
 }

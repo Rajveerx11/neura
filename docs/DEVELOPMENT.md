@@ -10,7 +10,7 @@ back later. The live harness is an installation target, not source.
 - Windows PowerShell.
 - Node.js and npm.
 - Git.
-- Pi `0.83.0` for the current release candidate.
+- Pi `0.84.1` for the stable release.
 - `uvx` for proof-of-work.
 
 ## Change loop
@@ -69,7 +69,8 @@ Runtime packages are declared in `agent/settings.json`. New packages require:
 5. changelog entry.
 
 Current unpinned packages are tracked as a release blocker in
-[STATUS.md](STATUS.md).
+[STATUS.md](STATUS.md). Reviewed pins, privileged behavior, and the update
+process live in [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ## Documentation ownership
 
