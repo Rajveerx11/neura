@@ -60,7 +60,7 @@ agent_settled
 | `checkpoint.ts` | Pre-turn Git tree snapshots and `/undo` | Git object database, temp index |
 | `check-gate.ts` | Quick proof feedback and `/ship` | `uvx`, proof-of-work |
 | `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |
-| `harness-health.ts` | Runtime readiness panel | Pi, Git, uvx, MCP config, local Qwen |
+| `harness-health.ts` | Runtime readiness panel | Exact Pi runtime contract, Git, uvx, MCP config, local Qwen |
 | `transcript-actions.ts` | Answer/code copy | Pi clipboard API |
 | `neura-memory.ts` | Local cross-session facts | `~/.pi/agent/neura/MEMORY.md` |
 | `presets.ts` | GPT, Opus, local Qwen switching | Provider login or llama.cpp |
@@ -83,6 +83,7 @@ agent_settled
 | `redaction.ts` | Central secret-shaped text and structured-value redaction |
 | `core.ts` | Process, Git, ANSI, palette, and layout helpers |
 | `ui-tokens.ts` | Shared terminal tokens, glyphs, motion values, width fitting |
+| `runtime-contract.json` | Versioned required Pi runtime contract shared by health and installation |
 
 ## Persistent state
 

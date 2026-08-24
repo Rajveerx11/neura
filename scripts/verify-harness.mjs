@@ -59,18 +59,57 @@ const { redactSensitiveText } = await import(
 const { HUMAN_AWAY_SANDBOX_TOOL, assertWorkspaceHasNoLinks, bubblewrapArguments } = await import(
   pathToFileURL(path.join(repoRoot, "agent", "neura", "human-away-sandbox.ts")).href
 );
+const { healthLines, parseRuntimeContract, piRuntimeStatus } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "extensions", "harness-health.ts")).href
+);
 const extensionDir = path.join(repoRoot, "agent", "extensions");
 const files = fs.readdirSync(extensionDir)
   .filter((name) => name.endsWith(".ts"))
   .map((name) => path.join(extensionDir, name));
 assert.equal(files.some((file) => file.endsWith(`${path.sep}autogit.ts`)), false, "retired autogit extension still loads");
 const installerSource = fs.readFileSync(path.join(repoRoot, "install.ps1"), "utf-8");
+const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
+const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 assert.match(installerSource, /\$retiredExtensions\s*=\s*@\("autogit\.ts"\)/, "installer does not retire the old autogit hook");
 assert.match(installerSource, /Remove-Item -LiteralPath \$retiredPath -Force/, "installer does not remove the retired autogit hook");
 assert.match(installerSource, /is retired but remains installed/, "drift check does not detect the retired autogit hook");
 assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot reconcile exact runtime package pins");
 assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
-assert.match(installerSource, /\$requiredPiVersion\s*=\s*"0\.84\.1"/, "installer does not enforce the verified Pi version");
+assert.match(installerSource, /runtime-contract\.json/, "installer does not consume the runtime contract");
+assert.match(installerSource, /\$requiredPiVersion\s*=\s*\[string\]\$runtimeContract\.piVersion/, "installer does not enforce the runtime contract Pi version");
+assert.match(installerSource, /\$schemaIsInteger\s*=\s*\(\$runtimeContract\.schemaVersion -is \[int\]\) -or \(\$runtimeContract\.schemaVersion -is \[long\]\)/, "installer allows a coercible non-integer runtime contract schema");
+assert.equal(runtimeContract.schemaVersion, 1, "runtime contract schema version changed without migration");
+assert.equal(runtimeContract.piVersion, packageManifest.devDependencies["@earendil-works/pi-coding-agent"], "runtime contract and development Pi pin disagree");
+assert.equal(parseRuntimeContract(runtimeContract), runtimeContract.piVersion, "valid runtime contract was rejected");
+assert.equal(parseRuntimeContract({ schemaVersion: "1", piVersion: runtimeContract.piVersion }), null, "string runtime contract schema was coerced");
+assert.deepEqual(piRuntimeStatus(runtimeContract.piVersion, runtimeContract.piVersion), {
+  valid: true,
+  installed: runtimeContract.piVersion,
+  required: runtimeContract.piVersion,
+  label: `pi ${runtimeContract.piVersion} (required ${runtimeContract.piVersion})`,
+  action: null,
+}, "matching Pi runtime was not healthy");
+assert.deepEqual(piRuntimeStatus("9.9.9", runtimeContract.piVersion), {
+  valid: false,
+  installed: "9.9.9",
+  required: runtimeContract.piVersion,
+  label: `pi 9.9.9 (requires ${runtimeContract.piVersion})`,
+  action: `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`,
+}, "Pi runtime drift was not actionable");
+assert.deepEqual(piRuntimeStatus(null, runtimeContract.piVersion), {
+  valid: false,
+  installed: null,
+  required: runtimeContract.piVersion,
+  label: `pi missing (requires ${runtimeContract.piVersion})`,
+  action: `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`,
+}, "missing Pi runtime was not actionable");
+assert.deepEqual(piRuntimeStatus(runtimeContract.piVersion, null), {
+  valid: false,
+  installed: runtimeContract.piVersion,
+  required: null,
+  label: `pi ${runtimeContract.piVersion} (runtime contract missing)`,
+  action: "restore runtime-contract.json",
+}, "missing runtime contract did not fail closed");
 const loaded = await loadExtensions(files, repoRoot);
 
 assert.deepEqual(loaded.errors, [], `extension load errors: ${JSON.stringify(loaded.errors)}`);
@@ -106,6 +145,52 @@ const firstHandler = (extension, event) => {
 };
 const stripAnsi = (value) => value.replace(/\x1b\[[0-9;]*m/g, "");
 const widthOf = (value) => visibleWidth(value);
+const repairAction = `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`;
+for (const width of [24, 40, 56, 72, 92, 120]) {
+  const lines = healthLines({
+    state: "degraded",
+    pi: piRuntimeStatus("9.9.9", runtimeContract.piVersion),
+    core: "git 2.53.0 · uvx 0.11.7",
+    workflow: "modes ready",
+    context: "persona ready",
+    workspace: "main · clean",
+    bridges: "unused in degraded layout",
+    impact: "runtime drift",
+    action: repairAction,
+  }, width).map(stripAnsi);
+  const actionIndex = lines.findIndex((line) => line.startsWith("next "));
+  assert.ok(lines.some((line) => line.includes("pi installed 9.9.9")), `installed Pi version hidden at ${width} columns`);
+  assert.ok(lines.some((line) => line.includes(`pi required  ${runtimeContract.piVersion}`)), `required Pi version hidden at ${width} columns`);
+  assert.notEqual(actionIndex, -1, `health repair action missing at ${width} columns`);
+  assert.ok(lines.some((line) => line.startsWith("core")), `degraded health hid core diagnostics at ${width} columns`);
+  assert.ok(lines.some((line) => line.startsWith("workflow")), `degraded health hid workflow diagnostics at ${width} columns`);
+  if (width >= 40) assert.ok(lines.some((line) => line.startsWith("context")), `degraded health hid context diagnostics at ${width} columns`);
+  if (width >= 72) assert.ok(lines.some((line) => line.startsWith("impact")), `degraded health hid impact diagnostics at ${width} columns`);
+  const renderedAction = lines.slice(actionIndex).map((line) => line.slice(5).trimEnd()).join("");
+  assert.equal(renderedAction, repairAction, `health repair action truncated at ${width} columns`);
+  assert.ok(lines.length <= 10, `degraded health exceeds Pi line cap at ${width} columns`);
+}
+const combinedGapLines = healthLines({
+  state: "degraded",
+  pi: piRuntimeStatus("9.9.9", runtimeContract.piVersion),
+  core: "git missing · uvx missing",
+  workflow: "modes missing · sandbox missing · proof missing",
+  context: "persona missing · memory missing · skills missing",
+  workspace: "not a git workspace",
+  bridges: "MCP config missing · local Qwen offline",
+  impact: "Multiple capabilities unavailable.",
+  action: `${repairAction}  ·  install uv  ·  sync extensions  ·  install mode keybindings  ·  restore persona  ·  configure skills  ·  restore mcp.json  ·  install WSL2 + bubblewrap`,
+}, 24).map(stripAnsi);
+const combinedActionIndex = combinedGapLines.findIndex((line) => line.startsWith("next "));
+assert.equal(combinedGapLines.length, 10, "combined degraded health did not use its exact ten-line budget");
+assert.ok(combinedGapLines.some((line) => line.startsWith("workflow")), "combined degraded health hid workflow gaps");
+assert.ok(combinedGapLines.some((line) => line.startsWith("context")), "combined degraded health hid context gaps");
+assert.ok(combinedGapLines.some((line) => line.startsWith("bridges")), "combined degraded health hid bridge gaps");
+assert.equal(
+  combinedGapLines.slice(combinedActionIndex).map((line) => line.slice(5).trimEnd()).join(""),
+  repairAction,
+  "combined degraded health truncated or merged the primary repair command",
+);
 
 const widgets = new Map();
 const statuses = new Map();

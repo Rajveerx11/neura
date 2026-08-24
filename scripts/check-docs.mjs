@@ -68,7 +68,7 @@ assert.doesNotMatch(readme, /continuity launch|LAST\/NOW\/NEXT/i, "README contai
 assert.match(readme, /logo-only launch/i, "README does not state current logo-only launch");
 assert.match(fs.readFileSync(path.join(repoRoot, "plans", "README.md"), "utf-8"), /polish-neura-launch-screen-plan\.html[^\n]*Superseded/i, "launch-polish plan is not marked superseded");
 
-for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "package.json", "package-lock.json", "tsconfig.json"]) {
+for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "agent/neura/runtime-contract.json", "package.json", "package-lock.json", "tsconfig.json"]) {
   JSON.parse(fs.readFileSync(path.join(repoRoot, relative), "utf-8"));
 }
 

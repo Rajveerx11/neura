@@ -1,8 +1,8 @@
 # Neura status
 
-Last audited: 2026-08-09
+Last audited: 2026-08-24
 Target: `2.5.1` stable
-Current: `2.5.1` stable; release commit passed GitHub Windows CI and live drift validation
+Current: `2.5.1` source stable; local live Pi is `0.84.2` while source requires `0.84.1`
 
 ## Release decision
 
@@ -27,13 +27,20 @@ even with its new WSL2 boundary.
 | MCP configuration | Optional | gfi-scout, Context7, and Gmail are enabled when credentials exist. Paper, Supabase, and Notion ship disabled. |
 | Proof-of-work gate | Preview | Quick proof starts at `agent_settled`; unavailable proof fails soft. Full `/ship` verification remains explicit. |
 | Automatic Git shipping | Removed | No lifecycle hook stages, commits, or pushes. The installer removes the retired `autogit.ts`; Git changes occur only through requested tool calls. |
-| Live harness sync | Ready | The generated install was audited, synced through `install.ps1`, and rechecked against source. Local settings, keybindings, and unrelated local-only files remain preserved; retired `autogit.ts` is absent. |
+| Live harness sync | Degraded locally | Release sync passed on 2026-08-09, but the 2026-08-24 drift check found Pi `0.84.2` installed while source requires `0.84.1`. No install was performed. Unreleased `/health` work now detects this exact mismatch from the shared runtime contract. |
 | YOLO policy | Ready with explicit risk | Matches Codex dangerous-full-access semantics: no Neura application approvals or tool blocking and no native-Windows OS sandbox. Harness tests cover sensitive shell, protected-file, and Gmail bypass. |
 | Approval grants | Ready | One-use grants bind canonical target identity, target content/state, exact input, workspace state, `HEAD`, index state, and 120-second expiry. Legacy pending records cannot grant retries. |
 | Central redaction | Ready with limits | One implementation covers action summaries, approval text, cockpit notices, reviewer dossiers, Gmail summaries, and sandbox output. Pattern matching remains defense in depth, not permission to handle raw secrets. |
 | Human Away | Preview | Only `human_away_exec` reaches the provider. WSL2 bubblewrap exposes one writable workspace mount, read-only system runtime, cleared host environment, hidden Windows/WSL user paths, no network, and link preflight. Missing prerequisites fail closed. |
 | Gmail mutation policy | Ready | Outside YOLO, only exact read-only actions pass. Every other known or unknown Gmail action confirms interactively or blocks headless. YOLO intentionally bypasses mediation. |
 | Release reproducibility | Ready | Pi `0.84.1`, all runtime packages, TypeScript, and type dependencies are exact-pinned. Lockfile install, typecheck, vulnerability/signature audit, harness/docs checks, and Windows install/drift checks run in CI. |
+
+## Unreleased implementation evidence
+
+1. Issue `#20` introduces `agent/neura/runtime-contract.json` as the shared Pi
+   version source for the installer and `/health`.
+2. The local drift check remains intentionally failing until the operator
+   installs the required Pi version; this branch does not mutate the live harness.
 
 ## Completed for `2.5.1` stable
 
