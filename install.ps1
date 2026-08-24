@@ -9,7 +9,17 @@ $repo = $PSScriptRoot
 $agent = Join-Path $HOME ".pi\agent"
 $bin = Join-Path $HOME ".local\bin"
 $retiredExtensions = @("autogit.ts")
-$requiredPiVersion = "0.84.1"
+$runtimeContractPath = Join-Path $repo "agent\neura\runtime-contract.json"
+try {
+    $runtimeContract = Get-Content $runtimeContractPath -Raw | ConvertFrom-Json
+    $requiredPiVersion = [string]$runtimeContract.piVersion
+    $schemaIsInteger = ($runtimeContract.schemaVersion -is [int]) -or ($runtimeContract.schemaVersion -is [long])
+    if (-not $schemaIsInteger -or $runtimeContract.schemaVersion -ne 1 -or $requiredPiVersion -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+        throw "unsupported runtime contract"
+    }
+} catch {
+    throw "Neura runtime contract is missing or invalid: $runtimeContractPath"
+}
 
 function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)

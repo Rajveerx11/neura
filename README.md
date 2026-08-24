@@ -100,7 +100,7 @@ powershell -File .\install.ps1 -Check
 | `/mode [plan|yolo|human-away|next|status]` | Select or inspect operating mode |
 | `/approvals` | Review Human Away requests |
 | `/approvals audit` | Show recent approval decisions |
-| `/health` | Inspect harness readiness |
+| `/health` | Inspect harness readiness and exact Pi-version drift |
 | `/ship` | Run full proof-of-work verification |
 | `/undo` | Restore the previous in-session checkpoint |
 | `/undo list` | List available checkpoints |

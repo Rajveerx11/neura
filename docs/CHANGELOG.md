@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-No unreleased changes.
+- Added a versioned runtime contract for the required Pi version. The installer
+  and `/health` now consume the same contract; an installed-version mismatch
+  degrades harness health and reports the exact pinned install command.
+- Added positive and negative regression coverage for matching, mismatched, and
+  missing runtime contracts, plus contract alignment with the development pin.
 
 ## 2026-08-09 - v2.5.1 (private stable release)
 
