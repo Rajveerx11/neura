@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { redactSensitiveText } from "./redaction.ts";
 
 export const HUMAN_AWAY_SANDBOX_TOOL = "human_away_exec";
+export const WORK_SANDBOX_TOOL = "work_exec";
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_WORKSPACE_ENTRIES = 200_000;
 

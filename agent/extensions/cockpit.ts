@@ -11,11 +11,11 @@ import { GLYPHS, joinFitting, widthTier } from "../neura/ui-tokens.ts";
 const { accent: ACC, error: RED, human: HUMAN, plan: PLAN, warning: WARN, dim: DIM, muted: MUT, text: TXT } = PALETTE;
 
 function modeColor(mode: AgentMode): string {
-  return mode === "plan" ? PLAN : mode === "human-away" ? HUMAN : RED;
+  return mode === "plan" ? PLAN : mode === "work" ? ACC : mode === "human-away" ? HUMAN : RED;
 }
 
 function modeGlyph(mode: AgentMode): string {
-  return mode === "plan" ? GLYPHS.plan : mode === "human-away" ? GLYPHS.humanAway : GLYPHS.yolo;
+  return mode === "plan" ? GLYPHS.plan : mode === "work" ? GLYPHS.neura : mode === "human-away" ? GLYPHS.humanAway : GLYPHS.yolo;
 }
 
 export function modeTag(mode = getMode()): string {

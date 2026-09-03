@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added supervised WORK between Plan and YOLO and made it the new-session
+  default. Structured reads and patches remain canonically inside the workspace;
+  hardened native inspection avoids repeated prompts; `work_exec` runs tests,
+  builds, and local shell work inside the existing WSL2 bubblewrap boundary.
+  Provider payload filtering hides unknown tools. Protected, secret-bearing,
+  remote, destructive, and unclassified actions fail closed or require one
+  explicit interactive approval. Persisted YOLO still requires deliberate entry
+  and remains genuinely unsandboxed with no per-action approval.
 - Added a complete-history secret scan to push and pull-request CI using the
   exact Gitleaks `8.30.1` Windows archive and its published SHA-256. Scanner
   output is fully redacted, the checkout includes every ref, and the dependency

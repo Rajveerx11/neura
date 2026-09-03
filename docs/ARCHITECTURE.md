@@ -53,9 +53,9 @@ agent_settled
 |---|---|---|
 | `neura.ts` | Identity, theme, `/dash`, `/notices`, persona injection | `NEURA.md`, cockpit state |
 | `modes.ts` | Mode switching, active-tool boundary, approval UI | Session entries, approval store |
-| `guardrail.ts` | Plan and Human Away tool-call policy; explicit YOLO bypass | Action policy, Headmaster |
+| `guardrail.ts` | Plan, WORK, and Human Away tool-call policy; explicit YOLO bypass | Action policy, Headmaster |
 | `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
-| `human-away-sandbox.ts` | Registers the only Human Away execution tool | WSL2, bubblewrap |
+| `human-away-sandbox.ts` | Registers WORK and Human Away sandbox execution tools | WSL2, bubblewrap |
 | `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
 | `checkpoint.ts` | Pre-turn Git tree snapshots and `/undo` | Git object database, temp index |
 | `check-gate.ts` | Quick proof feedback and `/ship` | `uvx`, proof-of-work |
@@ -106,7 +106,8 @@ agent_settled
   instructions remain its scope boundary, but no Neura hook technically enforces it.
 - Plan text is untrusted and rendered through structured escaped fields.
 - Credentials stay outside source and must be redacted before model or audit use.
-- Plan guardrails reduce mistakes but do not replace an OS sandbox. Human Away
-  adds a WSL2 bubblewrap boundary and exposes no normal or MCP tools; YOLO remains
-  intentionally unsandboxed.
+- Plan guardrails reduce mistakes but do not replace an OS sandbox. WORK combines
+  canonical structured workspace tools with WSL2 bubblewrap for shell execution;
+  its provider payload excludes unknown tools. Human Away exposes only its WSL2
+  bubblewrap executor. YOLO remains intentionally unsandboxed.
 - Repository and live harness are separate states; drift checks matter.
