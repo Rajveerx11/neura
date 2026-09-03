@@ -12,7 +12,7 @@ Neura uses semantic versions:
 `VERSION` is the machine-readable source. Changelog and release-note filenames
 must match it.
 
-## Stable-release gate
+## Private stable-release gate
 
 All items must pass:
 
@@ -33,6 +33,24 @@ All items must pass:
 
 Human Away expansion also requires the separate sandbox and adversarial-replay
 gates in [STATUS.md](STATUS.md).
+
+## Production-release gate
+
+A production-ready claim additionally requires:
+
+- [ ] Every P0 item in
+      [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) is closed.
+- [ ] Every security-critical P1 acceptance criterion and negative test passes.
+- [ ] Strict TypeScript and the hermetic/adversarial suites pass.
+- [ ] Secret scanning reports no unresolved incident.
+- [ ] Clean install, interrupted install, upgrade, rollback, and live-manifest
+      rehearsals pass on a disposable Windows host.
+- [ ] Unknown live extensions, floating executables, and source/live drift are absent.
+- [ ] Human Away is either still preview-disabled or has passed its separate field gates.
+- [ ] Status and release notes state the exact supported scope and remaining limitations.
+
+Production claims follow evidence, not dates. Exceptions require a named owner,
+expiry, compensating control, and tracked issue.
 
 ## Release commands
 

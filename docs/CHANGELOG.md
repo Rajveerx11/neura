@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Updated the Pi runtime, development APIs, runtime contract, CI install, and
+  live harness from `0.84.1`/`0.84.2` drift to exact `0.84.4` alignment.
+  The offline Neura startup smoke test, typecheck, 16-extension harness,
+  dependency/signature audits, live drift check, and WSL2 sandbox replay pass.
+- Created the GitHub
+  [Production readiness milestone](https://github.com/Rajveerx11/neura/milestone/1)
+  and expanded roadmap
+  [#31](https://github.com/Rajveerx11/neura/issues/31) with prioritized,
+  testable acceptance criteria for every audit finding.
+- Added `docs/PRODUCTION_READINESS.md` as the durable production-claim gate.
+  Updated status, security, development, dependency, release, and README
+  documentation to distinguish covered private use from production readiness.
 - Added a versioned runtime contract for the required Pi version. The installer
   and `/health` now consume the same contract; an installed-version mismatch
   degrades harness health and reports the exact pinned install command.

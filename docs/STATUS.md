@@ -1,77 +1,66 @@
 # Neura status
 
-Last audited: 2026-08-24
-Target: `2.5.1` stable
-Current: `2.5.1` source stable; local live Pi is `0.84.2` while source requires `0.84.1`
+Last audited: 2026-09-03
+Current source: `2.5.1` with an unreleased Pi `0.84.4` compatibility update
+Live runtime: Pi `0.84.4`; live Neura files match source
 
 ## Release decision
 
-**Approved for the `v2.5.1` stable tag.** Named security, dependency, typecheck,
-Windows CI, and live-sync gates passed on the release path. Normal supervised
-engineering is usable. Human Away remains preview-labelled per project policy
-even with its new WSL2 boundary.
+**Private engineering use only. Neura is not production-ready.**
 
-## Capability matrix
+The historical `v2.5.1` release remains usable for its documented personal,
+single-user scope. A fresh production-readiness audit found release blockers in
+mode defaults, unattended execution, executable dependency trust, installation
+reproducibility, and credential-incident closure. Human Away remains preview-only.
 
-| Capability | State | Evidence or limit |
+The canonical hardening backlog is
+[GitHub issue #31](https://github.com/Rajveerx11/neura/issues/31). Detailed
+release gates and issue ownership live in
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
+
+## Current evidence
+
+| Area | State | Evidence or blocker |
 |---|---|---|
-| Logo-only launch and persona | Ready | `neura.ts` renders only the responsive wordmark, then hides it when work starts. |
-| Responsive cockpit and theme | Ready | Harness checks 24-120 column layouts and the ten-line widget cap. |
-| Plan tool boundary | Ready | Plan activates a fixed tool set and blocks normal mutation tools. |
-| Plan filesystem containment | Ready | Filesystem tools resolve aliases, real paths, symlinks, junctions, and missing descendants before workspace comparison. Git inspection is limited to objects, refs, and index-only views under exact options that disable config-driven process and mailmap paths; unstaged diff requires explicit range-plus-separator syntax and worktree-aware modes are denied. |
-| Plan external research | Ready with limits | Bounded `web_search` remains available. Direct `web_fetch` is disabled because the delegated Ollama backend does not expose DNS answers, connection IPs, or redirect hops for policy enforcement. |
-| Visual Plan publisher | Ready | Structured input, escaped output, restrictive CSP, collision-safe creation, explicit waiting/new/revision lifecycle, session-owned revisions, and external-edit detection. TUI, print, JSON, and RPC runs share a one-retry publication contract; exhausted and successful outcomes emit versioned session entries. |
-| Checkpoints and `/undo` | Ready with limits | Snapshots are in memory, exclude ignored files, and do not delete files created after a snapshot. |
-| Persistent memory | Ready for personal use | Local Markdown file under the live harness; no encryption or multi-user isolation. |
-| Transcript copy and model presets | Ready | Covered by deterministic harness tests. External model login and local Qwen remain operator dependencies. |
-| MCP configuration | Optional | gfi-scout, Context7, and Gmail are enabled when credentials exist. Paper, Supabase, and Notion ship disabled. |
-| Proof-of-work gate | Preview | Quick proof starts at `agent_settled`; unavailable proof fails soft. Full `/ship` verification remains explicit. |
-| Automatic Git shipping | Removed | No lifecycle hook stages, commits, or pushes. The installer removes the retired `autogit.ts`; Git changes occur only through requested tool calls. |
-| Live harness sync | Degraded locally | Release sync passed on 2026-08-09, but the 2026-08-24 drift check found Pi `0.84.2` installed while source requires `0.84.1`. No install was performed. Unreleased `/health` work now detects this exact mismatch from the shared runtime contract. |
-| YOLO policy | Ready with explicit risk | Matches Codex dangerous-full-access semantics: no Neura application approvals or tool blocking and no native-Windows OS sandbox. Harness tests cover sensitive shell, protected-file, and Gmail bypass. |
-| Approval grants | Ready | One-use grants bind canonical target identity, target content/state, exact input, workspace state, `HEAD`, index state, and 120-second expiry. Legacy pending records cannot grant retries. |
-| Central redaction | Ready with limits | One implementation covers action summaries, approval text, cockpit notices, reviewer dossiers, Gmail summaries, and sandbox output. Pattern matching remains defense in depth, not permission to handle raw secrets. |
-| Human Away | Preview | Only `human_away_exec` reaches the provider. WSL2 bubblewrap exposes one writable workspace mount, read-only system runtime, cleared host environment, hidden Windows/WSL user paths, no network, and link preflight. Missing prerequisites fail closed. |
-| Gmail mutation policy | Ready | Outside YOLO, only exact read-only actions pass. Every other known or unknown Gmail action confirms interactively or blocks headless. YOLO intentionally bypasses mediation. |
-| Release reproducibility | Ready | Pi `0.84.1`, all runtime packages, TypeScript, and type dependencies are exact-pinned. Lockfile install, typecheck, vulnerability/signature audit, harness/docs checks, and Windows install/drift checks run in CI. |
+| Pi and live Neura | Ready | Pi `0.84.4` is installed; the offline startup smoke test and `install.ps1 -Check` pass. |
+| Dependency graph | Ready | Lockfile audit reports zero known vulnerabilities; 249 packages have verified registry signatures and 50 have attestations. |
+| Core harness | Ready for covered behavior | Typecheck, 16-extension harness, documentation checks, and live WSL2 sandbox replay pass. |
+| Default mode | Blocked | New sessions default to unsandboxed YOLO. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
+| Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
+| Automatic execution | Blocked | Proof and Git automation require pinned, contained execution. Track [#22](https://github.com/Rajveerx11/neura/issues/22). |
+| Installation | Blocked | Atomic activation, rollback, file hashes, and unknown-extension detection are missing. Track [#21](https://github.com/Rajveerx11/neura/issues/21). |
+| Credential incident | Blocked | Historical GitHub-token rotation must be verified and documented. Track [#36](https://github.com/Rajveerx11/neura/issues/36). |
+| Plan confidentiality | Major gap | Broad searches can discover ignored or historical secrets. Track [#35](https://github.com/Rajveerx11/neura/issues/35). |
+| Approvals | Major gap | Storage concurrency, tamper evidence, and remote endpoint binding need hardening. Track [#33](https://github.com/Rajveerx11/neura/issues/33). |
+| Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
+| Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
+| Type and test safety | Major gap | Strict compilation reports 246 source errors; hermetic, fuzz, race, and crash suites are incomplete. Track [#26](https://github.com/Rajveerx11/neura/issues/26) and [#27](https://github.com/Rajveerx11/neura/issues/27). |
+| UX and accessibility | Major gap | Dangerous-state visibility and generated-plan accessibility need hardening. Track [#37](https://github.com/Rajveerx11/neura/issues/37). |
+| Health and operations | Major gap | Health checks and diagnostics can overstate readiness. Track [#39](https://github.com/Rajveerx11/neura/issues/39) and [#30](https://github.com/Rajveerx11/neura/issues/30). |
 
-## Unreleased implementation evidence
+## Production claim gate
 
-1. Issue `#20` introduces `agent/neura/runtime-contract.json` as the shared Pi
-   version source for the installer and `/health`.
-2. The local drift check remains intentionally failing until the operator
-   installs the required Pi version; this branch does not mutate the live harness.
+Neura may be called production-ready only when:
 
-## Completed for `2.5.1` stable
+1. Every open P0 issue in the Production readiness milestone is closed.
+2. Security-critical P1 acceptance criteria and negative tests pass.
+3. Human Away remains disabled or preview-labelled until its separate field gates pass.
+4. Clean install, upgrade, interruption, rollback, and live-manifest checks pass.
+5. Strict typecheck, adversarial tests, dependency audit, signature audit,
+   secret scan, documentation check, and CI all pass from a clean checkout.
+6. No unresolved credential incident, unknown live extension, or source/live drift exists.
+7. Release notes state supported scope, remaining limitations, migration, and rollback.
 
-1. Approval grants are target/content/Git/input/expiry bound with positive and
-   replay-negative tests.
-2. Central redaction covers URL queries, headers, provider tokens, JWTs,
-   connection strings, high-entropy values, notices, audits, and reviewer input.
-3. Gmail uses an explicit read-only allowlist and fails closed for unknown
-   headless actions.
-4. Pi and every `agent/settings.json` package are exact-pinned with reviewed
-   sources, lifecycle behavior, update policy, registry signatures, and audit.
-5. TypeScript, dependency audit, harness/docs verification, and install/drift
-   validation run in pinned Windows CI.
+Passing tests prove only the behavior they cover. Dates, version bumps, or a
+green basic harness do not override an unmet production gate.
 
-## Human Away preview evidence
+## Preserved invariants
 
-1. WSL2 bubblewrap is the only Human Away execution route; normal and MCP tools
-   are filtered from active tools and provider payloads.
-2. Deterministic and live replay covers linked-path swaps between calls, shell
-   parsing, custom/MCP tool removal, secret-shaped values, approval reuse,
-   target/`HEAD`/index changes, audit corruption, host environment, network,
-   system writes, and Windows/WSL path visibility.
-3. Human Away remains labelled `PREVIEW` for field validation and because Plan
-   and YOLO retain their documented application-only/unsandboxed boundaries.
-
-## Deferred until evidence supports them
-
-- Per-tool color badges.
-- Agent scorecards.
-- More dashboards or launch content.
-- Hosted Plan artifacts.
-
-New features should solve repeated engineering friction. They should not delay
-the security and release gates above.
+- Source of truth remains `C:\Neura`; the live harness is generated.
+- Plain Pi stays stock unless `NEURA` is set.
+- The logo-only launch remains.
+- Plan remains read-only except controlled plan publication.
+- Deterministic policy outranks model review.
+- Human Away remains preview-labelled.
+- No automatic Git shipping returns.
+- Credentials, memory, approvals, sessions, and raw transcripts stay out of source.

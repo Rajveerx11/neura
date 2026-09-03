@@ -3,7 +3,9 @@
 ## Supported version
 
 Only current `main` receives security fixes. `2.5.1` is a private stable
-release, not a general production or multi-user security boundary.
+release, not a general production or multi-user security boundary. Current
+`main` is also not approved for a production claim while the named P0 and
+security-critical P1 issues remain open.
 
 ## Report a vulnerability
 
@@ -51,6 +53,24 @@ fix. Never include a real credential or private user data.
 - Headmaster cannot widen deterministic policy.
 - Application policy reduces mistakes in Plan and Human Away but does not provide
   OS isolation. YOLO bypasses that policy by design.
+
+## Production security gate
+
+A production claim requires all P0 issues and security-critical P1 acceptance
+criteria in [PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) to pass.
+In particular:
+
+- a supervised contained mode must be the default;
+- unattended work must not trust repository-controlled scripts by command name;
+- automatic executables must be pinned and contained;
+- credential incidents must be explicitly closed;
+- Plan, memory, MCP, Gmail, approvals, and skills must preserve confidentiality
+  under adversarial tests;
+- live installed code must match a reviewed manifest.
+
+No date, version bump, model review, or basic green test suite can waive these
+requirements. A temporary exception needs an owner, expiry, compensating
+control, and tracked issue.
 
 ## Known limitations
 

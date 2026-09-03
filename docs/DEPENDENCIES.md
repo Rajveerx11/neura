@@ -1,6 +1,6 @@
 # Dependency policy and review
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-09-03
 
 Neura uses exact runtime and development pins. `package-lock.json` is the
 reproducible development graph. Pi-managed runtime extensions are pinned in
@@ -11,7 +11,7 @@ harness without replacing unrelated local packages or model choices.
 
 | Package | Pin | Source and lifecycle review | Privileged behavior |
 |---|---:|---|---|
-| `@earendil-works/pi-coding-agent` | `0.84.1` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v0.84.1); published manifest has build and `prepublishOnly`, but no install hook. Registry integrity and signature verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
+| `@earendil-works/pi-coding-agent` | `0.84.4` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v0.84.4); published manifest has build and `prepublishOnly`, but no consumer install hook. Registry integrity and signature verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
 | `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
@@ -21,15 +21,17 @@ harness without replacing unrelated local packages or model choices.
 
 ## Development graph
 
-`package.json` pins Pi `0.84.1`, Pi API/TUI types `0.84.1`, Typebox `1.3.7`,
+`package.json` pins Pi `0.84.4`, Pi API/TUI types `0.84.4`, Typebox `1.3.7`,
 TypeScript `7.0.2`, and Node types `26.2.0`. Installation uses `npm ci` in CI.
-The 2026-08-09 review found zero known npm vulnerabilities; all 262 audited
-packages had verified registry signatures and 54 had attestations.
+The 2026-09-03 review found zero known npm vulnerabilities; all 249 audited
+packages had verified registry signatures and 50 had attestations.
 
 Pi `0.83.0` was rejected for stable release because its locked `undici` and
-`brace-expansion` versions had current moderate/high advisories. Pi `0.84.1`
-updates those dependencies and passed Neura's loader, harness, typecheck, and
-sandbox tests.
+`brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`
+passed Neura's offline live-startup smoke test, loader harness, typecheck,
+dependency audit, signature audit, live drift check, and WSL2 sandbox replay.
+The source contract, development APIs, CI global install, and live runtime use
+the same exact version.
 
 ## Update policy
 

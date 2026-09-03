@@ -10,7 +10,7 @@ back later. The live harness is an installation target, not source.
 - Windows PowerShell.
 - Node.js and npm.
 - Git.
-- Pi `0.84.1` for the stable release.
+- Pi `0.84.4` for current `main`.
 - `uvx` for proof-of-work.
 
 ## Change loop
@@ -22,7 +22,9 @@ back later. The live harness is an installation target, not source.
 4. Run:
 
    ```powershell
+   npm run typecheck
    node scripts\verify-harness.mjs
+   node scripts\verify-sandbox.mjs
    node scripts\check-docs.mjs
    git diff --check
    ```
@@ -68,9 +70,17 @@ Runtime packages are declared in `agent/settings.json`. New packages require:
 4. deterministic regression coverage;
 5. changelog entry.
 
-Current unpinned packages are tracked as a release blocker in
-[STATUS.md](STATUS.md). Reviewed pins, privileged behavior, and the update
-process live in [DEPENDENCIES.md](DEPENDENCIES.md).
+Executable dependency and provenance gaps are tracked in
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Reviewed pins, privileged
+behavior, and the update process live in [DEPENDENCIES.md](DEPENDENCIES.md).
+
+## Production issue closure
+
+A production-readiness issue closes only when its acceptance criteria, negative
+tests, integration evidence, migration, rollback, and documentation are present.
+Use [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) as the durable gate and
+GitHub issue [#31](https://github.com/Rajveerx11/neura/issues/31) as the live
+delivery order.
 
 ## Documentation ownership
 
@@ -79,6 +89,7 @@ process live in [DEPENDENCIES.md](DEPENDENCIES.md).
 | User-visible behavior | `README.md`, `docs/STATUS.md`, `docs/CHANGELOG.md` |
 | Architecture or lifecycle | `docs/ARCHITECTURE.md` |
 | Security boundary | `SECURITY.md`, `docs/STATUS.md`, tests |
+| Production gate or priority | `docs/PRODUCTION_READINESS.md`, GitHub roadmap |
 | Release process | `VERSION`, release notes, `docs/RELEASING.md` |
 | Visual system | `DESIGN.md` |
 | Historical plan state | `plans/README.md` |

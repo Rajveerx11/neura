@@ -33,12 +33,12 @@ jobs:
           npm audit signatures
 
       - name: Install verified Pi version
-        run: npm install --global @earendil-works/pi-coding-agent@0.84.1
+        run: npm install --global @earendil-works/pi-coding-agent@0.84.4
 
       - name: Verify Pi version and TypeScript
         shell: pwsh
         run: |
-          if ((pi --version) -notmatch '0\.84\.1') { throw "Unexpected Pi version: $(pi --version)" }
+          if ((pi --version) -notmatch '0\.84\.4') { throw "Unexpected Pi version: $(pi --version)" }
           npm run typecheck
 
       - name: Verify extensions

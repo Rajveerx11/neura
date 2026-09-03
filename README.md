@@ -5,11 +5,13 @@ Neura is Rajveer's private engineering-agent harness built on
 interface, operating modes, verification, recovery, memory, model presets, and
 guardrails around stock Pi.
 
-Current version: **2.5.1**. This is the stable private release. Plan mode is
-hardened for workspace-contained reads. Human Away remains preview-labelled and
-runs only through its WSL2 bubblewrap tool boundary; it is still not intended
-for unattended high-impact work. See [current status](docs/STATUS.md) and
-[release notes](docs/releases/v2.5.1.md).
+Current version: **2.5.1**. Current `main` and the live harness use Pi
+`0.84.4`. This remains a private, single-user engineering build and is
+**not production-ready**. Human Away remains preview-labelled and is not
+approved for unattended high-impact work. See
+[current status](docs/STATUS.md), the
+[production-readiness gate](docs/PRODUCTION_READINESS.md), and the historical
+[2.5.1 release notes](docs/releases/v2.5.1.md).
 
 ## What is implemented
 
@@ -50,11 +52,11 @@ Ctrl+Shift+T owns Pi's thinking-level shortcut.
 
 ## Install
 
-Verified platform: Windows with PowerShell, Node.js/npm, Git, Pi `0.84.1`, and
+Verified platform: Windows with PowerShell, Node.js/npm, Git, Pi `0.84.4`, and
 `uvx`.
 
 ```powershell
-npm install -g @earendil-works/pi-coding-agent@0.84.1
+npm install -g @earendil-works/pi-coding-agent@0.84.4
 git clone https://github.com/Rajveerx11/neura.git C:\Neura
 Set-Location C:\Neura
 powershell -File .\install.ps1
@@ -127,6 +129,7 @@ plans/              Historical visual plans; not current requirements
 ## Documentation
 
 - [Current feature and risk status](docs/STATUS.md)
+- [Production-readiness gates and issue map](docs/PRODUCTION_READINESS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development workflow](docs/DEVELOPMENT.md)
 - [Dependency policy and review](docs/DEPENDENCIES.md)
