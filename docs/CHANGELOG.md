@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added a complete-history secret scan to push and pull-request CI using the
+  exact Gitleaks `8.30.1` Windows archive and its published SHA-256. Scanner
+  output is fully redacted, the checkout includes every ref, and the dependency
+  review and local verification command are documented. Positive and negative
+  tests prove clean history passes while a tampered scanner archive and a
+  committed synthetic token fail.
+- Removed the historical plaintext GitHub-token field from the documented local
+  Claude configuration while preserving working GitHub CLI keyring access. Added
+  a value-free incident record; closure remains blocked until owner confirmation
+  of revocation and absence from known logs or screenshots.
 - Updated the Pi runtime, development APIs, runtime contract, CI install, and
   live harness from `0.84.1`/`0.84.2` drift to exact `0.84.4` alignment.
   The offline Neura startup smoke test, typecheck, 16-extension harness,

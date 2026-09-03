@@ -19,6 +19,12 @@ harness without replacing unrelated local packages or model choices.
 | `@spences10/pi-mcp` | `0.0.58` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-mcp); no install hook. Registry signature verified. | Starts configured MCP processes or HTTP clients, filters child environment, and stores oversized responses through `pi-context`. Human Away removes MCP tools. |
 | `@spences10/pi-context` | `0.1.15` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-context); no install hook. Registry signature verified. | Writes a local SQLite context sidecar under the live harness. |
 
+## Reviewed CI security tools
+
+| Tool | Pin and integrity | Source and lifecycle review | Privileged behavior |
+|---|---|---|---|
+| Gitleaks CLI | `8.30.1`; Windows x64 archive SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` | [Official release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). CI downloads the exact archive, verifies its published digest, then extracts it. No installer or floating action tag runs. | Reads the complete Git history in CI. Findings are fully redacted; checkout credentials are removed before the scanner starts. |
+
 ## Development graph
 
 `package.json` pins Pi `0.84.4`, Pi API/TUI types `0.84.4`, Typebox `1.3.7`,

@@ -20,6 +20,8 @@ fix. Never include a real credential or private user data.
 - Use synthetic values in tests.
 - Revoke and rotate any credential exposed in a command line, log, screenshot,
   transcript, issue, commit, or model context. Deleting the visible copy is not enough.
+- Record closure evidence without secret material in
+  [docs/SECURITY_INCIDENTS.md](docs/SECURITY_INCIDENTS.md).
 
 ## Current security model
 
