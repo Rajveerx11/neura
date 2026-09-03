@@ -27,10 +27,18 @@ harness without replacing unrelated local packages or model choices.
 
 ## Development graph
 
-`package.json` pins Pi `0.84.4`, Pi API/TUI types `0.84.4`, Typebox `1.3.7`,
-TypeScript `7.0.2`, and Node types `26.2.0`. Installation uses `npm ci` in CI.
-The 2026-09-03 review found zero known npm vulnerabilities; all 249 audited
-packages had verified registry signatures and 50 had attestations.
+`package.json` pins Pi `0.84.4`, Pi API/TUI types `0.84.4`, Playwright Core
+`1.62.1`, axe-core `4.13.0`, Typebox `1.3.7`, TypeScript `7.0.2`, and Node types
+`26.2.0`. Installation uses `npm ci --ignore-scripts` in CI. Playwright Core has
+no install hook or bundled browser; verification launches the Microsoft Edge
+already present on the Windows runner. axe-core has no consumer install hook and
+runs only against generated local Plan HTML. Browser contexts receive no
+credentials or network capability. The exact-pinned official
+`actions/upload-artifact` commit `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`
+stores only generated Plan screenshots and structured results for seven days.
+
+The 2026-09-03 review found zero known npm vulnerabilities; all 251 audited
+packages had verified registry signatures and 52 had attestations.
 
 Pi `0.83.0` was rejected for stable release because its locked `undici` and
 `brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`

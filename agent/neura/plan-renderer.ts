@@ -1,5 +1,7 @@
 import { isSafeExternalUrl, isSafePlanSlug } from "./plan-policy.ts";
 
+import { PALETTE } from "./ui-tokens.ts";
+
 export type PlanTone = "neutral" | "accent" | "success" | "warning" | "risk";
 export type PlanVisualKind = "flow" | "comparison" | "boundary";
 
@@ -165,7 +167,7 @@ function renderItems(items: string[]): string {
   return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
-function renderPreview(preview: PlanPreview): string {
+function renderPreview(preview: PlanPreview, marker: string): string {
   const regions = preview.regions.map((region, index) => {
     const tone = TONES.has(region.tone ?? "neutral") ? region.tone ?? "neutral" : "neutral";
     return `<article class="preview-region tone-${tone}">
@@ -175,7 +177,7 @@ function renderPreview(preview: PlanPreview): string {
       <div class="preview-lines">${region.items.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>
     </article>`;
   }).join("");
-  return `<section id="preview" class="preview-section"><header><span>Proposed state</span><div><h2>${escapeHtml(preview.title)}</h2><p>${escapeHtml(preview.caption ?? "Directional preview for review before implementation.")}</p></div></header>
+  return `<section id="preview" class="preview-section"><header><span>${escapeHtml(marker)}</span><div><h2>${escapeHtml(preview.title)}</h2><p>${escapeHtml(preview.caption ?? "Directional preview for review before implementation.")}</p></div></header>
     <div class="future-preview" role="group" aria-label="${escapeHtml(preview.title)}">${regions}</div>
   </section>`;
 }
@@ -210,12 +212,33 @@ function renderSources(sources: PlanDocument["sources"]): string {
 export function renderPlanHtml(plan: PlanDocument): string {
   assertPlanDocument(plan);
   const created = new Date().toISOString().slice(0, 10);
+  const sectionDefinitions = [
+    ...(plan.preview ? [{ id: "preview", label: "Preview" }] : []),
+    { id: "summary", label: "Summary" },
+    { id: "evidence", label: "Evidence" },
+    { id: "visuals", label: "Visuals" },
+    { id: "steps", label: "Steps" },
+    { id: "scope", label: "Scope" },
+    ...(plan.decisions?.length ? [{ id: "decisions", label: "Decisions" }] : []),
+    { id: "verification", label: "Proof" },
+    ...(plan.openQuestions?.length ? [{ id: "questions", label: "Questions" }] : []),
+    { id: "sources", label: "Sources" },
+    { id: "approval", label: "Approval" },
+  ];
+  const sectionMarkers = new Map(sectionDefinitions.map((section, index) => [
+    section.id,
+    `${String(index + 1).padStart(2, "0")} / ${section.label}`,
+  ]));
+  const marker = (id: string): string => sectionMarkers.get(id)!;
+  const navigation = sectionDefinitions
+    .map((section) => `<a href="#${section.id}">${escapeHtml(section.label)}</a>`)
+    .join("");
   const decisions = plan.decisions?.length ? `<section id="decisions">
-    <header><span>06 / Decisions</span><div><h2>Decisions</h2><p>Chosen directions that shape implementation.</p></div></header>
+    <header><span>${marker("decisions")}</span><div><h2>Decisions</h2><p>Chosen directions that shape implementation.</p></div></header>
     <div class="decision-list">${plan.decisions.map((item) => `<article><strong>${escapeHtml(item.decision)}</strong><p>${escapeHtml(item.direction)}</p></article>`).join("")}</div>
   </section>` : "";
   const questions = plan.openQuestions?.length ? `<section id="questions">
-    <header><span>Open questions</span><div><h2>Human decisions</h2><p>Only choices that materially change scope or architecture appear here.</p></div></header>
+    <header><span>${marker("questions")}</span><div><h2>Human decisions</h2><p>Only choices that materially change scope or architecture appear here.</p></div></header>
     <ol class="questions">${plan.openQuestions.map((question) => `<li>${escapeHtml(question)}</li>`).join("")}</ol>
   </section>` : "";
 
@@ -229,18 +252,18 @@ export function renderPlanHtml(plan: PlanDocument): string {
   <meta name="referrer" content="no-referrer" />
   <title>${escapeHtml(plan.title)}</title>
   <style>
-    :root{--page:#0b0c0e;--surface:#14171a;--raised:#1c2024;--line:#2c3237;--strong:#485159;--text:#e8e2d8;--soft:#cbc5bb;--muted:#a8a39b;--dim:#74787b;--copper:#d97841;--plan:#76b8c4;--success:#69c08a;--warning:#d3a64a;--error:#df6b63;--mono:"Cascadia Mono",Consolas,monospace;--sans:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;--content:1160px}
-    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;overflow-x:hidden;background:var(--page);color:var(--text);font:16px/1.62 var(--sans);text-rendering:optimizeLegibility}a{color:var(--plan);text-underline-offset:3px}code{color:#efa476;font-family:var(--mono)}
-    .topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:52px;padding:0 22px;border-bottom:1px solid var(--line);background:rgba(11,12,14,.95);backdrop-filter:blur(8px)}.brand,.date,.eyebrow,section>header>span,.visual-index,.step-number{font-family:var(--mono);text-transform:uppercase;letter-spacing:.11em}.brand{color:var(--copper);font-size:12px;font-weight:700}.date{color:var(--dim);font-size:10px}nav{display:flex;min-width:0;max-width:100%;gap:16px;overflow-x:auto}nav a{color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap}
+    :root{--page:${PALETTE.canvas};--surface:${PALETTE.surface};--raised:${PALETTE.raised};--line:${PALETTE.border};--strong:#485159;--text:${PALETTE.text};--soft:#cbc5bb;--muted:${PALETTE.muted};--dim:${PALETTE.dim};--copper:${PALETTE.accent};--focus:${PALETTE.focus};--plan:${PALETTE.plan};--success:${PALETTE.success};--warning:${PALETTE.warning};--error:${PALETTE.error};--mono:"Cascadia Mono",Consolas,monospace;--sans:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;--content:1160px}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;overflow-x:hidden;background:var(--page);color:var(--text);font:16px/1.62 var(--sans);text-rendering:optimizeLegibility}a{color:var(--plan);text-underline-offset:3px}a:focus-visible{outline:3px solid var(--focus);outline-offset:3px;border-radius:2px}code{color:var(--focus);font-family:var(--mono)}
+    .topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:52px;padding:0 22px;border-bottom:1px solid var(--line);background:rgba(11,12,14,.95);backdrop-filter:blur(8px)}.brand,.date,.eyebrow,section>header>span,.visual-index,.step-number{font-family:var(--mono);text-transform:uppercase;letter-spacing:.11em}.brand{color:var(--copper);font-size:12px;font-weight:700}.date{color:var(--dim);font-size:12px}nav{display:flex;min-width:0;max-width:100%;gap:8px;overflow-x:auto}nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 6px;color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap}
     main{width:min(calc(100% - 36px),var(--content));margin:0 auto;padding:50px 0 82px}.hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);gap:44px;align-items:end;padding:10px 0 44px;border-bottom:1px solid var(--strong)}.eyebrow{margin:0 0 12px;color:var(--copper);font-size:11px;font-weight:700}h1,h2,h3{margin:0;line-height:1.16}h1{max-width:800px;font-size:clamp(34px,5vw,58px);font-weight:610;letter-spacing:-.04em;overflow-wrap:anywhere}h2{font-size:clamp(25px,3vw,35px);letter-spacing:-.025em}h3{font-size:16px}.brief{max-width:760px;margin:20px 0 0;color:var(--soft);font-size:19px}.gate{padding:5px 0 5px 18px;border-left:2px solid var(--copper)}.gate small{color:var(--dim);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.gate strong{display:block;margin-top:9px;font-size:18px}.gate p{margin:7px 0 0;color:var(--muted);font-size:13px}
     section{padding:56px 0;border-bottom:1px solid var(--line);scroll-margin-top:64px}section>header{display:grid;grid-template-columns:160px minmax(0,1fr);gap:28px;margin-bottom:28px}section>header>span{color:var(--copper);font-size:10px;font-weight:700}section>header p{max-width:740px;margin:8px 0 0;color:var(--muted)}
     .status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;border:1px solid var(--line);background:var(--line)}.status-card{padding:22px;background:var(--page)}.status-card:nth-child(2){background:var(--surface)}.status-card span{display:block;margin-bottom:15px;color:var(--plan);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.status-card p{margin:8px 0 0;color:var(--muted);font-size:14px}
-    .evidence{width:100%;table-layout:fixed;border-collapse:collapse}.evidence th,.evidence td{padding:14px 12px;border-top:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}.evidence th{color:var(--dim);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.evidence td{color:var(--soft);font-size:14px}.evidence td:first-child{width:34%;color:var(--text);font-family:var(--mono);font-size:13px}
+    .evidence{width:100%;table-layout:fixed;border-collapse:collapse}.evidence caption{padding:0 0 12px;color:var(--muted);font-size:14px;text-align:left}.evidence th,.evidence td{padding:14px 12px;border-top:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}.evidence th{color:var(--dim);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.evidence td{color:var(--soft);font-size:14px}.evidence td:first-child{width:34%;color:var(--text);font-family:var(--mono);font-size:13px}
     .future-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;padding:1px;border:1px solid var(--strong);background:var(--line)}.preview-region{min-width:0;padding:20px;background:var(--page)}.preview-region.tone-accent{box-shadow:inset 3px 0 0 var(--copper)}.preview-region.tone-success{box-shadow:inset 3px 0 0 var(--success)}.preview-region.tone-warning{box-shadow:inset 3px 0 0 var(--warning)}.preview-region.tone-risk{box-shadow:inset 3px 0 0 var(--error)}.preview-index{display:block;margin-bottom:12px;color:var(--copper);font:700 9px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.preview-region p{margin:7px 0 0;color:var(--muted);font-size:13px}.preview-lines{display:grid;gap:7px;margin-top:15px}.preview-lines div{padding:8px 10px;border-left:1px solid var(--strong);background:var(--surface);color:var(--soft);font:12px/1.45 var(--mono);overflow-wrap:anywhere}
-    .visual{margin:28px 0 0;padding:20px;border:1px solid var(--strong);background:var(--surface)}.visual figcaption{display:flex;align-items:baseline;gap:16px;margin-bottom:18px}.visual figcaption span{color:var(--plan);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.visual figcaption strong{font-size:17px}.visual-grid{display:grid;gap:12px}.visual-flow .visual-grid{display:flex;align-items:stretch;gap:8px;overflow-x:auto}.visual-flow .visual-group{flex:1 0 150px}.visual-comparison .visual-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.visual-boundary .visual-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.visual-group{min-width:0;padding:16px;border:1px solid var(--line);background:var(--page)}.visual-group.tone-accent{border-color:var(--plan);background:#12252a}.visual-group.tone-success{border-color:var(--success)}.visual-group.tone-warning{border-color:var(--warning)}.visual-group.tone-risk{border-color:var(--error)}.visual-index{display:block;margin-bottom:12px;color:var(--dim);font-size:9px}.visual-group p{margin:7px 0 0;color:var(--muted);font-size:13px}.visual-group ul{margin:13px 0 0;padding-left:18px}.visual-group li{margin:6px 0;color:var(--soft);font-size:13px}.flow-link{display:grid;place-items:center;flex:0 0 14px;color:var(--copper);font:700 14px/1 var(--mono)}.visual-caption{margin:16px 0 0;color:var(--muted);font-size:13px;text-align:center}
+    .visual{margin:28px 0 0;padding:20px;border:1px solid var(--strong);background:var(--surface)}.visual figcaption{display:flex;align-items:baseline;gap:16px;margin-bottom:18px}.visual figcaption span{color:var(--plan);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}.visual figcaption strong{font-size:17px}.visual-grid{display:grid;gap:12px}.visual-flow .visual-grid{display:flex;align-items:stretch;gap:8px;overflow-x:auto}.visual-flow .visual-group{flex:1 0 150px}.visual-comparison .visual-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.visual-boundary .visual-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.visual-group{min-width:0;padding:16px;border:1px solid var(--line);background:var(--page)}.visual-group.tone-accent{border-color:var(--plan);background:#12252a}.visual-group.tone-success{border-color:var(--success)}.visual-group.tone-warning{border-color:var(--warning)}.visual-group.tone-risk{border-color:var(--error)}.visual-index{display:block;margin-bottom:12px;color:var(--muted);font-size:9px}.visual-group p{margin:7px 0 0;color:var(--muted);font-size:13px}.visual-group ul{margin:13px 0 0;padding-left:18px}.visual-group li{margin:6px 0;color:var(--soft);font-size:13px}.flow-link{display:grid;place-items:center;flex:0 0 14px;color:var(--copper);font:700 14px/1 var(--mono)}.visual-caption{margin:16px 0 0;color:var(--muted);font-size:13px;text-align:center}
     .steps{display:grid}.step{display:grid;grid-template-columns:68px minmax(0,1fr) minmax(230px,.45fr);gap:20px;padding:22px 0;border-top:1px solid var(--line)}.step-number{color:var(--copper);font-size:10px}.step p{margin:7px 0 0;color:var(--muted)}.files{margin:12px 0 0;padding:0;list-style:none}.files li{color:var(--soft);font:12px/1.6 var(--mono);overflow-wrap:anywhere}.proof{color:var(--soft);font-size:13px}.proof b{display:block;margin-bottom:6px;color:var(--plan);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}
     .two-column{display:grid;grid-template-columns:1fr 1fr;gap:24px}.panel{padding:20px;border-top:1px solid var(--strong)}.panel h3{margin-bottom:12px}.panel ul,.checklist,.questions{margin:0;padding-left:20px}.panel li,.questions li{margin:8px 0;color:var(--soft)}.risk-list,.decision-list{display:grid;gap:1px;border:1px solid var(--line);background:var(--line)}.risk-list article,.decision-list article{display:grid;grid-template-columns:.7fr 1.3fr;gap:20px;padding:16px 18px;background:var(--page)}.risk-list p,.decision-list p{margin:0;color:var(--muted)}.checklist{display:grid;grid-template-columns:1fr 1fr;gap:0 28px;padding:0;list-style:none}.checklist li{position:relative;padding:13px 0 13px 28px;border-top:1px solid var(--line);color:var(--soft)}.checklist li:before{content:"[ ]";position:absolute;left:0;color:var(--success);font:12px/1.7 var(--mono)}
-    .sources{margin:0;padding-left:22px}.sources li{margin:11px 0;color:var(--muted)}.sources li span{display:block;color:var(--soft)}.approval{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:26px;align-items:center;padding:26px;border:1px solid var(--copper);background:#2a1b14}.approval p{margin:8px 0 0;color:var(--soft)}.approval-state{padding:10px 14px;border:1px solid var(--copper);color:var(--copper);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}footer{padding-top:30px;color:var(--dim);font:11px/1.6 var(--mono)}
+    .sources{margin:0;padding-left:22px}.sources li{margin:11px 0;color:var(--muted)}.sources li a{display:inline-flex;align-items:center;min-height:44px}.sources li span{display:block;color:var(--soft)}.approval{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:26px;align-items:center;padding:26px;border:1px solid var(--copper);background:#2a1b14}.approval strong{font-size:18px}.approval p{margin:8px 0 0;color:var(--soft)}.approval-state{padding:10px 14px;border:1px solid var(--copper);color:var(--copper);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}footer{padding-top:30px;color:var(--dim);font:11px/1.6 var(--mono)}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
     @media(max-width:900px){.hero,section>header,.two-column{grid-template-columns:1fr}.status-grid{grid-template-columns:1fr}.step{grid-template-columns:52px 1fr}.proof{grid-column:2}}
     @media(max-width:620px){*{min-width:0}.topbar{align-items:flex-start;flex-direction:column;max-width:100vw;gap:9px;overflow:hidden;padding:14px 18px}nav{width:100%}.date{display:none}main{width:auto;max-width:none;margin:0 14px;padding-top:34px}h1{font-size:30px}h1,h2,h3,p,li,td{overflow-wrap:break-word}.future-preview{grid-template-columns:1fr}.visual-flow .visual-grid{flex-direction:column;overflow:visible}.visual-flow .visual-group{flex-basis:auto}.flow-link{min-height:18px;transform:rotate(90deg)}.visual-comparison .visual-grid,.visual-boundary .visual-grid{grid-template-columns:1fr}.step{grid-template-columns:1fr}.proof{grid-column:1}.risk-list article,.decision-list article{grid-template-columns:1fr}.checklist{grid-template-columns:1fr}.approval{grid-template-columns:1fr}.evidence th,.evidence td{padding:11px 8px}.evidence td:first-child{width:42%;font-size:11px}}
@@ -249,7 +272,7 @@ export function renderPlanHtml(plan: PlanDocument): string {
 <body>
   <header class="topbar">
     <div class="brand">Neura / Plan</div>
-    <nav aria-label="Plan sections">${plan.preview ? '<a href="#preview">Preview</a>' : ""}<a href="#summary">Summary</a><a href="#evidence">Evidence</a><a href="#visuals">Visuals</a><a href="#steps">Steps</a><a href="#verification">Proof</a><a href="#approval">Approval</a></nav>
+    <nav aria-label="Plan sections">${navigation}</nav>
     <div class="date">${escapeHtml(created)}</div>
   </header>
   <main>
@@ -258,36 +281,36 @@ export function renderPlanHtml(plan: PlanDocument): string {
       <aside class="gate"><small>Plan boundary</small><strong>Research complete</strong><p>Review this artifact. Implementation waits for approval.</p></aside>
     </header>
 
-    ${plan.preview ? renderPreview(plan.preview) : ""}
+    ${plan.preview ? renderPreview(plan.preview, marker("preview")) : ""}
 
-    <section id="summary"><header><span>01 / Summary</span><div><h2>Now, target, done</h2><p>Fast orientation before implementation detail.</p></div></header>
+    <section id="summary"><header><span>${marker("summary")}</span><div><h2>Now, target, done</h2><p>Fast orientation before implementation detail.</p></div></header>
       <div class="status-grid"><article class="status-card"><span>Now</span><h3>Current state</h3><p>${escapeHtml(plan.current)}</p></article><article class="status-card"><span>Target</span><h3>Planned state</h3><p>${escapeHtml(plan.target)}</p></article><article class="status-card"><span>Done</span><h3>Success condition</h3><p>${escapeHtml(plan.done)}</p></article></div>
     </section>
 
-    <section id="evidence"><header><span>02 / Evidence</span><div><h2>What research found</h2><p>Code, documentation, and external facts that shaped this direction.</p></div></header>
-      <table class="evidence"><thead><tr><th>Source</th><th>Finding</th></tr></thead><tbody>${plan.evidence.map((item) => `<tr><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.finding)}</td></tr>`).join("")}</tbody></table>
+    <section id="evidence"><header><span>${marker("evidence")}</span><div><h2>What research found</h2><p>Code, documentation, and external facts that shaped this direction.</p></div></header>
+      <table class="evidence"><caption>Evidence shaping this plan</caption><thead><tr><th scope="col">Source</th><th scope="col">Finding</th></tr></thead><tbody>${plan.evidence.map((item) => `<tr><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.finding)}</td></tr>`).join("")}</tbody></table>
     </section>
 
-    <section id="visuals"><header><span>03 / Visuals</span><div><h2>How the change works</h2><p>${plan.preview ? "Visuals explain sequence, comparison, or ownership boundaries. The proposed-state preview above shows how visible outcomes may look." : "Visuals explain sequence, comparison, or ownership boundaries."}</p></div></header>${plan.visuals.map(renderVisual).join("")}</section>
+    <section id="visuals"><header><span>${marker("visuals")}</span><div><h2>How the change works</h2><p>${plan.preview ? "Visuals explain sequence, comparison, or ownership boundaries. The proposed-state preview above shows how visible outcomes may look." : "Visuals explain sequence, comparison, or ownership boundaries."}</p></div></header>${plan.visuals.map(renderVisual).join("")}</section>
 
-    <section id="steps"><header><span>04 / Steps</span><div><h2>Implementation path</h2><p>Each step states the change, reason, files, and proof.</p></div></header>
+    <section id="steps"><header><span>${marker("steps")}</span><div><h2>Implementation path</h2><p>Each step states the change, reason, files, and proof.</p></div></header>
       <div class="steps">${plan.steps.map((step, index) => `<article class="step"><div class="step-number">Step ${String(index + 1).padStart(2, "0")}</div><div><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.what)}</p><p><strong>Why:</strong> ${escapeHtml(step.why)}</p><ul class="files">${step.files.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}</ul></div><div class="proof"><b>Proof</b>${escapeHtml(step.proof)}</div></article>`).join("")}</div>
     </section>
 
-    <section id="scope"><header><span>05 / Scope</span><div><h2>Boundaries and risks</h2><p>What ships now, what waits, and what could go wrong.</p></div></header>
+    <section id="scope"><header><span>${marker("scope")}</span><div><h2>Boundaries and risks</h2><p>What ships now, what waits, and what could go wrong.</p></div></header>
       <div class="two-column"><article class="panel"><h3>Included</h3>${renderItems(plan.included)}</article><article class="panel"><h3>Deferred</h3>${renderItems(plan.deferred)}</article></div>
       <div class="risk-list">${plan.risks.map((item) => `<article><strong>${escapeHtml(item.risk)}</strong><p>${escapeHtml(item.mitigation)}</p></article>`).join("")}</div>
     </section>
 
     ${decisions}
 
-    <section id="verification"><header><span>07 / Verification</span><div><h2>How success is proven</h2><p>Checks include the real human workflow, not only unit tests.</p></div></header><ul class="checklist">${plan.verification.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+    <section id="verification"><header><span>${marker("verification")}</span><div><h2>How success is proven</h2><p>Checks include the real human workflow, not only unit tests.</p></div></header><ul class="checklist">${plan.verification.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
 
     ${questions}
 
-    <section id="sources"><header><span>08 / Sources</span><div><h2>Research trail</h2><p>Only sources that materially informed the plan.</p></div></header><ol class="sources">${renderSources(plan.sources)}</ol></section>
+    <section id="sources"><header><span>${marker("sources")}</span><div><h2>Research trail</h2><p>Only sources that materially informed the plan.</p></div></header><ol class="sources">${renderSources(plan.sources)}</ol></section>
 
-    <section id="approval" style="border-bottom:0"><div class="approval"><div><h2>Approval gate</h2><p>Approve this direction or request changes. Neura must not implement while Plan mode remains active.</p></div><div class="approval-state">Awaiting review</div></div></section>
+    <section id="approval" style="border-bottom:0"><header><span>${marker("approval")}</span><div><h2>Approval gate</h2><p>Implementation remains locked until a human approves this direction.</p></div></header><div class="approval"><div><strong>Human decision required</strong><p>Approve this direction or request changes. Neura must not implement while Plan mode remains active.</p></div><div class="approval-state">Awaiting review</div></div></section>
     <footer>Local artifact · project plans/ folder · generated by Neura Plan mode</footer>
   </main>
 </body>

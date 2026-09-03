@@ -25,6 +25,7 @@ back later. The live harness is an installation target, not source.
    npm run typecheck
    powershell -NoProfile -File .\scripts\verify-secrets.ps1
    powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
+   npm run test:accessibility
    node scripts\verify-harness.mjs
    node scripts\verify-sandbox.mjs
    node scripts\check-docs.mjs

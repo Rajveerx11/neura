@@ -53,6 +53,21 @@ jobs:
       - name: Verify extensions
         run: node scripts\verify-harness.mjs
 
+      - name: Verify generated plan accessibility
+        shell: pwsh
+        env:
+          NEURA_A11Y_OUTPUT: ${{ runner.temp }}\neura-a11y
+        run: npm run test:accessibility
+
+      - name: Upload plan accessibility snapshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plan-accessibility-${{ github.run_attempt }}
+          path: ${{ runner.temp }}\neura-a11y
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Verify documentation and release files
         run: node scripts\check-docs.mjs
 

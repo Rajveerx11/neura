@@ -11,7 +11,7 @@ import { GLYPHS, joinFitting, widthTier } from "../neura/ui-tokens.ts";
 const { accent: ACC, error: RED, human: HUMAN, plan: PLAN, warning: WARN, dim: DIM, muted: MUT, text: TXT } = PALETTE;
 
 function modeColor(mode: AgentMode): string {
-  return mode === "plan" ? PLAN : mode === "human-away" ? HUMAN : ACC;
+  return mode === "plan" ? PLAN : mode === "human-away" ? HUMAN : RED;
 }
 
 function modeGlyph(mode: AgentMode): string {
@@ -19,7 +19,8 @@ function modeGlyph(mode: AgentMode): string {
 }
 
 export function modeTag(mode = getMode()): string {
-  return fg(modeColor(mode), `${modeGlyph(mode)} ${modeLabel(mode)}`);
+  const label = mode === "yolo" ? "YOLO · DANGER" : modeLabel(mode);
+  return fg(modeColor(mode), `${modeGlyph(mode)} ${label}`);
 }
 
 function contextTag(ctx): string | null {
