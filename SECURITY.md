@@ -39,7 +39,8 @@ fix. Never include a real credential or private user data.
   creation, and session-owned revision hashes.
 - YOLO intentionally disables Neura application approvals and tool blocking. On
   native Windows it has no OS sandbox; tool access follows the process and
-  signed-in user's permissions.
+  signed-in user's permissions. Every interactive transition into YOLO requires
+  deliberate confirmation, and the post-splash footer keeps a danger label visible.
 - Human Away combines deterministic policy with an isolated no-tool reviewer and
   a local hash-chained approval audit. Its only provider-visible tool executes
   through WSL2 bubblewrap with a workspace-only writable mount, cleared host
