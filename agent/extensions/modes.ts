@@ -68,7 +68,7 @@ const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
     verdict: "BOUNDARY APPLIED · research + visual plan · source writes locked",
   },
   yolo: {
-    color: ACC,
+    color: ERROR,
     capabilities: [["filesystem", "full access"], ["network", "full access"], ["approvals", "disabled"], ["autogit", "off"]],
     verdict: "DANGER FULL ACCESS · no sandbox · no approvals",
   },
@@ -337,13 +337,31 @@ export default function (pi) {
     pi.appendEntry(MODE_ENTRY, { mode: getMode(), changedAt: new Date().toISOString() } satisfies PersistedMode);
   }
 
-  function changeMode(next: AgentMode, ctx, source: "command" | "shortcut"): void {
+  async function confirmYolo(ctx): Promise<boolean> {
+    if (!ctx.hasUI || typeof ctx.ui?.confirm !== "function") {
+      ctx.ui?.notify?.("YOLO activation blocked: interactive confirmation is required.", "warning");
+      return false;
+    }
+    const confirmed = await ctx.ui.confirm(
+      "Enter YOLO · unsandboxed full access?",
+      "Neura guardrails and approval prompts will be disabled. Tools inherit your Windows account's filesystem, network, process, and credential access.",
+    );
+    if (!confirmed) ctx.ui.notify("YOLO activation cancelled; current safety boundary remains active.", "warning");
+    return confirmed;
+  }
+
+  async function changeMode(next: AgentMode, ctx, source: "command" | "shortcut"): Promise<void> {
     if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
       ctx.ui.notify("Mode change blocked while Neura is running. Finish or abort the turn first.", "warning");
       return;
     }
     if (next === getMode()) {
       ctx.ui.notify(`${modeLabel(next)} already active`);
+      return;
+    }
+    if (next === "yolo" && !await confirmYolo(ctx)) return;
+    if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
+      ctx.ui.notify("Mode change blocked while Neura is running. Finish or abort the turn first.", "warning");
       return;
     }
     setMode(next, source);
@@ -401,7 +419,7 @@ export default function (pi) {
 
   pi.registerShortcut(Key.shift(Key.tab), {
     description: "Cycle Neura mode: Plan → YOLO → Human Away Preview",
-    handler: async (ctx) => changeMode(nextMode(), ctx, "shortcut"),
+    handler: async (ctx) => { await changeMode(nextMode(), ctx, "shortcut"); },
   });
 
   pi.registerCommand("mode", {
@@ -422,7 +440,7 @@ export default function (pi) {
         "HUMAN AWAY · PREVIEW · delegated review",
       ]);
       const selected = selection?.startsWith("PLAN") ? "plan" : selection?.startsWith("YOLO") ? "yolo" : selection?.startsWith("HUMAN") ? "human-away" : null;
-      if (selected) changeMode(selected, ctx, "command");
+      if (selected) await changeMode(selected, ctx, "command");
     },
   });
 
@@ -453,7 +471,7 @@ export default function (pi) {
     },
   });
 
-  pi.on("session_start", (_event, ctx) => {
+  pi.on("session_start", async (_event, ctx) => {
     returnShown = false;
     let restored: AgentMode = "yolo";
     try {
@@ -462,6 +480,11 @@ export default function (pi) {
         .at(-1) as { data?: PersistedMode } | undefined;
       if (isAgentMode(entry?.data?.mode)) restored = entry.data.mode;
     } catch {}
+    if (restored === "yolo") {
+      setMode("plan", "restore");
+      applyToolBoundary("plan", ctx.cwd);
+      if (!await confirmYolo(ctx)) return;
+    }
     setMode(restored, "restore");
     applyToolBoundary(restored, ctx.cwd);
   });

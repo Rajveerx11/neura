@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Required deliberate confirmation for every interactive transition into YOLO,
+  rejected headless activation, and made the post-splash footer and transition
+  use the shared danger treatment. Denial preserves the current mode, tools, and
+  persisted state.
+- Made generated Plan navigation derive from every rendered section with
+  continuous numbering. Added table captions and scoped headers, visible focus,
+  44-pixel link targets, shared terminal/HTML color tokens, and corrected small-
+  text contrast. Exact-pinned Playwright Core and axe-core now verify WCAG AA,
+  focus, target size, navigation, and overflow at narrow and desktop widths in
+  real Edge; CI retains screenshots for seven days.
 - Updated the Pi runtime, development APIs, runtime contract, CI install, and
   live harness from `0.84.1`/`0.84.2` drift to exact `0.84.4` alignment.
   The offline Neura startup smoke test, typecheck, 16-extension harness,

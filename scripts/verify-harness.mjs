@@ -365,7 +365,7 @@ assert.match(launchFooterText, /gpt-5\.5-engineering-preview/, "launch footer lo
 assert.doesNotMatch(launchFooterText, /YOLO|feature\/agentic/, "logo view does not keep the footer quiet");
 await identityExtension.commands.get("dash").handler("", context);
 const idleFooterText = footer.render(120).map(stripAnsi).join("\n");
-assert.match(idleFooterText, /YOLO/, "idle footer lost the active mode");
+assert.match(idleFooterText, /YOLO · DANGER/, "idle footer lost the persistent YOLO danger state");
 assert.doesNotMatch(idleFooterText, /typescript ready|MCP 0\/3|proof full/, "idle footer still renders detached extension status rows");
 cockpitState.patchCockpit({ launchVisible: false, phase: "WORK", operation: { verb: "working", startedAt: Date.now() } });
 const workingFooterText = footer.render(120).map(stripAnsi).join("\n");
@@ -481,11 +481,26 @@ assert.equal(
 assert.equal(await guard({ toolName: "bash", input: { command: "terraform destroy" } }, deniedInYolo), undefined);
 assert.equal(yoloPrompts, 0, "YOLO requested approval for a sensitive action");
 
-// Mode spine: persisted default, direct /mode, exact Plan tool boundary, and Shift+Tab.
+// Mode spine: confirmed startup, direct /mode, exact Plan tool boundary, and Shift+Tab.
 const modes = extensionWithCommand("mode");
 assert.ok(modes.commands.has("approvals"), "/approvals command missing");
 assert.ok(modes.shortcuts.has("shift+tab"), "Shift+Tab mode shortcut missing");
+let startupYoloConfirmation;
+await firstHandler(modes, "session_start")({}, {
+  ...context,
+  ui: {
+    ...ui,
+    confirm: async (title, body) => {
+      startupYoloConfirmation = { title, body };
+      return false;
+    },
+  },
+});
+assert.match(startupYoloConfirmation.title, /YOLO · unsandboxed full access/, "fresh YOLO startup lacks explicit confirmation");
+assert.equal(modeState.getMode(), "plan", "denied YOLO startup did not fail closed to Plan");
+assert.ok(activeTools.includes("publish_plan"), "denied YOLO startup did not apply the Plan tool boundary");
 await firstHandler(modes, "session_start")({}, context);
+assert.equal(modeState.getMode(), "yolo", "confirmed YOLO startup did not activate YOLO");
 assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active during YOLO startup");
 
 process.env.NEURA_REDUCED_MOTION = "1";
@@ -493,6 +508,25 @@ await modes.commands.get("mode").handler("plan", context);
 let reducedTransition = widgets.get("neura-mode-transition")(null, null).render(92).map(stripAnsi).join("\n");
 assert.match(reducedTransition, /BOUNDARY APPLIED/, "reduced motion did not render the final policy frame immediately");
 assert.doesNotMatch(reducedTransition, /APPLYING POLICY/, "reduced motion retained intermediate animation state");
+let yoloConfirmation;
+const modeEntriesBeforeDeniedYolo = appendedEntries.length;
+await modes.shortcuts.get("shift+tab").handler({
+  ...context,
+  ui: {
+    ...ui,
+    confirm: async (title, body) => {
+      yoloConfirmation = { title, body };
+      return false;
+    },
+  },
+});
+assert.match(yoloConfirmation.title, /YOLO · unsandboxed full access/, "YOLO shortcut lacks an explicit danger confirmation");
+assert.match(yoloConfirmation.body, /guardrails.*approval prompts.*disabled/i, "YOLO confirmation hides disabled safety boundaries");
+assert.equal(modeState.getMode(), "plan", "denied YOLO shortcut changed the active mode");
+assert.equal(appendedEntries.length, modeEntriesBeforeDeniedYolo, "denied YOLO shortcut persisted a mode change");
+assert.ok(activeTools.includes("publish_plan"), "denied YOLO shortcut removed the Plan tool boundary");
+await modes.commands.get("mode").handler("yolo", { ...context, hasUI: false });
+assert.equal(modeState.getMode(), "plan", "headless YOLO activation bypassed interactive confirmation");
 await modes.commands.get("mode").handler("yolo", context);
 reducedTransition = widgets.get("neura-mode-transition")(null, null).render(92).map(stripAnsi).join("\n");
 assert.match(reducedTransition, /YOLO/, "latest rapid mode switch did not own the transition");
@@ -877,6 +911,7 @@ const planFixture = {
   risks: [{ risk: "A plan could overwrite human work.", mitigation: "Use collision-safe creation and session hash ownership." }],
   verification: ["Run node scripts/verify-harness.mjs.", "Open the generated plan at desktop and compact widths."],
   decisions: [{ decision: "Write boundary", direction: "Use publish_plan instead of generic write or edit." }],
+  openQuestions: ["Should implementation begin after this plan is approved?"],
   sources: [
     { label: "Official Pi extensions", note: "Confirms custom tools and active-tool filtering.", url: "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md" },
     { label: "Unsafe URL example", note: "Must render as text, never a clickable link.", url: "javascript:alert(1)" },
@@ -917,6 +952,19 @@ assert.match(firstHtml, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, "Published p
 assert.doesNotMatch(firstHtml, /<script\b/i, "Published plan contains executable script markup");
 assert.doesNotMatch(firstHtml, /href="javascript:/i, "Published plan rendered an unsafe source URL");
 assert.match(firstHtml, /href="#preview"/, "Published plan lacks preview navigation");
+const navHtml = firstHtml.match(/<nav aria-label="Plan sections">([\s\S]*?)<\/nav>/)?.[1] ?? "";
+const navigationTargets = [...navHtml.matchAll(/href="#([^"]+)"/g)].map((match) => match[1]);
+const renderedSectionIds = [...firstHtml.matchAll(/<section id="([^"]+)"/g)].map((match) => match[1]);
+assert.deepEqual(navigationTargets, renderedSectionIds, "Plan navigation does not include every rendered section in order");
+const sectionNumbers = [...firstHtml.matchAll(/<section id="[^"]+"[^>]*>\s*<header><span>(\d{2}) \/ [^<]+<\/span>/g)]
+  .map((match) => Number(match[1]));
+assert.deepEqual(sectionNumbers, renderedSectionIds.map((_, index) => index + 1), "Plan section numbering is not continuous");
+assert.match(firstHtml, /<table class="evidence"><caption>[^<]+<\/caption><thead><tr><th scope="col">Source<\/th><th scope="col">Finding<\/th>/, "Evidence table lacks captioned, scoped column headers");
+assert.match(firstHtml, /a:focus-visible\{outline:3px solid var\(--focus\)/, "Plan links lack a visible keyboard-focus treatment");
+assert.match(firstHtml, /nav a\{[^}]*min-height:44px/, "Plan navigation lacks practical touch targets");
+assert.match(firstHtml, new RegExp(`--dim:${theme.colors.dim}`), "Plan HTML does not consume the shared dim token");
+assert.match(firstHtml, new RegExp(`--error:${theme.colors.error}`), "Plan HTML does not consume the shared danger token");
+assert.doesNotMatch(firstHtml, /#74787b/i, "Plan HTML retained the low-contrast legacy dim token");
 assert.match(firstHtml, /class="future-preview"/, "Published plan lacks the future-state preview");
 assert.match(firstHtml, /Proposed Plan review cockpit/, "Published plan lost the preview title");
 assert.match(firstHtml, /&lt;img src=x onerror=alert\(1\)&gt;/, "Published plan did not escape preview content");

@@ -23,6 +23,7 @@ back later. The live harness is an installation target, not source.
 
    ```powershell
    npm run typecheck
+   npm run test:accessibility
    node scripts\verify-harness.mjs
    node scripts\verify-sandbox.mjs
    node scripts\check-docs.mjs
