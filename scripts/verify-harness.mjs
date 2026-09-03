@@ -56,7 +56,7 @@ const { GRANT_TTL_MS, consumeExactRetry, grantExactRetry, listPending } = await 
 const { redactSensitiveText } = await import(
   pathToFileURL(path.join(repoRoot, "agent", "neura", "redaction.ts")).href
 );
-const { HUMAN_AWAY_SANDBOX_TOOL, assertWorkspaceHasNoLinks, bubblewrapArguments } = await import(
+const { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, assertWorkspaceHasNoLinks, bubblewrapArguments } = await import(
   pathToFileURL(path.join(repoRoot, "agent", "neura", "human-away-sandbox.ts")).href
 );
 const { healthLines, parseRuntimeContract, piRuntimeStatus } = await import(
@@ -365,7 +365,8 @@ assert.match(launchFooterText, /gpt-5\.5-engineering-preview/, "launch footer lo
 assert.doesNotMatch(launchFooterText, /YOLO|feature\/agentic/, "logo view does not keep the footer quiet");
 await identityExtension.commands.get("dash").handler("", context);
 const idleFooterText = footer.render(120).map(stripAnsi).join("\n");
-assert.match(idleFooterText, /YOLO · DANGER/, "idle footer lost the persistent YOLO danger state");
+assert.match(idleFooterText, /WORK/, "idle footer lost the safe default WORK state");
+assert.doesNotMatch(idleFooterText, /YOLO · DANGER/, "idle footer incorrectly reports YOLO in the safe default mode");
 assert.doesNotMatch(idleFooterText, /typescript ready|MCP 0\/3|proof full/, "idle footer still renders detached extension status rows");
 cockpitState.patchCockpit({ launchVisible: false, phase: "WORK", operation: { verb: "working", startedAt: Date.now() } });
 const workingFooterText = footer.render(120).map(stripAnsi).join("\n");
@@ -402,6 +403,7 @@ const gmailGuardrail = loaded.extensions.find((extension) => extension.resolvedP
 assert.ok(gmailGuardrail, "Gmail guardrail extension missing");
 const gmailGuard = firstHandler(gmailGuardrail, "tool_call");
 const modeState = await import(pathToFileURL(path.join(repoRoot, "agent", "neura", "mode-state.ts")).href);
+assert.deepEqual(modeState.MODES, ["plan", "work", "yolo", "human-away"], "WORK mode is not positioned between Plan and YOLO");
 let gmailPrompts = 0;
 const deniedGmailContext = {
   ...context,
@@ -481,13 +483,161 @@ assert.equal(
 assert.equal(await guard({ toolName: "bash", input: { command: "terraform destroy" } }, deniedInYolo), undefined);
 assert.equal(yoloPrompts, 0, "YOLO requested approval for a sensitive action");
 
-// Mode spine: confirmed startup, direct /mode, exact Plan tool boundary, and Shift+Tab.
+// Mode spine: safe WORK startup, persisted transitions, exact tool boundaries, and Shift+Tab.
 const modes = extensionWithCommand("mode");
 assert.ok(modes.commands.has("approvals"), "/approvals command missing");
 assert.ok(modes.shortcuts.has("shift+tab"), "Shift+Tab mode shortcut missing");
-let startupYoloConfirmation;
+let unexpectedStartupConfirmation = 0;
 await firstHandler(modes, "session_start")({}, {
   ...context,
+  ui: {
+    ...ui,
+    confirm: async () => { unexpectedStartupConfirmation++; return false; },
+  },
+});
+assert.equal(unexpectedStartupConfirmation, 0, "fresh WORK startup requested approval");
+assert.equal(modeState.getMode(), "work", "fresh session did not default to WORK");
+assert.ok(activeTools.includes("read") && activeTools.includes("edit") && activeTools.includes(WORK_SANDBOX_TOOL),
+  "WORK startup omitted structured workspace or sandbox tools");
+assert.equal(activeTools.includes("publish_plan"), false, "WORK startup exposed the Plan publisher");
+assert.equal(activeTools.includes("web_fetch"), false, "WORK startup exposed unrestricted network fetch");
+
+const workProviderPayload = await firstHandler(modes, "before_provider_request")({ payload: {
+  tools: [
+    { type: "function", function: { name: "read", parameters: {} } },
+    { type: "function", function: { name: "Edit", parameters: {} } },
+    { type: "function", function: { name: WORK_SANDBOX_TOOL, parameters: {} } },
+    { type: "function", function: { name: "mcp__unknown__mutate", parameters: {} } },
+    { type: "unknown-provider-tool" },
+  ],
+} }, context);
+assert.deepEqual(workProviderPayload.tools.map((tool) => tool.function.name), ["read", "Edit", WORK_SANDBOX_TOOL],
+  "WORK provider payload exposed an unknown or inactive tool");
+const googleWorkPayload = await firstHandler(modes, "before_provider_request")({ payload: {
+  config: {
+    tools: [{ functionDeclarations: [
+      { name: "Read", parametersJsonSchema: {} },
+      { name: "Edit", parametersJsonSchema: {} },
+      { name: "mcp__unknown__mutate", parametersJsonSchema: {} },
+      { description: "missing name" },
+    ] }],
+  },
+} }, context);
+assert.deepEqual(
+  googleWorkPayload.config.tools[0].functionDeclarations.map((tool) => tool.name),
+  ["Read", "Edit"],
+  "WORK Google payload exposed an inactive or malformed function declaration",
+);
+const bedrockWorkPayload = await firstHandler(modes, "before_provider_request")({ payload: {
+  toolConfig: { tools: [
+    { toolSpec: { name: "read", inputSchema: { json: {} } } },
+    { toolSpec: { name: "mcp__unknown__mutate", inputSchema: { json: {} } } },
+    { unexpectedToolShape: {} },
+  ] },
+} }, context);
+assert.deepEqual(
+  bedrockWorkPayload.toolConfig.tools.map((tool) => tool.toolSpec.name),
+  ["read"],
+  "WORK Bedrock payload exposed an inactive or malformed tool specification",
+);
+
+const workWorkspace = path.join(scratchRoot, "work-boundary");
+fs.mkdirSync(path.join(workWorkspace, "src"), { recursive: true });
+fs.mkdirSync(path.join(workWorkspace, "agent", "neura"), { recursive: true });
+const workSource = path.join(workWorkspace, "src", "feature.ts");
+const workSecret = path.join(workWorkspace, ".env.production");
+fs.writeFileSync(workSource, "export const ready = true;\n");
+fs.writeFileSync(workSecret, "synthetic test fixture\n");
+fs.writeFileSync(path.join(workWorkspace, "agent", "neura", "action-policy.ts"), "// protected\n");
+fs.mkdirSync(path.join(workWorkspace, ".kube"), { recursive: true });
+fs.writeFileSync(path.join(workWorkspace, ".kube", "config"), "synthetic: masked\n");
+const benignCredentialAlias = path.join(workWorkspace, "safe-cloud-config");
+fs.symlinkSync(path.join(workWorkspace, ".kube"), benignCredentialAlias, process.platform === "win32" ? "junction" : "dir");
+const workContext = { ...context, cwd: workWorkspace };
+assert.equal(await guard({ toolName: "read", input: { path: workSource } }, workContext), undefined,
+  "WORK blocked a structured workspace read");
+assert.equal(await guard({ toolName: "edit", input: { path: workSource } }, workContext), undefined,
+  "WORK blocked a structured workspace patch");
+const workGit = "git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false -c log.mailmap=false -c format.pretty=medium";
+assert.equal(await guard({ toolName: "bash", input: { command: `${workGit} branch --show-current` } }, workContext), undefined,
+  "WORK blocked hardened Git inspection");
+assert.match(
+  (await guard({ toolName: "bash", input: { command: "npm run typecheck" } }, workContext))?.reason ?? "",
+  /through work_exec/,
+  "WORK allowed a build or test to escape its OS sandbox",
+);
+for (const command of [
+  "npm run typecheck",
+  "npm run test:accessibility",
+  "npm run verify:sandbox",
+  "node scripts/verify-harness.mjs",
+  "node scripts/check-docs.mjs",
+  "git status --short",
+]) {
+  assert.equal(await guard({ toolName: WORK_SANDBOX_TOOL, input: { command } }, workContext), undefined,
+    `WORK blocked a supported test, build, or inspection command inside its sandbox: ${command}`);
+}
+
+for (const relativeSecret of [
+  ".npmrc",
+  ".netrc",
+  ".pypirc",
+  ".git-credentials",
+  ".envrc",
+  ".env::$DATA",
+  ".aws/credentials",
+  ".azure/accessTokens.json",
+  ".config/gcloud/application_default_credentials.json",
+  ".kube/config",
+  ".docker/config.json",
+]) {
+  assert.equal((await guard(
+    { toolName: "read", input: { path: path.join(workWorkspace, ...relativeSecret.split("/")) } },
+    { ...workContext, hasUI: false },
+  ))?.block, true, `WORK allowed credential path without approval: ${relativeSecret}`);
+}
+for (const toolName of ["read", "edit"]) {
+  assert.equal((await guard(
+    { toolName, input: { path: path.join(benignCredentialAlias, "config") } },
+    { ...workContext, hasUI: false },
+  ))?.block, true, `WORK ${toolName} followed a benign alias to a canonical credential path`);
+}
+
+let workApprovalPrompts = 0;
+const deniedWorkContext = {
+  ...workContext,
+  ui: { ...ui, confirm: async () => { workApprovalPrompts++; return false; } },
+};
+assert.equal((await guard({ toolName: "read", input: { path: workSecret } }, deniedWorkContext))?.block, true,
+  "WORK read a protected secret path without approval");
+assert.equal((await guard({ toolName: "edit", input: { path: path.join(workWorkspace, "agent", "neura", "action-policy.ts") } }, deniedWorkContext))?.block, true,
+  "WORK changed a protected control file without approval");
+assert.equal((await guard({ toolName: "read", input: { path: path.join(workWorkspace, "agent", "neura", "action-policy.ts") } }, deniedWorkContext))?.block, true,
+  "WORK read a protected control file without approval");
+assert.equal((await guard({ toolName: "bash", input: { command: "git push origin main" } }, deniedWorkContext))?.block, true,
+  "WORK performed remote mutation without approval");
+assert.equal((await guard({ toolName: WORK_SANDBOX_TOOL, input: { command: "git commit -m generated" } }, deniedWorkContext))?.block, true,
+  "WORK mutated Git history without approval");
+assert.equal((await guard({ toolName: "unclassified_tool", input: {} }, deniedWorkContext))?.block, true,
+  "WORK executed an unknown tool without approval");
+assert.equal(workApprovalPrompts, 6, "WORK sensitive actions did not request one explicit confirmation each");
+assert.equal((await guard({ toolName: "read", input: { path: workSecret } }, { ...workContext, hasUI: false }))?.block, true,
+  "headless WORK did not fail closed on protected data");
+const promptsBeforeDestruction = workApprovalPrompts;
+assert.equal((await guard({ toolName: WORK_SANDBOX_TOOL, input: { command: "rm -rf ." } }, deniedWorkContext))?.block, true,
+  "WORK allowed broad workspace destruction");
+assert.equal(workApprovalPrompts, promptsBeforeDestruction, "WORK offered approval for policy-denied broad destruction");
+let approvedWorkPrompt = 0;
+assert.equal(await guard(
+  { toolName: "read", input: { path: workSecret } },
+  { ...workContext, ui: { ...ui, confirm: async () => { approvedWorkPrompt++; return true; } } },
+), undefined, "WORK ignored explicit approval for one protected read");
+assert.equal(approvedWorkPrompt, 1, "WORK protected read did not request exactly one approval");
+
+let startupYoloConfirmation;
+const persistedYoloContext = {
+  ...context,
+  sessionManager: { getEntries: () => [{ type: "custom", customType: "neura-mode-state", data: { mode: "yolo" } }], getBranch: () => [] },
   ui: {
     ...ui,
     confirm: async (title, body) => {
@@ -495,13 +645,14 @@ await firstHandler(modes, "session_start")({}, {
       return false;
     },
   },
-});
-assert.match(startupYoloConfirmation.title, /YOLO · unsandboxed full access/, "fresh YOLO startup lacks explicit confirmation");
-assert.equal(modeState.getMode(), "plan", "denied YOLO startup did not fail closed to Plan");
-assert.ok(activeTools.includes("publish_plan"), "denied YOLO startup did not apply the Plan tool boundary");
-await firstHandler(modes, "session_start")({}, context);
-assert.equal(modeState.getMode(), "yolo", "confirmed YOLO startup did not activate YOLO");
-assert.equal(activeTools.includes("publish_plan"), false, "Plan publisher remained active during YOLO startup");
+};
+await firstHandler(modes, "session_start")({}, persistedYoloContext);
+assert.match(startupYoloConfirmation.title, /YOLO · unsandboxed full access/, "persisted YOLO startup lacks explicit confirmation");
+assert.equal(modeState.getMode(), "work", "denied persisted YOLO startup did not fail closed to WORK");
+assert.ok(activeTools.includes(WORK_SANDBOX_TOOL), "denied persisted YOLO startup did not apply WORK boundary");
+await firstHandler(modes, "session_start")({}, { ...persistedYoloContext, ui });
+assert.equal(modeState.getMode(), "yolo", "confirmed persisted YOLO startup did not activate YOLO");
+assert.equal(activeTools.includes(WORK_SANDBOX_TOOL), false, "WORK-only executor remained active during YOLO startup");
 
 process.env.NEURA_REDUCED_MOTION = "1";
 await modes.commands.get("mode").handler("plan", context);
@@ -520,13 +671,28 @@ await modes.shortcuts.get("shift+tab").handler({
     },
   },
 });
+assert.equal(yoloConfirmation, undefined, "Plan-to-WORK shortcut unexpectedly requested YOLO confirmation");
+assert.equal(modeState.getMode(), "work", "Plan-to-WORK shortcut did not activate WORK");
+assert.equal(appendedEntries.length, modeEntriesBeforeDeniedYolo + 1, "WORK shortcut did not persist its mode change");
+assert.ok(activeTools.includes(WORK_SANDBOX_TOOL), "WORK shortcut omitted sandbox execution");
+const entriesBeforeDeniedYolo = appendedEntries.length;
+await modes.shortcuts.get("shift+tab").handler({
+  ...context,
+  ui: {
+    ...ui,
+    confirm: async (title, body) => {
+      yoloConfirmation = { title, body };
+      return false;
+    },
+  },
+});
 assert.match(yoloConfirmation.title, /YOLO · unsandboxed full access/, "YOLO shortcut lacks an explicit danger confirmation");
 assert.match(yoloConfirmation.body, /guardrails.*approval prompts.*disabled/i, "YOLO confirmation hides disabled safety boundaries");
-assert.equal(modeState.getMode(), "plan", "denied YOLO shortcut changed the active mode");
-assert.equal(appendedEntries.length, modeEntriesBeforeDeniedYolo, "denied YOLO shortcut persisted a mode change");
-assert.ok(activeTools.includes("publish_plan"), "denied YOLO shortcut removed the Plan tool boundary");
+assert.equal(modeState.getMode(), "work", "denied YOLO shortcut changed the active mode");
+assert.equal(appendedEntries.length, entriesBeforeDeniedYolo, "denied YOLO shortcut persisted a mode change");
+assert.ok(activeTools.includes(WORK_SANDBOX_TOOL), "denied YOLO shortcut removed WORK boundary");
 await modes.commands.get("mode").handler("yolo", { ...context, hasUI: false });
-assert.equal(modeState.getMode(), "plan", "headless YOLO activation bypassed interactive confirmation");
+assert.equal(modeState.getMode(), "work", "headless YOLO activation bypassed interactive confirmation");
 await modes.commands.get("mode").handler("yolo", context);
 reducedTransition = widgets.get("neura-mode-transition")(null, null).render(92).map(stripAnsi).join("\n");
 assert.match(reducedTransition, /YOLO/, "latest rapid mode switch did not own the transition");
@@ -535,7 +701,7 @@ assert.match(reducedTransition, /no sandbox · no approvals/, "YOLO transition d
 delete process.env.NEURA_REDUCED_MOTION;
 
 await modes.commands.get("mode").handler("plan", context);
-const planGit = "git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false -c log.mailmap=false -c format.pretty=medium";
+const planGit = workGit;
 const hookProbeRoot = path.join(scratchRoot, "git-hook-probe");
 const hookProbeMarker = path.join(hookProbeRoot, "hook-ran.txt");
 fs.mkdirSync(hookProbeRoot, { recursive: true });
@@ -569,6 +735,8 @@ assert.equal((await guard({ toolName: "bash", input: { command: "Get-Content env
 assert.equal((await guard({ toolName: "bash", input: { command: "rg --pre dangerous-helper pattern" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "git diff --output=review.patch" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "edit", input: { path: path.join(repoRoot, "README.md") } }, context))?.block, true);
+assert.equal(await guard({ toolName: "read", input: { path: path.join(repoRoot, "agent", "neura", "action-policy.ts") } }, context), undefined,
+  "WORK protected-read policy changed Plan's read-only research boundary");
 
 const planBoundaryWorkspace = path.join(scratchRoot, "plan-boundary-workspace");
 const planBoundaryOutside = path.join(scratchRoot, "plan-boundary-outside");

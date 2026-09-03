@@ -2,7 +2,7 @@
 
 Last audited: 2026-09-03
 Current source: `2.5.1` with an unreleased Pi `0.84.4` compatibility update
-Live runtime: Pi `0.84.4`; live Neura files match source
+Live runtime: Pi `0.84.4`; reviewed source changes remain uninstalled and drift is expected
 
 ## Release decision
 
@@ -10,7 +10,7 @@ Live runtime: Pi `0.84.4`; live Neura files match source
 
 The historical `v2.5.1` release remains usable for its documented personal,
 single-user scope. A fresh production-readiness audit found release blockers in
-mode defaults, unattended execution, executable dependency trust, installation
+unattended execution, executable dependency trust, installation
 reproducibility, and credential-incident closure. Human Away remains preview-only.
 
 The canonical hardening backlog is
@@ -22,10 +22,10 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Pi and live Neura | Ready | Pi `0.84.4` is installed; the offline startup smoke test and `install.ps1 -Check` pass. |
+| Pi and live Neura | Needs sync | Pi `0.84.4` is installed; source verification passes, but `install.ps1 -Check` reports reviewed source changes not yet installed. |
 | Dependency graph | Ready | Lockfile audit reports zero known vulnerabilities; 249 packages have verified registry signatures and 50 have attestations. |
 | Core harness | Ready for covered behavior | Typecheck, 16-extension harness, documentation checks, and live WSL2 sandbox replay pass. |
-| Default mode | Blocked | New sessions default to unsandboxed YOLO. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
+| Default mode | Ready for covered behavior | New sessions default to supervised WORK. Structured reads and patches are canonically workspace-contained; tests/builds use WSL2 bubblewrap; protected, remote, destructive, and unknown actions stop or require explicit approval. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
 | Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
 | Automatic execution | Blocked | Proof and Git automation require pinned, contained execution. Track [#22](https://github.com/Rajveerx11/neura/issues/22). |
 | Installation | Blocked | Atomic activation, rollback, file hashes, and unknown-extension detection are missing. Track [#21](https://github.com/Rajveerx11/neura/issues/21). |

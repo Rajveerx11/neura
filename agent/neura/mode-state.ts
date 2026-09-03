@@ -1,4 +1,4 @@
-export const MODES = ["plan", "yolo", "human-away"] as const;
+export const MODES = ["plan", "work", "yolo", "human-away"] as const;
 
 export type AgentMode = (typeof MODES)[number];
 export type ModeChangeSource = "restore" | "command" | "shortcut" | "internal";
@@ -16,7 +16,7 @@ type SharedModeState = {
 
 const STATE_KEY = Symbol.for("neura.mode-state.v1");
 const globalRegistry = globalThis as typeof globalThis & { [STATE_KEY]?: SharedModeState };
-const shared = globalRegistry[STATE_KEY] ??= { current: "yolo", listeners: new Set() };
+const shared = globalRegistry[STATE_KEY] ??= { current: "work", listeners: new Set() };
 
 export function isAgentMode(value: unknown): value is AgentMode {
   return typeof value === "string" && (MODES as readonly string[]).includes(value);
