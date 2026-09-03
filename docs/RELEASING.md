@@ -28,6 +28,9 @@ All items must pass:
 - [ ] Pi and every runtime package are pinned and audited.
 - [ ] Approvals, redaction, and Gmail policy meet the gates in `STATUS.md`.
 - [ ] No credential, private memory, approval audit, session file, or local path secret is tracked.
+- [ ] `scripts/verify-secrets.ps1` passes against complete Git history.
+- [ ] Every entry in `docs/SECURITY_INCIDENTS.md` is closed with owner-confirmed
+      revocation and documented scope.
 - [ ] Release notes state user-visible changes, limits, migration, verification, and rollback.
 - [ ] Worktree is clean and local `main` matches `origin/main`.
 
