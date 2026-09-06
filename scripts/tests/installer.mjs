@@ -29,6 +29,10 @@ assert.equal(parseRuntimeContract({ schemaVersion: "1", piVersion: runtimeContra
 
 console.log('PASS installer contract');
 
-const functions = spawnSync(process.platform === 'win32' ? 'powershell' : 'pwsh', ['-NoProfile','-File',path.join(import.meta.dirname,'installer-functions.ps1'),'-Source',path.join(repoRoot,'install.ps1'),'-Scratch',scratchRoot], {env:process.env,encoding:'utf8',windowsHide:true,timeout:15000});
-assert.equal(functions.status,0, 'Installer function verification failed: '+functions.stderr);
+const shell = process.platform === 'win32'
+  ? path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : 'pwsh';
+// Windows PowerShell's first startup on a hosted VM can exceed 15 seconds.
+// No prompts/profile scripts; retain a bounded cold-start allowance.
+const functions = spawnSync(shell, ['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(import.meta.dirname,'installer-functions.ps1'),'-Source',path.join(repoRoot,'install.ps1'),'-Scratch',scratchRoot], {env:process.env,encoding:'utf8',windowsHide:true,timeout:60000});
+assert.equal(functions.status,0, `Installer function verification failed (${functions.error?.code ?? functions.signal ?? functions.status}): ${functions.stderr}`);
 console.log(functions.stdout.trim());
