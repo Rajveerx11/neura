@@ -112,7 +112,7 @@ powershell -File .\install.ps1 -Check
 | `/approvals` | Review Human Away requests |
 | `/approvals audit` | Show recent approval decisions |
 | `/health` | Inspect harness readiness and exact Pi-version drift |
-| `/ship` | Run full proof-of-work verification |
+| `/ship` | Run fresh full verification; record worktree-bound quick and incremental evidence |
 | `/undo` | Restore the previous in-session checkpoint |
 | `/undo list` | List available checkpoints |
 | `/clip [answer|code]` | Copy the latest answer or a code block |

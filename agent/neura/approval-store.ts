@@ -122,7 +122,35 @@ function appendEvent(event: Omit<DecisionEvent, "prevHash" | "hash"> | Omit<Reso
   const unsigned = { ...event, prevHash } as Omit<AuditEvent, "hash">;
   const signed = { ...unsigned, hash: digest(unsigned) } as AuditEvent;
   fs.mkdirSync(approvalDirectory(), { recursive: true });
-  fs.appendFileSync(auditFile(), JSON.stringify(signed) + "\n", { encoding: "utf-8", flag: "a" });
+  const fd = fs.openSync(auditFile(), "a");
+  try {
+    const buffer = Buffer.from(JSON.stringify(signed) + "\n");
+    let offset = 0;
+    while (offset < buffer.length) {
+      const written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+      if (written <= 0) throw new Error("approval audit write made no progress");
+      offset += written;
+    }
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+}
+
+// Serialize the entire read/decision/append operation across Pi processes.
+// A lock left by a crash is deliberately not stolen: recovery belongs to #33.
+function withWriterLock<T>(operation: () => T): T {
+  fs.mkdirSync(approvalDirectory(), { recursive: true });
+  const lock = path.join(approvalDirectory(), "writer.lock");
+  const deadline = Date.now() + 2_000;
+  for (;;) {
+    try { fs.mkdirSync(lock); break; }
+    catch (error: any) {
+      if (error?.code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) throw new Error("approval audit writer lock timed out; inspection required");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  try { return operation(); }
+  finally { fs.rmdirSync(lock); }
 }
 
 function materialize(events = readEvents()): ApprovalRecord[] {
@@ -148,36 +176,38 @@ export function recordDecision(
   status: "pending" | "executed",
   approvable: boolean,
 ): ApprovalRecord {
-  if (status === "pending") {
-    const duplicate = listPending(action.workspace).find((record) =>
-      record.actionFingerprint === action.actionFingerprint &&
-      record.workspaceFingerprint === action.workspaceFingerprint &&
-      record.approvalBindingFingerprint === digest(action.approvalBinding),
-    );
-    if (duplicate) return duplicate;
-  }
+  return withWriterLock(() => {
+    if (status === "pending") {
+      const duplicate = listPending(action.workspace).find((record) =>
+        record.actionFingerprint === action.actionFingerprint &&
+        record.workspaceFingerprint === action.workspaceFingerprint &&
+        record.approvalBindingFingerprint === digest(action.approvalBinding),
+      );
+      if (duplicate) return duplicate;
+    }
 
-  const recordWithoutStatus: Omit<ApprovalRecord, "status"> = {
-    id: randomUUID().slice(0, 8),
-    createdAt: new Date().toISOString(),
-    workspace: action.workspace,
-    actionFingerprint: action.actionFingerprint,
-    workspaceFingerprint: action.workspaceFingerprint,
-    approvalBindingFingerprint: digest(action.approvalBinding),
-    toolName: action.toolName,
-    summary: sanitize(action.summary, 300),
-    category: action.category,
-    risk: action.risk,
-    verdict: {
-      decision: verdict.decision,
-      reason: sanitize(verdict.reason),
-      saferPath: sanitize(verdict.saferPath),
-      reviewer: verdict.reviewer,
-    },
-    approvable,
-  };
-  appendEvent({ kind: "decision", at: new Date().toISOString(), record: recordWithoutStatus, status });
-  return { ...recordWithoutStatus, status };
+    const recordWithoutStatus: Omit<ApprovalRecord, "status"> = {
+      id: randomUUID().slice(0, 8),
+      createdAt: new Date().toISOString(),
+      workspace: action.workspace,
+      actionFingerprint: action.actionFingerprint,
+      workspaceFingerprint: action.workspaceFingerprint,
+      approvalBindingFingerprint: digest(action.approvalBinding),
+      toolName: action.toolName,
+      summary: sanitize(action.summary, 300),
+      category: action.category,
+      risk: action.risk,
+      verdict: {
+        decision: verdict.decision,
+        reason: sanitize(verdict.reason),
+        saferPath: sanitize(verdict.saferPath),
+        reviewer: verdict.reviewer,
+      },
+      approvable,
+    };
+    appendEvent({ kind: "decision", at: new Date().toISOString(), record: recordWithoutStatus, status });
+    return { ...recordWithoutStatus, status };
+  });
 }
 
 export function listPending(workspace?: string): ApprovalRecord[] {
@@ -194,9 +224,11 @@ export function findPending(id: string, workspace?: string): ApprovalRecord | un
 }
 
 export function resolveApproval(id: string, resolution: "approved" | "denied" | "dismissed"): void {
-  const record = findPending(id);
-  if (!record) throw new Error(`pending approval not found: ${id}`);
-  appendEvent({ kind: "resolution", at: new Date().toISOString(), id: record.id, resolution });
+  withWriterLock(() => {
+    const record = findPending(id);
+    if (!record) throw new Error(`pending approval not found: ${id}`);
+    appendEvent({ kind: "resolution", at: new Date().toISOString(), id: record.id, resolution });
+  });
 }
 
 export function grantExactRetry(record: ApprovalRecord, now = Date.now()): Grant {

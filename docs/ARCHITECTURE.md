@@ -58,7 +58,7 @@ agent_settled
 | `human-away-sandbox.ts` | Registers WORK and Human Away sandbox execution tools | WSL2, bubblewrap |
 | `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
 | `checkpoint.ts` | Pre-turn Git tree snapshots and `/undo` | Git object database, temp index |
-| `check-gate.ts` | Quick proof feedback and `/ship` | `uvx`, proof-of-work |
+| `check-gate.ts` | Content-bound quick/full proof receipts and incremental evidence | `uvx`, proof-of-work |
 | `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |
 | `harness-health.ts` | Runtime readiness panel | Exact Pi runtime contract, Git, uvx, MCP config, local Qwen |
 | `transcript-actions.ts` | Answer/code copy | Pi clipboard API |

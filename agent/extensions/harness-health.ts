@@ -258,7 +258,7 @@ export function healthLines(report: HealthReport, width: number): string[] {
   ].map((value) => fitLine(value, width));
 }
 
-export default function (pi) {
+export function registerHealth(pi, inspectHealth = inspect) {
   if (!process.env.NEURA) return;
 
   pi.registerCommand("health", {
@@ -272,7 +272,7 @@ export default function (pi) {
 
       ctx.ui.setStatus("neura-health", "health check");
       patchCockpit({ operation: { verb: "health", target: "inspecting capabilities", startedAt: Date.now() } });
-      const report = await inspect(ctx.cwd);
+      const report = await inspectHealth(ctx.cwd);
       ctx.ui.setStatus("neura-health", undefined);
       patchCockpit({ operation: undefined, phase: report.state === "degraded" ? "DEGRADED" : "READY", degraded: report.state === "degraded" ? report.action : undefined });
       if (report.state === "degraded") {
@@ -287,3 +287,5 @@ export default function (pi) {
     },
   });
 }
+
+export default function (pi) { registerHealth(pi); }
