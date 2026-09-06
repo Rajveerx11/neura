@@ -101,3 +101,16 @@ control, and tracked issue.
 
 Full release gates are tracked in [docs/STATUS.md](docs/STATUS.md). Do not remove
 preview labels until those gates pass.
+
+## Verification failure boundaries
+
+Proof fingerprints read bounded file bytes and reject selected links, special files,
+conflicted indexes, and submodules. A failed snapshot, interrupted runner, malformed
+verdict, or worktree change during verification cannot produce a PASS receipt.
+Incremental reports under `.proofofwork/` are untrusted workspace evidence; `/ship`
+always runs full proof independently. Executable dependency containment remains #22.
+
+Approval writers serialize decisions and resolutions with a two-second lock wait,
+retry short writes, and flush completed appends. An orphaned lock or invalid audit
+fails closed. Do not delete a writer lock while another Neura process could own it.
+Transactional recovery, keyed tamper evidence, and remote binding remain #33.

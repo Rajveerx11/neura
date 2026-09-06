@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { isolate } from './isolation.mjs';
+const scratch = isolate();
+const {bubblewrapArguments,assertWorkspaceHasNoLinks} = await import('../../agent/neura/human-away-sandbox.ts');
+const args=bubblewrapArguments('/workspace-fixture','printf synthetic');
+for(const flag of ['--unshare-all','--clearenv','--die-with-parent','--new-session']) assert.ok(args.includes(flag));
+assert.deepEqual(args.slice(-3),['sh','-lc','printf synthetic']);
+assert.equal(args.includes('/mnt/c'),false);
+assert.equal(args.includes(process.env.USERPROFILE),false);
+fs.mkdirSync(path.join(scratch,'inside'));
+fs.mkdirSync(path.join(scratch,'outside'));
+assert.doesNotThrow(()=>assertWorkspaceHasNoLinks(path.join(scratch,'inside')));
+fs.symlinkSync(path.join(scratch,'outside'),path.join(scratch,'inside/link'),'junction');
+assert.throws(()=>assertWorkspaceHasNoLinks(path.join(scratch,'inside')),/refused linked workspace entry/);
+console.log('PASS sandbox contract; live WSL replay: npm run verify:sandbox');

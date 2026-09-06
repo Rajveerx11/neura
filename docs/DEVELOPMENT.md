@@ -18,7 +18,7 @@ back later. The live harness is an installation target, not source.
 1. Read [STATUS.md](STATUS.md) and relevant source.
 2. Make the smallest complete change.
 3. Add positive and negative regression coverage to
-   `scripts/verify-harness.mjs` when behavior changes.
+   the relevant `scripts/tests/` suite when behavior changes.
 4. Run:
 
    ```powershell
@@ -56,9 +56,12 @@ back later. The live harness is an installation target, not source.
 
 ## Verification scope
 
-`scripts/verify-harness.mjs` is the current executable specification. It loads
-every extension through Pi's real loader. A passing harness proves covered
-behavior only; it does not prove OS isolation or complete policy coverage.
+`scripts/verify-harness.mjs` runs independently isolated suites. Integration suites
+load every extension through the repository-pinned Pi loader; no global Pi is
+required. Run `npm ci --ignore-scripts` first. See [VERIFICATION.md](VERIFICATION.md)
+for suite commands, changed-file checks, evidence, and failure-path coverage.
+A passing harness proves covered behavior only; it does not prove OS isolation
+or complete policy coverage.
 
 `install.ps1 -Check` compares repository and live files. Text comparison ignores
 line-ending and final-newline differences but still reports semantic drift.
