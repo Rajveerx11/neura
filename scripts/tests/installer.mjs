@@ -31,8 +31,18 @@ console.log('PASS installer contract');
 
 const shell = process.platform === 'win32'
   ? path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : 'pwsh';
+// Supply only the shell's own modules and a writable synthetic cache. Avoid
+// cold module discovery through user/Program Files locations on hosted Windows.
+const shellEnv = { ...process.env,
+  APPDATA: path.join(scratchRoot, 'AppData', 'Roaming'),
+  LOCALAPPDATA: path.join(scratchRoot, 'AppData', 'Local'),
+  PSModuleAnalysisCachePath: path.join(scratchRoot, 'powershell-module-cache'),
+  POWERSHELL_UPDATECHECK: 'Off', POWERSHELL_TELEMETRY_OPTOUT: '1',
+};
+for (const key of ['APPDATA', 'LOCALAPPDATA']) fs.mkdirSync(shellEnv[key], { recursive: true });
+if (process.platform === 'win32') shellEnv.PSModulePath = path.join(path.dirname(shell), 'Modules');
 // Windows PowerShell's first startup on a hosted VM can exceed 15 seconds.
 // No prompts/profile scripts; retain a bounded cold-start allowance.
-const functions = spawnSync(shell, ['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(import.meta.dirname,'installer-functions.ps1'),'-Source',path.join(repoRoot,'install.ps1'),'-Scratch',scratchRoot], {env:process.env,encoding:'utf8',windowsHide:true,timeout:60000});
-assert.equal(functions.status,0, `Installer function verification failed (${functions.error?.code ?? functions.signal ?? functions.status}): ${functions.stderr}`);
+const functions = spawnSync(shell, ['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(import.meta.dirname,'installer-functions.ps1'),'-Source',path.join(repoRoot,'install.ps1'),'-Scratch',scratchRoot], {env:shellEnv,encoding:'utf8',windowsHide:true,timeout:60000});
+assert.equal(functions.status,0, `Installer function verification failed (${functions.error?.code ?? functions.signal ?? functions.status}):\n${functions.stdout}\n${functions.stderr}`);
 console.log(functions.stdout.trim());
