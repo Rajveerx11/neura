@@ -1,0 +1,16 @@
+{
+  "name": "neura-learning-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pinned local document extraction and offline OCR for Learn Mode",
+  "engines": { "node": ">=22.13.0" },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.8",
+    "@tesseract.js-data/eng": "1.0.0",
+    "pdfjs-dist": "6.3.289",
+    "saxes": "6.0.0",
+    "tesseract.js": "7.0.0",
+    "yauzl": "3.4.0"
+  }
+}
