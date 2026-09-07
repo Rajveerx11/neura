@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { getMode } from "../neura/mode-state.ts";
+import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, runInHumanAwaySandbox } from "../neura/human-away-sandbox.ts";
 
 export default function (pi): void {
@@ -23,7 +23,7 @@ export default function (pi): void {
     }, { additionalProperties: false }),
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      if (getMode() !== "work") throw new Error("work_exec is available only in WORK mode.");
+      if (isModeRestorePending() || getMode() !== "work") throw new Error("work_exec is available only in ready WORK mode.");
       const result = await runInHumanAwaySandbox(
         ctx.cwd,
         params.command,

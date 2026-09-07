@@ -13,6 +13,7 @@ import {
 } from "../neura/core.ts";
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
 import { humanAwaySandboxAvailable } from "../neura/human-away-sandbox.ts";
+import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
 import { fitLine } from "../neura/ui-tokens.ts";
 
 type HealthReport = {
@@ -269,10 +270,15 @@ export function registerHealth(pi, inspectHealth = inspect) {
         ctx.ui.setStatus("neura-health", undefined);
         return;
       }
+      if (getMode() !== "yolo") return void ctx.ui.notify("/health requires YOLO because it executes host diagnostics and probes integrations.", "warning");
 
       ctx.ui.setStatus("neura-health", "health check");
       patchCockpit({ operation: { verb: "health", target: "inspecting capabilities", startedAt: Date.now() } });
-      const report = await inspectHealth(ctx.cwd);
+      const release = acquireHostOperation();
+      if (!release) return;
+      let report: Awaited<ReturnType<typeof inspect>>;
+      try { report = await inspectHealth(ctx.cwd); }
+      finally { release(); }
       ctx.ui.setStatus("neura-health", undefined);
       patchCockpit({ operation: undefined, phase: report.state === "degraded" ? "DEGRADED" : "READY", degraded: report.state === "degraded" ? report.action : undefined });
       if (report.state === "degraded") {

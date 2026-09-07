@@ -76,6 +76,6 @@ assert.equal(fs.existsSync(path.join(repoRoot, "requirements.compiled")), false,
 assert.equal(fs.existsSync(path.join(repoRoot, "override.txt")), false, "unrelated ComfyUI override remains in repository root");
 
 const extensionCount = fs.readdirSync(path.join(repoRoot, "agent", "extensions")).filter((name) => name.endsWith(".ts")).length;
-assert.equal(extensionCount, 16, `expected 16 extensions, found ${extensionCount}`);
+assert.equal(extensionCount, 17, `expected 17 extensions, found ${extensionCount}`);
 
 console.log(`Neura docs: ${markdownFiles.length} Markdown files, required release files, links, version ${version}, and repository claims passed.`);

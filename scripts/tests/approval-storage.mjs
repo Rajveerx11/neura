@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { isolate } from './isolation.mjs';
 const scratch = isolate();
 const store = await import('../../agent/neura/approval-store.ts');
@@ -15,8 +16,10 @@ const select = name => {
 };
 const directory = select('concurrent');
 const children = Array.from({length:6},(_,i)=>{
-  const child = spawn(process.execPath,[worker,directory,String(i),'barrier'], {env:process.env,windowsHide:true,stdio:'ignore'});
-  const done = new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error(`writer ${i} failed (${code})`)));});
+  const child = spawn(process.execPath,[worker,directory,String(i),'barrier'], {env:process.env,windowsHide:true,stdio:['ignore','ignore','pipe']});
+  let stderr = '';
+  child.stderr.on('data',chunk=>{ stderr += String(chunk).slice(0,Math.max(0,4096-stderr.length)); });
+  const done = new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>code===0?resolve():reject(new Error(`writer ${i} failed (exit ${code}, signal ${signal ?? 'none'}): ${stderr.trim() || 'no stderr'}`)));});
   return {child,done};
 });
 try {
@@ -30,6 +33,43 @@ try {
 } finally { for(const {child} of children) if(child.exitCode===null) child.kill(); }
 assert.deepEqual(store.verifyApprovalAudit(),{valid:true,events:48});
 assert.equal(store.listPending().length,48,'concurrent writers lost decisions');
+
+// Reproduce Windows's transient EPERM on mkdir without changing the real lock,
+// append, or audit validation. Permanent denial must retain the bounded failure.
+const originalMkdir = fs.mkdirSync;
+for (const kind of ['transient', 'persistent', 'io-error']) {
+  const target = select(`permission-${kind}`);
+  const lock = path.join(target,'writer.lock');
+  let calls = 0;
+  fs.mkdirSync = (name, ...args) => {
+    if (name === lock) {
+      calls++;
+      if (kind !== 'transient' || calls === 1) {
+        throw Object.assign(new Error('synthetic lock creation failure'), { code: kind === 'io-error' ? 'EIO' : 'EPERM' });
+      }
+    }
+    return originalMkdir(name, ...args);
+  };
+  syncBuiltinESMExports();
+  const started = Date.now();
+  try {
+    const write = () => store.recordDecision({workspace:path.join(target,'workspace'),toolName:'edit',summary:'synthetic edit',
+      category:'protected',risk:'high',actionFingerprint:kind,workspaceFingerprint:'synthetic',approvalBinding:{target:'synthetic'}},
+      {decision:'defer',reason:'synthetic test',saferPath:'review',reviewer:'policy'},'pending',true);
+    if (kind === 'transient' && process.platform === 'win32') {
+      write();
+      assert.equal(calls,2,'transient EPERM did not retry real acquisition');
+      assert.equal(store.verifyApprovalAudit().events,1,'successful retry lost or duplicated the decision');
+    } else {
+      const boundedRetry = kind === 'persistent' && process.platform === 'win32';
+      assert.throws(write,boundedRetry ? /writer lock timed out/ : {code:kind === 'io-error' ? 'EIO' : 'EPERM'});
+      if (boundedRetry) assert.ok(calls>1 && Date.now()-started<4000,'permanent EPERM did not fail within the lock deadline');
+      else assert.equal(calls,1,'unrelated or POSIX errors were retried');
+      assert.equal(fs.existsSync(audit(target)),false,'failed acquisition mutated the audit');
+    }
+    assert.equal(fs.existsSync(lock),false,'permission handling leaked a lock');
+  } finally { fs.mkdirSync=originalMkdir; syncBuiltinESMExports(); }
+}
 
 const short=select('short');
 assert.equal(spawnSync(process.execPath,[worker,short,'short','short'],{env:process.env,windowsHide:true,stdio:'ignore'}).status,0);

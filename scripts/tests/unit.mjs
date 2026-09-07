@@ -13,12 +13,17 @@ const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 const { selectSuites, suites } = await import('../test-suites.mjs');
-assert.deepEqual(selectSuites(['agent/neura/verification.ts']),['integration','proof']);
+assert.deepEqual(selectSuites(['agent/neura/verification.ts']),['integration','learn','proof']);
+assert.deepEqual(selectSuites(['agent/extensions/check-gate.ts']),['integration','learn','proof']);
 assert.deepEqual(selectSuites(['agent/neura/approval-store.ts']),['approval-storage','approvals']);
 assert.deepEqual(selectSuites(['new/unknown-code.ts']),Object.keys(suites),'unknown impact skipped tests');
 assert.deepEqual(selectSuites(['docs/DEVELOPMENT.md']),[]);
 assert.deepEqual(selectSuites(['agent/neura/headmaster-policy.md']),Object.keys(suites),'runtime policy Markdown skipped tests');
 assert.deepEqual(selectSuites(['scripts/tests/proof.mjs']),['proof']);
+for (const name of ['learn', 'learn-materials', 'learn-workshop', 'learn-storage', 'learn-end-to-end']) {
+  assert.equal(suites[name], `scripts/tests/${name}.mjs`, `${name} omitted from full verification`);
+  assert.deepEqual(selectSuites([`scripts/tests/${name}.mjs`]), [name], `${name} direct change skipped`);
+}
 const { pinnedPi } = await import('./pinned-pi.mjs');
 const syntheticRoot=path.join(scratchRoot,'pinned');
 fs.mkdirSync(path.join(syntheticRoot,'agent/neura'),{recursive:true});

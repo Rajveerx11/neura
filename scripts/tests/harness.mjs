@@ -42,16 +42,18 @@ const loaded = await loadExtensions(files, repoRoot);
 
 assert.deepEqual(loaded.errors, [], `extension load errors: ${JSON.stringify(loaded.errors)}`);
 assert.equal(loaded.extensions.length, files.length, "not every extension loaded");
+assert.equal(loaded.extensions.length, 17, "expected Neura's 17 extensions including Learn");
 
 // loadExtensions deliberately leaves action methods unbound. Bind the small runtime
 // surface exercised by this deterministic harness without constructing an AgentSession.
 const registeredToolNames = loaded.extensions.flatMap((extension) => [...extension.tools.keys()]);
-const state = { activeTools: [...new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "web_search", "web_fetch", ...registeredToolNames])], aborted: 0, title: "", workingMessage: "" };
+const availableToolNames = [...new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "web_search", "web_fetch", ...registeredToolNames])];
+const state = { activeTools: [...availableToolNames], aborted: 0, title: "", workingMessage: "" };
 const appendedEntries = [];
 const sentUserMessages = [];
 loaded.runtime.getActiveTools = () => [...state.activeTools];
 loaded.runtime.setActiveTools = (names) => { state.activeTools = [...names]; };
-loaded.runtime.getAllTools = () => [...new Set([...state.activeTools, ...registeredToolNames, "web_search", "web_fetch"])]
+loaded.runtime.getAllTools = () => [...new Set([...state.activeTools, ...availableToolNames, ...registeredToolNames])]
   .map((name) => ({ name }));
 loaded.runtime.appendEntry = (customType, data) => { appendedEntries.push({ customType, data }); };
 loaded.runtime.sendUserMessage = (content, options) => { sentUserMessages.push({ content, options }); };
@@ -124,4 +126,4 @@ export { assert, execFileSync, spawnSync, createHash, fs, os, path, pathToFileUR
   healthLines, parseRuntimeContract, piRuntimeStatus, files, runtimeContract, packageManifest,
   loaded, registeredToolNames, state, appendedEntries, sentUserMessages, extensionWithCommand,
   extensionWithTool, firstHandler, widgets, statuses, notices, ui, context, modeState,
-  cockpitState, guardrail, guard, modes, stripAnsi, widthOf };
+  cockpitState, guardrail, guard, modes, stripAnsi, widthOf, loadExtensions, extensionDir };

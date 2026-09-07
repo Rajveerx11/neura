@@ -10,7 +10,7 @@ const gmailGuardrail = loaded.extensions.find((extension) => extension.resolvedP
 assert.ok(gmailGuardrail, "Gmail guardrail extension missing");
 const gmailGuard = firstHandler(gmailGuardrail, "tool_call");
 
-assert.deepEqual(modeState.MODES, ["plan", "work", "yolo", "human-away"], "WORK mode is not positioned between Plan and YOLO");
+assert.deepEqual(modeState.MODES, ["plan", "work", "yolo", "human-away", "learn"], "WORK and Learn mode positions changed");
 let gmailPrompts = 0;
 const deniedGmailContext = {
   ...context,

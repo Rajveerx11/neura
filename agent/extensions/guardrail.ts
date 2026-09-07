@@ -3,7 +3,8 @@
 // YOLO deliberately bypasses Neura application guardrails. Human Away sends eligible actions to the isolated Headmaster, then clamps every
 // verdict through deterministic policy and queues anything not approved.
 
-import { getMode } from "../neura/mode-state.ts";
+import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
+import { isLearnActionAllowed } from "../neura/learn-policy.ts";
 import { patchCockpit } from "../neura/cockpit-state.ts";
 import { inspectAction, isApprovalRetryEligible, isPlanActionAllowed } from "../neura/action-policy.ts";
 import { consumeExactRetry, recordDecision, type ReviewDecision } from "../neura/approval-store.ts";
@@ -30,7 +31,13 @@ export default function (pi) {
   pi.on("agent_start", () => { consecutiveStops = 0; });
 
   pi.on("tool_call", async (event, ctx) => {
+    if (isModeRestorePending()) return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
     const mode = getMode();
+
+    if (mode === "learn") {
+      if (isLearnActionAllowed(event, ctx.cwd)) return;
+      return { block: true, reason: `LEARN mode blocked ${event.toolName}. Use bounded research and learning tools; host execution, generic writes, and remote actions are unavailable.` };
+    }
 
     if (mode === "plan") {
       if (isPlanActionAllowed(event, ctx.cwd)) return;
@@ -43,6 +50,7 @@ export default function (pi) {
     // Match Codex --yolo: no sandbox and no approval prompts. Scope still comes
     // from the user's request and higher-priority instructions, not this hook.
     if (mode === "yolo") return;
+    if (mode !== "human-away" && mode !== "work") return { block: true, reason: "Unknown Neura mode: all tool calls are blocked." };
 
     const action = inspectAction(event, ctx.cwd, { protectControlReads: mode === "work" });
 

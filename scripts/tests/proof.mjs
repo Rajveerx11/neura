@@ -7,8 +7,36 @@ import { repository, git } from './git-fixture.mjs';
 const scratch = isolate();
 process.env.NEURA = '1';
 const { captureWorktree, changedFiles, execute, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
-const { registerCheckGate } = await import('../../agent/extensions/check-gate.ts');
+const { registerCheckGate, runModeProof } = await import('../../agent/extensions/check-gate.ts');
+const { setMode } = await import('../../agent/neura/mode-state.ts');
 const root = repository(scratch);
+// Reconciliation keeps Work proof in the OS sandbox and Learn fully read-only.
+let sandboxProofCalls = 0, hostProofCalls = 0;
+const hostProof = async () => { hostProofCalls++; return { ok: true, completed: true, stdout: '{"passed":true,"reasons":[]}' }; };
+setMode('work');
+for (const quick of [true, false]) {
+  const modeProof = await runModeProof(root, quick, { execute: hostProof }, async (cwd, command, timeout) => {
+    sandboxProofCalls++;
+    assert.equal(cwd, root);
+    assert.equal(command, 'uvx --from proof-of-work-agent proof-of-work check --json --base HEAD' + (quick ? ' --no-tests' : ''));
+    assert.ok(timeout > 0);
+    return { code: 0, completed: true, stdout: '{"passed":true,"reasons":[]}', stderr: '' };
+  });
+  assert.equal(modeProof.status, 'passed');
+}
+assert.equal(sandboxProofCalls, 2);
+assert.equal(hostProofCalls, 0, 'Work proof executed an ambient host runner');
+assert.equal((await runModeProof(root, true, { execute: hostProof }, async () => { throw new Error('synthetic missing sandbox'); })).status, 'unavailable');
+assert.equal(hostProofCalls, 0, 'Missing Work sandbox fell back to host execution');
+assert.equal((await runModeProof(root, true, {}, async () => ({ code: 1, completed: false, stdout: '{"passed":true,"reasons":[]}', stderr: '' }))).status, 'unavailable');
+setMode('learn');
+assert.equal((await runModeProof(root, true, { execute: hostProof }, async () => { sandboxProofCalls++; throw new Error('Learn invoked sandbox'); })).status, 'unavailable');
+assert.equal(sandboxProofCalls, 2);
+assert.equal(hostProofCalls, 0);
+setMode('yolo');
+assert.equal((await runModeProof(root, true, { execute: hostProof })).status, 'passed');
+assert.equal(hostProofCalls, 1);
+setMode('work');
 const { changedPaths, selectSuites, suites } = await import('../test-suites.mjs');
 const renameRoot = repository(scratch,'rename');
 fs.mkdirSync(path.join(renameRoot,'docs'));

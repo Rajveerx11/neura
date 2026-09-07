@@ -25,6 +25,23 @@ fix. Never include a real credential or private user data.
 
 ## Current security model
 
+- Learn exposes bounded reads/listing, web search, questions, and dedicated
+  material/lesson/exercise/progress tools. No arbitrary shell or generic writes.
+  Stock search tools are excluded because inherited host configuration can
+  redirect reads or execute preprocessors. Hidden/private paths, alternate streams,
+  links, and large generic reads are denied.
+- Learn SQL uses a fixed subprocess with an in-memory database, read-only authorizer,
+  cleared environment, resource limits, and no host file or extension operations.
+  It is a constrained SQL evaluator, not an arbitrary-code sandbox.
+- Document parsing uses reviewed native/WASM dependencies in a bounded subprocess;
+  it is not OS isolation from native parser vulnerabilities. Controlled learning
+  writers validate canonical parents and opened file identities before content
+  writes. Hostile concurrent same-user filesystem relocation remains outside the
+  application guarantee. Use trusted local workspaces. See [Learn dependency review](docs/LEARN_DEPENDENCIES.md).
+- Saved learning excerpts are historical, unverified data after resume. New lesson
+  citations require source reimport. Quoted-location validation does not prove a
+  claim's interpretation, and exercise feedback does not certify mastery.
+
 - Plan uses a fixed tool set and canonical workspace containment.
 - Plan Git inspection accepts only command-specific read options. Every Git call
   disables paging, optional locks, lazy fetching, configured filesystem monitors,

@@ -64,7 +64,7 @@ const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
 export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|\.envrc|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?|\.aws|\.azure|\.config[\\/]gcloud|\.kube[\\/]config|\.docker[\\/]config\.json)(?=$|[\\/:\s"'`;|&])/i;
 
-const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction)\.(?:ts|md)(?:[\s"']|$))/i;
+const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact|learn)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/]package(?:-lock)?\.json(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction|learn(?:-[\w-]+)?)\.(?:ts|md|mjs)(?:[\s"']|$))/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
 const SHELL_CONTROL = /(?:\r|\n|[;&|><`()]|\$\()/;
 
@@ -1037,6 +1037,46 @@ export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
     return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
   }
   return isPlanToolInputAllowed(toolName, event.input);
+}
+
+// Research needs containment, not approval fingerprints or Git execution.
+export function isBoundedResearchReadAllowed(event: ToolEvent, cwd: string): boolean {
+  const toolName = String(event.toolName ?? "");
+  if (toolName !== "read" && toolName !== "ls") return false;
+  const input = inputRecord(event.input);
+  const requested = input.path ?? (toolName === "ls" ? "." : "");
+  if (typeof requested !== "string" || !requested || requested.length > 4096
+      || /[\x00-\x1f\x7f\u00A0\u2000-\u200A\u202F\u205F\u3000]/.test(requested) || /^[\\/]{2}|^[@~]/.test(requested)
+      || (process.platform === "win32" && /^[\\/]/.test(requested))
+      || /:/.test(requested.replace(/^[a-z]:[\\/]/i, "")) || SECRET_PATH.test(requested)) return false;
+  if (typeof cwd !== "string" || !path.isAbsolute(cwd) || /^[\\/]{2}/.test(cwd)
+      || /[\x00-\x1f\x7f]/.test(cwd) || /:/.test(cwd.replace(/^[a-z]:[\\/]/i, ""))) return false;
+  const workspace = normalizedWorkspace(cwd);
+  const lexical = path.resolve(workspace, requested);
+  const sensitive = (target: string): boolean => {
+    if (SECRET_PATH.test(target)) return true;
+    const components = target.split(/[\\/]/);
+    if (components.some((part) => part.startsWith(".") || /^(?:node_modules|sessions|approvals)$/i.test(part))) return true;
+    return /^(?:memory\.(?:md|json|txt)|(?:auth|models|settings|mcp|keybindings|tokens|credentials|secrets)\.json|credentials(?:\.[\w.-]+)?)$/i.test(path.basename(target));
+  };
+  if (!insideWorkspace(lexical, workspace) || sensitive(lexical)) return false;
+  try {
+    let current = workspace;
+    for (const component of path.relative(workspace, lexical).split(path.sep).filter(Boolean)) {
+      current = path.join(current, component);
+      if (fs.lstatSync(current).isSymbolicLink()) return false;
+    }
+    const canonical = fs.realpathSync(lexical);
+    if (!insideWorkspace(canonical, workspace) || sensitive(canonical)) return false;
+    const stat = fs.lstatSync(canonical);
+    if (toolName === "read") return stat.isFile() && stat.nlink === 1 && stat.size <= 8 * 1024 * 1024;
+    if (!stat.isDirectory()) return false;
+    // Pi ls stats each child. Reject linked children before it can follow an
+    // outside/UNC target just to decide whether to append a directory suffix.
+    return fs.readdirSync(canonical, { withFileTypes: true }).every((entry) => !entry.isSymbolicLink());
+  } catch {
+    return false;
+  }
 }
 
 export function isApprovalRetryEligible(action: InspectedAction): boolean {

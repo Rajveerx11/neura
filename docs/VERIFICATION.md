@@ -5,10 +5,10 @@ harness specification with focused suites and closes its missed-untracked-edit b
 
 ## Commands and isolation
 
-Run `npm ci --ignore-scripts`, then `npm test` or
+Run `npm ci --ignore-scripts` and `npm ci --prefix agent/neura --ignore-scripts`, then `npm test` or
 `node scripts/verify-harness.mjs`. No globally installed Pi is needed. Integration
 suites validate installed package versions against `package.json` and the runtime
-contract, then load all 16 extensions with that checkout's real Pi loader.
+contract, then load all 17 extensions with that checkout's real Pi loader.
 
 Each suite starts in a separate process with a temporary home, synthetic approval
 storage, no provider credentials, and isolated Git configuration. Tests neither
@@ -30,8 +30,11 @@ existing Windows CI installation/drift rehearsal remains separate.
 | `npm run test:approval-storage` | Six concurrent writers, short writes, partial tails, corruption, crash lock |
 | `npm run test:proof` | Content fingerprints, bounds, cancellation, lifecycle, full/quick/incremental receipts |
 | `npm run test:fuzz` | Fixed seed `0x27c0ffee`: 96 generated path cases and 96 shell mutations |
+| `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, storage races, end-to-end progress, and browser behavior |
 
 `npm run test:accessibility` remains the real Edge/axe browser suite.
+Learn's five nonbrowser suites also run in `npm test`; its isolated browser wrapper
+runs separately in CI. Browser tools require Edge on the tested Windows platform.
 `npm run verify:sandbox` remains the independent live WSL2/bubblewrap replay;
 contract tests alone do not establish OS isolation. CI also runs portable proof,
 approval-storage, and sandbox contracts on Linux, including FIFO and executable-bit
@@ -69,9 +72,18 @@ claim to solve all concurrent filesystem races or Plan confidentiality (#35).
 
 ## Approval failures and remaining gates
 
+Work proof executes only inside the existing network-disabled WSL2 bubblewrap
+environment, with its runner and packages already available. Unavailable sandbox
+execution reports unavailable, without host fallback. YOLO retains bounded host
+proof. Both modes block mode changes during capture and verification. Learn, Plan,
+and Human Away do not run this proof hook.
+
 Approval writers hold a cross-process directory lock across read, deduplication,
 and append. Short writes retry; completed appends are flushed. Lock waits stop
 after two seconds. Readers reject malformed JSON or a broken hash chain.
+Windows can return `EPERM` during directory-lock contention. Acquisition retries
+that error within the same deadline; permanent denial still fails without audit
+mutation, and unrelated errors remain immediate. No lock is stolen or bypassed.
 
 A crashed writer can leave a lock or incomplete tail. Both fail closed; the test
 suite proves rejection, not automatic recovery. Before manually repairing a lock,
@@ -82,7 +94,9 @@ remains #22; strict TypeScript remains #26; Human Away remains preview-only.
 
 ## Migration and rollback
 
-No runtime dependency or existing approval schema changes. Existing valid audits
+The verification refactor changes no runtime dependency or existing approval schema.
+Learn separately adds the pinned document runtime described in
+[LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md). Existing valid audits
 remain readable. New session receipt entries are additive. Roll back the scoped
 source commit and, only with owner authorization, regenerate the live install;
 older versions ignore the new receipt entries and ignored incremental report.

@@ -1,9 +1,28 @@
 // Quick verification follows changed bytes; /ship always obtains a fresh full verdict.
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
+import { acquireHostOperation, getMode, isModeRestorePending } from "../neura/mode-state.ts";
+import { runInHumanAwaySandbox } from "../neura/human-away-sandbox.ts";
 import { captureWorktree, changedFiles, makeReceipt, readIncrementalEvidence, runProof } from "../neura/verification.ts";
-import type { TreeSnapshot, VerificationReceipt } from "../neura/verification.ts";
+import type { ProofResult, TreeSnapshot, VerificationReceipt } from "../neura/verification.ts";
 
-export function registerCheckGate(pi, dependencies = { captureWorktree, runProof }) {
+export async function runModeProof(cwd: string, quick: boolean, options: Parameters<typeof runProof>[2] = {},
+  sandbox = runInHumanAwaySandbox): Promise<ProofResult> {
+  if (isModeRestorePending()) return { status: "unavailable", reasons: ["Session restoration is pending."] };
+  const mode = getMode();
+  if (mode === "yolo") return runProof(cwd, quick, options);
+  if (mode !== "work") return { status: "unavailable", reasons: ["Verification is unavailable in this mode."] };
+  try {
+    return await runProof(cwd, quick, { ...options, execute: async (file, args, execution) => {
+      // runProof supplies only fixed arguments. Never route Work to a host
+      // executable or fall back when WSL, uvx, or its cached package is missing.
+      if (file !== "uvx" || args.some((argument) => !/^[A-Za-z0-9_-]+$/.test(argument))) throw new Error("Unexpected proof command.");
+      const result = await sandbox(execution.cwd, [file, ...args].join(" "), execution.timeoutMs, execution.signal);
+      return { ok: result.code === 0, stdout: result.stdout, completed: result.completed ?? result.code === 0 };
+    } });
+  } catch { return { status: "unavailable", reasons: ["WORK verification requires the offline proof runner inside WSL2 bubblewrap. No host fallback was used."] }; }
+}
+
+export function registerCheckGate(pi, dependencies = { captureWorktree, runProof: runModeProof }) {
   if (!process.env.NEURA) return;
   let before: TreeSnapshot | null = null;
   let quick: { root: string; receipt: VerificationReceipt } | undefined;
@@ -23,9 +42,13 @@ export function registerCheckGate(pi, dependencies = { captureWorktree, runProof
   pi.on("session_shutdown", reset);
   pi.on("input", event => { if (event.source === "interactive") fedBack = false; });
   pi.on("agent_start", async (_event, ctx) => {
+    const release = acquireHostOperation(["work", "yolo"]);
+    if (!release) { before = null; return; }
     const owner = generation;
-    const snapshot = await dependencies.captureWorktree(ctx.cwd);
-    if (owner === generation) before = snapshot;
+    try {
+      const snapshot = await dependencies.captureWorktree(ctx.cwd);
+      if (owner === generation) before = snapshot;
+    } finally { release(); }
   });
 
   async function check(scope: "quick" | "full", snapshot: TreeSnapshot, changes: string[], ctx) {
@@ -82,30 +105,39 @@ export function registerCheckGate(pi, dependencies = { captureWorktree, runProof
   }
 
   pi.on("agent_settled", async (_event, ctx) => {
+    if (getMode() !== "work" && getMode() !== "yolo") { before = null; return; }
     if (!ctx.hasUI || running) return;
-    const owner = generation;
-    const start = before;
-    before = null;
-    const after = await dependencies.captureWorktree(ctx.cwd);
-    if (owner !== generation) return;
-    if (!start || !after || start.root !== after.root) {
-      patchCockpit({ proof: { scope: "quick", status: "unavailable" }, phase: "DEGRADED", degraded: "Worktree change detection unavailable." });
-      return;
-    }
-    if (start.fingerprint !== after.fingerprint) await check("quick", after, changedFiles(start, after), ctx);
+    const release = acquireHostOperation(["work", "yolo"]);
+    if (!release) return;
+    try {
+      const owner = generation;
+      const start = before;
+      before = null;
+      const after = await dependencies.captureWorktree(ctx.cwd);
+      if (owner !== generation) return;
+      if (!start || !after || start.root !== after.root) {
+        patchCockpit({ proof: { scope: "quick", status: "unavailable" }, phase: "DEGRADED", degraded: "Worktree change detection unavailable." });
+        return;
+      }
+      if (start.fingerprint !== after.fingerprint) await check("quick", after, changedFiles(start, after), ctx);
+    } finally { release(); }
   });
 
   pi.registerCommand("ship", {
     description: "Full proof-of-work check with a worktree-bound receipt and prior quick-check evidence",
     handler: async (_args, ctx) => {
-      const owner = generation;
-      const snapshot = await dependencies.captureWorktree(ctx.cwd);
-      if (owner !== generation) return;
-      if (!snapshot) {
-        ctx.ui.notify("Cannot capture a bounded Git worktree with HEAD. Full verification unavailable.", "warning");
-        return;
-      }
-      await check("full", snapshot, quick?.root === snapshot.root ? quick.receipt.changedFiles : [], ctx);
+      const release = acquireHostOperation(["work", "yolo"]);
+      if (!release) return void ctx.ui.notify("/ship requires Work or YOLO; current mode does not permit verification execution.", "warning");
+      try {
+        const owner = generation;
+        const snapshot = await dependencies.captureWorktree(ctx.cwd);
+        if (owner !== generation) return;
+        if (!snapshot) {
+          ctx.ui.notify("Cannot capture a bounded Git worktree with HEAD. Full verification unavailable.", "warning");
+          return;
+        }
+        await check("full", snapshot, quick?.root === snapshot.root ? quick.receipt.changedFiles : [], ctx);
+      } finally { release(); }
     },
   });
 }

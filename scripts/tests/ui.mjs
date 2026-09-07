@@ -95,12 +95,21 @@ assert.equal(statuses.size, 0, "health status not cleared");
 // Run the actual health command without ambient processes, provider calls, or live configuration.
 const { registerHealth } = await import('../../agent/extensions/harness-health.ts');
 let inspectHealth;
-registerHealth({registerCommand(_name,command){inspectHealth=command.handler;}}, async ()=>({
+let inspectedHealth = 0;
+registerHealth({registerCommand(_name,command){inspectHealth=command.handler;}}, async ()=>{ inspectedHealth++; return {
   state:'degraded',pi:piRuntimeStatus('9.9.9',runtimeContract.piVersion),
   core:'fixture',workflow:'fixture',context:'fixture',workspace:'fixture',bridges:'fixture',
   impact:'runtime drift',action:repairAction,
-}));
+}; });
+for (const mode of ['work', 'learn']) {
+  modeState.setMode(mode);
+  await inspectHealth('', context);
+  assert.equal(inspectedHealth, 0, `${mode} ran host health diagnostics`);
+}
+modeState.setMode('yolo');
 await inspectHealth('',context);
+assert.equal(inspectedHealth, 1, 'YOLO did not run the injected health inspection');
+modeState.setMode('work');
 assert.equal(statuses.size,0,'completed health inspection retained status');
 assert.ok(widgets.has('neura-health'),'health inspection did not publish a widget');
 

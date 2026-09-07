@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
-import { getMode } from "../neura/mode-state.ts";
+import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
 
 type Snap = { tree: string; when: string; label: string };
 
@@ -27,14 +27,17 @@ function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<stri
 // never --force: it would pull node_modules/build dirs into git objects) into a
 // tree object via a throwaway index. Worktree and real index stay untouched.
 async function snapshot(cwd: string): Promise<string | null> {
-  if (!(await git(cwd, ["rev-parse", "--verify", "HEAD"]))) return null;
+  const release = acquireHostOperation();
+  if (!release) return null;
   const tmpIndex = path.join(os.tmpdir(), `neura-ckpt-${process.pid}-${Date.now()}`);
   try {
+    if (!(await git(cwd, ["rev-parse", "--verify", "HEAD"]))) return null;
     const env = { GIT_INDEX_FILE: tmpIndex };
     if ((await git(cwd, ["add", "-A", "."], env)) === null) return null;
     return await git(cwd, ["write-tree"], env);
   } finally {
     try { fs.unlinkSync(tmpIndex); } catch {}
+    release();
   }
 }
 
@@ -42,6 +45,8 @@ async function snapshot(cwd: string): Promise<string | null> {
 // ponytail: files CREATED after the snapshot are left behind (deleting untracked
 // files is how you lose real work) — surfaced in the /undo notice instead.
 async function restore(cwd: string, tree: string): Promise<boolean> {
+  const release = acquireHostOperation();
+  if (!release) return false;
   const tmpIndex = path.join(os.tmpdir(), `neura-ckpt-${process.pid}-${Date.now()}`);
   try {
     const env = { GIT_INDEX_FILE: tmpIndex };
@@ -49,6 +54,7 @@ async function restore(cwd: string, tree: string): Promise<boolean> {
     return (await git(cwd, ["checkout-index", "-a", "-f"], env)) !== null;
   } finally {
     try { fs.unlinkSync(tmpIndex); } catch {}
+    release();
   }
 }
 
@@ -65,7 +71,7 @@ export default function (pi) {
   });
 
   pi.on("agent_start", async (_event, ctx) => {
-    if (getMode() === "plan") return;
+    if (getMode() !== "yolo") return;
     try { if (ctx.hasUI) ctx.ui.setStatus("neura-checkpoint", "checkpoint"); } catch {}
     patchCockpit({ checkpoint: "capturing", operation: { verb: "checkpoint", target: "capturing worktree", startedAt: Date.now() } });
     try {
@@ -101,6 +107,7 @@ export default function (pi) {
         ctx.ui.notify(`snapshots (newest first):\n${lines.join("\n")}`);
         return;
       }
+      if (getMode() !== "yolo") return void ctx.ui.notify("/undo requires YOLO; current mode does not permit worktree changes.", "warning");
       const snap = snaps.pop();
       if (!snap) return void ctx.ui.notify("nothing to undo · no snapshot taken this session", "warning");
 

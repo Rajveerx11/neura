@@ -14,6 +14,11 @@ export const suites = Object.freeze({
   'approval-storage': 'scripts/tests/approval-storage.mjs',
   proof: 'scripts/tests/proof.mjs',
   fuzz: 'scripts/tests/fuzz.mjs',
+  learn: 'scripts/tests/learn.mjs',
+  'learn-materials': 'scripts/tests/learn-materials.mjs',
+  'learn-workshop': 'scripts/tests/learn-workshop.mjs',
+  'learn-storage': 'scripts/tests/learn-storage.mjs',
+  'learn-end-to-end': 'scripts/tests/learn-end-to-end.mjs',
 });
 
 export function changedPaths(root) {
@@ -32,7 +37,7 @@ export function selectSuites(files) {
   for (const name of files) {
     if (/^(docs\/|README\.md$|CONTRIBUTING\.md$|CHANGELOG\.md$)/.test(name)) continue;
     if (name === 'agent/extensions/check-gate.ts' || name === 'agent/neura/verification.ts') {
-      selected.add('proof'); selected.add('integration');
+      selected.add('proof'); selected.add('integration'); selected.add('learn');
     } else if (/approval-store\.ts$/.test(name)) {
       selected.add('approvals'); selected.add('approval-storage');
     } else if (/plan-renderer\.ts$/.test(name)) {

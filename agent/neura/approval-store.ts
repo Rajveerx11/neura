@@ -144,7 +144,9 @@ function withWriterLock<T>(operation: () => T): T {
   for (;;) {
     try { fs.mkdirSync(lock); break; }
     catch (error: any) {
-      if (error?.code !== "EEXIST") throw error;
+      // Windows can report EPERM while another process releases the directory.
+      // Retry acquisition only; never enter the critical section without mkdir.
+      if (error?.code !== "EEXIST" && !(process.platform === "win32" && error?.code === "EPERM")) throw error;
       if (Date.now() >= deadline) throw new Error("approval audit writer lock timed out; inspection required");
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }

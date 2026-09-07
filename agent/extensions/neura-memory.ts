@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getMode } from "../neura/mode-state.ts";
 
 const MEMORY_FILE = path.join(os.homedir(), ".pi", "agent", "neura", "MEMORY.md");
 
@@ -16,6 +17,7 @@ export default function (pi) {
   if (!process.env.NEURA) return; // plain `pi` stays stock
 
   pi.on("before_agent_start", (event) => {
+    if (getMode() !== "yolo") return;
     const mem = readMemory();
     if (!mem) return;
     return {
@@ -31,6 +33,7 @@ export default function (pi) {
   pi.registerCommand("remember", {
     description: "Save a fact to persistent memory (survives sessions)",
     handler: async (args, ctx) => {
+      if (getMode() !== "yolo") return void ctx.ui.notify("/remember requires YOLO; use optional Learn progress for learning notes.", "warning");
       const fact = (args ?? "").trim();
       if (!fact) return void ctx.ui.notify("usage: /remember <fact>", "warning");
       const today = new Date().toISOString().slice(0, 10);
@@ -49,6 +52,7 @@ export default function (pi) {
   pi.registerCommand("memory", {
     description: "Show persistent memory",
     handler: async (_args, ctx) => {
+      if (getMode() !== "yolo") return void ctx.ui.notify("Private persistent memory is unavailable in this mode.", "warning");
       const mem = readMemory();
       ctx.ui.notify(mem || "memory is empty — /remember <fact> to add");
     },
