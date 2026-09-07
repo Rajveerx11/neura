@@ -1402,6 +1402,154 @@ assert.match(humanAwayFooter, /PREVIEW/, "Human Away preview label missing from 
 const modePrompt = await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
 assert.match(modePrompt.systemPrompt, /HUMAN AWAY/, "Human Away system contract missing");
 
+// Learn has its own provider/tool boundary, never the Plan publisher or a
+// Human Away approval fallback. Exercise direct calls as well as hidden schemas.
+const { LEARN_ONLY_TOOL_NAMES, LEARN_MODE_TOOL_NAMES } = await import(
+  pathToFileURL(path.join(repoRoot, "agent", "neura", "learn-policy.ts")).href,
+);
+assert.equal(modeState.nextMode("human-away"), "learn");
+assert.equal(modeState.nextMode("learn"), "plan");
+await modes.commands.get("mode").handler("learn", context);
+assert.equal(modeState.getMode(), "learn");
+assert.ok(activeTools.every((name) => LEARN_MODE_TOOL_NAMES.includes(name)), "Learn activated an unaudited tool");
+for (const name of LEARN_ONLY_TOOL_NAMES.filter((name) => registeredToolNames.includes(name))) {
+  assert.ok(activeTools.includes(name), `Learn did not activate ${name}`);
+}
+assert.equal(activeTools.includes("bash"), false);
+assert.equal(activeTools.includes("publish_plan"), false);
+const learnPrompt = await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
+assert.match(learnPrompt.systemPrompt, /NEURA MODE: LEARN/);
+assert.match(learnPrompt.systemPrompt, /3-5 short key bullets/);
+assert.match(learnPrompt.systemPrompt, /untrusted reference data/);
+for (const name of LEARN_ONLY_TOOL_NAMES) {
+  assert.equal(await guard({ toolName: name, input: {} }, context), undefined, `${name} denied`);
+  assert.equal((await guard({ toolName: name, input: null }, context))?.block, true, `${name} accepted malformed input`);
+}
+assert.equal(await guard({ toolName: "questionnaire", input: {} }, context), undefined);
+assert.equal(await guard({ toolName: "read", input: { path: "README.md" } }, context), undefined);
+assert.equal(await guard({ toolName: "grep", input: { path: "README.md", pattern: "Neura" } }, context), undefined);
+assert.equal(await guard({ toolName: "web_search", input: { query: "database relationships", max_results: 3 } }, context), undefined);
+for (const event of [
+  { toolName: "write", input: { path: "example.txt", content: "blocked" } },
+  { toolName: "edit", input: { path: "README.md" } },
+  { toolName: "bash", input: { command: "echo example" } },
+  { toolName: "human_away_exec", input: { command: "echo example" } },
+  { toolName: "publish_plan", input: { slug: "learning-plan" } },
+  { toolName: "plan_request", input: { action: "start_new" } },
+  { toolName: "message_peer", input: {} },
+  { toolName: "mcp__gmail__GMAIL_GET_PROFILE", input: {} },
+  { toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} },
+  { toolName: "web_fetch", input: { url: "https://example.com" } },
+  { toolName: "web_search", input: { query: "x" } },
+  { toolName: "read", input: { path: "../outside.txt" } },
+  { toolName: "read", input: { path: ".env.local" } },
+  { toolName: "read", input: { path: ".neura-learning/progress.json" } },
+  { toolName: "read", input: { path: ".git/config" } },
+  { toolName: "grep", input: { path: ".", pattern: "." } },
+  { toolName: "find", input: { path: ".", pattern: ".env*" } },
+  { toolName: "unknown_tool", input: {} },
+]) assert.equal((await guard(event, context))?.block, true, `Learn allowed ${event.toolName}: ${JSON.stringify(event.input)}`);
+assert.equal((await firstHandler(gmailGuardrail, "tool_call")({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, context))?.block, true,
+  "Gmail approval bypassed Learn");
+const learnWorkspace = path.join(scratchRoot, "learn-policy-workspace");
+const learnOutside = path.join(scratchRoot, "learn-policy-outside");
+fs.mkdirSync(learnWorkspace);
+fs.mkdirSync(learnOutside);
+fs.writeFileSync(path.join(learnOutside, "reference.txt"), "synthetic outside reference");
+fs.symlinkSync(learnOutside, path.join(learnWorkspace, "linked"), process.platform === "win32" ? "junction" : "dir");
+assert.equal((await guard({ toolName: "read", input: { path: "linked/reference.txt" } }, { ...context, cwd: learnWorkspace }))?.block, true,
+  "Learn allowed junction escape");
+fs.mkdirSync(path.join(learnWorkspace, ".neura-learning"));
+fs.writeFileSync(path.join(learnWorkspace, ".neura-learning", "progress.json"), "{}");
+fs.symlinkSync(path.join(learnWorkspace, ".neura-learning"), path.join(learnWorkspace, "notes"), process.platform === "win32" ? "junction" : "dir");
+assert.equal((await guard({ toolName: "read", input: { path: "notes/progress.json" } }, { ...context, cwd: learnWorkspace }))?.block, true,
+  "Learn read progress through an alias");
+
+activeTools.push("write", "bash", "publish_plan", "mcp__late__execute");
+const learnProvider = await firstHandler(modes, "before_provider_request")({ payload: { tools: [
+  { name: "Read" }, { name: "Bash" }, { name: "write" }, { name: "publish_plan" },
+  { function: { name: "learn_lesson" } }, { function: { name: "mcp__late__execute" } },
+] } }, context);
+assert.ok(learnProvider.tools.every((tool) => ["Read", "learn_lesson"].includes(tool.name ?? tool.function?.name)),
+  "Late provider schema bypassed Learn");
+assert.ok(activeTools.every((name) => LEARN_MODE_TOOL_NAMES.includes(name)));
+await firstHandler(modes, "session_start")({}, {
+  ...context,
+  sessionManager: { getEntries: () => [{ type: "custom", customType: "neura-mode-state", data: { mode: "learn" } }] },
+});
+assert.equal(modeState.getMode(), "learn", "Learn did not restore");
+for (const width of [24, 40, 56, 72, 92, 120]) {
+  const lines = footer.render(width);
+  assert.ok(lines.every((line) => widthOf(line) <= width), `Learn footer overflow at ${width}`);
+  assert.match(lines.map(stripAnsi).join("\n"), /LEARN/);
+}
+for (const [filename, event] of [["checkpoint.ts", "agent_start"], ["check-gate.ts", "agent_start"], ["check-gate.ts", "agent_settled"], ["neura-memory.ts", "before_agent_start"]]) {
+  const extension = loaded.extensions.find((item) => item.resolvedPath.endsWith(`${path.sep}${filename}`));
+  assert.equal(await firstHandler(extension, event)({}, {}), undefined, `${filename} accessed context in Learn`);
+}
+for (const command of ["undo", "ship", "remember", "memory", "skill-doctor", "health", "approvals"]) {
+  const beforeNotices = notices.length;
+  await extensionWithCommand(command).commands.get(command).handler("example", { ui });
+  assert.equal(notices.length, beforeNotices + 1, `${command} was not blocked before accessing the workspace`);
+}
+assert.throws(() => modeState.setMode("future-mode"), /Unknown Neura mode/);
+assert.equal(modeState.getMode(), "learn");
+const modeRegistry = globalThis[Symbol.for("neura.mode-state.v1")];
+modeRegistry.current = "future-mode";
+assert.equal((await guard({ toolName: "read", input: { path: "README.md" } }, context))?.block, true, "Unknown mode fell through to Human Away");
+const unknownProvider = await firstHandler(modes, "before_provider_request")({ payload: { tools: [{ name: "read" }] } }, context);
+assert.deepEqual(unknownProvider.tools, [], "Unknown mode exposed provider tools");
+modeState.setMode("learn");
+await modes.commands.get("mode").handler("plan", context);
+assert.equal(activeTools.some((name) => LEARN_ONLY_TOOL_NAMES.includes(name)), false, "Learning tools leaked into Plan");
+assert.ok(activeTools.includes("publish_plan"), "Learn transition lost Plan publisher");
+await modes.commands.get("mode").handler("yolo", context);
+const releaseHostOperation = modeState.acquireHostOperation();
+assert.equal(typeof releaseHostOperation, "function");
+assert.throws(() => modeState.setMode("learn"), /host operation/);
+await modes.commands.get("mode").handler("learn", context);
+assert.equal(modeState.getMode(), "yolo", "Mode changed while background host work was running");
+releaseHostOperation();
+releaseHostOperation();
+assert.equal(modeState.isHostOperationActive(), false, "Host operation release was not idempotent");
+await modes.commands.get("mode").handler("learn", context);
+assert.equal(modeState.getMode(), "learn");
+assert.equal(modeState.acquireHostOperation(), null, "Learn acquired a host operation lease");
+
+const savedOctober = Object.fromEntries(["OCTOBER_BUS_PORT", "OCTOBER_BUS_CANVAS", "OCTOBER_BUS_NODE", "CAMPFIRE_SESSION_ROLE"]
+  .map((key) => [key, process.env[key]]));
+Object.assign(process.env, { OCTOBER_BUS_PORT: "1", OCTOBER_BUS_CANVAS: "synthetic", OCTOBER_BUS_NODE: "synthetic", CAMPFIRE_SESSION_ROLE: "host" });
+const savedFetch = globalThis.fetch;
+let learnNetworkCalls = 0;
+globalThis.fetch = async () => { learnNetworkCalls++; throw new Error("Network forbidden in this test"); };
+try {
+  const october = await loadExtensions([path.join(extensionDir, "october-bus.ts")], repoRoot);
+  assert.deepEqual(october.errors, []);
+  const bus = october.extensions[0];
+  for (const event of ["session_start", "session_shutdown", "before_agent_start", "agent_end"]) {
+    assert.equal(await firstHandler(bus, event)({}, {}), undefined, `October ${event} did not stop in Learn`);
+  }
+  assert.ok(bus.tools.size > 0, "October test did not register tools");
+  for (const tool of bus.tools.values()) await assert.rejects(() => tool.definition.execute("test", {}), /require YOLO/);
+  assert.equal(learnNetworkCalls, 0, "October accessed the network from Learn");
+} finally {
+  globalThis.fetch = savedFetch;
+  for (const [key, value] of Object.entries(savedOctober)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
+// Plain Pi must not acquire Neura's mode boundaries or integration hooks.
+delete process.env.NEURA;
+const stockNames = ["modes.ts", "guardrail.ts", "checkpoint.ts", "check-gate.ts", "neura-memory.ts", "october-bus.ts"];
+const stock = await loadExtensions(stockNames.map((name) => path.join(extensionDir, name)), repoRoot);
+assert.deepEqual(stock.errors, []);
+for (const extension of stock.extensions) {
+  assert.equal(extension.commands.size + extension.tools.size + extension.handlers.size, 0, `Plain Pi acquired ${extension.resolvedPath}`);
+}
+process.env.NEURA = "1";
+
 console.log(
   `Neura verify: ${loaded.extensions.length} extensions; logo-only launch, responsive cockpit, transcript actions, visual Plan publishing, modes, approvals, proof state, presets, and guardrails passed.`,
 );

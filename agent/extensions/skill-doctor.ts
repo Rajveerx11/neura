@@ -4,6 +4,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { getMode } from "../neura/mode-state.ts";
 
 const SKILL_DIRS = [
   path.join(os.homedir(), ".claude", "skills"),
@@ -26,6 +27,7 @@ export default function (pi) {
   pi.registerCommand("skill-doctor", {
     description: "Scan skills for Claude-only tool references that won't work in pi",
     handler: async (_args, ctx) => {
+      if (getMode() !== "yolo") return void ctx.ui.notify("/skill-doctor requires YOLO because it writes a report outside the workspace.", "warning");
       const flagged = [];
       let scanned = 0;
       for (const dir of SKILL_DIRS) {

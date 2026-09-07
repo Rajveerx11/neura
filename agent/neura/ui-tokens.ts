@@ -7,6 +7,7 @@ export const PALETTE = {
   accent: "#d97841",
   focus: "#f0a66f",
   plan: "#76b8c4",
+  learn: "#86a7d7",
   human: "#d3a64a",
   info: "#86a7d7",
   text: "#e8e2d8",
@@ -21,6 +22,7 @@ export const PALETTE = {
 export const GLYPHS = {
   neura: "◆",
   plan: "◇",
+  learn: "◇",
   yolo: "◆",
   humanAway: "◇",
   success: "✓",

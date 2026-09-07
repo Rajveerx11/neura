@@ -64,7 +64,7 @@ const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
 export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?)(?=$|[\\/\s"'`;|&])/i;
 
-const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction)\.(?:ts|md)(?:[\s"']|$))/i;
+const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact|learn)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction|learn(?:-[\w-]+)?)\.(?:ts|md)(?:[\s"']|$))/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
 const SHELL_CONTROL = /(?:\r|\n|[;&|><`()]|\$\()/;
 
@@ -1000,6 +1000,29 @@ export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
     return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
   }
   return isPlanToolInputAllowed(toolName, event.input);
+}
+
+// Research needs containment, not approval fingerprints or Git execution.
+export function isBoundedResearchReadAllowed(event: ToolEvent, cwd: string): boolean {
+  const toolName = String(event.toolName ?? "");
+  if (!READ_TOOLS.has(toolName)) return false;
+  const input = inputRecord(event.input);
+  const requested = rawPath(input) || (toolName === "read" ? "" : ".");
+  if (!requested || requested.includes("\0") || SECRET_PATH.test(requested)) return false;
+  const workspace = normalizedWorkspace(cwd);
+  const lexical = resolveToolTarget(requested, cwd);
+  const canonical = lexical === null ? null : canonicalTarget(lexical);
+  if (canonical === null || !insideWorkspace(canonical, workspace) || SECRET_PATH.test(canonical)) return false;
+  const relative = path.relative(workspace, canonical);
+  if (/(?:^|[\\/])(?:\.git|\.pi|\.neura|\.neura-learning)(?:[\\/]|$)/i.test(relative)) return false;
+  // Do not allow broad content scans to ingest ignored files, symlink targets,
+  // or learning progress. The tutor can inspect explicit source files instead.
+  if (toolName === "grep") {
+    try { if (!fs.statSync(canonical).isFile()) return false; } catch { return false; }
+  }
+  if (toolName === "find" && (SECRET_PATH.test(String(input.pattern ?? ""))
+      || /(?:\.git|\.pi|\.neura|\.env)/i.test(String(input.pattern ?? "")))) return false;
+  return true;
 }
 
 export function isApprovalRetryEligible(action: InspectedAction): boolean {

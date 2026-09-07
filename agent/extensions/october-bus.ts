@@ -1,6 +1,7 @@
 // October context-bus extension (auto-generated; Neura adds one Human Away privacy gate).
 import { getMode } from '../neura/mode-state.ts'
 export default async function (pi) {
+  if (!process.env.NEURA) return
   const PORT = process.env.OCTOBER_BUS_PORT
   const CANVAS = process.env.OCTOBER_BUS_CANVAS
   const NODE = process.env.OCTOBER_BUS_NODE
@@ -27,18 +28,19 @@ export default async function (pi) {
   }
 
   pi.on('session_start', async (_event, ctx) => {
-    if (getMode() === 'plan') return
+    if (getMode() !== 'yolo') return
     let session = ''
     try { session = ctx.sessionManager.getSessionId() || '' } catch { /* ignore */ }
     await post('/hook/session', { canvas: CANVAS, node: NODE, status: 'live', session, agent: 'pi' })
   })
   pi.on('session_shutdown', async () => {
-    if (getMode() === 'plan') return
+    if (getMode() !== 'yolo') return
     await post('/hook/session', { canvas: CANVAS, node: NODE, status: 'offline', agent: 'pi' })
   })
 
   // before each user prompt: pull unread peer messages/context and ride along as a custom message
   pi.on('before_agent_start', async () => {
+    if (getMode() !== 'yolo') return
     const text = await pull()
     if (!text) return
     return { message: { customType: 'october-bus', content: text, display: true } }
@@ -89,6 +91,7 @@ export default async function (pi) {
         message: Type.String({ description: 'what to say — your exact words, delivered verbatim' })
       }),
       async execute(_toolCallId, params) {
+        if (getMode() !== 'yolo') throw new Error('October actions require YOLO.')
         const r = await post('/hook/message-peer', { canvas: CANVAS, node: NODE, peer: params.peer, message: params.message })
         const ok = !!(r && r.ok)
         const text = ok ? 'Sent to ' + params.peer + '.' : 'Could not send: ' + ((r && r.reason) || 'bus unreachable')
@@ -105,6 +108,7 @@ export default async function (pi) {
         description,
         parameters,
         async execute(_toolCallId, params) {
+          if (getMode() !== 'yolo') throw new Error('October actions require YOLO.')
           const r = await post('/hook/task', { canvas: CANVAS, node: NODE, ...toBody(params || {}) })
           const text = (r && r.text) || 'bus unreachable'
           return { content: [{ type: 'text', text }], details: {} }

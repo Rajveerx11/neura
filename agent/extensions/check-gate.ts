@@ -6,14 +6,17 @@
 import { execFile } from "node:child_process";
 import * as path from "node:path";
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
+import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
 
 const POW = ["--from", "proof-of-work-agent", "proof-of-work", "check", "--json", "--base", "HEAD"];
 
 type Verdict = { passed: boolean; reasons: string[] };
 
 function runPow(cwd: string, quick: boolean, timeoutMs: number): Promise<Verdict | null> {
+  const release = acquireHostOperation();
+  if (!release) return Promise.resolve(null);
   const args = quick ? [...POW, "--no-tests"] : POW;
-  return new Promise((resolve) => {
+  return new Promise<Verdict | null>((resolve) => {
     execFile("uvx", args, { cwd, timeout: timeoutMs, windowsHide: true }, (_err, stdout) => {
       try {
         const j = JSON.parse(stdout.trim());
@@ -22,20 +25,24 @@ function runPow(cwd: string, quick: boolean, timeoutMs: number): Promise<Verdict
         resolve(null); // uvx missing, not a git repo, no HEAD, bad JSON — fail soft, never block
       }
     });
-  });
+  }).finally(release);
 }
 
 function isGitRepo(cwd: string): Promise<boolean> {
-  return new Promise((resolve) => {
+  const release = acquireHostOperation();
+  if (!release) return Promise.resolve(false);
+  return new Promise<boolean>((resolve) => {
     execFile("git", ["rev-parse", "--verify", "HEAD"], { cwd, windowsHide: true }, (err) =>
       resolve(!err),
     );
-  });
+  }).finally(release);
 }
 
 // fingerprint of the working tree vs HEAD — catches edits from ANY tool (edit, write, bash)
 function treeState(cwd: string): Promise<string | null> {
-  return new Promise((resolve) => {
+  const release = acquireHostOperation();
+  if (!release) return Promise.resolve(null);
+  return new Promise<string | null>((resolve) => {
     execFile("git", ["status", "--porcelain"], { cwd, windowsHide: true }, (err, status) => {
       if (err) return resolve(null);
       execFile(
@@ -50,7 +57,7 @@ function treeState(cwd: string): Promise<string | null> {
         },
       );
     });
-  });
+  }).finally(release);
 }
 
 export default function (pi) {
@@ -65,10 +72,12 @@ export default function (pi) {
   });
 
   pi.on("agent_start", async (_event, ctx) => {
+    if (getMode() !== "yolo") { before = null; return; }
     if (before === null) before = await treeState(ctx.cwd);
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
+    if (getMode() !== "yolo") { before = null; return; }
     // print/JSON mode tears down before async handlers finish and never runs
     // follow-ups — the gate only makes sense in a live session
     if (!ctx.hasUI || checking) return;
@@ -77,6 +86,7 @@ export default function (pi) {
     before = null;
     if (!changed) return;
     if (!(await isGitRepo(ctx.cwd))) return;
+    if (getMode() !== "yolo") return;
 
     checking = true;
     patchCockpit({
@@ -119,10 +129,12 @@ export default function (pi) {
   pi.registerCommand("ship", {
     description: "Full proof-of-work check: real test run, signed verdict in the audit log",
     handler: async (_args, ctx) => {
+      if (getMode() !== "yolo") return void ctx.ui.notify("/ship requires YOLO; current mode does not permit host execution.", "warning");
       if (!(await isGitRepo(ctx.cwd))) {
         ctx.ui.notify("not a git repo · nothing to verify", "warning");
         return;
       }
+      if (getMode() !== "yolo") return;
       ctx.ui.notify("running full proof-of-work check (tests + signed log)...");
       ctx.ui.setStatus("neura-proof", "proof · full");
       patchCockpit({

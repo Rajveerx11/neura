@@ -1,4 +1,4 @@
-export const MODES = ["plan", "yolo", "human-away"] as const;
+export const MODES = ["plan", "yolo", "human-away", "learn"] as const;
 
 export type AgentMode = (typeof MODES)[number];
 export type ModeChangeSource = "restore" | "command" | "shortcut" | "internal";
@@ -12,6 +12,7 @@ export type ModeChange = {
 type SharedModeState = {
   current: AgentMode;
   listeners: Set<(change: ModeChange) => void>;
+  hostOperations?: number;
 };
 
 const STATE_KEY = Symbol.for("neura.mode-state.v1");
@@ -27,6 +28,8 @@ export function getMode(): AgentMode {
 }
 
 export function setMode(next: AgentMode, source: ModeChangeSource = "internal"): ModeChange {
+  if (!isAgentMode(next)) throw new Error("Unknown Neura mode; current boundary remains active.");
+  if (next !== shared.current && isHostOperationActive()) throw new Error("Mode change blocked while a host operation is running.");
   const change = { previous: shared.current, current: next, source };
   shared.current = next;
   if (change.previous !== change.current || source === "restore") {
@@ -35,6 +38,23 @@ export function setMode(next: AgentMode, source: ModeChangeSource = "internal"):
     }
   }
   return change;
+}
+
+export function isHostOperationActive(): boolean {
+  return (shared.hostOperations ?? 0) > 0;
+}
+
+// Prevent a background proof/checkpoint launched in YOLO from crossing into a
+// restricted mode after the foreground agent becomes idle.
+export function acquireHostOperation(): (() => void) | null {
+  if (shared.current !== "yolo") return null;
+  shared.hostOperations = (shared.hostOperations ?? 0) + 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    shared.hostOperations = Math.max(0, (shared.hostOperations ?? 1) - 1);
+  };
 }
 
 export function nextMode(mode: AgentMode = shared.current): AgentMode {
