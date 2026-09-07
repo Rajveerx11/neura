@@ -1,8 +1,8 @@
 # Neura status
 
-Last audited: 2026-09-03
-Current source: `2.5.1` with an unreleased Pi `0.84.4` compatibility update
-Live runtime: Pi `0.84.4`; live Neura files match source
+Last release audit: 2026-09-03; Learn branch updated 2026-09-07
+Current source: `2.5.1` with unreleased Pi `0.84.4` compatibility and Learn Mode updates
+Live runtime: Pi `0.84.4`; Learn feature branch has not been installed live
 
 ## Release decision
 
@@ -22,9 +22,10 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Pi and live Neura | Ready | Pi `0.84.4` is installed; the offline startup smoke test and `install.ps1 -Check` pass. |
+| Pi and live Neura | Baseline ready; Learn not installed | Pi `0.84.4` is installed. The prior baseline passed startup and drift checks; the Learn branch deliberately differs from the live install. |
 | Dependency graph | Ready | Lockfile audit reports zero known vulnerabilities; 249 packages have verified registry signatures and 50 have attestations. |
-| Core harness | Ready for covered behavior | Typecheck, 16-extension harness, documentation checks, and live WSL2 sandbox replay pass. |
+| Core harness | Ready for covered behavior | Typecheck, 17-extension harness, and documentation checks cover the Learn branch. Live WSL2 sandbox replay evidence remains from the prior baseline. |
+| Learn Mode | Unreleased source feature | Visual workshops, PDF/PPTX references, offline English OCR, constrained SQL exercises, and optional progress. Dedicated document, storage, end-to-end, and browser suites supplement the now 17-extension harness. Full PPTX layout needs PDF export; parser subprocesses are not OS sandboxes. See [LEARN_MODE.md](LEARN_MODE.md). |
 | Default mode | Blocked | New sessions default to unsandboxed YOLO. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
 | Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
 | Automatic execution | Blocked | Proof and Git automation require pinned, contained execution. Track [#22](https://github.com/Rajveerx11/neura/issues/22). |

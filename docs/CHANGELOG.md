@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added native Learn Mode with visual flow/ER/sequence workshops, short teaching
+  bullets, PDF/PPTX references, offline English OCR, practical exercises, and
+  explicit local save/resume. Browser actions carry lesson revisions; SQL runs
+  only against disposable sample tables and validates worked answer keys.
+- Added Learn-specific tool/provider restrictions and closed background-hook,
+  inherited search configuration, private-path, and alternate-stream bypasses.
+  Learning writers validate exclusive file handles before writing content.
+- Added exact-pinned document runtime dependencies and Node.js 24.10 minimum,
+  installer prerequisites/drift checks, independent reviews, synthetic document
+  and storage tests, and desktop/mobile browser accessibility checks. Learn is
+  unreleased; full PowerPoint slide visuals require PDF export. See [LEARN_MODE.md](LEARN_MODE.md).
+
 - Added a complete-history secret scan to push and pull-request CI using the
   exact Gitleaks `8.30.1` Windows archive and its published SHA-256. Scanner
   output is fully redacted, the checkout includes every ref, and the dependency

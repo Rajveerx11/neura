@@ -17,8 +17,23 @@ launcher/neura.cmd
 ```
 
 Plain `pi` stays stock for Neura-specific extensions because they return early
-unless `NEURA` is set. `october-bus.ts` is the exception: it activates only when
-all October bus environment variables are present.
+unless `NEURA` is set. The October integration additionally requires its bus
+environment variables and permits host/network work only in YOLO.
+
+## Learning workshop
+
+`learn.ts` connects native mode controls to four structured tools. Materials are
+captured once and parsed in a fixed child process; exact content hashes and
+page/slide numbers anchor citations. The renderer accepts structured lesson data
+and generates standalone HTML/SVG with a fixed CSP-protected interaction script.
+Browser commands carry a lesson revision before terminal evaluation. The SQL
+worker exposes only its in-memory fixture database and permitted read operations.
+
+Learning artifacts use exclusive controlled writes under `.neura-learning/`.
+Optional progress snapshots omit images and are revalidated on resume; source
+trust must be re-established by import. Background host operations carry a mode
+lock so a transition cannot overlap work started under broader permissions.
+See [LEARN_MODE.md](LEARN_MODE.md) for commands, limits, and verification.
 
 ## Turn lifecycle
 

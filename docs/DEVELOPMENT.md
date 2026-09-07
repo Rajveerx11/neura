@@ -8,12 +8,17 @@ back later. The live harness is an installation target, not source.
 ## Prerequisites
 
 - Windows PowerShell.
-- Node.js and npm.
+- Node.js 24.10+ and npm (the Learn SQL authorizer requires this minimum).
 - Git.
 - Pi `0.84.4` for current `main`.
 - `uvx` for proof-of-work.
 
 ## Change loop
+
+Install both locked graphs for local verification: `npm ci --ignore-scripts` and
+`npm ci --prefix agent/neura --ignore-scripts`. Run `npm run test:learn` for document,
+workshop, storage, and real-browser learning coverage. These source installs do
+not modify the live Pi harness. See [LEARN_MODE.md](LEARN_MODE.md).
 
 1. Read [STATUS.md](STATUS.md) and relevant source.
 2. Make the smallest complete change.

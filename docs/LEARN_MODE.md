@@ -1,6 +1,7 @@
 # Learn Mode: visual, practical learning
 
-Status: implementation reference, not a shipped capability. Requested 2026-09-07.
+Status: implemented on the Learn feature branch, unreleased and not installed in
+the live harness. Requested 2026-09-07. Delivery evidence is recorded below.
 
 ## Outcome
 
@@ -20,7 +21,7 @@ PDFs and PowerPoint decks should ground lessons in the learner's own material.
 6. Record evidence from attempts, misconceptions, and the next step. Reading or
    revealing an answer never proves mastery. Resume saved work only on request.
 
-## First-release scope
+## Implemented experience
 
 - Native mode, tool restrictions, prompt, session restoration, and terminal status.
 - PDF and PPTX ingestion: text, page/slide numbering, slide notes where available,
@@ -29,11 +30,14 @@ PDFs and PowerPoint decks should ground lessons in the learner's own material.
 - Grounding by immutable source identity plus page/slide, with citations validated
   against imported material. Treat all document content as untrusted reference data.
   Distinguish source-supported claims, outside sources, and tutor examples.
-- A local browser learning board: accessible flow, ER, and sequence diagrams;
+- A standalone local browser learning board: accessible flow, ER, and sequence diagrams;
   short lesson bullets; reference excerpts; exercises; hint and reveal controls.
-  Browser actions must actually work, with clear handoff to the terminal where needed.
-- Practical exercises, including a constrained SQL/table lab or equally useful
-  contained execution environment. No arbitrary host-code execution.
+  Browser quizzes grade locally; revision-bound copy controls hand attempts and
+  explanation requests to the terminal. The board does not silently sync state.
+- Practical choice, short-answer, open-ended, and SQL exercises. SQL queries run
+  against provided sample tables in a disposable in-memory SQLite process with
+  an authorizer, a three-second deadline, and bounded memory/results. No arbitrary
+  host-code execution. Worked SQL answer keys are checked before publication.
 - Optional local learning progress and controlled material/lesson storage. No
   unsolicited transcript export, external sync, or modifications to source documents.
 
@@ -49,19 +53,64 @@ PDFs and PowerPoint decks should ground lessons in the learner's own material.
   cross-component tests, documentation, installer integration, independent review,
   one integrated PR, and CI. Agents work in separate Git worktrees.
 
-Provisional tool names: `learn_material`, `learn_lesson`, `learn_exercise`, and
+Tool names: `learn_material`, `learn_lesson`, `learn_exercise`, and
 `learn_progress`. Shared modules live directly under `agent/neura/`; the extension
 is `agent/extensions/learn.ts`. Coordinate exported interfaces before integration.
 
 ## Permission boundary
 
-Learn permits bounded research, approved material reads, interactive questions,
+Learn permits bounded `read`/`ls`, web research, material reads, interactive questions,
 and its dedicated learning tools. Generic writes/edits, arbitrary shell commands,
 remote mutation, Plan publication, and Human Away execution are unavailable.
 Dedicated writers use canonical junction-aware containment and bounded payloads.
 Background proof, checkpoint, memory, and integration hooks must not bypass this
 boundary. Plain Pi remains stock, Plan keeps its existing contract, Human Away
 stays preview-only, and the logo-only launch remains unchanged.
+
+Stock `grep` and `find` are excluded: inherited ripgrep configuration can change
+their targets or execute preprocessors. Generic reads deny hidden paths, private
+memory/session/approval/configuration files, alternate streams, hardlinks, and
+linked paths. `ls` refuses linked children rather than following them.
+
+Learning files live in `.neura-learning/` with an ownership marker and Git exclusion.
+Writers create exclusive files, validate the opened handle and canonical parent
+before writing content, and check again afterward. These checks are application
+controls, not an OS sandbox against a hostile same-user process relocating paths.
+The parser likewise uses reviewed native/WASM dependencies; resource limits do
+not eliminate native parser vulnerability risk.
+
+## Commands and persistence
+
+- `/learn status`: current lesson, step, attempts, next action, and board path.
+- `/learn answer <text or SQL>`: submit to the active exercise.
+- `/learn answer-helped <text or SQL>`: record an assisted attempt.
+- `/learn hint`, `/learn reveal`: progressive help; assistance stays recorded.
+- `/learn explain`, `/learn deeper`, `/learn example`: ask the tutor to continue.
+- `/learn save`: explicitly save the current lesson, source text/notes, and attempts.
+- `/learn saved`: newest 100 snapshots; `/learn resume <filename>` restores one.
+- `/learn reset`: clear in-memory learning state without deleting saved work.
+
+Browser-generated commands include a lesson revision and reject stale boards.
+New sessions start without learning content until explicitly resumed. Saved
+images are omitted; reimport sources for visual inspection. Restored excerpts
+are historical and unverified, visibly labelled on the board. A new citation
+requires reimporting the original. The tutor retrieves full resumed lesson data
+through `learn_progress`, including diagrams and SQL tables.
+
+## Limits and deliberate boundaries
+
+- Node.js 24.10+ is required. Runtime dependencies have a separate exact lockfile;
+  install with `npm ci --prefix agent/neura --ignore-scripts` for development.
+- At most 12 materials per learning session, 25 MiB and 100 pages/slides per file.
+  OCR is offline English. Full PPTX layout, SmartArt, charts, and legacy PPT require
+  PDF/PPTX export as documented in [LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md).
+- Lessons contain 3-5 bullets and small diagrams (2-6 nodes), with text alternatives
+  and horizontal diagram scrolling on narrow screens. No arbitrary model HTML/JS.
+- Short answers with an answer key use exact normalized matching; open-ended work
+  has no automatic grade. SQL grading includes column names and duplicate rows,
+  ignores ordering, and does not grade truncated output. No mastery score is inferred.
+- Browser progress is local until handed to Neura. This is a self-study workshop,
+  not an exam system: browser source contains the worked answers.
 
 ## Delivery and verification
 
@@ -78,6 +127,30 @@ stays preview-only, and the logo-only launch remains unchanged.
 - Required checks: `node scripts/verify-harness.mjs`, `node scripts/check-docs.mjs`,
   `git diff --check`, TypeScript, and new Learn-focused suites.
 - Update this reference with delivered behavior and precise limitations after checks.
+
+## Delivery evidence
+
+Local verification passed on 2026-09-07: TypeScript, all 17 harness extensions,
+documentation/whitespace, 43 material assertions, 24 storage checks, 60 integrated
+assertions, workshop evaluator tests, and Learn/Plan desktop/mobile browser scans.
+Both dependency graphs reported zero known vulnerabilities; all 31 installed
+Learn runtime packages had verified registry signatures (13 attestations).
+Independent review findings were fixed and rechecked. CI status remains the PR's
+source of truth; this local evidence does not claim a live installation or release.
+
+- `verify-harness.mjs`: real Pi loader, all 17 extensions, mode/provider boundaries,
+  private reads/ADS/hardlinks, background hooks, restore, and existing-mode regressions.
+- `verify-learn-materials.mjs`: real synthetic PDF/PPTX/OCR and malformed-input tests.
+- `verify-learn-workshop.mjs`: diagram validation, escaping, exercise grading, SQL
+  denial/resource limits, and numeric edge cases.
+- `verify-learn-storage.mjs`: real filesystem link/open interleavings, no content
+  disclosure through tested swaps, and static hardlink/path denials.
+- `verify-learn.mjs`: actual tools from PDF/PPTX import through cited lesson, attempt,
+  SQL, explicit save/resume, forged/stale answers, and saved-input limits.
+- `verify-learn-browser.mjs`: desktop/mobile Edge, keyboard interactions, functional
+  controls, CSP and no-network assertions, and axe accessibility scans.
+- Independent reviews cross-check components authored by other agents. Valid
+  findings receive fixes and regression coverage before the integrated PR.
 
 ## Inspiration
 

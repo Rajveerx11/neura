@@ -36,10 +36,15 @@ jobs:
       - name: Install locked development dependencies
         run: npm ci --ignore-scripts
 
+      - name: Install locked learning document runtime
+        run: npm ci --prefix agent/neura --ignore-scripts
+
       - name: Audit dependency vulnerabilities and registry signatures
         run: |
           npm audit --audit-level=high
           npm audit signatures
+          npm audit --prefix agent/neura --audit-level=high
+          npm audit signatures --prefix agent/neura
 
       - name: Install verified Pi version
         run: npm install --global @earendil-works/pi-coding-agent@0.84.4
@@ -52,6 +57,16 @@ jobs:
 
       - name: Verify extensions
         run: node scripts\verify-harness.mjs
+
+      - name: Verify Learn documents, exercises, storage, and end-to-end flow
+        run: |
+          node scripts/verify-learn-materials.mjs
+          node scripts/verify-learn-workshop.mjs
+          node scripts/verify-learn-storage.mjs
+          node scripts/verify-learn.mjs
+
+      - name: Verify Learn workshop in browser
+        run: node scripts/verify-learn-browser.mjs
 
       - name: Verify generated plan accessibility
         shell: pwsh

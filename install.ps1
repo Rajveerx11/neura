@@ -63,6 +63,11 @@ if ($Check) {
     $missing = @()
     $drift = @()
     $credentialWarnings = @()
+    if (-not (Test-Command "node")) {
+        $missing += "Node.js 24.10 or newer"
+    } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]'24.10.0') {
+        $drift += "Node.js 24.10 or newer is required for the Learn SQL lab"
+    }
     foreach ($cmd in @("pi", "git", "uvx")) {
         if (-not (Test-Command $cmd)) { $missing += $cmd }
     }
@@ -89,6 +94,13 @@ if ($Check) {
         if (Test-Path (Join-Path "$agent\extensions" $name)) {
             $drift += "$name is retired but remains installed"
         }
+    }
+    $learnLock = Join-Path "$agent\neura" "package-lock.json"
+    $learnReceipt = Join-Path "$agent\neura" ".learn-runtime-lock"
+    if (-not (Test-Path -LiteralPath $learnLock) -or -not (Test-Path -LiteralPath "$agent\neura\node_modules\.package-lock.json") -or -not (Test-Path -LiteralPath $learnReceipt)) {
+        $drift += "Learn document runtime dependencies missing"
+    } elseif ((Get-Content -LiteralPath $learnReceipt -Raw).Trim() -ne (Get-FileHash -LiteralPath $learnLock -Algorithm SHA256).Hash) {
+        $drift += "Learn document runtime lock changed; reinstall dependencies"
     }
     foreach ($pair in @(
         @("$repo\agent\mcp.json", "$agent\mcp.json"),
@@ -170,6 +182,10 @@ if ($piVersion -ne $requiredPiVersion) {
     throw "Pi $piVersion is installed; Neura requires $requiredPiVersion. Run: npm install -g @earendil-works/pi-coding-agent@$requiredPiVersion"
 }
 
+if (-not (Test-Command "npm")) { throw "npm is required to install the Learn document runtime." }
+if (-not (Test-Command "node")) { throw "Node.js 24.10 or newer is required for Learn Mode." }
+$learnNodeVersion = (& node --version).Trim().TrimStart('v')
+if ([version]$learnNodeVersion -lt [version]'24.10.0') { throw "Node.js 24.10 or newer is required for the contained Learn SQL lab." }
 New-Item -ItemType Directory -Force "$agent\extensions", "$agent\themes", "$agent\neura", $bin | Out-Null
 foreach ($name in $retiredExtensions) {
     $retiredPath = Join-Path "$agent\extensions" $name
@@ -177,7 +193,14 @@ foreach ($name in $retiredExtensions) {
 }
 Copy-Item "$repo\agent\extensions\*" "$agent\extensions\" -Force
 Copy-Item "$repo\agent\themes\*" "$agent\themes\" -Force
-Copy-Item "$repo\agent\neura\*" "$agent\neura\" -Force
+Get-ChildItem -LiteralPath "$repo\agent\neura" -File | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination "$agent\neura\" -Force
+}
+# Install only the reviewed, locked document runtime. Never copy development node_modules.
+& npm.cmd ci --prefix "$agent\neura" --ignore-scripts --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw "Learn document runtime installation failed. Re-run the installer after fixing npm." }
+$learnLockHash = (Get-FileHash -LiteralPath "$agent\neura\package-lock.json" -Algorithm SHA256).Hash
+[System.IO.File]::WriteAllText((Join-Path "$agent\neura" ".learn-runtime-lock"), $learnLockHash)
 Copy-Item "$repo\launcher\neura.cmd" "$bin\" -Force
 Copy-Item "$repo\agent\mcp.json" "$agent\" -Force  # no secrets; tokens flow via MY_PI_MCP_ENV_ALLOWLIST
 
