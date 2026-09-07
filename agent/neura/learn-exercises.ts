@@ -98,7 +98,10 @@ process.stdin.on('end', () => {
     const rows=[]; let truncated=false;
     for(const row of statement.iterate()) {
       if(rows.length===200) { truncated=true; break; }
-      for(const cell of Object.values(row)) if(typeof cell==='string' && cell.length>1000 || cell instanceof Uint8Array) throw new Error('Result cells must be text up to 1000 characters, numbers or null.');
+      for(const cell of Object.values(row)) {
+        if(typeof cell==='number' && (!Number.isFinite(cell) || Math.abs(cell)>Number.MAX_SAFE_INTEGER)) throw new Error('Numeric results must be finite and within the safe number range.');
+        if(typeof cell==='string' && cell.length>1000 || cell instanceof Uint8Array) throw new Error('Result cells must be text up to 1000 characters, numbers or null.');
+      }
       rows.push(row);
       if(JSON.stringify(rows).length>200000) throw new Error('Result exceeds the lab size limit.');
     }

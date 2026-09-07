@@ -12,6 +12,10 @@ export type LearnLesson = {
   id: string; title: string; goal: string; steps: string[]; currentStep: number;
   bullets: string[]; example: string; diagram: LearnDiagram; references: LearnReference[]; exercise: LearnExercise;
 };
+export function learnLessonRevision(lesson: LearnLesson): string {
+  assertLearnLesson(lesson);
+  return createHash("sha256").update(JSON.stringify(lesson)).digest("hex");
+}
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 export function assertLearnLesson(value: unknown): asserts value is LearnLesson {
   if (!isRecord(value)) throw new Error("Lesson must be an object.");
@@ -93,6 +97,7 @@ const CSS = `
 const SCRIPT = String.raw`(() => {
 'use strict';
 const lesson=JSON.parse(document.getElementById('lesson-data').textContent);
+const revision=document.documentElement.dataset.lessonRevision;
 const exercise=lesson.exercise;
 const byId=id=>document.getElementById(id);
 const feedback=byId('feedback');
@@ -104,7 +109,7 @@ function handoff(command){
   byId('handoff-command').focus(); byId('handoff-command').select();
   byId('handoff-status').textContent='Command selected. Copy it and paste into Neura. This board does not save progress.';
 }
-function answerCommand(answer){return '/learn '+(revealed||hintIndex?'answer-helped ':'answer ')+answer;}
+function answerCommand(answer){return '/learn '+(revealed||hintIndex?'answer-helped-for ':'answer-for ')+revision+' '+answer;}
 function currentAnswer(){
   if(exercise.kind==='choice'){const selected=document.querySelector('input[name="answer"]:checked');return selected?selected.value:'';}
   return byId('answer').value.trim();
@@ -116,7 +121,7 @@ byId('reveal').addEventListener('click',()=>{revealed=true;byId('solution').hidd
 document.querySelectorAll('[data-focus]').forEach(button=>button.addEventListener('click',()=>{const id=button.dataset.focus;document.querySelectorAll('[data-focus]').forEach(other=>other.setAttribute('aria-pressed',String(other===button)));document.querySelectorAll('[data-node]').forEach(node=>node.classList.toggle('focused',node.dataset.node===id));document.querySelectorAll('.diagram-edge').forEach(edge=>edge.classList.toggle('active',edge.dataset.from===id||edge.dataset.to===id));const node=lesson.diagram.nodes.find(node=>node.id===id);byId('focus-description').textContent=node.detail||node.label;document.querySelector('[data-node="'+id+'"]').scrollIntoView({block:'nearest',inline:'center'});}));
 byId('exercise-form').addEventListener('submit',event=>{event.preventDefault();const answer=currentAnswer();if(!answer){feedback.textContent='Enter an answer first.';return;}if(exercise.kind==='sql'){feedback.textContent='SQL runs in Neura’s restricted lab. Paste the selected command there to run and record this attempt.';handoff(answerCommand(answer));return;}if(exercise.kind==='short'&&!exercise.acceptedAnswers.length){feedback.textContent='Open-ended exercise. Send your reasoning to Neura for tutor feedback; this board does not grade it.';return;}const correct=exercise.kind==='choice'?Number(answer)-1===exercise.answer:exercise.acceptedAnswers.some(value=>normalize(value)===normalize(answer));feedback.textContent=(correct?'Matches the expected answer. '+exercise.explanation:exercise.kind==='short'?'No exact match. Try a hint, or ask your tutor to review different wording.':'That choice does not fit yet. Compare the alternatives or try a hint.')+(revealed?' Answer was revealed; this is practice, not mastery.':'')+' Local feedback only. Send your attempt to Neura to record it.';});
 byId('record').addEventListener('click',()=>{const answer=currentAnswer();if(!answer){feedback.textContent='Enter an answer first.';return;}handoff(answerCommand(answer));});
-document.querySelectorAll('[data-command]').forEach(button=>button.addEventListener('click',()=>handoff('/learn '+button.dataset.command)));
+document.querySelectorAll('[data-command]').forEach(button=>button.addEventListener('click',()=>handoff('/learn '+button.dataset.command+'-for '+revision)));
 byId('copy-command').addEventListener('click',async()=>{const field=byId('handoff-command');try{await navigator.clipboard.writeText(field.value);byId('handoff-status').textContent='Copied. Paste into Neura.';}catch{field.focus();field.select();byId('handoff-status').textContent='Clipboard unavailable. Command selected; copy it manually.';}});
 })();`;
 
@@ -124,12 +129,13 @@ export function renderLearnHtml(lesson: LearnLesson, options: { historical?: boo
   assertLearnLesson(lesson);
   const exercise = lesson.exercise;
   const scriptHash = createHash("sha256").update(SCRIPT).digest("base64");
+  const revision = learnLessonRevision(lesson);
   const styleHash = createHash("sha256").update(CSS).digest("base64");
   const json = JSON.stringify(lesson).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
   const historicalNotice = options.historical ? '<p role="note"><strong>Saved snapshot — source excerpts have not been reverified.</strong> Reimport originals before relying on current citations.</p>' : "";
   const answer = exercise.kind === "choice" ? `<fieldset><legend>Choose one answer</legend>${exercise.options.map((option, index) => `<label class="option"><input type="radio" name="answer" value="${index + 1}"/><span>${escapeHtml(option)}</span></label>`).join("")}</fieldset>` : `<label for="answer">${exercise.kind === "sql" ? "Your SELECT query" : "Your answer"}</label><textarea id="answer" maxlength="8000" spellcheck="false" placeholder="${exercise.kind === "sql" ? "SELECT ..." : "Try it in your own words"}"></textarea>`;
   const tables = exercise.kind === "sql" ? exercise.tables.map((table) => `<div class="table-scroll" tabindex="0" role="region" aria-label="${escapeHtml(table.name)} sample data"><table><caption>${escapeHtml(table.name)} · ${table.rows.length} sample rows</caption><thead><tr>${table.columns.map((column) => `<th scope="col">${escapeHtml(column.name)} <small>${column.type}</small></th>`).join("")}</tr></thead><tbody>${table.rows.map((row) => `<tr>${row.map((cell) => `<td>${cell === null ? "NULL" : escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`).join("") : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${scriptHash}'; style-src 'sha256-${styleHash}'; img-src 'none'; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"><title>${escapeHtml(lesson.title)} · Neura Learn</title><style>${CSS}</style></head><body>
+  return `<!doctype html><html lang="en" data-lesson-revision="${revision}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${scriptHash}'; style-src 'sha256-${styleHash}'; img-src 'none'; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"><title>${escapeHtml(lesson.title)} · Neura Learn</title><style>${CSS}</style></head><body>
   <a class="skip" href="#concept">Skip to lesson</a><header><div class="brand"><span>Neura / Learn</span><span>Visual workshop</span></div><h1>${escapeHtml(lesson.title)}</h1><p>${escapeHtml(lesson.goal)}</p>${historicalNotice}</header><main><nav aria-label="Lesson sections"><a href="#concept">Understand</a><a href="#practice">Practice</a><a href="#sources">References</a></nav><div class="layout"><div class="content">
   <section class="card" id="concept" aria-labelledby="concept-title"><div class="eyebrow">Concept ${lesson.currentStep + 1} of ${lesson.steps.length}</div><h2 id="concept-title">${escapeHtml(lesson.diagram.title)}</h2>${renderDiagram(lesson.diagram)}<ul class="bullets">${lesson.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul><div class="actions"><button type="button" class="primary" id="try">Let me try</button><button type="button" id="show-example">Show example</button><button type="button" data-command="explain">Explain differently in Neura</button><button type="button" data-command="deeper">Go deeper in Neura</button></div><details id="example"><summary>Worked example · tutor-created</summary><pre>${escapeHtml(lesson.example)}</pre></details></section>
   <section class="card" id="practice" aria-labelledby="practice-title"><div class="eyebrow">Put it to work</div><h2 id="practice-title">${escapeHtml(exercise.prompt)}</h2>${tables}<p class="muted">${exercise.kind === "sql" ? "Read-only, disposable SQL lab. Enter a query here, then run it in Neura. No browser SQL execution." : exercise.kind === "short" ? "Short answers use exact matching when an answer key exists. Open-ended exercises go to your tutor for review." : "Choose an answer, inspect the feedback, then explain why it works."}</p><form id="exercise-form">${answer}<div class="actions"><button class="primary" type="submit">${exercise.kind === "sql" ? "Prepare SQL for Neura" : "Check answer"}</button><button type="button" id="hint">Give a hint</button><button type="button" id="reveal">Reveal answer</button></div></form><ol id="hints" aria-live="polite"></ol><p id="feedback" role="status">Your attempt stays in this browser until you send it to Neura.</p><div id="solution" hidden><h3>Worked answer</h3><pre id="solution-text"></pre></div><button type="button" id="record">Send attempt to Neura</button><p class="muted">Hint and reveal use is included in the command when you send this attempt. A revealed answer never proves mastery.</p></section>

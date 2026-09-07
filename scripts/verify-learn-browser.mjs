@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
-import { renderLearnHtml } from "../agent/neura/learn-renderer.ts";
+import { renderLearnHtml, learnLessonRevision } from "../agent/neura/learn-renderer.ts";
 import { workshopFixture, sqlExercise } from "./learn-workshop-fixture.mjs";
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -37,14 +37,14 @@ try {
     await page.getByRole('button', { name: 'Check answer', exact: true }).click();
     assert.match(await page.locator('#feedback').innerText(), /Matches/);
     await page.getByRole('button', { name: 'Send attempt to Neura', exact: true }).click();
-    assert.equal(await page.locator('#handoff-command').inputValue(), '/learn answer-helped 1');
+    assert.equal(await page.locator('#handoff-command').inputValue(), `/learn answer-helped-for ${learnLessonRevision(fixture)} 1`);
     await page.getByRole('button', { name: 'Reveal answer', exact: true }).click();
     assert.equal(await page.locator('#solution').isVisible(), true);
     assert.match(await page.locator('#feedback').innerText(), /revealed/);
     await page.getByRole('button', { name: 'Show example', exact: true }).click();
     assert.equal(await page.locator('#example').getAttribute('open'), '');
     await page.getByRole('button', { name: 'Go deeper in Neura', exact: true }).click();
-    assert.equal(await page.locator('#handoff-command').inputValue(), '/learn deeper');
+    assert.equal(await page.locator('#handoff-command').inputValue(), `/learn deeper-for ${learnLessonRevision(fixture)}`);
     await page.getByRole('button', { name: 'Copy command', exact: true }).click();
     assert.match(await page.locator('#handoff-status').innerText(), /Copied|selected/);
     const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, pwned: globalThis.pwned }));
@@ -72,7 +72,7 @@ try {
       await page.locator('#answer').fill(kind === 'flow' ? 'FOREIGN  KEY' : sqlExercise.solution);
       await page.locator('#exercise-form button[type=submit]').click();
       if (kind === 'flow') assert.match(await page.locator('#feedback').innerText(), /Matches/);
-      else assert.equal(await page.locator('#handoff-command').inputValue(), '/learn answer ' + sqlExercise.solution);
+      else assert.equal(await page.locator('#handoff-command').inputValue(), `/learn answer-for ${learnLessonRevision(next)} ${sqlExercise.solution}`);
       await page.screenshot({ path: join(output, `${kind}-${width}.png`), fullPage: true });
     }
     const subjective = structuredClone(workshopFixture);

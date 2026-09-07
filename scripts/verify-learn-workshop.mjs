@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { assertLearnExercise, evaluateLearnExercise } from "../agent/neura/learn-exercises.ts";
-import { assertLearnLesson, renderLearnHtml } from "../agent/neura/learn-renderer.ts";
+import { assertLearnLesson, renderLearnHtml, learnLessonRevision } from "../agent/neura/learn-renderer.ts";
 import { workshopFixture, sqlExercise } from "./learn-workshop-fixture.mjs";
 
 const clone = (value) => structuredClone(value);
 assertLearnLesson(workshopFixture);
+assert.match(learnLessonRevision(workshopFixture), /^[a-f0-9]{64}$/);
+assert.equal(learnLessonRevision(workshopFixture), learnLessonRevision(clone(workshopFixture)));
+assert.notEqual(learnLessonRevision(workshopFixture), learnLessonRevision({ ...workshopFixture, example: "A different worked example." }));
 assert.match(renderLearnHtml(workshopFixture, { historical: true }), /Saved snapshot — source excerpts have not been reverified/);
 assert.doesNotMatch(renderLearnHtml(workshopFixture), /Saved snapshot — source excerpts have not been reverified/);
 for (const kind of ["flow", "er", "sequence"]) {
@@ -44,6 +47,14 @@ assert.equal(good.correct, true, good.feedback);
 assert.equal(good.rows.length, 3);
 const count = await evaluateLearnExercise({ ...sqlExercise, expectedRows: [{ total: 3 }] }, 'SELECT count(*) AS total FROM bookings');
 assert.equal(count.correct, true, count.feedback);
+const nullExpected = { ...sqlExercise, expectedRows: [{ value: null }] };
+assert.equal((await evaluateLearnExercise(nullExpected, 'SELECT NULL AS value')).correct, true);
+for (const expression of ['1e999', '-1e999', '1e20', '-1e20']) {
+  const numeric = await evaluateLearnExercise(nullExpected, `SELECT ${expression} AS value`);
+  assert.equal(numeric.correct, false, 'Invalid SQL numbers must not serialize to a matching null');
+  assert.equal(numeric.rows, undefined);
+  assert.match(numeric.feedback, /finite.*safe/);
+}
 assert.equal((await evaluateLearnExercise(sqlExercise, 'SELECT name FROM customers')).correct, false);
 assert.equal((await evaluateLearnExercise({ ...sqlExercise, expectedRows: undefined }, 'SELECT name FROM customers')).correct, null);
 assert.equal((await evaluateLearnExercise(sqlExercise, `${sqlExercise.solution} ORDER BY name DESC`)).correct, true);
