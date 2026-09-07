@@ -83,6 +83,10 @@ memory/session/approval/configuration files, alternate streams, hardlinks, and
 linked paths. `ls` refuses linked children rather than following them.
 
 Learning files live in `.neura-learning/` with an ownership marker and Git exclusion.
+First use prepares markers in a unique sibling directory before atomic publication,
+so concurrent saves see a complete directory and interrupted initialization can retry.
+Unpublished initialization directories contain metadata only and may remain after
+interruption or a lost publication race; Neura does not recursively clean these paths.
 Writers create exclusive files, validate the opened handle and canonical parent
 before writing content, and check again afterward. These checks are application
 controls, not an OS sandbox against a hostile same-user process relocating paths.
@@ -106,6 +110,8 @@ images are omitted; reimport sources for visual inspection. Restored excerpts
 are historical and unverified, visibly labelled on the board. A new citation
 requires reimporting the original. The tutor retrieves full resumed lesson data
 through `learn_progress`, including diagrams and SQL tables.
+Attempt counts and current progress include only the active lesson. Attempts with
+other lesson IDs remain separately labelled, unverified history, including after resume.
 
 ## Limits and deliberate boundaries
 
@@ -141,7 +147,7 @@ through `learn_progress`, including diagrams and SQL tables.
 ## Delivery evidence
 
 Local verification passed on 2026-09-07: TypeScript, all 17 harness extensions,
-documentation/whitespace, 43 material assertions, 26 storage checks, 65 integrated
+documentation/whitespace, 43 material assertions, 44 storage checks, 71 integrated
 assertions, workshop evaluator tests, and Learn/Plan desktop/mobile browser scans.
 Both dependency graphs reported zero known vulnerabilities; all 31 installed
 Learn runtime packages had verified registry signatures (13 attestations).

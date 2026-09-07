@@ -32,7 +32,7 @@ function harness() {
     notify: (message) => notifications.push(message), setStatus: (key, value) => statuses.set(key, value),
   } };
   learn(pi);
-  const fire = async (name, event = {}) => { for (const handler of events.get(name) ?? []) await handler(event, ctx); };
+  const fire = async (name, event = {}) => { let result; for (const handler of events.get(name) ?? []) result = await handler(event, ctx); return result; };
   const call = async (name, input, signal = new AbortController().signal) => tools.get(name).execute("test-call", input, signal, undefined, ctx);
   const command = async (text) => commands.get("learn").handler(text, ctx);
   return { tools, commands, messages, notifications, statuses, ctx, fire, call, command };
@@ -138,6 +138,22 @@ try {
   const malformedAttemptPath = await writeLearnArtifact(workspace, "progress", JSON.stringify(malformedAttempt));
   await app.command(`resume ${path.basename(malformedAttemptPath)}`);
   check(/Invalid saved attempt/.test(app.notifications.at(-1)), "Oversized snapshot date rejected before prompt context");
+  const mixedHistory = structuredClone(snapshot); mixedHistory.attempts[0].lessonId = "another-lesson";
+  const mixedPath = await writeLearnArtifact(workspace, "progress", JSON.stringify(mixedHistory));
+  await app.command(`resume ${path.basename(mixedPath)}`);
+  const mixedStatus = JSON.parse((await app.call("learn_progress", { action: "status" })).content[0].text);
+  check(mixedStatus.attempts.length === 1 && mixedStatus.attempts[0].lessonId === lesson.id, "Restored current progress excludes another lesson's attempts");
+  check(mixedStatus.otherLessonHistory.attempts[0].lessonId === "another-lesson" && /unverified/.test(mixedStatus.otherLessonHistory.notice), "Other lesson attempts remain explicitly separate unverified history");
+  check(/1 attempts/.test(app.statuses.get("neura-learn")), "Terminal count excludes other lesson attempts");
+  await app.command("status");
+  check(/Practice attempts: 1; current lesson only/.test(app.messages.at(-1)), "Status command excludes other lesson attempts");
+  const mixedPrompt = await app.fire("before_agent_start", { systemPrompt: "base" });
+  check(mixedPrompt.systemPrompt.includes('"practiceAttempts":1'), "Tutor brief counts only active lesson attempts");
+  const noLessonHistory = structuredClone(mixedHistory); delete noLessonHistory.lesson;
+  const noLessonPath = await writeLearnArtifact(workspace, "progress", JSON.stringify(noLessonHistory));
+  await app.command(`resume ${path.basename(noLessonPath)}`);
+  const noLessonStatus = JSON.parse((await app.call("learn_progress", { action: "status" })).content[0].text);
+  check(noLessonStatus.attempts.length === 0 && noLessonStatus.otherLessonHistory.attempts.length === 2, "Attempts without an active lesson remain separate history");
   const manyWarnings = structuredClone(snapshot); manyWarnings.materials[0].warnings = Array.from({ length: 33 }, (_, index) => `Page ${index + 1} preview unavailable.`);
   const warningPath = await writeLearnArtifact(workspace, "progress", JSON.stringify(manyWarnings));
   await app.command(`resume ${path.basename(warningPath)}`);

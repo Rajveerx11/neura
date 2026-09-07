@@ -68,12 +68,40 @@ async function storage(workspace: string, create: boolean): Promise<string> {
   const root = await realDirectory(path.resolve(workspace));
   const directory = path.join(root, DIRECTORY);
   if (create) {
+    let exists = true;
     try {
-      await fs.mkdir(directory, { mode: 0o700 });
-      await writeExclusive(directory, ".gitignore", "*\n");
-      await writeExclusive(directory, "owner", MARKER);
+      await fs.lstat(directory);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      exists = false;
+    }
+    if (!exists) {
+      // Publish only a complete directory. Other first writers never observe
+      // half-written ownership markers, and an interrupted attempt cannot poison
+      // the final path. Unpublished stages contain metadata only; leave them
+      // untouched rather than recursively deleting through a replaceable path.
+      const staging = path.join(root, `${DIRECTORY}-init-${randomUUID()}`);
+      await realDirectory(root);
+      await fs.mkdir(staging, { mode: 0o700 });
+      await writeExclusive(staging, ".gitignore", "*\n");
+      await writeExclusive(staging, "owner", MARKER);
+      await realDirectory(root);
+      await realDirectory(staging);
+      try {
+        // Preserve any target created meanwhile, including unowned empty dirs
+        // that POSIX rename would otherwise replace. Cooperating publishers
+        // always publish a nonempty directory, so only one rename can win.
+        await fs.lstat(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        try { await fs.rename(staging, directory); }
+        catch (renameError) {
+          if (!["EEXIST", "ENOTEMPTY", "EPERM", "EACCES"].includes((renameError as NodeJS.ErrnoException).code ?? "")) throw renameError;
+          // If a concurrent writer won, normal validation below checks its
+          // directory and both markers. Otherwise retain the real rename error.
+          try { await fs.lstat(directory); } catch { throw renameError; }
+        }
+      }
     }
   }
   const canonical = await realDirectory(directory);
