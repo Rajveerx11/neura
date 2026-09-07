@@ -53,7 +53,7 @@ const appendedEntries = [];
 const sentUserMessages = [];
 loaded.runtime.getActiveTools = () => [...state.activeTools];
 loaded.runtime.setActiveTools = (names) => { state.activeTools = [...names]; };
-loaded.runtime.getAllTools = () => [...new Set([...state.activeTools, ...availableToolNames])]
+loaded.runtime.getAllTools = () => [...new Set([...state.activeTools, ...availableToolNames, ...registeredToolNames])]
   .map((name) => ({ name }));
 loaded.runtime.appendEntry = (customType, data) => { appendedEntries.push({ customType, data }); };
 loaded.runtime.sendUserMessage = (content, options) => { sentUserMessages.push({ content, options }); };
