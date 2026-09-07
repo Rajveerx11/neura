@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible Neura defect without sensitive data.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Never include credentials, private code,
+        memory, transcripts, approval records, provider payloads, or exploit details.
+        Security reports belong in a private security advisory.
+  - type: input
+    id: version
+    attributes:
+      label: Neura version, source commit, and Pi version
+      placeholder: "Neura 2.5.1; commit from git rev-parse --short HEAD; Pi 0.84.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Plan
+        - Work (default)
+        - YOLO
+        - Human Away Preview
+        - Learn
+        - Startup or mode-independent
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, shell, Node version, and relevant optional tooling.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Exact redacted steps using a disposable repository when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted verification output
+      description: Include commands run and shortest relevant output. Remove sensitive data.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I searched existing issues and current status.
+          required: true
+        - label: This report contains no credentials, private data, or exploit details.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

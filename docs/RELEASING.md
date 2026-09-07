@@ -12,7 +12,20 @@ Neura uses semantic versions:
 `VERSION` is the machine-readable source. Changelog and release-note filenames
 must match it.
 
-## Private stable-release gate
+Latest release remains `2.5.1`. Work, modular verification, and Learn are merged
+but unreleased. Prepare a new version and release note for their eventual
+release; do not retrofit their behavior into historical v2.5.1 notes.
+
+## Open-source publication gate
+
+Before first public release, complete every unchecked item in
+[OPEN_SOURCE.md](OPEN_SOURCE.md). Repository must remain private while
+credential-incident closure or public-default cleanup is incomplete.
+
+Public visibility and production readiness are independent. Public release notes
+must say `experimental` until production gate below passes.
+
+## Stable-release gate
 
 All items must pass:
 
@@ -20,18 +33,30 @@ All items must pass:
 - [ ] `node scripts\verify-harness.mjs` passes.
 - [ ] `node scripts\verify-sandbox.mjs` passes on the release workstation.
 - [ ] `npm run typecheck`, `npm audit --audit-level=high`, and
-      `npm audit signatures` pass from a clean lockfile install.
+      `npm audit signatures` pass from clean lockfile installs. Repeat both
+      audit commands with `--prefix agent/neura` for the Learn runtime graph.
+- [ ] Plan accessibility and `node scripts\tests\learn-browser.mjs` pass in real
+      Edge at narrow/desktop widths; the 17-suite harness includes nonbrowser Learn checks.
 - [ ] `node scripts\check-docs.mjs` passes.
-- [ ] Windows CI passes on the release commit.
+- [ ] Windows and Linux portable CI pass on the release commit. Contract tests
+      do not replace the Windows live WSL2/bubblewrap rehearsal.
 - [ ] `git diff --check` passes.
 - [ ] `powershell -File .\install.ps1 -Check` passes after an intentional live sync.
 - [ ] Pi and every runtime package are pinned and audited.
+- [ ] Learn's manifest, lockfile, worker, installed runtime, and lock receipt are
+      present; native-Windows first store creation and failure paths are exercised.
 - [ ] Approvals, redaction, and Gmail policy meet the gates in `STATUS.md`.
-- [ ] No credential, private memory, approval audit, session file, or local path secret is tracked.
+- [ ] No credential, private memory, approval audit, session file, personal
+      endpoint, or machine-specific path is tracked in public defaults.
 - [ ] `scripts/verify-secrets.ps1` passes against complete Git history.
 - [ ] Every entry in `docs/SECURITY_INCIDENTS.md` is closed with owner-confirmed
       revocation and documented scope.
 - [ ] Release notes state user-visible changes, limits, migration, verification, and rollback.
+- [ ] Selected open-source license is present and recognized by GitHub.
+- [ ] README, security, support, conduct, governance, issue forms, pull-request
+      template, CODEOWNERS, and package metadata are current.
+- [ ] GitHub description, topics, branch protection, private vulnerability
+      reporting, security alerts, and Actions permissions are reviewed.
 - [ ] Worktree is clean and local `main` matches `origin/main`.
 
 Human Away expansion also requires the separate sandbox and adversarial-replay
@@ -71,12 +96,18 @@ stable or describe preview boundaries as production-safe.
 
 ## Rollback
 
-1. Stop Neura and any active external automation.
+1. Stop every Neura process, approval writer, and active external automation.
 2. Check out the previous known-good tag in a separate worktree.
-3. Run its verifier.
-4. Install that tag with `install.ps1`.
+3. Install that tag's development/runtime graphs with scripts disabled and run
+   its documented verifier. Older tags may not contain a nested Learn graph.
+4. With owner authorization, install that tag with its `install.ps1`.
 5. Run `install.ps1 -Check`.
 6. Record the rollback reason in the next changelog entry.
 
 Do not rewrite shared history or delete the failed release tag. Publish a fixed
 version.
+
+Older approval writers may not honor the current cross-process lock. Do not
+repair or discard an invalid audit tail to make rollback pass. Saved Learn files
+and additive proof receipts can remain local; older code may ignore them. Do not
+delete private learning data as part of rollback. See [VERIFICATION.md](VERIFICATION.md).

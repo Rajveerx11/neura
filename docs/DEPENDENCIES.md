@@ -1,11 +1,26 @@
 # Dependency policy and review
 
-Last reviewed: 2026-09-03
+Pi/development source review: 2026-09-03. Learn runtime review: 2026-09-07.
+Documentation reconciled with merged source: 2026-09-07.
 
 Neura uses exact runtime and development pins. `package-lock.json` is the
 reproducible development graph. Pi-managed runtime extensions are pinned in
 `agent/settings.json`; `install.ps1` merges those exact pins into the live
 harness without replacing unrelated local packages or model choices.
+
+Learn's document runtime has a separate exact manifest and lockfile under
+`agent/neura/`. See [LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md) for six direct
+pins, licenses, reviewed entry points, native/WASM trust, and parser limits.
+Development setup needs both graphs:
+
+```powershell
+npm ci --ignore-scripts
+npm ci --prefix agent/neura --ignore-scripts
+```
+
+The installer provisions the nested graph with scripts disabled and records a
+lock receipt. It does not make installation atomic. Node 24.10+ is required for
+Learn's SQLite authorizer; CI exercises 24.16.0.
 
 ## Reviewed runtime surface
 
@@ -32,10 +47,11 @@ harness without replacing unrelated local packages or model choices.
 `26.2.0`. Installation uses `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
 already present on the Windows runner. axe-core has no consumer install hook and
-runs only against generated local Plan HTML. Browser contexts receive no
+runs only against generated local Plan and Learn HTML. Browser contexts receive no
 credentials or network capability. The exact-pinned official
 `actions/upload-artifact` commit `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`
-stores only generated Plan screenshots and structured results for seven days.
+stores generated Plan screenshots and structured results for seven days.
+Learn browser assertions also run in CI; the current artifact step is Plan-specific.
 
 The 2026-09-03 review found zero known npm vulnerabilities; all 251 audited
 packages had verified registry signatures and 52 had attestations.
@@ -44,8 +60,8 @@ Pi `0.83.0` was rejected for stable release because its locked `undici` and
 `brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`
 passed Neura's offline live-startup smoke test, loader harness, typecheck,
 dependency audit, signature audit, live drift check, and WSL2 sandbox replay.
-The source contract, development APIs, CI global install, and live runtime use
-the same exact version.
+That is historical evidence, not a fresh live-drift result. Current source,
+development APIs, and CI still pin `0.84.4`; verify live installations separately.
 
 ## Update policy
 
@@ -53,9 +69,14 @@ the same exact version.
 2. Review repository ownership, published files, dependency changes, and every
    lifecycle script before installation.
 3. Install with scripts disabled when package operation does not require them.
-4. Run `npm audit --audit-level=high` and `npm audit signatures`.
+4. Run `npm audit --audit-level=high` and `npm audit signatures` for the root
+   graph and again with `--prefix agent/neura` for Learn's graph.
 5. Run typecheck, harness verification, sandbox replay, docs validation, and the
    Windows live-drift check.
 6. Record behavior, migration, and rollback in the changelog and release notes.
 
 Never use `*`, `latest`, caret, or tilde ranges for Neura runtime packages.
+
+Mode availability narrows package capability: Learn and Human Away exclude
+subagent and MCP tools; Learn also excludes direct `web_fetch`, `grep`, and
+`find`. Merely installing an extension does not authorize it in every mode.

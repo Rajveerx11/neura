@@ -14,6 +14,8 @@ node_modules/
 .agents/
 
 # local generated state and temporary checkouts
+.omo/
+.worktrees/
 .proofofwork/
 .tmp-hermes-agent/
 /nul

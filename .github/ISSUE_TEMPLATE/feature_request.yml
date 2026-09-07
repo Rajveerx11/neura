@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose one scoped improvement with evidence and boundaries.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read current status and production roadmap first. Propose one observable
+        outcome, not a broad rewrite.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What repeated user or engineering problem needs solving?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior and completion test.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Security and compatibility impact
+      description: Note network, process, filesystem, credential, mode, install, and rollback effects.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Proposed verification
+      description: Positive, negative, integration, and documentation checks.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I searched existing issues and production roadmap.
+          required: true
+        - label: Proposal preserves preview and production-status labels unless their gates pass.
+          required: true

@@ -2,34 +2,40 @@
 
 ## Unreleased
 
-- Added native Learn Mode with visual flow/ER/sequence workshops, short teaching
-  bullets, PDF/PPTX references, offline English OCR, practical exercises, and
-  explicit local save/resume. Browser actions carry lesson revisions; SQL runs
-  only against disposable sample tables and validates worked answer keys.
-- Added Learn-specific tool/provider restrictions and closed background-hook,
-  inherited search configuration, private-path, and alternate-stream bypasses.
-  Learning writers validate exclusive file handles before writing content.
-- Added exact-pinned document runtime dependencies and Node.js 24.10 minimum,
-  installer prerequisites/drift checks, independent reviews, synthetic document
-  and storage tests, and desktop/mobile browser accessibility checks. Learn is
-  unreleased; full PowerPoint slide visuals require PDF export. See [LEARN_MODE.md](LEARN_MODE.md).
+- Made Work the default supervised mode, with contained workspace operations,
+  WSL2/bubblewrap command execution, explicit approval boundaries, and no host
+  fallback for unavailable Work proof. Closed #23.
+- Replaced the monolithic verifier with isolated suites, seeded adversarial cases,
+  content-bound worktree fingerprints, and full/quick proof receipts. `/ship`
+  remains verification only. Closed #27; strict typing remains a separate gate.
+- Merged Learn Mode in [PR #44](https://github.com/Rajveerx11/neura/pull/44):
+  short practical lessons, flow/ER/sequence diagrams, local PDF/PPTX references,
+  page previews and offline English OCR, choice/short/open-ended/SQL practice,
+  and explicit save/resume. Browser progress uses a revision-bound terminal
+  handoff; resumed sources are unverified until reimported.
+- Added a separately locked and reviewed Learn runtime, Node 24.10+ requirement,
+  bounded document workers, and controlled `.neura-learning/` storage. First store
+  creation requires native Windows. PPTX full layouts/charts require PDF export;
+  parser process limits are not OS security isolation.
+- Restricted host checkpoints, health, memory, skill scans, and October to YOLO;
+  held restored sessions in paused Work until older operations drained. Added
+  Learn private-read, storage-race, stale-answer, and existing-mode regressions.
+- Hardened approval writer locking, including bounded Windows `EPERM` contention
+  retries, without bypassing ownership or automatically repairing crash state.
+  PR #44 passed Windows/Linux CI and Greptile review on its final head.
+- Reconciled README and current architecture, security, setup, verification,
+  dependency, design, support, and release guidance with merged source. Added a
+  documentation index; preserved historical releases and local publication edits.
+- Current evidence is recorded in [STATUS.md](STATUS.md). Dated live-install and
+  dependency results below describe their original verification, not a new sync.
 
-- Split verification into independently runnable suites with isolated synthetic state
-  and repository-pinned Pi loading. Added seeded path/shell fuzzing, concurrent
-  approval writers, corruption/partial-write checks, and proof timeout/cancellation
-  tests. Worktree fingerprints now include untracked content and binary edits;
-  `/ship` records fresh full proof with current/stale quick and incremental evidence.
-  Approval writes use a bounded cross-process lock and retry short writes. Crash
-  locks and damaged audits fail closed; automatic recovery remains tracked in #33.
-
-- Added supervised WORK between Plan and YOLO and made it the new-session
-  default. Structured reads and patches remain canonically inside the workspace;
-  hardened native inspection avoids repeated prompts; `work_exec` runs tests,
-  builds, and local shell work inside the existing WSL2 bubblewrap boundary.
-  Provider payload filtering hides unknown tools. Protected, secret-bearing,
-  remote, destructive, and unclassified actions fail closed or require one
-  explicit interactive approval. Persisted YOLO still requires deliberate entry
-  and remains genuinely unsandboxed with no per-action approval.
+- Prepared repository documentation and GitHub community files for a future
+  public release: public-facing README, support and governance policies, code of
+  conduct, CODEOWNERS, structured issue forms, portable development guidance,
+  package/repository metadata, and an explicit open-source publication
+  checklist. Adopted Apache-2.0 with project NOTICE and SPDX package metadata.
+  Public visibility remains blocked on credential-incident closure,
+  public-default integration cleanup, and final history/content audit.
 - Added a complete-history secret scan to push and pull-request CI using the
   exact Gitleaks `8.30.1` Windows archive and its published SHA-256. Scanner
   output is fully redacted, the checkout includes every ref, and the dependency

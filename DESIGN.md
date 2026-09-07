@@ -12,7 +12,7 @@ bone text, and semantic colors used only for real outcomes.
 ## Product principles
 
 1. **Identity before activity.** Launch shows only the Neura wordmark. Working
-   state appears after the first task begins.
+   state appears after first task begins.
 2. **One active signal.** Copper identifies Neura, current focus, and the primary
    action. It is not decoration.
 3. **Detail on demand.** Health, memory, agents, model control, proof detail, and
@@ -36,7 +36,7 @@ bone text, and semantic colors used only for real outcomes.
 | Muted steel | `#a8a39b` | Supporting metadata |
 | Dim | `#7a828b` | Inactive and historical text; 5.03:1 on canvas |
 | Plan cyan | `#76b8c4` | Read-only boundary and code structure |
-| Information blue | `#86a7d7` | Links and informational state |
+| Information / Learn blue | `#86a7d7` | Links, informational state, and Learn mode |
 | Success | `#69c08a` | Verified outcomes only |
 | Warning | `#d3a64a` | Approval and degraded operation |
 | Error | `#df6b63` | Blocked and failed outcomes |
@@ -88,12 +88,13 @@ with changed scope, evidence, and one manual next action.
 
 ## Modes, motion, and decisions
 
-- Shift+Tab cycles Plan, YOLO, and Human Away Preview.
+- Shift+Tab cycles Plan, Work, YOLO, Human Away Preview, and Learn. Work is default.
 - Mode changes enforce policy first, then show a capability latch for workspace,
   reviewer, sensitive action, and remote action boundaries.
 - Motion settles within 360 ms. Latest transition wins. Reduced motion shows only
   the final frame.
-- Human Away is always amber and always says `PREVIEW` until OS sandboxing exists.
+- Human Away is always amber and always says `PREVIEW` until its transactional,
+  resource, and field-validation gates pass; WSL2 isolation already exists.
 - Approval is an agent action request: Neura, task, intent, exact action, evidence,
   boundary, fallback, and one-use grant scope. Denial has default focus.
 
@@ -106,12 +107,24 @@ with changed scope, evidence, and one manual next action.
   before primary meaning.
 - No `(widget truncated)`, wrapped footer labels, or hidden primary action.
 
+## Learn boards
+
+- Teach one concept with 3-5 bullets, a practical example, and one next action.
+- Use small flow, ER, or sequence diagrams with text alternatives. Keep diagrams
+  scrollable on narrow screens and controls usable by keyboard.
+- Separate source excerpts and page/slide citations from tutor examples.
+- Show hints, reveals, and assisted attempts honestly; reading is not mastery.
+- Browser progress stays local until the learner copies a revision-bound command
+  into Neura. Show stale-board rejection and unverified resumed sources clearly.
+- Generate standalone escaped HTML/SVG with a fixed CSP and no remote resources.
+  Verify actual behavior and axe results at 390 and 1280 pixels.
+
 ## Direction contract
 
 <!--
 THESIS: Neura launches with one unmistakable wordmark and no competing content.
 OWN-WORLD: Tungsten neutrals, burnt copper, bone text, flat one-cell rules.
-STORY: Rajveer sees Neura, then starts work in the composer.
+STORY: Operator sees Neura, then starts work in composer.
 FIRST VIEWPORT: The NEURA wordmark alone.
 FORM: Operate-mode terminal instrument; focused, responsive, and state-driven.
 -->

@@ -1,8 +1,30 @@
 {
   "name": "neura-harness",
   "version": "2.5.1",
+  "description": "Windows-first engineering-agent harness for Pi with explicit modes, policy guardrails, recovery, and verification.",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
+  "author": "Rajveerx11",
+  "homepage": "https://github.com/Rajveerx11/neura#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rajveerx11/neura.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rajveerx11/neura/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "coding-agent",
+    "developer-tools",
+    "pi",
+    "powershell",
+    "sandbox",
+    "typescript",
+    "windows",
+    "wsl2"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:accessibility": "node scripts/verify-plan-accessibility.mjs",

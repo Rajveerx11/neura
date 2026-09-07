@@ -2,16 +2,23 @@
 
 ## Supported version
 
-Only current `main` receives security fixes. `2.5.1` is a private stable
-release, not a general production or multi-user security boundary. Current
-`main` is also not approved for a production claim while the named P0 and
-security-critical P1 issues remain open.
+Only current `main` receives security fixes. Historical `2.5.1` was a private
+stable release for one operator; it is not a general production or multi-user
+security boundary. Current `main` is a public-release candidate, not an
+approved production release, while named P0 and security-critical P1 issues
+remain open.
 
 ## Report a vulnerability
 
-Contact the repository owner privately or use a private GitHub security advisory.
-Include affected version, exact boundary, safe reproduction, impact, and suggested
-fix. Never include a real credential or private user data.
+Use **Security > Report a vulnerability** in GitHub repository to open a private
+security advisory. If private reporting is unavailable, contact repository owner
+through GitHub without exploit details and request a private channel.
+
+Include affected version, exact boundary, safe reproduction, impact, and
+suggested fix. Never include a real credential or private user data. Maintainer
+will acknowledge when practical, validate scope, coordinate a fix, and publish a
+redacted advisory after affected users have a reasonable update window. No fixed
+response-time or embargo guarantee is offered.
 
 ## Secret handling
 
@@ -25,23 +32,11 @@ fix. Never include a real credential or private user data.
 
 ## Current security model
 
-- Learn exposes bounded reads/listing, web search, questions, and dedicated
-  material/lesson/exercise/progress tools. No arbitrary shell or generic writes.
-  Stock search tools are excluded because inherited host configuration can
-  redirect reads or execute preprocessors. Hidden/private paths, alternate streams,
-  links, and large generic reads are denied.
-- Learn SQL uses a fixed subprocess with an in-memory database, read-only authorizer,
-  cleared environment, resource limits, and no host file or extension operations.
-  It is a constrained SQL evaluator, not an arbitrary-code sandbox.
-- Document parsing uses reviewed native/WASM dependencies in a bounded subprocess;
-  it is not OS isolation from native parser vulnerabilities. Controlled learning
-  writers validate canonical parents and opened file identities before content
-  writes. Hostile concurrent same-user filesystem relocation remains outside the
-  application guarantee. Use trusted local workspaces. See [Learn dependency review](docs/LEARN_DEPENDENCIES.md).
-- Saved learning excerpts are historical, unverified data after resume. New lesson
-  citations require source reimport. Quoted-location validation does not prove a
-  claim's interpretation, and exercise feedback does not certify mastery.
-
+- Work is the default supervised mode. Structured reads/edits/writes stay within
+  the canonical workspace. `work_exec` uses network-disabled WSL2 bubblewrap;
+  protected, remote, destructive, and unknown actions encounter deterministic
+  policy and, where permitted, explicit interactive approval. Headless approval
+  requests fail closed. Generic shell access is restricted to read-only inspection.
 - Plan uses a fixed tool set and canonical workspace containment.
 - Plan Git inspection accepts only command-specific read options. Every Git call
   disables paging, optional locks, lazy fetching, configured filesystem monitors,
@@ -56,13 +51,18 @@ fix. Never include a real credential or private user data.
   for SSRF-safe enforcement.
 - Plan HTML uses structured input, escaping, CSP, safe URL checks, collision-safe
   creation, and session-owned revision hashes.
-- WORK is the new-session default. Structured filesystem tools use canonical,
-  junction-aware workspace containment. Native shell is limited to hardened
-  read-only inspection; tests, builds, and other local commands use WSL2
-  bubblewrap with only the workspace writable, a cleared host environment,
-  hidden Windows/WSL user paths, and no network namespace. Provider payloads
-  remove inactive and unknown tools. Broader actions fail closed or require one
-  explicit interactive approval; headless runs cannot approve them.
+- Learn permits bounded `read`, `ls`, `web_search`, `questionnaire`, and its four
+  learning tools. It denies generic writes/edits/shell, `grep`/`find`, MCP, Plan
+  publication, private/configuration paths, hidden files, ADS, and linked/hardlinked
+  inputs. Its writers use a marked local store and exclusive bounded files.
+- PDF/PPTX content is untrusted reference data. Learn checks captured bytes,
+  source identity, page/slide number, and quoted excerpts. It does not establish
+  that a tutor's interpretation is correct. Parser workers have deadlines and
+  heap limits but trust native/WASM code; they are not OS security sandboxes.
+- Learn SQL uses a disposable in-memory SQLite process, an authorizer, fixed
+  limits, and sample tables. No arbitrary host code, filesystem access, network,
+  `ATTACH`, or writes are allowed. Browser lessons use fixed CSP and escaped
+  HTML/SVG; worked answers are visible in their source, so this is not an exam system.
 - YOLO intentionally disables Neura application approvals and tool blocking. On
   native Windows it has no OS sandbox; tool access follows the process and
   signed-in user's permissions. Every interactive transition into YOLO requires
@@ -73,14 +73,25 @@ fix. Never include a real credential or private user data.
   environment, hidden Windows/WSL user paths, and an unshared network namespace.
 - One-use approval retries bind canonical target identity, target content/state,
   exact input, workspace state, `HEAD`, index state, and a 120-second expiry.
+- Approval writers lock across read/deduplication/append and flush completed
+  writes. Lock contention has a two-second deadline, including Windows `EPERM`.
+  Corrupt tails and crash locks fail closed; no automatic lock stealing or audit
+  repair occurs. This is not authenticated protection against a same-user attacker.
 - Action summaries, cockpit notices, approval text, reviewer dossiers, Gmail
   summaries, and sandbox output use one central redaction implementation.
-- Outside YOLO, Gmail permits only explicitly allowlisted reads without a prompt;
-  every other action confirms interactively or blocks headless.
+- When a mode exposes Gmail tools outside YOLO, only explicitly allowlisted reads
+  avoid a prompt; other actions confirm interactively or block headless. This
+  guardrail never expands the selected mode's tool allowlist.
 - Headmaster cannot widen deterministic policy.
-- Application policy contains Plan and WORK structured tools. WORK and Human Away
-  shell execution add OS isolation through WSL2 bubblewrap. YOLO bypasses both
-  application policy and sandboxing by design.
+- Work proof runs only in its network-disabled WSL sandbox with an already
+  provisioned runner; unavailable execution never falls back to the host. YOLO
+  retains host proof. `/ship` verifies and does not publish Git changes.
+- Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
+  Operation leases and paused session restoration prevent old work from crossing
+  into a restricted mode. Late proof results cannot earn a new session receipt.
+- Application policy is distinct from OS isolation. Work/Human Away command
+  execution adds bubblewrap; Plan/Learn path checks remain application controls.
+  YOLO intentionally bypasses Neura application policy.
 
 ## Production security gate
 
@@ -106,9 +117,14 @@ control, and tracked issue.
   external tools, and trigger destructive or remote side effects without a
   confirmation prompt. Misuse can cause data loss or account impact.
 - Plan uses application-level canonical containment rather than an OS sandbox.
-- WORK requires Windows, WSL2, and `bubblewrap` for tests, builds, and mutating
-  shell commands. If unavailable, `work_exec` fails closed; structured workspace
-  reads and patches remain available.
+- Plan and Work search paths still have confidentiality gaps; do not infer that
+  a workspace boundary prevents discovery of ignored or historical secrets.
+- Learn's first store initialization requires native Windows. Existing validated
+  stores work on POSIX, but first creation there fails before writing. Path/handle
+  revalidation does not isolate against a hostile same-user process moving paths.
+- Saved learning content is private local data, not encrypted or authenticated
+  evidence. Resumed excerpts are historical/unverified; new citations require
+  source reimport. Browser progress transfers only through explicit user action.
 - Human Away requires Windows, WSL2, and `bubblewrap`; tool execution fails closed
   when they are unavailable or a linked workspace entry is detected. It remains
   preview-labelled while field evidence accumulates.
@@ -119,15 +135,5 @@ control, and tracked issue.
 Full release gates are tracked in [docs/STATUS.md](docs/STATUS.md). Do not remove
 preview labels until those gates pass.
 
-## Verification failure boundaries
-
-Proof fingerprints read bounded file bytes and reject selected links, special files,
-conflicted indexes, and submodules. A failed snapshot, interrupted runner, malformed
-verdict, or worktree change during verification cannot produce a PASS receipt.
-Incremental reports under `.proofofwork/` are untrusted workspace evidence; `/ship`
-always runs full proof independently. Executable dependency containment remains #22.
-
-Approval writers serialize decisions and resolutions with a two-second lock wait,
-retry short writes, and flush completed appends. An orphaned lock or invalid audit
-fails closed. Do not delete a writer lock while another Neura process could own it.
-Transactional recovery, keyed tamper evidence, and remote binding remain #33.
+Detailed parser limits: [Learn runtime review](docs/LEARN_DEPENDENCIES.md).
+Proof and approval failure behavior: [Verification](docs/VERIFICATION.md).

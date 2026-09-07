@@ -1,17 +1,26 @@
 # Neura status
 
-Last release audit: 2026-09-03; Learn branch updated 2026-09-07
-Current source: `2.5.1` with unreleased Pi `0.84.4`, Work Mode, verification, and Learn Mode updates
-Live runtime: Pi `0.84.4`; reviewed source changes remain uninstalled and drift is expected
+Last documentation audit: 2026-09-07
+
+Latest release: `2.5.1`. Current merged source: `d3e77c6`, including Work,
+modular verification, and Learn Mode; these changes are unreleased. Required Pi:
+`0.84.4`; Node: `24.10+` (CI `24.16.0`).
+
+Live installation: not refreshed by the Learn delivery or this documentation
+audit. No new live-drift result is claimed. These docs describe merged source;
+older working checkouts and live installations can differ.
 
 ## Release decision
 
-**Private engineering use only. Neura is not production-ready.**
+**Public-release candidate. Neura is not production-ready.**
 
-The historical `v2.5.1` release remains usable for its documented personal,
-single-user scope. A fresh production-readiness audit found release blockers in
-unattended execution, executable dependency trust, installation
-reproducibility, and credential-incident closure. Human Away remains preview-only.
+This revision includes Apache-2.0, community policies, and package metadata.
+Repository visibility remains private pending the
+[publication checklist](OPEN_SOURCE.md). Historical `v2.5.1` release
+remains usable for its documented personal, single-user scope.
+Production-readiness audit still has blockers in unattended
+execution, executable dependency trust, installation reproducibility, and
+credential-incident closure. Human Away remains preview-only.
 
 The canonical hardening backlog is
 [GitHub issue #31](https://github.com/Rajveerx11/neura/issues/31). Detailed
@@ -22,24 +31,37 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Pi and live Neura | Needs sync | Pi `0.84.4` is installed; reviewed source changes including Learn remain uninstalled. |
-| Dependency graph | Ready | Lockfile audit reports zero known vulnerabilities; 249 packages have verified registry signatures and 50 have attestations. |
-| Core harness | Ready for covered behavior | Typecheck, 17-extension harness, and documentation checks cover the Learn branch. Live WSL2 sandbox replay evidence remains from the prior baseline. |
-| Learn Mode | Unreleased source feature | Visual workshops, PDF/PPTX references, offline English OCR, constrained SQL exercises, and optional progress. Dedicated document, storage, end-to-end, and browser suites supplement the now 17-extension harness. Full PPTX layout needs PDF export; parser subprocesses are not OS sandboxes. See [LEARN_MODE.md](LEARN_MODE.md). |
-| Default mode | Ready for covered behavior | New sessions default to supervised WORK. Structured reads and patches are canonically workspace-contained; tests/builds use WSL2 bubblewrap; protected, remote, destructive, and unknown actions stop or require explicit approval. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
+| Public release | Blocked | Credential revocation confirmation, public-default configuration cleanup, final history/content audit, and GitHub settings remain. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
+| Pi and live Neura | Source verified; live status unverified | Source and CI pin Pi `0.84.4`. A fresh owner-authorized install and drift check are separate from merge. |
+| Dependency graphs | Verified at Learn delivery | Both lockfile graphs reported zero known vulnerabilities on 2026-09-07; Learn runtime verified 31 registry signatures and 13 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
+| Core harness | Ready for covered behavior | PR #44 passed Windows harness and Linux portable CI, 17 isolated suites/17 extensions, typecheck, docs, and real Learn/Plan browser checks. This is not a fresh live WSL replay. |
+| Default mode | Implemented, unreleased | Work is default; execution uses network-disabled WSL2 bubblewrap, with no host fallback. [#23](https://github.com/Rajveerx11/neura/issues/23) is closed. |
+| Learn Mode | Implemented, unreleased | Practical lessons, diagrams, PDF/PPTX/OCR, bounded SQL, citations, and explicit save/resume. First store creation requires native Windows. Parser process limits are not OS isolation. See [LEARN_MODE.md](LEARN_MODE.md). |
 | Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
-| Automatic execution | Blocked | Proof and Git automation require pinned, contained execution. Track [#22](https://github.com/Rajveerx11/neura/issues/22). |
+| Automatic execution | Remaining dependency-trust gap | Work proof is isolated and YOLO proof uses the host. `/ship` only verifies; it does not publish Git changes. Executable provenance remains [#22](https://github.com/Rajveerx11/neura/issues/22). |
 | Installation | Blocked | Atomic activation, rollback, file hashes, and unknown-extension detection are missing. Track [#21](https://github.com/Rajveerx11/neura/issues/21). |
 | Credential incident | Blocked | Historical GitHub-token rotation must be verified and documented. Track [#36](https://github.com/Rajveerx11/neura/issues/36). |
 | Plan confidentiality | Major gap | Broad searches can discover ignored or historical secrets. Track [#35](https://github.com/Rajveerx11/neura/issues/35). |
-| Approvals | Major gap | Storage concurrency, tamper evidence, and remote endpoint binding need hardening. Track [#33](https://github.com/Rajveerx11/neura/issues/33). |
+| Approvals | Partially hardened | Cross-process locking, flushed appends, bounded Windows contention retries, and corruption/crash rejection are covered. Automatic recovery, authenticated tamper evidence, and stronger remote binding remain [#33](https://github.com/Rajveerx11/neura/issues/33). |
 | Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
 | Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
-| Type and test safety | Major gap | Strict TypeScript migration remains open. Independent suites use pinned Pi and cover seeded path/shell fuzzing, concurrent approval writers, interrupted writes, bounded proof execution, and worktree-bound receipts. Track [#26](https://github.com/Rajveerx11/neura/issues/26) and [#27](https://github.com/Rajveerx11/neura/issues/27). |
-| UX and accessibility | Ready for covered surfaces | YOLO transitions require confirmation and retain a danger label after launch. Generated plans use shared tokens, continuous navigation, semantic tables, visible focus, 44-pixel link targets, WCAG AA scans, and narrow/desktop browser snapshots. Track [#37](https://github.com/Rajveerx11/neura/issues/37). |
+| Type and test safety | Tests improved; strict typing open | Hermetic suites, seeded fuzzing, races, crash rejection, and content-bound receipts shipped; [#27](https://github.com/Rajveerx11/neura/issues/27) is closed. Configured typecheck passes; strict migration remains [#26](https://github.com/Rajveerx11/neura/issues/26). |
+| UX and accessibility | Ready for covered surfaces | YOLO requires confirmation and persistent danger treatment. Plan and Learn boards have narrow/desktop Edge, keyboard, and axe checks. [#37](https://github.com/Rajveerx11/neura/issues/37) is closed; covered screens do not prove universal accessibility. |
 | Health and operations | Major gap | Health checks and diagnostics can overstate readiness. Track [#39](https://github.com/Rajveerx11/neura/issues/39) and [#30](https://github.com/Rajveerx11/neura/issues/30). |
 
 ## Production claim gate
+
+Delivery reference: [PR #44](https://github.com/Rajveerx11/neura/pull/44), merged
+2026-09-07. Final reviewed head `c66c88c` passed
+[CI run 34101891018](https://github.com/Rajveerx11/neura/actions/runs/34101891018)
+and received Greptile 5/5 with no actionable findings. Review and CI establish
+covered source behavior, not a release or live-install guarantee.
+
+Documentation refresh validation on 2026-09-07: all 17 harness suites and configured
+TypeScript passed in an isolated checkout of `d3e77c6` with the updated docs.
+Documentation/link and whitespace checks passed. Browser, dependency-audit, and
+live-install evidence above remains the dated delivery evidence; those checks
+were not repeated for this documentation-only update.
 
 Neura may be called production-ready only when:
 
@@ -57,7 +79,7 @@ green basic harness do not override an unmet production gate.
 
 ## Preserved invariants
 
-- Source of truth remains `C:\Neura`; the live harness is generated.
+- Repository checkout remains source of truth; live harness is generated.
 - Plain Pi stays stock unless `NEURA` is set.
 - The logo-only launch remains.
 - Plan remains read-only except controlled plan publication.

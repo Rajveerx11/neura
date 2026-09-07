@@ -1,13 +1,30 @@
 # Learn Mode: visual, practical learning
 
-Status: implemented in source, unreleased and not installed in
-the live harness. Requested 2026-09-07. Delivery evidence is recorded below.
+Status: merged in [PR #44](https://github.com/Rajveerx11/neura/pull/44) on
+2026-09-07, unreleased. No live install was performed by this delivery.
+See [STATUS.md](STATUS.md) for the audited source revision and release state.
 
 ## Outcome
 
-Learn Mode is a native Neura mode for technical and nontechnical subjects. The
-learner prefers practical tasks, flowcharts and ER diagrams, and short bullets.
-PDFs and PowerPoint decks should ground lessons in the learner's own material.
+Learn Mode teaches technical and nontechnical subjects through practical tasks,
+flowcharts and ER diagrams, and short bullets. Local PDFs and PowerPoint decks
+can ground lessons in the learner's own material.
+
+## Quick start
+
+Enter `/mode learn`, then give a concrete goal:
+
+> Help me design a small shop database. Use an ER diagram, 3-5 bullets, and one
+> SQL exercise. Reference `materials/database-basics.pdf` when relevant.
+
+The path is an example: use your own ordinary file inside the workspace. Ask the
+tutor to import it and publish a lesson board. Open the returned local HTML path,
+try the exercise, and submit the board's copied command to Neura. In the terminal,
+`/learn answer <text or SQL>` submits to the active exercise. Use `/learn hint`
+for help and `/learn save` when you want to keep progress.
+
+For nontechnical learning, a practical goal can be a customer conversation or
+project plan. Open-ended exercises receive discussion, not an automatic grade.
 
 ## Learning experience
 
@@ -25,8 +42,8 @@ PDFs and PowerPoint decks should ground lessons in the learner's own material.
 
 - Native mode, tool restrictions, prompt, session restoration, and terminal status.
 - PDF and PPTX ingestion: text, page/slide numbering, slide notes where available,
-  visual page inspection, and OCR fallback with explicit limitations. Legacy `.ppt`
-  must produce an actionable conversion message unless a tested converter exists.
+  PDF page previews, embedded PPTX image previews, and bounded offline OCR.
+  Legacy `.ppt` returns an actionable PDF/PPTX export message; no converter runs.
 - Grounding by immutable source identity plus page/slide, with citations validated
   against imported material. Treat all document content as untrusted reference data.
   Distinguish source-supported claims, outside sources, and tutor examples.
@@ -41,21 +58,18 @@ PDFs and PowerPoint decks should ground lessons in the learner's own material.
 - Optional local learning progress and controlled material/lesson storage. No
   unsolicited transcript export, external sync, or modifications to source documents.
 
-## Architecture and ownership
+## Implementation map
 
-- Mode agent: mode registry, mode UI/prompt, deterministic allowlist, all existing
-  mode-sensitive background hooks, and mode regression tests.
-- Materials agent: document extraction module, bounded input validation, source
-  identity and citations, dependency provisioning if needed, and synthetic fixtures.
-- Workshop agent: structured lesson model, HTML/SVG rendering, interactive exercises,
-  accessible browser checks, and safe evaluation with no arbitrary code.
-- Orchestrator: Learn extension/tool wiring, controlled artifact/progress storage,
-  cross-component tests, documentation, installer integration, independent review,
-  one integrated PR, and CI. Agents work in separate Git worktrees.
+| Component | Source responsibility |
+|---|---|
+| Mode registry and policy | `modes.ts`, `mode-state.ts`, `learn-policy.ts`: selection, prompts, allowlist, private paths, and background-operation boundaries |
+| Document imports | `learn-materials.ts`, `learn-materials-worker.mjs`: captured bytes, extraction/OCR, immutable identity, and citation validation |
+| Lesson workshop | `learn-schema.ts`, `learn-renderer.ts`, `learn-exercises.ts`: structured lessons, HTML/SVG, practice, and bounded SQLite |
+| Tools and persistence | `learn.ts`, `learn-store.ts`: four tools, `/learn`, controlled boards, snapshots, and explicit resume |
 
 Tool names: `learn_material`, `learn_lesson`, `learn_exercise`, and
 `learn_progress`. Shared modules live directly under `agent/neura/`; the extension
-is `agent/extensions/learn.ts`. Coordinate exported interfaces before integration.
+is `agent/extensions/learn.ts`.
 
 ## Permission boundary
 
@@ -132,19 +146,15 @@ other lesson IDs remain separately labelled, unverified history, including after
 - Browser progress is local until handed to Neura. This is a self-study workshop,
   not an exam system: browser source contains the worked answers.
 
-## Delivery and verification
+## Maintenance and verification
 
-- Preserve existing uncommitted work. Integrate only scoped commits from isolated
-  worktrees; merge only after explicit authorization and green checks. Live installation
-  requires separate authorization.
-- Use task-to-pr workflow: acceptance, implementation, meaningful tests, independent
-  review, scoped commit/push/PR, and required CI. No guarantee of zero defects.
+- Follow [development workflow](DEVELOPMENT.md) and repository authorization rules.
 - New runtime dependencies need exact pins, source review, documentation, and tests.
 - Test valid inputs and denied traversal, links, forged citations, oversized/malformed
   documents, untrusted markup, prohibited execution, mode transitions, and restore.
 - Exercise PDF and PPTX ingestion through a rendered lesson and a practical attempt.
 - Inspect real browser behavior at desktop and narrow widths; verify keyboard and
-  accessibility behavior. Test missing OCR/converter tools with honest diagnostics.
+  accessibility behavior. Test missing OCR data and legacy-PPT export diagnostics.
 - Required checks: `node scripts/verify-harness.mjs`, `node scripts/check-docs.mjs`,
   `git diff --check`, TypeScript, and new Learn-focused suites.
 - Update this reference with delivered behavior and precise limitations after checks.
@@ -156,8 +166,10 @@ documentation/whitespace, 43 material assertions, 61 Windows storage checks, 71 
 assertions, workshop evaluator tests, and Learn/Plan desktop/mobile browser scans.
 Both dependency graphs reported zero known vulnerabilities; all 31 installed
 Learn runtime packages had verified registry signatures (13 attestations).
-Independent review findings were fixed and rechecked. CI status remains the PR's
-source of truth; this local evidence does not claim a live installation or release.
+Independent review findings were fixed and rechecked. Final head `c66c88c` passed
+[Windows/Linux CI](https://github.com/Rajveerx11/neura/actions/runs/34101891018)
+and Greptile review (5/5, no actionable findings), then merged as `d3e77c6`.
+This evidence does not claim a live installation or release.
 
 - `verify-harness.mjs`: 17 isolated suites, real Pi loader, all 17 extensions, mode/provider boundaries,
   private reads/ADS/hardlinks, background hooks, restore, and existing-mode regressions.
@@ -170,8 +182,8 @@ source of truth; this local evidence does not claim a live installation or relea
   SQL, explicit save/resume, forged/stale answers, and saved-input limits.
 - `verify-learn-browser.mjs`: desktop/mobile Edge, keyboard interactions, functional
   controls, CSP and no-network assertions, and axe accessibility scans.
-- Independent reviews cross-check components authored by other agents. Valid
-  findings receive fixes and regression coverage before the integrated PR.
+- Independent reviews cross-checked components authored in separate agent
+  worktrees. Valid findings received fixes and regression coverage before merge.
 
 ## Inspiration
 

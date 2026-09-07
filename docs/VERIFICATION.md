@@ -1,7 +1,10 @@
 # Verification
 
-Issue [#27](https://github.com/Rajveerx11/neura/issues/27) replaces the sequential
-harness specification with focused suites and closes its missed-untracked-edit bug.
+The current verifier uses 17 isolated suites and the checkout's pinned Pi loader.
+It includes Work/Learn boundaries, document and exercise behavior, and content-bound
+proof receipts. The original modular refactor closed
+[#27](https://github.com/Rajveerx11/neura/issues/27); Learn expanded it in
+[PR #44](https://github.com/Rajveerx11/neura/pull/44).
 
 ## Commands and isolation
 
@@ -32,12 +35,13 @@ existing Windows CI installation/drift rehearsal remains separate.
 | `npm run test:fuzz` | Fixed seed `0x27c0ffee`: 96 generated path cases and 96 shell mutations |
 | `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, storage races, end-to-end progress, and browser behavior |
 
-`npm run test:accessibility` remains the real Edge/axe browser suite.
+`npm run test:accessibility` is the real Plan Edge/axe browser suite.
+`node scripts/tests/learn-browser.mjs` runs Learn's isolated browser checks.
 Learn's five nonbrowser suites also run in `npm test`; its isolated browser wrapper
 runs separately in CI. Browser tools require Edge on the tested Windows platform.
 `npm run verify:sandbox` remains the independent live WSL2/bubblewrap replay;
 contract tests alone do not establish OS isolation. CI also runs portable proof,
-approval-storage, and sandbox contracts on Linux, including FIFO and executable-bit
+approval-storage, sandbox, and Learn storage contracts on Linux, including FIFO and executable-bit
 regressions that Windows cannot exercise.
 
 ## Changed-file checks and receipts

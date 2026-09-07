@@ -1,13 +1,17 @@
 # Production readiness
 
-This document is the durable gate between a private engineering build and a
+This document is durable gate between experimental engineering build and a
 production-ready Neura release. GitHub issues hold implementation detail;
 this file defines order, evidence, and the meaning of done.
 
 ## Current decision
 
-Neura is **not production-ready**. The current private release is limited to
+Neura is **not production-ready**. Current supported scope is experimental,
 personal, single-user engineering use. Human Away is preview-only.
+
+Open-source publication is a separate decision governed by
+[OPEN_SOURCE.md](OPEN_SOURCE.md). Public source does not satisfy any production
+gate.
 
 Milestone: [Production readiness](https://github.com/Rajveerx11/neura/milestone/1)
 
@@ -15,10 +19,12 @@ Roadmap: [#31](https://github.com/Rajveerx11/neura/issues/31)
 
 ## P0 release blockers
 
+Issue state checked 2026-09-07. Merged source improvements remain unreleased;
+closing one issue does not establish production readiness.
+
 | Issue | Required outcome |
 |---|---|
 | [#36](https://github.com/Rajveerx11/neura/issues/36) | Close the historical credential exposure and enforce secret scanning. |
-| [#23](https://github.com/Rajveerx11/neura/issues/23) | Make a supervised, sandboxed WORK mode the default. |
 | [#24](https://github.com/Rajveerx11/neura/issues/24) | Make Human Away transactional and resource bounded. |
 | [#22](https://github.com/Rajveerx11/neura/issues/22) | Pin and contain every automatically executed dependency. |
 | [#21](https://github.com/Rajveerx11/neura/issues/21) | Add a complete runtime manifest, atomic install, and rollback. |
@@ -33,10 +39,17 @@ Roadmap: [#31](https://github.com/Rajveerx11/neura/issues/31)
 | Prompt ingress, memory, redaction, and MCP | [#29](https://github.com/Rajveerx11/neura/issues/29) |
 | Skill provenance | [#38](https://github.com/Rajveerx11/neura/issues/38) |
 | Runtime architecture and strict typing | [#25](https://github.com/Rajveerx11/neura/issues/25), [#26](https://github.com/Rajveerx11/neura/issues/26) |
-| Adversarial and hermetic testing | [#27](https://github.com/Rajveerx11/neura/issues/27) |
 | Durable recovery | [#28](https://github.com/Rajveerx11/neura/issues/28) |
 | Health, diagnostics, and evaluation | [#39](https://github.com/Rajveerx11/neura/issues/39), [#30](https://github.com/Rajveerx11/neura/issues/30) |
-| Safety UX and accessibility | [#37](https://github.com/Rajveerx11/neura/issues/37) |
+
+## Completed source milestones
+
+| Delivery | Covered outcome |
+|---|---|
+| [#23](https://github.com/Rajveerx11/neura/issues/23), closed | Work is default; `work_exec` uses network-disabled WSL2 bubblewrap. This does not close every search/confidentiality gap. |
+| [#27](https://github.com/Rajveerx11/neura/issues/27), closed | Isolated modular suites, seeded fuzzing, approval concurrency/crash rejection, and content-bound verification receipts. Strict typing remains #26. |
+| [#37](https://github.com/Rajveerx11/neura/issues/37), closed | Deliberate YOLO confirmation, persistent danger treatment, and generated Plan accessibility coverage. |
+| [PR #44](https://github.com/Rajveerx11/neura/pull/44), merged | Learn lessons, document grounding, bounded exercises, explicit progress, browser accessibility, and cross-mode regression coverage. Parser limits are not OS isolation; first store creation requires Windows. |
 
 ## Evidence required for closure
 
@@ -61,7 +74,9 @@ Before a production claim:
 2. Install only from the candidate artifact and manifest.
 3. Verify hashes, runtime versions, skills, extensions, and MCP packages.
 4. Run unit, integration, adversarial, sandbox, accessibility, and secret scans.
-5. Exercise Plan, WORK, YOLO, Human Away, Gmail, recovery, and failure paths.
+5. Exercise Plan, Work, YOLO, Human Away, Learn, Gmail, and recovery. Include
+   session replacement during background work, PDF/PPTX/OCR imports, citations,
+   SQL denial, stale boards, explicit save/resume, and missing runtime failures.
 6. Interrupt installation and active work to verify rollback and recovery.
 7. Confirm the live manifest exactly matches the candidate.
 8. Run a bounded soak period and record failures, latency, interventions, and resource use.
