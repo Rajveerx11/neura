@@ -1427,7 +1427,7 @@ for (const name of LEARN_ONLY_TOOL_NAMES) {
 }
 assert.equal(await guard({ toolName: "questionnaire", input: {} }, context), undefined);
 assert.equal(await guard({ toolName: "read", input: { path: "README.md" } }, context), undefined);
-assert.equal(await guard({ toolName: "grep", input: { path: "README.md", pattern: "Neura" } }, context), undefined);
+assert.equal(await guard({ toolName: "ls", input: { path: "docs" } }, context), undefined);
 assert.equal(await guard({ toolName: "web_search", input: { query: "database relationships", max_results: 3 } }, context), undefined);
 for (const event of [
   { toolName: "write", input: { path: "example.txt", content: "blocked" } },
@@ -1446,6 +1446,8 @@ for (const event of [
   { toolName: "read", input: { path: ".neura-learning/progress.json" } },
   { toolName: "read", input: { path: ".git/config" } },
   { toolName: "grep", input: { path: ".", pattern: "." } },
+  { toolName: "grep", input: { path: "README.md", pattern: "Neura" } },
+  { toolName: "find", input: { path: ".", pattern: "*.md" } },
   { toolName: "find", input: { path: ".", pattern: ".env*" } },
   { toolName: "unknown_tool", input: {} },
 ]) assert.equal((await guard(event, context))?.block, true, `Learn allowed ${event.toolName}: ${JSON.stringify(event.input)}`);
@@ -1464,10 +1466,68 @@ fs.writeFileSync(path.join(learnWorkspace, ".neura-learning", "progress.json"), 
 fs.symlinkSync(path.join(learnWorkspace, ".neura-learning"), path.join(learnWorkspace, "notes"), process.platform === "win32" ? "junction" : "dir");
 assert.equal((await guard({ toolName: "read", input: { path: "notes/progress.json" } }, { ...context, cwd: learnWorkspace }))?.block, true,
   "Learn read progress through an alias");
+fs.writeFileSync(path.join(learnWorkspace, "safe.txt"), "synthetic public reference");
+fs.mkdirSync(path.join(learnWorkspace, "public"));
+assert.equal(await guard({ toolName: "read", input: { path: "safe.txt" } }, { ...context, cwd: learnWorkspace }), undefined);
+assert.equal(await guard({ toolName: "read", input: { path: path.join(learnWorkspace, "safe.txt") } }, { ...context, cwd: learnWorkspace }), undefined);
+assert.equal(await guard({ toolName: "ls", input: { path: "public" } }, { ...context, cwd: learnWorkspace }), undefined);
+assert.equal(await guard({ toolName: "ls", input: {} }, { ...context, cwd: path.join(learnWorkspace, "public") }), undefined);
+assert.equal((await guard({ toolName: "read", input: { path: "safe.txt" } }, { ...context, cwd: "\\\\server\\share" }))?.block, true,
+  "Learn attempted to resolve a network workspace");
+assert.equal((await guard({ toolName: "ls", input: { path: "." } }, { ...context, cwd: learnWorkspace }))?.block, true,
+  "Pi ls would stat an outside linked child");
+for (const relative of [".aws/config", ".npmrc", "MEMORY.md", "sessions/example.jsonl", "approvals/example.json", "node_modules/example.txt", "auth.json", "models.json", "settings.json", "mcp.json", "keybindings.json", "tokens.json", "credentials.json", "secrets.json"]) {
+  const filename = path.join(learnWorkspace, relative);
+  fs.mkdirSync(path.dirname(filename), { recursive: true });
+  fs.writeFileSync(filename, "synthetic protected reference");
+  assert.equal((await guard({ toolName: "read", input: { path: relative } }, { ...context, cwd: learnWorkspace }))?.block, true,
+    `Learn read protected source ${relative}`);
+}
+fs.linkSync(path.join(learnWorkspace, "MEMORY.md"), path.join(learnWorkspace, "public-memory.txt"));
+assert.equal((await guard({ toolName: "read", input: { path: "public-memory.txt" } }, { ...context, cwd: learnWorkspace }))?.block, true,
+  "Learn read protected memory through a hardlink");
+for (const value of ["@safe.txt", "~/safe.txt", "file:///safe.txt", "safe.txt:reference", "C:safe.txt", "\\\\server\\share\\safe.txt", "\\\\?\\C:\\safe.txt", "safe\u0000.txt", "safe\u00a0.txt"]) {
+  assert.equal((await guard({ toolName: "read", input: { path: value } }, { ...context, cwd: learnWorkspace }))?.block, true,
+    `Learn accepted ambiguous path ${JSON.stringify(value)}`);
+}
+if (process.platform === "win32") {
+  fs.writeFileSync(path.join(learnWorkspace, "auth.json:reference"), "synthetic alternate stream");
+  assert.equal(fs.readFileSync(path.join(learnWorkspace, "auth.json:reference"), "utf-8"), "synthetic alternate stream", "ADS fixture was not created");
+  assert.equal((await guard({ toolName: "read", input: { path: "auth.json:reference" } }, { ...context, cwd: learnWorkspace }))?.block, true,
+    "Learn read protected authentication through ADS");
+  for (const value of ["/c/safe.txt", "/mnt/c/safe.txt", "/cygdrive/c/safe.txt", "\\safe.txt"]) {
+    assert.equal((await guard({ toolName: "read", input: { path: value } }, { ...context, cwd: learnWorkspace }))?.block, true,
+      `Learn accepted shell-dependent Windows path ${value}`);
+  }
+}
+const largeReference = fs.openSync(path.join(learnWorkspace, "large.txt"), "w");
+fs.ftruncateSync(largeReference, 8 * 1024 * 1024 + 1); fs.closeSync(largeReference);
+assert.equal((await guard({ toolName: "read", input: { path: "large.txt" } }, { ...context, cwd: learnWorkspace }))?.block, true,
+  "Learn allowed an unbounded stock read");
+const savedRipgrepConfig = process.env.RIPGREP_CONFIG_PATH;
+const hostileSearchConfig = path.join(learnWorkspace, "search.conf");
+fs.writeFileSync(hostileSearchConfig, `--pre\nsynthetic-never-executed\n${path.join(learnOutside, "reference.txt")}\n`);
+process.env.RIPGREP_CONFIG_PATH = hostileSearchConfig;
+try {
+  for (const toolName of ["grep", "Grep", "find", "Find", "Read", "Bash"]) {
+    assert.equal((await guard({ toolName, input: { path: "safe.txt", pattern: "reference" } }, { ...context, cwd: learnWorkspace }))?.block, true,
+      `${toolName} bypassed Learn under hostile search configuration`);
+  }
+} finally {
+  if (savedRipgrepConfig === undefined) delete process.env.RIPGREP_CONFIG_PATH;
+  else process.env.RIPGREP_CONFIG_PATH = savedRipgrepConfig;
+}
+for (const relative of ["agent/neura/learn-materials-worker.mjs", "agent/neura/package.json", "agent/neura/package-lock.json"]) {
+  const filename = path.join(learnWorkspace, relative);
+  fs.mkdirSync(path.dirname(filename), { recursive: true });
+  fs.writeFileSync(filename, "{}");
+  assert.equal(inspectAction({ toolName: "write", input: { path: filename, content: "changed" } }, learnWorkspace).category, "protected-control",
+    `Human Away did not protect learning runtime control ${relative}`);
+}
 
-activeTools.push("write", "bash", "publish_plan", "mcp__late__execute");
+activeTools.push("write", "bash", "grep", "find", "publish_plan", "mcp__late__execute");
 const learnProvider = await firstHandler(modes, "before_provider_request")({ payload: { tools: [
-  { name: "Read" }, { name: "Bash" }, { name: "write" }, { name: "publish_plan" },
+  { name: "Read" }, { name: "Bash" }, { name: "Grep" }, { name: "find" }, { name: "write" }, { name: "publish_plan" },
   { function: { name: "learn_lesson" } }, { function: { name: "mcp__late__execute" } },
 ] } }, context);
 assert.ok(learnProvider.tools.every((tool) => ["Read", "learn_lesson"].includes(tool.name ?? tool.function?.name)),

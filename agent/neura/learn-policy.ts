@@ -6,15 +6,15 @@ export const LEARN_ONLY_TOOL_NAMES = Object.freeze([
 ]);
 
 export const LEARN_MODE_TOOL_NAMES = Object.freeze([
-  "read", "grep", "find", "ls", "questionnaire", "web_search", ...LEARN_ONLY_TOOL_NAMES,
+  "read", "ls", "questionnaire", "web_search", ...LEARN_ONLY_TOOL_NAMES,
 ]);
 
 const dedicated = new Set(LEARN_ONLY_TOOL_NAMES);
 const allowed = new Set(LEARN_MODE_TOOL_NAMES);
 
 // Dedicated tools enforce their bounded schemas and canonical storage at execute
-// time. Research inherits Plan's sensitive-path and input checks, never its shell
-// or publisher permissions. Unknown/custom/MCP tools fail closed.
+// time. Stock grep/find inherit executable search configuration and are never
+// exposed here. Unknown/custom/MCP tools fail closed.
 export function isLearnActionAllowed(event: { toolName?: unknown; input?: unknown }, cwd: string): boolean {
   const name = typeof event.toolName === "string" ? event.toolName : "";
   if (!allowed.has(name)) return false;
