@@ -141,7 +141,7 @@ through `learn_progress`, including diagrams and SQL tables.
 ## Delivery evidence
 
 Local verification passed on 2026-09-07: TypeScript, all 17 harness extensions,
-documentation/whitespace, 43 material assertions, 24 storage checks, 65 integrated
+documentation/whitespace, 43 material assertions, 26 storage checks, 65 integrated
 assertions, workshop evaluator tests, and Learn/Plan desktop/mobile browser scans.
 Both dependency graphs reported zero known vulnerabilities; all 31 installed
 Learn runtime packages had verified registry signatures (13 attestations).

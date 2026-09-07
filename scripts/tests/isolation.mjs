@@ -4,7 +4,9 @@ import path from 'node:path';
 
 // Only synthetic test state can reach a suite, including when run directly.
 export function isolate() {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'neura-test-'));
+  // Windows CI may spell TEMP through an 8.3 alias. Synthetic workspaces use
+  // the actual directory spelling, just like an ordinary canonical checkout.
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-test-'));
   const keep = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext', 'temp', 'tmp']);
   for (const key of Object.keys(process.env)) {
     if (!keep.has(key.toLowerCase())) delete process.env[key];

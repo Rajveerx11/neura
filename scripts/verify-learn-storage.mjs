@@ -8,7 +8,8 @@ import { readLearnProgress, writeLearnArtifact } from "../agent/neura/learn-stor
 // Synthetic, deterministic filesystem interleavings. Patching a builtin schedules
 // the directory replacement at a specific await boundary; real OS links, handles,
 // identity checks and writes still run. Never run these patches concurrently.
-const scratch = await fs.mkdtemp(path.join(tmpdir(), "neura-learn-storage-"));
+const temporaryRoot = await fs.realpath(tmpdir());
+const scratch = await fs.mkdtemp(path.join(temporaryRoot, "neura-learn-storage-"));
 const original = { mkdir: fs.mkdir, open: fs.open };
 const payload = "SYNTHETIC PRIVATE LESSON — must not reach the outside directory";
 const linkType = process.platform === "win32" ? "junction" : "dir";
@@ -49,6 +50,13 @@ try {
   assert.equal(await fs.readFile(board, "utf8"), payload); checks++;
   const saved = await writeLearnArtifact(ordinary.workspace, "progress", JSON.stringify({ synthetic: true }));
   assert.deepEqual(await readLearnProgress(ordinary.workspace, path.basename(saved)), { synthetic: true }); checks++;
+
+  const linkedAncestor = await fixture("linked-ancestor");
+  const alias = path.join(linkedAncestor.root, "workspace-alias");
+  await fs.symlink(linkedAncestor.root, alias, linkType);
+  await rejectsMutation(() => writeLearnArtifact(path.join(alias, "workspace"), "lesson", payload));
+  assert.deepEqual(await fs.readdir(linkedAncestor.workspace), []); checks++;
+  await fs.unlink(alias);
 
   const staticLink = await fixture("static-link");
   await fs.symlink(staticLink.outside, staticLink.storage, linkType);
@@ -128,6 +136,6 @@ try {
 } finally {
   restoreBuiltins();
   const resolved = path.resolve(scratch);
-  if (path.dirname(resolved) !== path.resolve(tmpdir()) || !path.basename(resolved).startsWith("neura-learn-storage-")) throw new Error("Unexpected storage-test cleanup path.");
+  if (path.dirname(resolved) !== temporaryRoot || !path.basename(resolved).startsWith("neura-learn-storage-")) throw new Error("Unexpected storage-test cleanup path.");
   await fs.rm(resolved, { recursive: true, force: true });
 }

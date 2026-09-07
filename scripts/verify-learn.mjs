@@ -9,7 +9,8 @@ import { learnLessonRevision } from "../agent/neura/learn-renderer.ts";
 import { listLearnProgress, readLearnProgress, writeLearnArtifact, MAX_LEARN_SNAPSHOT_BYTES } from "../agent/neura/learn-store.ts";
 import { pdf, zip, presentation } from "./learn-material-fixtures.mjs";
 
-const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "neura-learn-end-to-end-"));
+const temporaryRoot = await fs.realpath(os.tmpdir());
+const scratch = await fs.mkdtemp(path.join(temporaryRoot, "neura-learn-end-to-end-"));
 const workspace = path.join(scratch, "workspace");
 await fs.mkdir(workspace);
 const previousNeura = process.env.NEURA;
@@ -203,6 +204,6 @@ try {
   if (previousNeura === undefined) delete process.env.NEURA; else process.env.NEURA = previousNeura;
   setMode(previousMode);
   const resolved = path.resolve(scratch);
-  if (path.dirname(resolved) !== path.resolve(os.tmpdir()) || !path.basename(resolved).startsWith("neura-learn-end-to-end-")) throw new Error("Unexpected test cleanup path.");
+  if (path.dirname(resolved) !== temporaryRoot || !path.basename(resolved).startsWith("neura-learn-end-to-end-")) throw new Error("Unexpected test cleanup path.");
   await fs.rm(resolved, { recursive: true, force: true });
 }
