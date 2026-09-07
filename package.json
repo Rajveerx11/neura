@@ -6,10 +6,24 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:accessibility": "node scripts/verify-plan-accessibility.mjs",
-    "test:learn": "node scripts/verify-learn-materials.mjs && node scripts/verify-learn-workshop.mjs && node scripts/verify-learn-storage.mjs && node scripts/verify-learn.mjs && node scripts/verify-learn-browser.mjs",
+    "test:learn": "node scripts/tests/learn.mjs && node scripts/tests/learn-materials.mjs && node scripts/tests/learn-workshop.mjs && node scripts/tests/learn-storage.mjs && node scripts/tests/learn-end-to-end.mjs && node scripts/tests/learn-browser.mjs",
     "verify": "node scripts/verify-harness.mjs && node scripts/check-docs.mjs",
     "verify:sandbox": "node scripts/verify-sandbox.mjs",
-    "audit:dependencies": "npm audit --audit-level=high"
+    "audit:dependencies": "npm audit --audit-level=high",
+    "test": "node scripts/verify-harness.mjs",
+    "test:changed": "node scripts/verify-harness.mjs --changed",
+    "test:unit": "node scripts/verify-harness.mjs --suite unit",
+    "test:state-machine": "node scripts/verify-harness.mjs --suite state-machine",
+    "test:integration": "node scripts/verify-harness.mjs --suite integration",
+    "test:ui": "node scripts/verify-harness.mjs --suite ui",
+    "test:installer": "node scripts/verify-harness.mjs --suite installer",
+    "test:sandbox": "node scripts/verify-harness.mjs --suite sandbox",
+    "test:policy": "node scripts/verify-harness.mjs --suite policy",
+    "test:plan": "node scripts/verify-harness.mjs --suite plan",
+    "test:approvals": "node scripts/verify-harness.mjs --suite approvals",
+    "test:approval-storage": "node scripts/verify-harness.mjs --suite approval-storage",
+    "test:proof": "node scripts/verify-harness.mjs --suite proof",
+    "test:fuzz": "node scripts/verify-harness.mjs --suite fuzz"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "0.84.4",

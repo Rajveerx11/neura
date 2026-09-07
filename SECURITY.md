@@ -56,6 +56,13 @@ fix. Never include a real credential or private user data.
   for SSRF-safe enforcement.
 - Plan HTML uses structured input, escaping, CSP, safe URL checks, collision-safe
   creation, and session-owned revision hashes.
+- WORK is the new-session default. Structured filesystem tools use canonical,
+  junction-aware workspace containment. Native shell is limited to hardened
+  read-only inspection; tests, builds, and other local commands use WSL2
+  bubblewrap with only the workspace writable, a cleared host environment,
+  hidden Windows/WSL user paths, and no network namespace. Provider payloads
+  remove inactive and unknown tools. Broader actions fail closed or require one
+  explicit interactive approval; headless runs cannot approve them.
 - YOLO intentionally disables Neura application approvals and tool blocking. On
   native Windows it has no OS sandbox; tool access follows the process and
   signed-in user's permissions. Every interactive transition into YOLO requires
@@ -71,8 +78,9 @@ fix. Never include a real credential or private user data.
 - Outside YOLO, Gmail permits only explicitly allowlisted reads without a prompt;
   every other action confirms interactively or blocks headless.
 - Headmaster cannot widen deterministic policy.
-- Application policy reduces mistakes in Plan and Human Away but does not provide
-  OS isolation. YOLO bypasses that policy by design.
+- Application policy contains Plan and WORK structured tools. WORK and Human Away
+  shell execution add OS isolation through WSL2 bubblewrap. YOLO bypasses both
+  application policy and sandboxing by design.
 
 ## Production security gate
 
@@ -98,6 +106,9 @@ control, and tracked issue.
   external tools, and trigger destructive or remote side effects without a
   confirmation prompt. Misuse can cause data loss or account impact.
 - Plan uses application-level canonical containment rather than an OS sandbox.
+- WORK requires Windows, WSL2, and `bubblewrap` for tests, builds, and mutating
+  shell commands. If unavailable, `work_exec` fails closed; structured workspace
+  reads and patches remain available.
 - Human Away requires Windows, WSL2, and `bubblewrap`; tool execution fails closed
   when they are unavailable or a linked workspace entry is detected. It remains
   preview-labelled while field evidence accumulates.
@@ -107,3 +118,16 @@ control, and tracked issue.
 
 Full release gates are tracked in [docs/STATUS.md](docs/STATUS.md). Do not remove
 preview labels until those gates pass.
+
+## Verification failure boundaries
+
+Proof fingerprints read bounded file bytes and reject selected links, special files,
+conflicted indexes, and submodules. A failed snapshot, interrupted runner, malformed
+verdict, or worktree change during verification cannot produce a PASS receipt.
+Incremental reports under `.proofofwork/` are untrusted workspace evidence; `/ship`
+always runs full proof independently. Executable dependency containment remains #22.
+
+Approval writers serialize decisions and resolutions with a two-second lock wait,
+retry short writes, and flush completed appends. An orphaned lock or invalid audit
+fails closed. Do not delete a writer lock while another Neura process could own it.
+Transactional recovery, keyed tamper evidence, and remote binding remain #33.

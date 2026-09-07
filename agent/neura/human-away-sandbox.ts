@@ -4,10 +4,11 @@ import * as path from "node:path";
 import { redactSensitiveText } from "./redaction.ts";
 
 export const HUMAN_AWAY_SANDBOX_TOOL = "human_away_exec";
+export const WORK_SANDBOX_TOOL = "work_exec";
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_WORKSPACE_ENTRIES = 200_000;
 
-type ProcessResult = { code: number; stdout: string; stderr: string };
+type ProcessResult = { code: number; stdout: string; stderr: string; completed?: boolean };
 
 function wslExecutable(): string {
   const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
@@ -42,6 +43,7 @@ function runWsl(args: string[], timeoutMs: number, signal?: AbortSignal): Promis
       signal,
     }, (error, stdout, stderr) => {
       const result = {
+        completed: !error || (typeof error.code === "number" && !error.killed),
         code: typeof (error as { code?: unknown } | null)?.code === "number"
           ? Number((error as { code: number }).code)
           : error ? 1 : 0,

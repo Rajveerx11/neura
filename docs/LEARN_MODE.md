@@ -67,6 +67,16 @@ Background proof, checkpoint, memory, and integration hooks must not bypass this
 boundary. Plain Pi remains stock, Plan keeps its existing contract, Human Away
 stays preview-only, and the logo-only launch remains unchanged.
 
+Work remains the default; Learn is the fifth mode. Work proof uses the existing
+network-disabled WSL2 bubblewrap environment. Its runner and packages must already
+be available there; unavailable proof never falls back to host execution. YOLO
+retains bounded host proof. Mode changes are locked during capture and verification.
+If a new session starts before old background work finishes, it holds safe Work
+state with tools paused, then restores the requested restricted mode after drain.
+Saved YOLO still requires fresh confirmation; old verification cannot earn a new receipt.
+Checkpoints/undo, host health diagnostics, private memory, skill reports, and October
+remain YOLO-only so background operations cannot bypass Work or Learn restrictions.
+
 Stock `grep` and `find` are excluded: inherited ripgrep configuration can change
 their targets or execute preprocessors. Generic reads deny hidden paths, private
 memory/session/approval/configuration files, alternate streams, hardlinks, and
@@ -131,14 +141,14 @@ through `learn_progress`, including diagrams and SQL tables.
 ## Delivery evidence
 
 Local verification passed on 2026-09-07: TypeScript, all 17 harness extensions,
-documentation/whitespace, 43 material assertions, 24 storage checks, 60 integrated
+documentation/whitespace, 43 material assertions, 24 storage checks, 65 integrated
 assertions, workshop evaluator tests, and Learn/Plan desktop/mobile browser scans.
 Both dependency graphs reported zero known vulnerabilities; all 31 installed
 Learn runtime packages had verified registry signatures (13 attestations).
 Independent review findings were fixed and rechecked. CI status remains the PR's
 source of truth; this local evidence does not claim a live installation or release.
 
-- `verify-harness.mjs`: real Pi loader, all 17 extensions, mode/provider boundaries,
+- `verify-harness.mjs`: 17 isolated suites, real Pi loader, all 17 extensions, mode/provider boundaries,
   private reads/ADS/hardlinks, background hooks, restore, and existing-mode regressions.
 - `verify-learn-materials.mjs`: real synthetic PDF/PPTX/OCR and malformed-input tests.
 - `verify-learn-workshop.mjs`: diagram validation, escaping, exercise grading, SQL

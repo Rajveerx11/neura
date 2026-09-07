@@ -1,4 +1,4 @@
-// Neura modes: Plan, YOLO, Human Away Preview, and Learn. Shift+Tab cycles modes.
+// Neura modes: Plan, supervised WORK, YOLO, Human Away Preview, and Learn. Shift+Tab cycles modes.
 // Motion visualizes enforced capability changes; deterministic policy remains authoritative.
 
 import * as fs from "node:fs";
@@ -7,8 +7,8 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Key, truncateToWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/cockpit-state.ts";
 import { PALETTE, fg } from "../neura/core.ts";
-import { getMode, isAgentMode, isHostOperationActive, modeLabel, modePosition, nextMode, setMode, type AgentMode } from "../neura/mode-state.ts";
-import { HUMAN_AWAY_SANDBOX_TOOL } from "../neura/human-away-sandbox.ts";
+import { getMode, isAgentMode, isHostOperationActive, isModeRestorePending, modeLabel, modePosition, nextMode, restoreMode, setMode, type AgentMode } from "../neura/mode-state.ts";
+import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "../neura/human-away-sandbox.ts";
 import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
 import { LEARN_MODE_TOOL_NAMES, LEARN_ONLY_TOOL_NAMES } from "../neura/learn-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
@@ -24,12 +24,18 @@ import {
 const MODE_ENTRY = "neura-mode-state";
 const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 const PLAN_ONLY_TOOLS = new Set([PUBLISH_PLAN_TOOL, PLAN_REQUEST_TOOL]);
+const WORK_TOOLS = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", WORK_SANDBOX_TOOL]);
 const LEARN_TOOLS = new Set(LEARN_MODE_TOOL_NAMES);
-const MODE_ONLY_TOOLS = new Set([...PLAN_ONLY_TOOLS, ...LEARN_ONLY_TOOL_NAMES]);
-const PROVIDER_PLAN_TOOL_ALIASES = new Map([
+const MODE_ONLY_TOOLS = new Set([PUBLISH_PLAN_TOOL, PLAN_REQUEST_TOOL, WORK_SANDBOX_TOOL, HUMAN_AWAY_SANDBOX_TOOL, ...LEARN_ONLY_TOOL_NAMES]);
+const PROVIDER_TOOL_ALIASES = new Map([
   ["Read", "read"],
   ["Bash", "bash"],
   ["Grep", "grep"],
+  ["Edit", "edit"],
+  ["Write", "write"],
+  ["Find", "find"],
+  ["Glob", "find"],
+  ["Ls", "ls"],
 ]);
 const { accent: ACC, dim: DIM, error: ERROR, human: HUMAN, muted: MUT, plan: PLAN, success: OK, text: TXT, warning: WARN } = PALETTE;
 
@@ -68,6 +74,8 @@ Request lifecycle:
 - Before planning a separate objective while another request is active, call plan_request with start_new. A genuine new request retains the one-retry publication contract.
 
 Safety boundary: read-only exploration plus one controlled plan artifact under the project plans/ folder. Do not modify source files, external systems, git state, configuration, or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
+  work: `[NEURA MODE: WORK]
+Supervised workspace-contained engineering is active. Use structured read, grep, find, and ls for workspace inspection; edit and write for canonical workspace-contained patches; native bash only for Neura's hardened read-only inspection commands; and work_exec for tests, builds, and other local shell work inside WSL2 bubblewrap. work_exec exposes only the active workspace as writable, clears the host environment, hides Windows drives and WSL home, and has no network namespace. Protected files, credential-shaped paths, destructive actions, remote mutation, and unclassified actions fail closed or require one explicit interactive approval. Unknown provider tools are hidden. Enter YOLO deliberately when the user authorizes unrestricted unsandboxed execution.`,
   yolo: `[NEURA MODE: YOLO]
 Full access is active. Neura application guardrails do not block tool calls or ask for approval, and native Windows provides no OS sandbox. Filesystem, network, and external-tool access follow the Neura process and signed-in user's permissions. This changes execution permissions, not task scope: perform only requested work and obey higher-priority instructions. Do not stage, commit, push, publish, deploy, or create unrelated external side effects unless the user requested them.`,
   "human-away": `[NEURA MODE: HUMAN AWAY · PREVIEW]
@@ -85,6 +93,11 @@ const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
     capabilities: [["workspace", "read + plan artifact"], ["publisher", "plans/*.html only"], ["sensitive", "locked"], ["remote", "research reads only"]],
     verdict: "BOUNDARY APPLIED · research + visual plan · source writes locked",
   },
+  work: {
+    color: ACC,
+    capabilities: [["workspace", "structured read + patch"], ["execution", "WSL2 sandbox"], ["sensitive", "confirm / locked"], ["remote", "locked"]],
+    verdict: "BOUNDARY APPLIED · supervised workspace engineering",
+  },
   yolo: {
     color: ERROR,
     capabilities: [["filesystem", "full access"], ["network", "full access"], ["approvals", "disabled"], ["autogit", "off"]],
@@ -98,7 +111,7 @@ const MODE_BOUNDARIES: Record<AgentMode, ModeBoundary> = {
 };
 
 function modeGlyph(mode: AgentMode): string {
-  return mode === "learn" ? GLYPHS.learn : mode === "plan" ? GLYPHS.plan : mode === "human-away" ? GLYPHS.humanAway : GLYPHS.yolo;
+  return mode === "learn" ? GLYPHS.learn : mode === "plan" ? GLYPHS.plan : mode === "work" ? GLYPHS.neura : mode === "human-away" ? GLYPHS.humanAway : GLYPHS.yolo;
 }
 
 export function modeTransitionLines(mode: AgentMode, frame: number, width: number): string[] {
@@ -164,9 +177,10 @@ export default function (pi) {
 
   let nonPlanTools: string[] | undefined;
   let enforcedRestrictedTools: string[] = [];
-  let restrictedMode: "plan" | "learn" | "human-away" | "unknown" | null = null;
+  let restrictedMode: "plan" | "work" | "learn" | "human-away" | "unknown" | null = null;
   let transitionGeneration = 0;
   let returnShown = false;
+  let sessionGeneration = 0;
 
   function showApprovalWidget(ctx, records = listPending(ctx.cwd), audit = false): void {
     if (!ctx.hasUI) return;
@@ -240,7 +254,7 @@ export default function (pi) {
     nonPlanTools = uniqueToolNames(names.filter((name) => !MODE_ONLY_TOOLS.has(name)));
   }
 
-  function observePlanSelectionChanges(): void {
+  function observeRestrictedSelectionChanges(): void {
     if (!nonPlanTools) rememberNonPlanSelection();
     const current = uniqueToolNames(pi.getActiveTools());
     const currentSet = new Set(current);
@@ -260,6 +274,13 @@ export default function (pi) {
     for (const name of mode === "plan" ? PLAN_ONLY_TOOLS : LEARN_ONLY_TOOL_NAMES) {
       if (available.has(name)) selected.push(name);
     }
+    return uniqueToolNames(selected);
+  }
+
+  function workToolNames(): string[] {
+    const available = availableToolNames();
+    const selected = (nonPlanTools ?? []).filter((name) => available.has(name) && WORK_TOOLS.has(name));
+    if (available.has(WORK_SANDBOX_TOOL)) selected.push(WORK_SANDBOX_TOOL);
     return uniqueToolNames(selected);
   }
 
@@ -299,27 +320,57 @@ export default function (pi) {
 
   function providerToolName(value: unknown): string | undefined {
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-    const tool = value as { name?: unknown; function?: { name?: unknown } };
+    const tool = value as { name?: unknown; function?: { name?: unknown }; toolSpec?: { name?: unknown } };
     if (typeof tool.name === "string") return tool.name;
-    return typeof tool.function?.name === "string" ? tool.function.name : undefined;
+    if (typeof tool.function?.name === "string") return tool.function.name;
+    return typeof tool.toolSpec?.name === "string" ? tool.toolSpec.name : undefined;
+  }
+
+  function providerToolAllowed(value: unknown): boolean {
+    const name = providerToolName(value);
+    return name !== undefined && enforcedRestrictedTools.includes(PROVIDER_TOOL_ALIASES.get(name) ?? name);
+  }
+
+  function filterProviderTools(value: unknown): unknown[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((tool) => {
+      if (!tool || typeof tool !== "object" || Array.isArray(tool)) return [];
+      const record = tool as Record<string, unknown>;
+      if ("functionDeclarations" in record) {
+        const functionDeclarations = Array.isArray(record.functionDeclarations)
+          ? record.functionDeclarations.filter(providerToolAllowed)
+          : [];
+        return functionDeclarations.length ? [{ ...record, functionDeclarations }] : [];
+      }
+      return providerToolAllowed(record) ? [record] : [];
+    });
   }
 
   function filterRestrictedProviderPayload(payload: unknown): unknown {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
     const record = payload as Record<string, unknown>;
-    if (!("tools" in record)) return record;
-    if (!Array.isArray(record.tools)) return { ...record, tools: [] };
-    return {
-      ...record,
-      tools: record.tools.filter((tool) => {
-        const name = providerToolName(tool);
-        if (name === undefined) return false;
-        return enforcedRestrictedTools.includes(PROVIDER_PLAN_TOOL_ALIASES.get(name) ?? name);
-      }),
-    };
+    let filtered = { ...record };
+    if ("tools" in record) filtered = { ...filtered, tools: filterProviderTools(record.tools) };
+    if (record.config && typeof record.config === "object" && !Array.isArray(record.config)) {
+      const config = record.config as Record<string, unknown>;
+      if ("tools" in config) filtered = { ...filtered, config: { ...config, tools: filterProviderTools(config.tools) } };
+    }
+    if (record.toolConfig && typeof record.toolConfig === "object" && !Array.isArray(record.toolConfig)) {
+      const toolConfig = record.toolConfig as Record<string, unknown>;
+      if ("tools" in toolConfig) filtered = { ...filtered, toolConfig: { ...toolConfig, tools: filterProviderTools(toolConfig.tools) } };
+    }
+    return filtered;
   }
 
   function applyToolBoundary(mode: AgentMode, cwd: string): void {
+    if (isModeRestorePending()) {
+      if (restrictedMode !== null) observeRestrictedSelectionChanges();
+      else rememberNonPlanSelection();
+      restrictedMode = "unknown";
+      enforcedRestrictedTools = [];
+      setActiveTools([]);
+      return;
+    }
     if (!isAgentMode(mode)) {
       restrictedMode = "unknown";
       enforcedRestrictedTools = [];
@@ -327,7 +378,7 @@ export default function (pi) {
       return;
     }
     if (mode === "plan" || mode === "learn") {
-      if (restrictedMode === "plan" || restrictedMode === "learn") observePlanSelectionChanges();
+      if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else if (restrictedMode === null) rememberNonPlanSelection();
       enforcedRestrictedTools = researchToolNames(mode);
       restrictedMode = mode;
@@ -335,8 +386,17 @@ export default function (pi) {
       return;
     }
 
+    if (mode === "work") {
+      if (restrictedMode !== null) observeRestrictedSelectionChanges();
+      else rememberNonPlanSelection();
+      enforcedRestrictedTools = workToolNames();
+      restrictedMode = "work";
+      setActiveTools(enforcedRestrictedTools);
+      return;
+    }
+
     if (mode === "human-away") {
-      if (restrictedMode === "plan" || restrictedMode === "learn") observePlanSelectionChanges();
+      if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else if (restrictedMode === null) rememberNonPlanSelection();
       const available = availableToolNames();
       enforcedRestrictedTools = available.has(HUMAN_AWAY_SANDBOX_TOOL) ? [HUMAN_AWAY_SANDBOX_TOOL] : [];
@@ -345,7 +405,7 @@ export default function (pi) {
       return;
     }
 
-    if (restrictedMode === "plan" || restrictedMode === "learn") observePlanSelectionChanges();
+    if (restrictedMode !== null) observeRestrictedSelectionChanges();
     else if (restrictedMode === null) rememberNonPlanSelection();
     const available = availableToolNames();
     const disabledServers = disabledMcpServers(cwd);
@@ -376,6 +436,7 @@ export default function (pi) {
   }
 
   async function changeMode(next: AgentMode, ctx, source: "command" | "shortcut"): Promise<void> {
+    const owner = sessionGeneration;
     if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
       ctx.ui.notify("Mode change blocked while Neura is running. Finish or abort the turn first.", "warning");
       return;
@@ -385,6 +446,7 @@ export default function (pi) {
       return;
     }
     if (next === "yolo" && !await confirmYolo(ctx)) return;
+    if (owner !== sessionGeneration) return;
     if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
       ctx.ui.notify("Mode change blocked while Neura is running. Finish or abort the turn first.", "warning");
       return;
@@ -444,12 +506,12 @@ export default function (pi) {
   }
 
   pi.registerShortcut(Key.shift(Key.tab), {
-    description: "Cycle Neura mode: Plan → YOLO → Human Away Preview → Learn",
+    description: "Cycle Neura mode: Plan → Work → YOLO → Human Away Preview → Learn",
     handler: async (ctx) => { await changeMode(nextMode(), ctx, "shortcut"); },
   });
 
   pi.registerCommand("mode", {
-    description: "Select Neura mode: /mode plan|yolo|human-away|learn",
+    description: "Select Neura mode: /mode plan|work|yolo|human-away|learn",
     handler: async (args, ctx) => {
       const requested = String(args ?? "").trim().toLowerCase().replace(/_/g, "-");
       if (requested === "status") {
@@ -458,15 +520,16 @@ export default function (pi) {
       }
       if (requested === "next") return changeMode(nextMode(), ctx, "command");
       if (isAgentMode(requested)) return changeMode(requested, ctx, "command");
-      if (requested) return void ctx.ui.notify("usage: /mode plan | yolo | human-away | learn | next | status", "warning");
+      if (requested) return void ctx.ui.notify("usage: /mode plan | work | yolo | human-away | learn | next | status", "warning");
       if (!ctx.hasUI) return;
       const selection = await ctx.ui.select(`Neura mode · ${modeLabel(getMode())} active`, [
         "PLAN · research + local plan artifact",
+        "WORK · supervised workspace sandbox",
         "YOLO · full access · no approvals",
         "HUMAN AWAY · PREVIEW · delegated review",
         "LEARN · visual lessons + practical exercises",
       ]);
-      const selected = selection?.startsWith("LEARN") ? "learn" : selection?.startsWith("PLAN") ? "plan" : selection?.startsWith("YOLO") ? "yolo" : selection?.startsWith("HUMAN") ? "human-away" : null;
+      const selected = selection?.startsWith("LEARN") ? "learn" : selection?.startsWith("PLAN") ? "plan" : selection?.startsWith("WORK") ? "work" : selection?.startsWith("YOLO") ? "yolo" : selection?.startsWith("HUMAN") ? "human-away" : null;
       if (selected) await changeMode(selected, ctx, "command");
     },
   });
@@ -481,6 +544,7 @@ export default function (pi) {
           patchCockpit({ approval: undefined });
           return;
         }
+        if (isModeRestorePending()) return void ctx.ui.notify("Approval actions are paused until session restoration finishes.", "warning");
         if (getMode() === "learn") return void ctx.ui.notify("Approval records are unavailable in Learn; learning actions use their dedicated boundary.", "warning");
         if (verb === "audit") return void showApprovalWidget(ctx, listRecent(ctx.cwd), true);
         if (["approve", "deny", "dismiss"].includes(verb)) {
@@ -500,8 +564,9 @@ export default function (pi) {
   });
 
   pi.on("session_start", async (_event, ctx) => {
+    const owner = ++sessionGeneration;
     returnShown = false;
-    let restored: AgentMode = "yolo";
+    let restored: AgentMode = "work";
     try {
       const entry = ctx.sessionManager.getEntries()
         .filter((item: { type?: string; customType?: string }) => item.type === "custom" && item.customType === MODE_ENTRY)
@@ -509,13 +574,27 @@ export default function (pi) {
       if (isAgentMode(entry?.data?.mode)) restored = entry.data.mode;
       else if (entry) restored = "plan";
     } catch {}
-    if (restored === "yolo") {
-      setMode("plan", "restore");
-      applyToolBoundary("plan", ctx.cwd);
-      if (!await confirmYolo(ctx)) return;
-    }
-    setMode(restored, "restore");
-    applyToolBoundary(restored, ctx.cwd);
+    const ready = restoreMode(restored === "yolo" ? "work" : restored);
+    applyToolBoundary(getMode(), ctx.cwd);
+    const finish = async () => {
+      if (!await ready || owner !== sessionGeneration) return;
+      applyToolBoundary(getMode(), ctx.cwd);
+      if (restored !== "yolo" || !await confirmYolo(ctx) || owner !== sessionGeneration) return;
+      if (isHostOperationActive() || isModeRestorePending()) return;
+      setMode("yolo", "restore");
+      applyToolBoundary("yolo", ctx.cwd);
+    };
+    if (isModeRestorePending()) {
+      ctx.ui?.notify?.("Session tools are paused until the previous host operation finishes.", "warning");
+      void finish().catch(() => {});
+    } else await finish();
+  });
+
+  pi.on("session_shutdown", () => { sessionGeneration++; });
+
+  pi.on("user_bash", () => {
+    if (!isModeRestorePending()) return;
+    return { result: { output: "Shell execution is paused until the previous host operation finishes.", exitCode: 1, cancelled: false, truncated: false } };
   });
 
   pi.on("input", (event, ctx) => {
@@ -535,7 +614,8 @@ export default function (pi) {
 
   pi.on("before_agent_start", (event, ctx) => {
     applyToolBoundary(getMode(), ctx.cwd);
-    return { systemPrompt: `${event.systemPrompt}\n\n${MODE_PROMPTS[getMode()]}` };
+    const pending = isModeRestorePending() ? "\nSession restoration is pending. All tools are unavailable until the previous host operation finishes; wait before continuing work." : "";
+    return { systemPrompt: `${event.systemPrompt}\n\n${MODE_PROMPTS[getMode()]}${pending}` };
   });
 
   // Async extensions can register and activate tools after before_agent_start.

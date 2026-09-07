@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
-import { HUMAN_AWAY_SANDBOX_TOOL } from "./human-away-sandbox.ts";
+import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./human-away-sandbox.ts";
 import { redactSensitiveText } from "./redaction.ts";
 
 export type PolicyRoute = "allow" | "review" | "human" | "deny";
@@ -62,7 +62,7 @@ type ToolEvent = { toolName?: unknown; input?: unknown };
 const READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
-export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?)(?=$|[\\/\s"'`;|&])/i;
+export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|\.envrc|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?|\.aws|\.azure|\.config[\\/]gcloud|\.kube[\\/]config|\.docker[\\/]config\.json)(?=$|[\\/:\s"'`;|&])/i;
 
 const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact|learn)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/]package(?:-lock)?\.json(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction|learn(?:-[\w-]+)?)\.(?:ts|md|mjs)(?:[\s"']|$))/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
@@ -79,6 +79,7 @@ const HARD_DENY = [
 ];
 
 const HUMAN_ONLY_SHELL = [
+  { re: /\bgit\s+(?:add|commit)(?:\s|$)/i, why: "Git index and history mutation require direct human approval" },
   { re: /\bgit\s+push\b[^\r\n]*(?:--force(?:-with-lease)?\b|-f\b)/i, why: "force-push can rewrite shared history" },
   { re: /\bgit\s+reset\s+--hard\b/i, why: "hard reset discards local work" },
   { re: /\bgit\s+clean\s+-[a-z]*f/i, why: "git clean deletes untracked work" },
@@ -201,6 +202,11 @@ function actionFingerprint(toolName: string, input: Record<string, unknown>, wor
 
 function rawPath(input: Record<string, unknown>): string {
   return String(input.path ?? input.file_path ?? input.filePath ?? "").trim();
+}
+
+function targetsSecretPath(requestedPath: string, facts: ActionFacts, workspace: string): boolean {
+  if (SECRET_PATH.test(requestedPath)) return true;
+  return typeof facts.target === "string" && SECRET_PATH.test(path.relative(workspace, facts.target));
 }
 
 function resolveTarget(raw: string, cwd: string, stripToolAlias: boolean): string | null {
@@ -794,12 +800,24 @@ function isKnownDevelopmentCommand(command: string): boolean {
   const value = command.trim();
   if (!value || SHELL_CONTROL.test(value)) return false;
   return [
-    /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|build|check|typecheck|verify)(?:\s|$)/i,
+    /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|build|check|typecheck|verify)(?::[\w.-]+)?(?:\s|$)/i,
     /^(?:npx\s+)?(?:tsc|eslint|prettier|vitest|jest)(?:\s|$)/i,
     /^(?:node\s+--test|python\s+-m\s+pytest|pytest|go\s+test|cargo\s+(?:test|check|build)|dotnet\s+(?:test|build))(?:\s|$)/i,
-    /^git\s+(?:add|commit)(?:\s|$)/i,
     /^(?:mkdir|new-item\s+-itemtype\s+directory)(?:\s|$)/i,
   ].some((pattern) => pattern.test(value));
+}
+
+function isWorkSandboxGitStatus(command: string): boolean {
+  if (!command.trim() || SHELL_CONTROL.test(command)) return false;
+  const tokens = shellTokens(command.trim());
+  if (!tokens || tokens[0]?.toLowerCase() !== "git" || tokens[1]?.toLowerCase() !== "status") return false;
+  return tokens.slice(2).every((argument) => /^(?:--short|-s|--branch|-b|--porcelain(?:=v[12])?|--untracked-files=(?:no|normal|all)|--ignored=(?:no|traditional|matching)|--ahead-behind|--no-ahead-behind|--show-stash)$/.test(argument));
+}
+
+function isWorkSandboxVerification(command: string): boolean {
+  const value = command.trim();
+  if (!value || SHELL_CONTROL.test(value)) return false;
+  return /^node\s+(?:\.?[\\/])?scripts[\\/](?:verify|check)-[\w.-]+\.(?:mjs|js)(?:\s|$)/i.test(value);
 }
 
 function result(
@@ -826,7 +844,11 @@ function result(
   };
 }
 
-export function inspectAction(event: ToolEvent, cwdInput: string): InspectedAction {
+export function inspectAction(
+  event: ToolEvent,
+  cwdInput: string,
+  options: { protectControlReads?: boolean } = {},
+): InspectedAction {
   const executionCwd = typeof cwdInput === "string" && cwdInput.trim() ? path.resolve(cwdInput) : process.cwd();
   const workspace = normalizedWorkspace(executionCwd);
   const toolName = String(event.toolName ?? "unknown");
@@ -844,7 +866,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
   if (READ_TOOLS.has(toolName)) {
     const requestedPath = rawPath(input);
     const facts = requestedPath ? targetFacts(requestedPath, workspace, executionCwd) : {};
-    if (requestedPath && SECRET_PATH.test(requestedPath)) {
+    if (requestedPath && targetsSecretPath(requestedPath, facts, workspace)) {
       return result(base, {
         summary: `${toolName} protected secret path`, category: "protected-data", risk: "high", route: "human",
         reason: "Protected credentials must never enter unattended model context.",
@@ -858,6 +880,15 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         reason: "The requested path is outside Neura's active workspace boundary.",
         saferPath: "Copy a non-sensitive artifact into the workspace or inspect it with Rajveer present.",
         facts,
+      });
+    }
+    const relative = requestedPath ? path.relative(workspace, facts.target ?? workspace) : "";
+    if (options.protectControlReads && requestedPath && PROTECTED_CONTROL.test(relative)) {
+      return result(base, {
+        summary: `${toolName} protected control file: ${relative}`,
+        category: "protected-control", risk: "high", route: "human",
+        reason: "This file controls Neura's safety boundary, credentials, or deployment behavior.",
+        saferPath: "Use hardened Git inspection or approve this exact protected-file read.", facts,
       });
     }
     return result(base, {
@@ -879,7 +910,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         saferPath: "Move the target into the workspace or wait for Rajveer.", facts,
       });
     }
-    if (SECRET_PATH.test(requestedPath)) {
+    if (targetsSecretPath(requestedPath, facts, workspace)) {
       return result(base, {
         summary: `${toolName} protected secret path: ${relative}`, category: "protected-data", risk: "critical", route: "human",
         reason: "Secret-bearing files stay under direct human control.",
@@ -899,7 +930,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
     });
   }
 
-  if (toolName === "bash" || toolName === HUMAN_AWAY_SANDBOX_TOOL) {
+  if (toolName === "bash" || toolName === HUMAN_AWAY_SANDBOX_TOOL || toolName === WORK_SANDBOX_TOOL) {
     const command = String(input.command ?? "").trim();
     if (!command) {
       return result(base, {
@@ -916,7 +947,7 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         facts: {},
       });
     }
-    if (toolName === HUMAN_AWAY_SANDBOX_TOOL && PROTECTED_CONTROL.test(command)) {
+    if ((toolName === HUMAN_AWAY_SANDBOX_TOOL || toolName === WORK_SANDBOX_TOOL) && PROTECTED_CONTROL.test(command)) {
       return result(base, {
         summary: redactCommand(command), category: "protected-control", risk: "high", route: "human",
         reason: "The sandbox command touches Neura's safety, credential, Git, or deployment control plane.",
@@ -962,13 +993,19 @@ export function inspectAction(event: ToolEvent, cwdInput: string): InspectedActi
         reason: "Command matches Neura's exact read-only allowlist.", saferPath: "", facts: {},
       });
     }
+    if (toolName === WORK_SANDBOX_TOOL && (isWorkSandboxGitStatus(command) || isWorkSandboxVerification(command))) {
+      return result(base, {
+        summary: redactCommand(command), category: "read-only", risk: "low", route: "allow",
+        reason: "Known inspection or verification command runs inside the WORK OS sandbox.", saferPath: "", facts: {},
+      });
+    }
     if (isKnownDevelopmentCommand(command)) {
       return result(base, {
         summary: redactCommand(command), category: "workspace-change", risk: "medium", route: "allow",
         reason: "Known local build, test, validation, or git-recording command.", saferPath: "", facts: {},
       });
     }
-    if (toolName === HUMAN_AWAY_SANDBOX_TOOL) {
+    if (toolName === HUMAN_AWAY_SANDBOX_TOOL || toolName === WORK_SANDBOX_TOOL) {
       return result(base, {
         summary: redactCommand(command), category: "unclassified-shell", risk: "high", route: "human",
         reason: "The OS sandbox limits reach, but an opaque command can still destroy writable workspace contents.",

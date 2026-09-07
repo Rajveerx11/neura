@@ -1,9 +1,9 @@
 // Neura guardrail v2 — mode-aware action mediation.
-// Plan blocks mutation. YOLO deliberately bypasses Neura application guardrails.
-// Human Away sends eligible actions to the isolated Headmaster, then clamps every
+// Plan blocks mutation. WORK contains routine engineering and confirms broader actions.
+// YOLO deliberately bypasses Neura application guardrails. Human Away sends eligible actions to the isolated Headmaster, then clamps every
 // verdict through deterministic policy and queues anything not approved.
 
-import { getMode } from "../neura/mode-state.ts";
+import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
 import { isLearnActionAllowed } from "../neura/learn-policy.ts";
 import { patchCockpit } from "../neura/cockpit-state.ts";
 import { inspectAction, isApprovalRetryEligible, isPlanActionAllowed } from "../neura/action-policy.ts";
@@ -31,6 +31,7 @@ export default function (pi) {
   pi.on("agent_start", () => { consecutiveStops = 0; });
 
   pi.on("tool_call", async (event, ctx) => {
+    if (isModeRestorePending()) return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
     const mode = getMode();
 
     if (mode === "learn") {
@@ -49,9 +50,34 @@ export default function (pi) {
     // Match Codex --yolo: no sandbox and no approval prompts. Scope still comes
     // from the user's request and higher-priority instructions, not this hook.
     if (mode === "yolo") return;
-    if (mode !== "human-away") return { block: true, reason: "Unknown Neura mode: all tool calls are blocked." };
+    if (mode !== "human-away" && mode !== "work") return { block: true, reason: "Unknown Neura mode: all tool calls are blocked." };
 
-    const action = inspectAction(event, ctx.cwd);
+    const action = inspectAction(event, ctx.cwd, { protectControlReads: mode === "work" });
+
+    if (mode === "work") {
+      if (action.route === "allow") {
+        if (event.toolName === "bash" && action.category !== "read-only") {
+          return {
+            block: true,
+            reason: "WORK mode runs tests, builds, and workspace-changing shell commands through work_exec. Native bash is limited to hardened read-only inspection.",
+          };
+        }
+        return;
+      }
+      if (action.route === "deny") {
+        return { block: true, reason: `WORK mode denied ${action.summary}: ${action.reason}\nSafer path: ${action.saferPath}` };
+      }
+      if (!ctx.hasUI || typeof ctx.ui?.confirm !== "function") {
+        return { block: true, reason: `WORK mode blocked ${action.summary}: explicit interactive approval is required.\nSafer path: ${action.saferPath}` };
+      }
+      const approved = await ctx.ui.confirm(
+        `WORK approval · ${action.risk} risk`,
+        `${action.summary}\n\nBoundary: ${action.reason}\nSafer path: ${action.saferPath}\n\nAllow this action once?`,
+      );
+      if (!approved) return { block: true, reason: `WORK mode approval denied for ${action.summary}.` };
+      return;
+    }
+
     if (consumeExactRetry(action)) return;
     if (action.route === "allow") return;
 

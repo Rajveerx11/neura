@@ -14,6 +14,22 @@
   and storage tests, and desktop/mobile browser accessibility checks. Learn is
   unreleased; full PowerPoint slide visuals require PDF export. See [LEARN_MODE.md](LEARN_MODE.md).
 
+- Split verification into independently runnable suites with isolated synthetic state
+  and repository-pinned Pi loading. Added seeded path/shell fuzzing, concurrent
+  approval writers, corruption/partial-write checks, and proof timeout/cancellation
+  tests. Worktree fingerprints now include untracked content and binary edits;
+  `/ship` records fresh full proof with current/stale quick and incremental evidence.
+  Approval writes use a bounded cross-process lock and retry short writes. Crash
+  locks and damaged audits fail closed; automatic recovery remains tracked in #33.
+
+- Added supervised WORK between Plan and YOLO and made it the new-session
+  default. Structured reads and patches remain canonically inside the workspace;
+  hardened native inspection avoids repeated prompts; `work_exec` runs tests,
+  builds, and local shell work inside the existing WSL2 bubblewrap boundary.
+  Provider payload filtering hides unknown tools. Protected, secret-bearing,
+  remote, destructive, and unclassified actions fail closed or require one
+  explicit interactive approval. Persisted YOLO still requires deliberate entry
+  and remains genuinely unsandboxed with no per-action approval.
 - Added a complete-history secret scan to push and pull-request CI using the
   exact Gitleaks `8.30.1` Windows archive and its published SHA-256. Scanner
   output is fully redacted, the checkout includes every ref, and the dependency

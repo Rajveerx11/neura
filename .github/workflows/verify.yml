@@ -46,27 +46,17 @@ jobs:
           npm audit --prefix agent/neura --audit-level=high
           npm audit signatures --prefix agent/neura
 
-      - name: Install verified Pi version
-        run: npm install --global @earendil-works/pi-coding-agent@0.84.4
-
       - name: Verify Pi version and TypeScript
         shell: pwsh
         run: |
-          if ((pi --version) -notmatch '0\.84\.4') { throw "Unexpected Pi version: $(pi --version)" }
+          if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne '0.84.4') { throw 'Unexpected repository Pi version' }
           npm run typecheck
 
-      - name: Verify extensions
+      - name: Verify independent hermetic suites
         run: node scripts\verify-harness.mjs
 
-      - name: Verify Learn documents, exercises, storage, and end-to-end flow
-        run: |
-          node scripts/verify-learn-materials.mjs
-          node scripts/verify-learn-workshop.mjs
-          node scripts/verify-learn-storage.mjs
-          node scripts/verify-learn.mjs
-
       - name: Verify Learn workshop in browser
-        run: node scripts/verify-learn-browser.mjs
+        run: node scripts/tests/learn-browser.mjs
 
       - name: Verify generated plan accessibility
         shell: pwsh
@@ -92,6 +82,21 @@ jobs:
       - name: Verify Windows installer and live drift check
         shell: pwsh
         run: |
+          $env:PATH = "$PWD\node_modules\.bin;$env:PATH"
           python -m pip install uv==0.11.7
           powershell -File .\install.ps1
           powershell -File .\install.ps1 -Check
+
+  portable-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.16.0"
+      - run: node scripts/verify-harness.mjs --suite proof
+      - run: node scripts/verify-harness.mjs --suite approval-storage
+      - run: node scripts/verify-harness.mjs --suite sandbox

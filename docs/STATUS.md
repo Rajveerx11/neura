@@ -1,8 +1,8 @@
 # Neura status
 
 Last release audit: 2026-09-03; Learn branch updated 2026-09-07
-Current source: `2.5.1` with unreleased Pi `0.84.4` compatibility and Learn Mode updates
-Live runtime: Pi `0.84.4`; Learn feature branch has not been installed live
+Current source: `2.5.1` with unreleased Pi `0.84.4`, Work Mode, verification, and Learn Mode updates
+Live runtime: Pi `0.84.4`; reviewed source changes remain uninstalled and drift is expected
 
 ## Release decision
 
@@ -10,7 +10,7 @@ Live runtime: Pi `0.84.4`; Learn feature branch has not been installed live
 
 The historical `v2.5.1` release remains usable for its documented personal,
 single-user scope. A fresh production-readiness audit found release blockers in
-mode defaults, unattended execution, executable dependency trust, installation
+unattended execution, executable dependency trust, installation
 reproducibility, and credential-incident closure. Human Away remains preview-only.
 
 The canonical hardening backlog is
@@ -22,11 +22,11 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Pi and live Neura | Baseline ready; Learn not installed | Pi `0.84.4` is installed. The prior baseline passed startup and drift checks; the Learn branch deliberately differs from the live install. |
+| Pi and live Neura | Needs sync | Pi `0.84.4` is installed; reviewed source changes including Learn remain uninstalled. |
 | Dependency graph | Ready | Lockfile audit reports zero known vulnerabilities; 249 packages have verified registry signatures and 50 have attestations. |
 | Core harness | Ready for covered behavior | Typecheck, 17-extension harness, and documentation checks cover the Learn branch. Live WSL2 sandbox replay evidence remains from the prior baseline. |
 | Learn Mode | Unreleased source feature | Visual workshops, PDF/PPTX references, offline English OCR, constrained SQL exercises, and optional progress. Dedicated document, storage, end-to-end, and browser suites supplement the now 17-extension harness. Full PPTX layout needs PDF export; parser subprocesses are not OS sandboxes. See [LEARN_MODE.md](LEARN_MODE.md). |
-| Default mode | Blocked | New sessions default to unsandboxed YOLO. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
+| Default mode | Ready for covered behavior | New sessions default to supervised WORK. Structured reads and patches are canonically workspace-contained; tests/builds use WSL2 bubblewrap; protected, remote, destructive, and unknown actions stop or require explicit approval. Track [#23](https://github.com/Rajveerx11/neura/issues/23). |
 | Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
 | Automatic execution | Blocked | Proof and Git automation require pinned, contained execution. Track [#22](https://github.com/Rajveerx11/neura/issues/22). |
 | Installation | Blocked | Atomic activation, rollback, file hashes, and unknown-extension detection are missing. Track [#21](https://github.com/Rajveerx11/neura/issues/21). |
@@ -35,7 +35,7 @@ release gates and issue ownership live in
 | Approvals | Major gap | Storage concurrency, tamper evidence, and remote endpoint binding need hardening. Track [#33](https://github.com/Rajveerx11/neura/issues/33). |
 | Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
 | Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
-| Type and test safety | Major gap | Strict compilation reports 246 source errors; hermetic, fuzz, race, and crash suites are incomplete. Track [#26](https://github.com/Rajveerx11/neura/issues/26) and [#27](https://github.com/Rajveerx11/neura/issues/27). |
+| Type and test safety | Major gap | Strict TypeScript migration remains open. Independent suites use pinned Pi and cover seeded path/shell fuzzing, concurrent approval writers, interrupted writes, bounded proof execution, and worktree-bound receipts. Track [#26](https://github.com/Rajveerx11/neura/issues/26) and [#27](https://github.com/Rajveerx11/neura/issues/27). |
 | UX and accessibility | Ready for covered surfaces | YOLO transitions require confirmation and retain a danger label after launch. Generated plans use shared tokens, continuous navigation, semantic tables, visible focus, 44-pixel link targets, WCAG AA scans, and narrow/desktop browser snapshots. Track [#37](https://github.com/Rajveerx11/neura/issues/37). |
 | Health and operations | Major gap | Health checks and diagnostics can overstate readiness. Track [#39](https://github.com/Rajveerx11/neura/issues/39) and [#30](https://github.com/Rajveerx11/neura/issues/30). |
 

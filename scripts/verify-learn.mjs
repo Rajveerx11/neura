@@ -162,7 +162,7 @@ try {
   await app.command("answer ATTACH DATABASE 'outside.db' AS outside");
   check(!await fs.stat(path.join(workspace, "outside.db")).catch(() => null), "SQL never creates an attached host database");
 
-  for (const mode of ["plan", "yolo", "human-away"]) {
+  for (const mode of ["plan", "work", "yolo", "human-away"]) {
     setMode(mode);
     for (const name of app.tools.keys()) await denied(() => app.call(name, {}), /only in Learn/);
     await app.command("save");

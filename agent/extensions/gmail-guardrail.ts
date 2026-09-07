@@ -73,7 +73,7 @@ export default function (pi) {
     const prefix = "mcp__gmail__";
     if (!event.toolName.startsWith(prefix)) return;
     if (getMode() === "yolo") return;
-    if (getMode() !== "human-away") return { block: true, reason: "Gmail tools are unavailable in this mode." };
+    if (getMode() !== "human-away" && getMode() !== "work") return { block: true, reason: "Gmail tools are unavailable in this mode." };
 
     const action = event.toolName.slice(prefix.length).toUpperCase();
     if (READ_ONLY.has(action)) return;

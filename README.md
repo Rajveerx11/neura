@@ -18,11 +18,11 @@ approved for unattended high-impact work. See
 | Area | What it does | Main files |
 |---|---|---|
 | Identity | Logo-only launch, Neura persona, session-only Forged Tungsten theme | `agent/extensions/neura.ts`, `agent/neura/NEURA.md`, `agent/themes/neura-dark.json` |
-| Modes | Plan, YOLO, Human Away Preview, Learn, Shift+Tab switching, confirmed YOLO entry, persisted mode state | `agent/extensions/modes.ts`, `agent/neura/mode-state.ts` |
+| Modes | Plan, default WORK, YOLO, Human Away Preview, Learn, Shift+Tab switching, confirmed YOLO entry, persisted mode state | `agent/extensions/modes.ts`, `agent/neura/mode-state.ts` |
 | Learn | Visual workshops, PDF/PPTX references, offline English OCR, contained SQL practice, and optional local progress | `agent/extensions/learn.ts`, `agent/neura/learn-renderer.ts`, `agent/neura/learn-materials.ts` |
 | Plan | Bounded web search, explicit request lifecycle, one structured HTML publisher under `plans/`, and a headless publication contract | `agent/extensions/plan-artifact.ts`, `agent/neura/plan-policy.ts`, `agent/neura/plan-renderer.ts` |
-| Policy | Plan containment, state-bound approvals, centralized redaction, Gmail default-deny mediation, Human Away review queue, explicit YOLO bypass | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts`, `agent/neura/redaction.ts` |
-| Sandbox | Human Away WSL2 bubblewrap executor with workspace-only writable mount, cleared host environment, and no network namespace | `agent/extensions/human-away-sandbox.ts`, `agent/neura/human-away-sandbox.ts` |
+| Policy | Plan containment, supervised WORK mediation, state-bound approvals, centralized redaction, Gmail default-deny mediation, Human Away review queue, explicit YOLO bypass | `agent/extensions/guardrail.ts`, `agent/neura/action-policy.ts`, `agent/neura/approval-store.ts`, `agent/neura/redaction.ts` |
+| Sandbox | WORK and Human Away WSL2 bubblewrap execution with workspace-only writable mount, cleared host environment, and no network namespace | `agent/extensions/human-away-sandbox.ts`, `agent/neura/human-away-sandbox.ts` |
 | Recovery | In-memory Git worktree checkpoints and `/undo` | `agent/extensions/checkpoint.ts` |
 | Verification | Quick proof-of-work feedback and full `/ship` command | `agent/extensions/check-gate.ts` |
 | Cockpit | Responsive footer, active-operation state, notices, health panel, transcript copy | `agent/extensions/cockpit.ts`, `agent/extensions/harness-health.ts`, `agent/extensions/transcript-actions.ts` |
@@ -37,6 +37,7 @@ infer a security guarantee from a feature being present.
 | Mode | Intended use | Enforced behavior |
 |---|---|---|
 | Plan | Research and design before implementation | Activates bounded workspace reads and `web_search`; direct `web_fetch` stays disabled because its delegated backend does not expose DNS, connection-IP, or redirect-hop validation. Filesystem tools resolve inside the canonical workspace. Git inspection is limited to objects, refs, and index-only views under fixed process-blocking options; history disables mailmaps, unstaged diff requires explicit range-plus-separator syntax, and worktree-aware modes are denied. `plan_request` records waiting, revision, and separate-request transitions; only `publish_plan` may write, and only under the project `plans/` directory. |
+| WORK | Default supervised engineering | Exposes structured workspace-contained reads and patches. Native shell accepts only hardened read-only inspection; `work_exec` runs tests, builds, and other local commands in WSL2 bubblewrap with only the active workspace writable, no host environment or user paths, and no network. Provider payloads expose only the active WORK tool set. Protected files, secret-shaped paths, remote mutation, destructive actions, and unknown tools fail closed or require one explicit interactive approval. |
 | YOLO | Codex-style dangerous full access | Requires interactive confirmation when entered. Disables Neura application approvals and tool blocking. Native Windows provides no OS sandbox, so filesystem, network, and external tools inherit the signed-in user's permissions. After the logo-only splash, the footer keeps an explicit danger label visible. YOLO expands execution permission, not task scope. |
 | Human Away Preview | Low-risk work while Rajveer is unavailable | Exposes only `human_away_exec`, backed by WSL2 bubblewrap. Windows drives and WSL home are hidden, the host environment is cleared, network is unshared, and only the active workspace is writable. Deterministic policy and the isolated reviewer still apply. |
 | Learn | Practical learning with diagrams and short bullets | Bounded `read`/`ls`, web search, questions, and four dedicated learning tools. No generic shell, file edits, background proof, or remote mutations. Stock `grep`/`find` are excluded because host configuration can change their behavior. Local artifact writers and fixed exercise workers enforce separate limits. |
@@ -49,7 +50,8 @@ Neura appends a versioned `neura-plan-contract` session entry with
 receive it as an `entry_appended` event. Successful publications append the same
 contract entry with `status: "published"`, artifact identity, and hash.
 
-Shift+Tab cycles modes. `/mode plan|yolo|human-away|learn` selects one directly. Every
+New sessions start in WORK; valid non-YOLO session modes restore directly.
+Shift+Tab cycles modes. `/mode plan|work|yolo|human-away|learn` selects one directly. Every
 transition into YOLO stops for explicit confirmation.
 Ctrl+Shift+T owns Pi's thinking-level shortcut.
 
@@ -72,6 +74,12 @@ requires conversion. OCR and exact-match answers need human judgment; a passing
 exercise is practice evidence, not proof of mastery.
 
 Details, limits, and acceptance evidence: [Learn Mode](docs/LEARN_MODE.md).
+
+Migration needs no state rewrite: fresh sessions select WORK; saved Plan, WORK,
+Human Away, and Learn modes restore directly. Saved YOLO still asks for deliberate
+activation. Use `install.ps1` when ready to update the generated live harness.
+An older harness without Learn treats a saved Learn entry as an unknown mode;
+revert and reinstall the earlier source for rollback.
 
 ## Install
 
@@ -125,11 +133,11 @@ powershell -File .\install.ps1 -Check
 
 | Command | Purpose |
 |---|---|
-| `/mode [plan|yolo|human-away|next|status]` | Select or inspect operating mode |
+| `/mode [plan|work|yolo|human-away|next|status]` | Select or inspect operating mode |
 | `/approvals` | Review Human Away requests |
 | `/approvals audit` | Show recent approval decisions |
 | `/health` | Inspect harness readiness and exact Pi-version drift |
-| `/ship` | Run full proof-of-work verification |
+| `/ship` | Run fresh full verification; record worktree-bound quick and incremental evidence |
 | `/undo` | Restore the previous in-session checkpoint |
 | `/undo list` | List available checkpoints |
 | `/clip [answer|code]` | Copy the latest answer or a code block |
