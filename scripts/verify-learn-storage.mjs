@@ -20,6 +20,7 @@ const scratch = await fs.mkdtemp(path.join(temporaryRoot, "neura-learn-storage-"
 const original = { mkdir: fs.mkdir, open: fs.open, rename: fs.rename };
 const payload = "SYNTHETIC PRIVATE LESSON — must not reach the outside directory";
 const linkType = process.platform === "win32" ? "junction" : "dir";
+const nativePlatform = process.platform;
 let checks = 0;
 
 async function fixture(name) {
@@ -52,7 +53,67 @@ async function rejectsMutation(operation) {
   checks++;
 }
 
+async function seedOwnedFixture(value) {
+  // Synthetic prevalidated data, never advice to forge ownership on user files.
+  await original.mkdir(value.storage);
+  await fs.writeFile(path.join(value.storage, ".gitignore"), "*\n");
+  await fs.writeFile(path.join(value.storage, "owner"), "neura-learning-v1\n");
+}
+
+async function portableChecks() {
+  const unsupported = await fixture("portable-first-init");
+  await assert.rejects(() => writeLearnArtifact(unsupported.workspace, "lesson", payload), /First-time.*native Windows/); checks++;
+  assert.deepEqual(await fs.readdir(unsupported.workspace), [], "Unsupported initialization must not create staging metadata"); checks++;
+
+  const unowned = await fixture("portable-unowned");
+  await original.mkdir(unowned.storage);
+  await assert.rejects(() => writeLearnArtifact(unowned.workspace, "lesson", payload)); checks++;
+  assert.deepEqual(await fs.readdir(unowned.storage), []); checks++;
+
+  const existing = await fixture("portable-existing");
+  await seedOwnedFixture(existing);
+  const board = await writeLearnArtifact(existing.workspace, "lesson", payload);
+  assert.equal(await fs.readFile(board, "utf8"), payload); checks++;
+  const saved = await writeLearnArtifact(existing.workspace, "progress", JSON.stringify({ synthetic: true }));
+  assert.deepEqual(await readLearnProgress(existing.workspace, path.basename(saved)), { synthetic: true }); checks++;
+  const hardlink = path.join(existing.storage, `progress-${"c".repeat(36)}.json`);
+  await fs.link(saved, hardlink);
+  await assert.rejects(() => readLearnProgress(existing.workspace, path.basename(saved)), /unlinked/); checks++;
+  await fs.unlink(hardlink);
+  await assert.rejects(() => readLearnProgress(existing.workspace, "../outside.json"), /filename/); checks++;
+
+  const linked = await fixture("portable-linked");
+  await fs.symlink(linked.outside, linked.storage, linkType);
+  await rejectsMutation(() => writeLearnArtifact(linked.workspace, "lesson", payload));
+  assert.deepEqual(await fs.readdir(linked.outside), []); checks++;
+
+  const openSwap = await fixture("portable-open-swap");
+  await seedOwnedFixture(openSwap);
+  let swapped = false;
+  fs.open = async (file, flags, ...args) => {
+    if (flags === "wx" && path.dirname(String(file)) === openSwap.storage && !swapped) {
+      swapped = true; await swapDirectory(openSwap);
+    }
+    return original.open(file, flags, ...args);
+  };
+  syncBuiltinESMExports();
+  try { await rejectsMutation(() => writeLearnArtifact(openSwap.workspace, "lesson", payload)); }
+  finally { restoreBuiltins(); }
+  assert.equal(swapped, true); checks++;
+  await emptyOutside(openSwap);
+}
+
 try {
+  if (nativePlatform !== "win32") {
+    await portableChecks();
+    console.log(`Learn storage: ${checks} portable checks passed; unsupported first initialization denied before writes; existing stores, links, open swaps, hardlinks and traversal checked.`);
+  } else {
+  // Exercise the platform guard on Windows too; filesystem operations remain
+  // real Windows operations, while native POSIX CI runs this branch unmocked.
+  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { ...descriptor, value: "linux" });
+  try { await portableChecks(); }
+  finally { Object.defineProperty(process, "platform", descriptor); }
   const concurrent = await fixture("concurrent-first-use");
   const writes = await Promise.all(Array.from({ length: 8 }, (_, writer) =>
     writeLearnArtifact(concurrent.workspace, "progress", JSON.stringify({ writer }))));
@@ -126,6 +187,25 @@ try {
   finally { restoreBuiltins(); }
   await assert.rejects(() => fs.stat(renameFailure.storage), { code: "ENOENT" }); checks++;
   assert.equal(await fs.readFile(await writeLearnArtifact(renameFailure.workspace, "lesson", payload), "utf8"), payload); checks++;
+
+  const finalRenameRace = await fixture("final-rename-race");
+  let lateIdentity;
+  fs.rename = async (from, to) => {
+    if (to === finalRenameRace.storage) {
+      // Exactly the interval after the final lstat: the native rename itself
+      // must refuse this new unowned empty directory, without replacing it.
+      await original.mkdir(to);
+      lateIdentity = await fs.lstat(to);
+    }
+    return original.rename(from, to);
+  };
+  syncBuiltinESMExports();
+  try { await assert.rejects(() => writeLearnArtifact(finalRenameRace.workspace, "lesson", payload)); checks++; }
+  finally { restoreBuiltins(); }
+  assert.ok(lateIdentity); checks++;
+  const preserved = await fs.lstat(finalRenameRace.storage);
+  assert.equal(preserved.ino, lateIdentity.ino); assert.equal(preserved.dev, lateIdentity.dev); checks++;
+  assert.deepEqual(await fs.readdir(finalRenameRace.storage), [], "Native directory publication replaced an unowned target"); checks++;
 
   const ordinary = await fixture("ordinary");
   const board = await writeLearnArtifact(ordinary.workspace, "lesson", payload);
@@ -219,6 +299,7 @@ try {
   await fs.unlink(hardlink);
   await assert.rejects(() => readLearnProgress(ordinary.workspace, "../outside.json"), /filename/); checks++;
   console.log(`Learn storage: ${checks} checks passed; concurrent/interrupted initialization, unowned targets, publication failures, links, open swaps, hardlinks and traversal.`);
+  }
 } finally {
   restoreBuiltins();
   const resolved = path.resolve(scratch);

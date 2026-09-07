@@ -1,6 +1,6 @@
 # Learn Mode: visual, practical learning
 
-Status: implemented on the Learn feature branch, unreleased and not installed in
+Status: implemented in source, unreleased and not installed in
 the live harness. Requested 2026-09-07. Delivery evidence is recorded below.
 
 ## Outcome
@@ -85,6 +85,10 @@ linked paths. `ls` refuses linked children rather than following them.
 Learning files live in `.neura-learning/` with an ownership marker and Git exclusion.
 First use prepares markers in a unique sibling directory before atomic publication,
 so concurrent saves see a complete directory and interrupted initialization can retry.
+First initialization requires native Windows: its directory publication refuses an
+existing target atomically. Node's POSIX directory rename can replace an unowned
+empty target, so first initialization there fails before writing. Existing validated
+Learn stores remain usable; Neura does not create them through WSL/POSIX.
 Unpublished initialization directories contain metadata only and may remain after
 interruption or a lost publication race; Neura does not recursively clean these paths.
 Writers create exclusive files, validate the opened handle and canonical parent
@@ -131,7 +135,8 @@ other lesson IDs remain separately labelled, unverified history, including after
 ## Delivery and verification
 
 - Preserve existing uncommitted work. Integrate only scoped commits from isolated
-  worktrees; do not install into the live harness or merge the PR.
+  worktrees; merge only after explicit authorization and green checks. Live installation
+  requires separate authorization.
 - Use task-to-pr workflow: acceptance, implementation, meaningful tests, independent
   review, scoped commit/push/PR, and required CI. No guarantee of zero defects.
 - New runtime dependencies need exact pins, source review, documentation, and tests.
@@ -147,7 +152,7 @@ other lesson IDs remain separately labelled, unverified history, including after
 ## Delivery evidence
 
 Local verification passed on 2026-09-07: TypeScript, all 17 harness extensions,
-documentation/whitespace, 43 material assertions, 44 storage checks, 71 integrated
+documentation/whitespace, 43 material assertions, 61 Windows storage checks, 71 integrated
 assertions, workshop evaluator tests, and Learn/Plan desktop/mobile browser scans.
 Both dependency graphs reported zero known vulnerabilities; all 31 installed
 Learn runtime packages had verified registry signatures (13 attestations).

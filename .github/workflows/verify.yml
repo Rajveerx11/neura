@@ -100,3 +100,4 @@ jobs:
       - run: node scripts/verify-harness.mjs --suite proof
       - run: node scripts/verify-harness.mjs --suite approval-storage
       - run: node scripts/verify-harness.mjs --suite sandbox
+      - run: node scripts/verify-harness.mjs --suite learn-storage

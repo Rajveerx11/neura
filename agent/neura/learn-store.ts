@@ -76,6 +76,11 @@ async function storage(workspace: string, create: boolean): Promise<string> {
       exists = false;
     }
     if (!exists) {
+      // Node exposes no portable RENAME_NOREPLACE for directories. On POSIX,
+      // rename can overwrite an unowned empty target created after our check;
+      // Windows refuses an existing directory atomically. Keep first creation
+      // on the supported host rather than weaken that ownership boundary.
+      if (process.platform !== "win32") throw new Error("First-time Learn storage creation requires native Windows. Create and use the learning workspace with Neura on Windows; an existing complete store remains usable on this platform.");
       // Publish only a complete directory. Other first writers never observe
       // half-written ownership markers, and an interrupted attempt cannot poison
       // the final path. Unpublished stages contain metadata only; leave them
@@ -88,9 +93,9 @@ async function storage(workspace: string, create: boolean): Promise<string> {
       await realDirectory(root);
       await realDirectory(staging);
       try {
-        // Preserve any target created meanwhile, including unowned empty dirs
-        // that POSIX rename would otherwise replace. Cooperating publishers
-        // always publish a nonempty directory, so only one rename can win.
+        // Reuse a target published meanwhile. Windows's native directory rename
+        // also rejects any target that appears after this check, including an
+        // unowned empty directory; the ownership check below still applies.
         await fs.lstat(directory);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
