@@ -37,7 +37,7 @@ export function selectSuites(files) {
   for (const name of files) {
     if (/^(docs\/|README\.md$|CONTRIBUTING\.md$|CHANGELOG\.md$)/.test(name)) continue;
     if (name === 'agent/extensions/check-gate.ts' || name === 'agent/neura/verification.ts') {
-      selected.add('proof'); selected.add('integration');
+      selected.add('proof'); selected.add('integration'); selected.add('learn');
     } else if (/approval-store\.ts$/.test(name)) {
       selected.add('approvals'); selected.add('approval-storage');
     } else if (/plan-renderer\.ts$/.test(name)) {
