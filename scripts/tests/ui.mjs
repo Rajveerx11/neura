@@ -4,6 +4,7 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
     state: "degraded",
     pi: piRuntimeStatus("9.9.9", runtimeContract.piVersion),
+    identity: "neura 2.5.1 · source:0123456789ab · manifest abcdef012345",
     core: "git 2.53.0 · uvx 0.11.7",
     workflow: "modes ready",
     context: "persona ready",
@@ -11,6 +12,7 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
     bridges: "unused in degraded layout",
     impact: "runtime drift",
     action: repairAction,
+    capabilities: [],
   }, width).map(stripAnsi);
   const actionIndex = lines.findIndex((line) => line.startsWith("next "));
   assert.ok(lines.some((line) => line.includes("pi installed 9.9.9")), `installed Pi version hidden at ${width} columns`);
@@ -20,6 +22,7 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
   assert.ok(lines.some((line) => line.startsWith("workflow")), `degraded health hid workflow diagnostics at ${width} columns`);
   if (width >= 40) assert.ok(lines.some((line) => line.startsWith("context")), `degraded health hid context diagnostics at ${width} columns`);
   if (width >= 72) assert.ok(lines.some((line) => line.startsWith("impact")), `degraded health hid impact diagnostics at ${width} columns`);
+  if (width >= 56) assert.ok(lines.some((line) => line.startsWith("identity")), `health identity hidden at ${width} columns`);
   const renderedAction = lines.slice(actionIndex).map((line) => line.slice(5).trimEnd()).join("");
   assert.equal(renderedAction, repairAction, `health repair action truncated at ${width} columns`);
   assert.ok(lines.length <= 10, `degraded health exceeds Pi line cap at ${width} columns`);
@@ -27,6 +30,7 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
 const combinedGapLines = healthLines({
   state: "degraded",
   pi: piRuntimeStatus("9.9.9", runtimeContract.piVersion),
+  identity: "neura 2.5.1 · source:0123456789ab · manifest abcdef012345",
   core: "git missing · uvx missing",
   workflow: "modes missing · sandbox missing · proof missing",
   context: "persona missing · memory missing · skills missing",
@@ -34,6 +38,7 @@ const combinedGapLines = healthLines({
   bridges: "MCP config missing · local Qwen offline",
   impact: "Multiple capabilities unavailable.",
   action: `${repairAction}  ·  install uv  ·  sync extensions  ·  install mode keybindings  ·  restore persona  ·  configure skills  ·  restore mcp.json  ·  install WSL2 + bubblewrap`,
+  capabilities: [],
 }, 24).map(stripAnsi);
 const combinedActionIndex = combinedGapLines.findIndex((line) => line.startsWith("next "));
 assert.equal(combinedGapLines.length, 10, "combined degraded health did not use its exact ten-line budget");
@@ -45,6 +50,21 @@ assert.equal(
   repairAction,
   "combined degraded health truncated or merged the primary repair command",
 );
+const optionalGapLines = healthLines({
+  state: "ready",
+  pi: piRuntimeStatus(runtimeContract.piVersion, runtimeContract.piVersion),
+  identity: "neura 2.5.1 · live:0123456789ab · manifest abcdef012345",
+  core: "Pi ready · Git ready · workspace ready",
+  workflow: "modes ready · sandbox ready · proof ready",
+  context: "persona ready · memory disabled · skills missing",
+  workspace: "main · clean",
+  bridges: "MCP unhealthy · local Qwen missing",
+  impact: "Core ready; optional capability gap does not block Neura.",
+  action: "repair MCP credentials",
+  capabilities: [],
+}, 120).map(stripAnsi);
+assert.match(optionalGapLines[0], /READY/, "optional capability gap falsely degraded health");
+assert.ok(optionalGapLines.some((line) => line.includes("manifest abcdef012345")), "health omitted manifest hash");
 
 const identityExtension = extensionWithCommand("dash");
 await firstHandler(identityExtension, "session_start")({}, context);
@@ -96,10 +116,12 @@ assert.equal(statuses.size, 0, "health status not cleared");
 const { registerHealth } = await import('../../agent/extensions/harness-health.ts');
 let inspectHealth;
 let inspectedHealth = 0;
-registerHealth({registerCommand(_name,command){inspectHealth=command.handler;}}, async ()=>{ inspectedHealth++; return {
+let failHealth = false;
+registerHealth({registerCommand(_name,command){inspectHealth=command.handler;}}, async ()=>{ inspectedHealth++; if (failHealth) throw new Error("Authorization: Bearer stale-widget-secret"); return {
   state:'degraded',pi:piRuntimeStatus('9.9.9',runtimeContract.piVersion),
+  identity:'neura 2.5.1 · source:0123456789ab · manifest abcdef012345',
   core:'fixture',workflow:'fixture',context:'fixture',workspace:'fixture',bridges:'fixture',
-  impact:'runtime drift',action:repairAction,
+  impact:'runtime drift',action:repairAction,capabilities:[],
 }; });
 for (const mode of ['work', 'learn']) {
   modeState.setMode(mode);
@@ -112,6 +134,12 @@ assert.equal(inspectedHealth, 1, 'YOLO did not run the injected health inspectio
 modeState.setMode('work');
 assert.equal(statuses.size,0,'completed health inspection retained status');
 assert.ok(widgets.has('neura-health'),'health inspection did not publish a widget');
+failHealth = true;
+modeState.setMode('yolo');
+await inspectHealth('',context);
+modeState.setMode('work');
+assert.equal(widgets.has('neura-health'),false,'failed health inspection retained a stale widget');
+assert.doesNotMatch(JSON.stringify(notices),/stale-widget-secret/,'failed health inspection leaked credentials');
 
 for (const width of [24, 40, 56, 72, 92, 120]) {
   for (const [id, factory] of widgets) {

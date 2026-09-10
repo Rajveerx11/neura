@@ -164,7 +164,7 @@ For focused commands, Linux coverage, and proof limits, see
 | `/learn [save|saved|resume <filename>|reset]` | Explicitly save, restore, or clear learning state |
 | `/approvals` | Review Human Away requests |
 | `/approvals audit` | Show recent approval decisions |
-| `/health` | Inspect readiness and Pi-version drift in YOLO |
+| `/health` | Inspect required readiness, optional integrations, runtime identity, and Pi drift in YOLO |
 | `/ship` | Full proof in Work or YOLO; does not commit, push, or merge |
 | `/undo` | Restore previous in-session checkpoint in YOLO |
 | `/undo list` | List YOLO checkpoints |

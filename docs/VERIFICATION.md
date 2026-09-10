@@ -21,7 +21,7 @@ existing Windows CI installation/drift rehearsal remains separate.
 
 | Independent command | Coverage |
 |---|---|
-| `npm run test:unit` | Runtime contracts, redaction, suite selection, local Pi pin failures |
+| `npm run test:unit` | Runtime identity, health states, bounded MCP/provider initialization, cancellation, redaction, suite selection, local Pi pin failures |
 | `npm run test:state-machine` | WORK default, transitions, persistence, provider payloads |
 | `npm run test:integration` | Real Pi extension registration, Gmail mediation, presets |
 | `npm run test:ui` | Logo, cockpit, widths, line caps, contrast, transcript affordances |
@@ -106,3 +106,8 @@ source commit and, only with owner authorization, regenerate the live install;
 older versions ignore the new receipt entries and ignored incremental report.
 Do not roll back while approval writers are active, because older code does not
 honor the writer lock. No live installation is required to run these suites.
+
+Health state and probe results are diagnostic only; no persisted schema changes.
+The runtime contract adds the existing Neura package version for display and
+drift evidence. Roll back the health extension, runtime-contract field, and
+tests together, then regenerate the live install only with owner authorization.

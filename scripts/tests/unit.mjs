@@ -8,7 +8,17 @@ import { pathToFileURL } from "node:url";
 import { isolate } from './isolation.mjs';
 const scratchRoot = isolate();
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-const { parseRuntimeContract, piRuntimeStatus } = await import('../../agent/extensions/harness-health.ts');
+const {
+  inspectMcpConfig,
+  mergeMcpConfigs,
+  parseRuntimeContract,
+  piRuntimeStatus,
+  probeHttpMcp,
+  probeLocalProvider,
+  probeStdioMcp,
+  requiredHealthState,
+  runtimeIdentity,
+} = await import('../../agent/extensions/harness-health.ts');
 const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
@@ -61,6 +71,138 @@ assert.deepEqual(piRuntimeStatus(runtimeContract.piVersion, null), {
   label: `pi ${runtimeContract.piVersion} (runtime contract missing)`,
   action: "restore runtime-contract.json",
 }, "missing runtime contract did not fail closed");
+assert.equal(runtimeContract.neuraVersion, packageManifest.version, "runtime contract Neura version drifted from package version");
+const identity = runtimeIdentity(JSON.stringify(runtimeContract), "C:/source/agent", "C:/live/agent");
+assert.equal(identity.version, packageManifest.version, "health identity omitted Neura version");
+assert.match(identity.manifestHash, /^[0-9a-f]{12}$/, "health identity omitted bounded manifest hash");
+assert.match(identity.install, /^source:[0-9a-f]{12}$/, "health identity omitted source install identity");
+assert.equal(requiredHealthState([
+  { name: "core", required: true, state: "ready" },
+  { name: "optional", required: false, state: "unhealthy" },
+]), "ready", "optional failure falsely degraded core readiness");
+assert.equal(requiredHealthState([
+  { name: "core", required: true, state: "missing" },
+]), "degraded", "missing required capability falsely reported ready");
+assert.equal(requiredHealthState([
+  { name: "core", required: true, state: "unhealthy" },
+]), "unhealthy", "unhealthy required capability lost its state");
+
+const disabledMcp = await inspectMcpConfig({ mcpServers: { example: { disabled: true } } });
+assert.equal(disabledMcp.state, "disabled", "disabled MCP was reported missing or unhealthy");
+const missingMcp = await inspectMcpConfig({});
+assert.equal(missingMcp.state, "missing", "missing MCP configuration was not distinguished");
+assert.deepEqual(
+  mergeMcpConfigs(
+    { mcpServers: { shared: { url: "https://global.test/mcp" }, global: { disabled: true } } },
+    { mcpServers: { shared: { disabled: true }, project: { disabled: true } } },
+  ).mcpServers,
+  { shared: { disabled: true }, global: { disabled: true }, project: { disabled: true } },
+  "project MCP configuration did not override and extend global configuration",
+);
+let projectProbeCalled = false;
+const projectMcp = await inspectMcpConfig(
+  { mcpServers: { project: { url: "https://attacker.test/mcp", headers: { authorization: "$" + "{HEALTH_TEST_TOKEN}" } } } },
+  async () => { projectProbeCalled = true; return new Response("{}"); },
+  undefined,
+  new Set(["project"]),
+);
+assert.equal(projectMcp.state, "degraded", "untrusted project MCP was not reported as unprobeable");
+assert.equal(projectProbeCalled, false, "untrusted project MCP reached the network");
+const leakedActionMcp = await inspectMcpConfig({ mcpServers: { "Authorization: Bearer remediation-secret": {} } });
+assert.doesNotMatch(leakedActionMcp.action, /remediation-secret/, "MCP server name leaked through remediation output");
+
+process.env.MY_PI_MCP_ENV_ALLOWLIST = "HEALTH_TEST_TOKEN";
+process.env.HEALTH_TEST_TOKEN = "synthetic-health-secret";
+let observedHeader;
+const readyMcp = await probeHttpMcp("fixture", {
+  url: "https://example.test/mcp",
+  headers: { authorization: "$" + "{HEALTH_TEST_TOKEN}" },
+}, async (_url, options) => {
+  observedHeader = options.headers.authorization;
+  return new Response(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    result: { protocolVersion: "2025-11-25", capabilities: {}, serverInfo: { name: "fixture", version: "1" } },
+  }), { status: 200, headers: { "content-type": "application/json" } });
+});
+assert.equal(readyMcp.state, "ready", "valid HTTP MCP initialize failed");
+assert.equal(observedHeader, "synthetic-health-secret", "allowlisted MCP credential was not supplied to probe");
+const rejectedMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => new Response("", { status: 401 }));
+assert.equal(rejectedMcp.problem.code, "authentication", "MCP authentication failure was misclassified");
+const timedOutHttpMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => { throw new DOMException("timed out", "TimeoutError"); });
+assert.equal(timedOutHttpMcp.problem.code, "timeout", "HTTP MCP DOMException timeout was misclassified");
+const cancelledHttp = new AbortController();
+cancelledHttp.abort();
+const cancelledHttpMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => { throw new DOMException("aborted", "AbortError"); }, cancelledHttp.signal);
+assert.equal(cancelledHttpMcp.problem.code, "cancelled", "HTTP MCP cancellation was misclassified");
+const incompatibleMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => new Response(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    result: { protocolVersion: "unknown", capabilities: {}, serverInfo: { name: "fixture", version: "1" } },
+  }), { status: 200 }));
+assert.equal(incompatibleMcp.problem.code, "schema", "invalid MCP protocol version was accepted");
+const missingServerInfoMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => new Response(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    result: { protocolVersion: "2025-11-25", capabilities: {} },
+  }), { status: 200 }));
+assert.equal(missingServerInfoMcp.problem.code, "schema", "MCP response without server identity was accepted");
+const wrongEnvelopeMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => new Response(JSON.stringify({
+    jsonrpc: "1.0",
+    id: 2,
+    result: { protocolVersion: "2025-11-25", capabilities: {} },
+  }), { status: 200 }));
+assert.equal(wrongEnvelopeMcp.problem.code, "schema", "invalid MCP JSON-RPC envelope was accepted");
+const oversizedMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => new Response("{}", { status: 200, headers: { "content-length": "70000" } }));
+assert.equal(oversizedMcp.problem.code, "response-limit", "oversized MCP response was accepted");
+let unsafeUrlCalled = false;
+const unsafeUrlMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp?token=stored" },
+  async () => { unsafeUrlCalled = true; return new Response("{}"); });
+assert.equal(unsafeUrlMcp.problem.code, "configuration", "credential-bearing MCP URL was accepted");
+assert.equal(unsafeUrlCalled, false, "unsafe MCP URL reached the network");
+const redactedMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
+  async () => { throw new Error("Authorization: Bearer synthetic-health-secret"); });
+assert.doesNotMatch(redactedMcp.problem.message, /synthetic-health-secret/, "MCP error leaked credential material");
+
+const stdioScript = "process.stdin.once('data',()=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:1,result:{protocolVersion:process.env.HEALTH_TEST_TOKEN||'2025-11-25',capabilities:{},serverInfo:{name:'fixture',version:'1'}}})+'\\n'))";
+const readyStdio = await probeStdioMcp("fixture", { command: process.execPath, args: ["-e", stdioScript] });
+assert.equal(readyStdio.state, "ready", "valid stdio MCP initialize failed");
+assert.doesNotMatch(readyStdio.detail, /synthetic-health-secret/, "stdio MCP probe received an unrelated provider credential");
+const timedOutStdio = await probeStdioMcp(
+  "fixture",
+  { command: process.execPath, args: ["-e", "setInterval(()=>{},1000)"] },
+  undefined,
+  50,
+);
+assert.equal(timedOutStdio.problem.code, "timeout", "stalled MCP probe did not time out");
+const cancelled = new AbortController();
+cancelled.abort();
+const cancelledStdio = await probeStdioMcp("fixture", { command: process.execPath, args: ["-e", "setInterval(()=>{},1000)"] }, cancelled.signal);
+assert.equal(cancelledStdio.problem.code, "cancelled", "cancelled MCP probe was not terminated");
+
+const readyProvider = await probeLocalProvider(async () => new Response(JSON.stringify({ data: [{ id: "qwen3-coder-30b-a3b" }] }), { status: 200 }));
+assert.equal(readyProvider.state, "ready", "compatible local provider failed health");
+const timedOutProvider = await probeLocalProvider(async () => { throw new DOMException("timed out", "TimeoutError"); });
+assert.equal(timedOutProvider.problem.code, "timeout", "provider DOMException timeout was misclassified");
+const cancelledProviderSignal = new AbortController();
+cancelledProviderSignal.abort();
+const cancelledProvider = await probeLocalProvider(async () => { throw new DOMException("aborted", "AbortError"); }, cancelledProviderSignal.signal);
+assert.equal(cancelledProvider.problem.code, "cancelled", "provider cancellation was misclassified");
+for (const data of [[], [{ id: "wrong-model" }]]) {
+  const unavailableProvider = await probeLocalProvider(async () => new Response(JSON.stringify({ data }), { status: 200 }));
+  assert.equal(unavailableProvider.state, "unhealthy", "missing required local model falsely reported ready");
+}
+const invalidProvider = await probeLocalProvider(async () => new Response("{}", { status: 200 }));
+assert.equal(invalidProvider.problem.code, "schema", "provider schema mismatch was accepted");
+delete process.env.HEALTH_TEST_TOKEN;
+delete process.env.MY_PI_MCP_ENV_ALLOWLIST;
 const settings = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "settings.json"), "utf-8"));
 assert.ok(settings.skills.includes("!skills/agent-reach"), "agent-reach collision exclusion missing");
 assert.ok(settings.skills.includes("!skills/find-skills"), "find-skills collision exclusion missing");
