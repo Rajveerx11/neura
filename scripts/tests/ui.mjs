@@ -5,7 +5,7 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
     state: "degraded",
     pi: piRuntimeStatus("9.9.9", runtimeContract.piVersion),
     identity: "neura 2.5.1 · source:0123456789ab · manifest abcdef012345",
-    core: "git 2.53.0 · uvx 0.11.7",
+    core: "git 2.53.0 · uvx 0.12.11",
     workflow: "modes ready",
     context: "persona ready",
     workspace: "main · clean",

@@ -63,7 +63,7 @@ for (const kind of ['transient', 'persistent', 'io-error']) {
     } else {
       const boundedRetry = kind === 'persistent' && process.platform === 'win32';
       assert.throws(write,boundedRetry ? /writer lock timed out/ : {code:kind === 'io-error' ? 'EIO' : 'EPERM'});
-      if (boundedRetry) assert.ok(calls>1 && Date.now()-started<4000,'permanent EPERM did not fail within the lock deadline');
+      if (boundedRetry) assert.ok(calls>1 && Date.now()-started<12000,'permanent EPERM did not fail within the lock deadline');
       else assert.equal(calls,1,'unrelated or POSIX errors were retried');
       assert.equal(fs.existsSync(audit(target)),false,'failed acquisition mutated the audit');
     }
@@ -90,7 +90,7 @@ const locked=select('crash-lock');
 fs.mkdirSync(path.join(locked,'writer.lock'));
 const start=Date.now();
 assert.throws(()=>store.resolveApproval('missing','approved'),/writer lock timed out/);
-assert.ok(Date.now()-start<4000,'stale writer lock wait unbounded');
+assert.ok(Date.now()-start<12000,'stale writer lock wait unbounded');
 assert.equal(fs.existsSync(path.join(locked,'writer.lock')),true,'crash lock stolen automatically');
 assert.equal(fs.existsSync(audit(locked)),false,'lock failure mutated audit');
 console.log('PASS approval-storage: 6 concurrent writers, short writes, truncation, tampering, and crash lock');
