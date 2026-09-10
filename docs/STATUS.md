@@ -47,7 +47,8 @@ release gates and issue ownership live in
 | Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
 | Type and test safety | Tests improved; strict typing open | Hermetic suites, seeded fuzzing, races, crash rejection, and content-bound receipts shipped; [#27](https://github.com/Rajveerx11/neura/issues/27) is closed. Configured typecheck passes; strict migration remains [#26](https://github.com/Rajveerx11/neura/issues/26). |
 | UX and accessibility | Ready for covered surfaces | YOLO requires confirmation and persistent danger treatment. Plan and Learn boards have narrow/desktop Edge, keyboard, and axe checks. [#37](https://github.com/Rajveerx11/neura/issues/37) is closed; covered screens do not prove universal accessibility. |
-| Health and operations | Major gap | Health checks and diagnostics can overstate readiness. Track [#39](https://github.com/Rajveerx11/neura/issues/39) and [#30](https://github.com/Rajveerx11/neura/issues/30). |
+| Health | Implemented, unreleased | Core readiness is separate from optional capabilities. Bounded MCP/provider probes report explicit states, redacted errors, runtime identity, and remediation. Track delivery in [#39](https://github.com/Rajveerx11/neura/issues/39). |
+| Evaluations and operations | Major gap | Privacy-preserving evaluation and observability remain open. Track [#30](https://github.com/Rajveerx11/neura/issues/30). |
 
 ## Production claim gate
 

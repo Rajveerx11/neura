@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reworked `/health` around explicit required and optional capabilities. Core
+  readiness no longer fails because optional MCP, skills, memory, or local Qwen
+  are absent. MCP and provider probes now distinguish missing, disabled,
+  unhealthy, degraded, and ready states; validate bounded initialization
+  responses; support timeout and cancellation; redact structured failures; and
+  report Neura version, runtime-contract hash, install identity, and remediation.
 - Made Work the default supervised mode, with contained workspace operations,
   WSL2/bubblewrap command execution, explicit approval boundaries, and no host
   fallback for unavailable Work proof. Closed #23.

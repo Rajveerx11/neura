@@ -87,6 +87,14 @@ response-time or embargo guarantee is offered.
   provisioned runner; unavailable execution never falls back to the host. YOLO
   retains host proof. `/ship` verifies and does not publish Git changes.
 - Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
+- `/health` executes only existing absolute stdio MCP binaries and sends
+  bounded initialize requests only to HTTPS or loopback HTTP endpoints.
+  All configured HTTP header values must use placeholders from the existing
+  explicit MCP environment allowlist; literal values are rejected regardless of
+  header name. Protocol headers are supplied by the probe. Stdio probes receive
+  no provider credentials; nonabsolute commands are not executed.
+  Repository-defined MCP servers are reported but never auto-probed.
+  Probe output and errors are bounded and redacted before display.
   Operation leases and paused session restoration prevent old work from crossing
   into a restricted mode. Late proof results cannot earn a new session receipt.
 - Application policy is distinct from OS isolation. Work/Human Away command
