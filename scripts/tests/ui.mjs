@@ -141,6 +141,48 @@ modeState.setMode('work');
 assert.equal(widgets.has('neura-health'),false,'failed health inspection retained a stale widget');
 assert.doesNotMatch(JSON.stringify(notices),/stale-widget-secret/,'failed health inspection leaked credentials');
 
+// A cancelled probe may return READY or reject; neither may publish a result.
+for (const outcome of ['ready', 'reject', 'pre-aborted']) {
+  const controller = new AbortController();
+  let calls = 0;
+  let started;
+  let finish;
+  const pending = new Promise((resolve, reject) => { finish = outcome === 'reject' ? reject : resolve; });
+  const running = new Promise((resolve) => { started = resolve; });
+  let handler;
+  registerHealth({ registerCommand(_name, command) { handler = command.handler; } }, async (_cwd, signal) => {
+    calls++;
+    assert.equal(signal, controller.signal);
+    started();
+    await pending;
+    return { state: 'ready' };
+  });
+  modeState.setMode('yolo');
+  cockpitState.patchCockpit({ phase: 'DEGRADED', degraded: 'previous finding' });
+  const previousNotices = [...cockpitState.getCockpitState().notices];
+  const noticeCount = notices.length;
+  widgets.set('neura-health', () => ({ render: () => ['stale READY'] }));
+  if (outcome === 'pre-aborted') controller.abort();
+  const completed = handler('', { ...context, abortSignal: controller.signal });
+  if (outcome !== 'pre-aborted') {
+    await running;
+    controller.abort();
+    finish(outcome === 'reject' ? new DOMException('cancelled', 'AbortError') : undefined);
+  }
+  await completed;
+  assert.equal(calls, outcome === 'pre-aborted' ? 0 : 1);
+  assert.equal(widgets.has('neura-health'), false, 'cancelled health published a widget');
+  assert.equal(statuses.has('neura-health'), false, 'cancelled health retained status');
+  assert.equal(modeState.isHostOperationActive(), false, 'cancelled health retained its lease');
+  const cockpit = cockpitState.getCockpitState();
+  assert.equal(cockpit.operation, undefined, 'cancelled health retained its operation');
+  assert.equal(cockpit.phase, 'DEGRADED', 'cancelled health published readiness');
+  assert.equal(cockpit.degraded, 'previous finding');
+  assert.deepEqual(cockpit.notices, previousNotices, 'cancelled health changed existing findings');
+  assert.equal(notices.length, noticeCount, 'cancellation reported an inspection error');
+}
+modeState.setMode('work');
+
 for (const width of [24, 40, 56, 72, 92, 120]) {
   for (const [id, factory] of widgets) {
     const lines = factory(null, null).render(width);

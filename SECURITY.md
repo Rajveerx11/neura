@@ -89,9 +89,10 @@ response-time or embargo guarantee is offered.
 - Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
 - `/health` executes only existing absolute stdio MCP binaries and sends
   bounded initialize requests only to HTTPS or loopback HTTP endpoints.
-  HTTP credentials come from each server's placeholder and the existing explicit
-  MCP environment allowlist. Stdio probes receive no provider credentials;
-  literal credential headers and nonabsolute commands are not executed.
+  All configured HTTP header values must use placeholders from the existing
+  explicit MCP environment allowlist; literal values are rejected regardless of
+  header name. Protocol headers are supplied by the probe. Stdio probes receive
+  no provider credentials; nonabsolute commands are not executed.
   Repository-defined MCP servers are reported but never auto-probed.
   Probe output and errors are bounded and redacted before display.
   Operation leases and paused session restoration prevent old work from crossing

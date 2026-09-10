@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import childProcess, { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import { syncBuiltinESMExports } from 'node:module';
 import { isolate } from './isolation.mjs';
 const scratchRoot = isolate();
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const {
+  inspect,
   inspectMcpConfig,
   mergeMcpConfigs,
   parseRuntimeContract,
@@ -87,6 +89,35 @@ assert.equal(requiredHealthState([
   { name: "core", required: true, state: "unhealthy" },
 ]), "unhealthy", "unhealthy required capability lost its state");
 
+// Exercise the real inventory with synthetic files and no ambient processes/network.
+const originalExecFile = childProcess.execFile;
+const originalFetch = globalThis.fetch;
+const checkpointPath = path.join(process.env.PI_CODING_AGENT_DIR, 'extensions/checkpoint.ts');
+fs.mkdirSync(path.dirname(checkpointPath), { recursive: true });
+childProcess.execFile = (_file, _args, _options, callback) => callback(null, '', '');
+syncBuiltinESMExports();
+globalThis.fetch = async () => new Response('{}');
+try {
+  for (const present of [false, true]) {
+    if (present) fs.writeFileSync(checkpointPath, '// synthetic checkpoint');
+    const report = await inspect(scratchRoot);
+    const checkpoint = report.capabilities.find((item) => item.name === 'checkpoint');
+    assert.ok(checkpoint?.required, 'checkpoint omitted from required readiness');
+    assert.equal(checkpoint.state, present ? 'ready' : 'missing');
+    assert.equal(checkpoint.action, present ? null : 'sync checkpoint extension');
+    assert.match(report.workflow, present ? /checkpoint ready/ : /checkpoint missing/);
+    assert.match(report.context, /^persona /, 'checkpoint shifted context capability grouping');
+    assert.equal(requiredHealthState(report.capabilities.map((item) =>
+      item.name === 'checkpoint' ? item : { ...item, state: 'ready' })),
+    present ? 'ready' : 'degraded', 'checkpoint loss did not block otherwise-ready inventory');
+  }
+} finally {
+  childProcess.execFile = originalExecFile;
+  syncBuiltinESMExports();
+  globalThis.fetch = originalFetch;
+  fs.rmSync(checkpointPath, { force: true });
+}
+
 const disabledMcp = await inspectMcpConfig({ mcpServers: { example: { disabled: true } } });
 assert.equal(disabledMcp.state, "disabled", "disabled MCP was reported missing or unhealthy");
 const missingMcp = await inspectMcpConfig({});
@@ -116,9 +147,12 @@ process.env.HEALTH_TEST_TOKEN = "synthetic-health-secret";
 let observedHeader;
 const readyMcp = await probeHttpMcp("fixture", {
   url: "https://example.test/mcp",
-  headers: { authorization: "$" + "{HEALTH_TEST_TOKEN}" },
+  headers: { authorization: "$" + "{HEALTH_TEST_TOKEN}", "x-access-key": "$" + "{HEALTH_TEST_TOKEN}" },
 }, async (_url, options) => {
   observedHeader = options.headers.authorization;
+  assert.equal(options.headers['x-access-key'], 'synthetic-health-secret', 'allowlisted custom credential not supplied');
+  assert.equal(options.headers.Accept, 'application/json, text/event-stream');
+  assert.equal(options.headers['Content-Type'], 'application/json');
   return new Response(JSON.stringify({
     jsonrpc: "2.0",
     id: 1,
@@ -127,6 +161,27 @@ const readyMcp = await probeHttpMcp("fixture", {
 });
 assert.equal(readyMcp.state, "ready", "valid HTTP MCP initialize failed");
 assert.equal(observedHeader, "synthetic-health-secret", "allowlisted MCP credential was not supplied to probe");
+for (const name of ['authorization', 'x-access-key', 'x-master-key', 'x-auth', 'X-Custom-Credential', 'Accept']) {
+  let called = false;
+  const result = await probeHttpMcp('fixture', {
+    url: 'https://example.test/mcp', headers: { [name]: 'synthetic-literal-secret' },
+  }, async () => { called = true; return new Response('{}'); });
+  assert.equal(result.problem?.code, 'configuration', name + ' accepted a literal value');
+  assert.equal(called, false, name + ' literal value reached the network');
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-literal-secret/);
+}
+for (const placeholder of ['HEALTH_UNLISTED_TOKEN', 'HEALTH_MISSING_TOKEN']) {
+  process.env.HEALTH_UNLISTED_TOKEN = 'synthetic-unlisted-secret';
+  process.env.MY_PI_MCP_ENV_ALLOWLIST = 'HEALTH_TEST_TOKEN,HEALTH_MISSING_TOKEN';
+  let called = false;
+  const result = await probeHttpMcp('fixture', {
+    url: 'https://example.test/mcp', headers: { 'x-auth': '$' + '{' + placeholder + '}' },
+  }, async () => { called = true; return new Response('{}'); });
+  assert.equal(result.problem?.code, 'authentication');
+  assert.equal(called, false, 'unavailable or unapproved credential reached the network');
+}
+delete process.env.HEALTH_UNLISTED_TOKEN;
+process.env.MY_PI_MCP_ENV_ALLOWLIST = 'HEALTH_TEST_TOKEN';
 const rejectedMcp = await probeHttpMcp("fixture", { url: "https://example.test/mcp" },
   async () => new Response("", { status: 401 }));
 assert.equal(rejectedMcp.problem.code, "authentication", "MCP authentication failure was misclassified");

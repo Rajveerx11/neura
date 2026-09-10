@@ -287,10 +287,8 @@ function allowedMcpHeaders(value: unknown): { headers?: Record<string, string>; 
         return { problem: cleanProblem("authentication", "MCP credential " + environmentName + " is unavailable") };
       }
       headers[name] = secret;
-    } else if (/authorization|api[-_]?key|cookie|token|secret/i.test(name)) {
-      return { problem: cleanProblem("configuration", "MCP header " + name + " must use an allowlisted environment placeholder") };
     } else {
-      headers[name] = raw;
+      return { problem: cleanProblem("configuration", "MCP header " + name + " must use an allowlisted environment placeholder") };
     }
   }
   return { headers };
@@ -626,6 +624,7 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
     capability("modes", true, modes && modeKeys ? "ready" : "degraded", modes && modeKeys ? "extension and keybinding ready" : "extension or keybinding missing", modes && modeKeys ? null : "sync extensions and keybindings"),
     capability("sandbox", true, sandbox ? "ready" : "degraded", sandbox ? "WSL2 and bubblewrap ready" : "unavailable", sandbox ? null : "install WSL2 + bubblewrap"),
     capability("proof", true, gate && !!uvxVersion ? "ready" : "degraded", gate && uvxVersion ? versionLabel(uvxVersion) : "gate or uvx missing", gate && uvxVersion ? null : "sync proof gate and install uv"),
+    capability("checkpoint", true, checkpoint ? "ready" : "missing", checkpoint ? "undo available" : "extension missing", checkpoint ? null : "sync checkpoint extension"),
     capability("persona", true, persona ? "ready" : "missing", persona ? "loaded" : "missing", persona ? null : "restore persona"),
     capability("memory", false, memory ? "ready" : "disabled", memory ? "configured" : "not configured", null),
     capability("skills", false, skills ? "ready" : "missing", skills ? skills + " found" : "none found", skills ? null : "configure skills only if needed"),
@@ -643,8 +642,8 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
     pi,
     identity: identity.label,
     core: capabilities.slice(0, 4).map(stateText).join(" · "),
-    workflow: capabilities.slice(4, 7).map(stateText).join(" · "),
-    context: capabilities.slice(7, 10).map(stateText).join(" · "),
+    workflow: capabilities.slice(4, 8).map(stateText).join(" · "),
+    context: capabilities.slice(8, 11).map(stateText).join(" · "),
     workspace: git.isRepo ? git.branch + " · " + changes + (sync ? " · " + sync : "") : "not a Git workspace",
     bridges: [mcp, qwen].map(stateText).join(" · "),
     impact: state === "ready"
@@ -750,18 +749,22 @@ export function registerHealth(pi, inspectHealth = inspect) {
       }
       let report: Awaited<ReturnType<typeof inspect>>;
       try {
+        ctx.abortSignal?.throwIfAborted();
         report = await inspectHealth(ctx.cwd, ctx.abortSignal);
+        ctx.abortSignal?.throwIfAborted();
       } catch (error) {
+        if (ctx.abortSignal?.aborted) return;
         const message = redactSensitiveText(error, 180) || "health inspection failed";
-        patchCockpit({ operation: undefined, phase: "DEGRADED", degraded: message });
+        patchCockpit({ phase: "DEGRADED", degraded: message });
         addCockpitNotice({ id: "health", message: "Health inspection failed", detail: message, tone: "warning", persistent: true });
         return void ctx.ui.notify(message, "error");
       } finally {
         release();
         ctx.ui.setStatus("neura-health", undefined);
+        patchCockpit({ operation: undefined });
       }
       const ready = report.state === "ready";
-      patchCockpit({ operation: undefined, phase: ready ? "READY" : "DEGRADED", degraded: ready ? undefined : report.action });
+      patchCockpit({ phase: ready ? "READY" : "DEGRADED", degraded: ready ? undefined : report.action });
       if (!ready) {
         addCockpitNotice({ id: "health", message: report.state === "unhealthy" ? "Harness unhealthy" : "Harness degraded", detail: report.action, tone: "warning", persistent: true });
       } else {
