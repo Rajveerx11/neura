@@ -84,7 +84,7 @@ and Human Away do not run this proof hook.
 
 Approval writers hold a cross-process directory lock across read, deduplication,
 and append. Short writes retry; completed appends are flushed. Lock waits stop
-after two seconds. Readers reject malformed JSON or a broken hash chain.
+after ten seconds. Readers reject malformed JSON or a broken hash chain.
 Windows can return `EPERM` during directory-lock contention. Acquisition retries
 that error within the same deadline; permanent denial still fails without audit
 mutation, and unrelated errors remain immediate. No lock is stolen or bypassed.

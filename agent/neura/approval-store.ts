@@ -140,7 +140,7 @@ function appendEvent(event: Omit<DecisionEvent, "prevHash" | "hash"> | Omit<Reso
 function withWriterLock<T>(operation: () => T): T {
   fs.mkdirSync(approvalDirectory(), { recursive: true });
   const lock = path.join(approvalDirectory(), "writer.lock");
-  const deadline = Date.now() + 2_000;
+  const deadline = Date.now() + 10_000;
   for (;;) {
     try { fs.mkdirSync(lock); break; }
     catch (error: any) {

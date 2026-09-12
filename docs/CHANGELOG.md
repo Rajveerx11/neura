@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Updated checkout and Node setup actions to their Node 24-native releases using
+  immutable commit pins, and refreshed the CI-only uv pin to `0.12.11`.
+- Increased the fail-closed approval writer-lock deadline from two to ten seconds
+  so valid concurrent writers do not intermittently time out on loaded CI runners.
 - Reworked `/health` around explicit required and optional capabilities. Core
   readiness no longer fails because optional MCP, skills, memory, or local Qwen
   are absent. MCP and provider probes now distinguish missing, disabled,
