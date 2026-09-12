@@ -44,8 +44,8 @@
   conduct, CODEOWNERS, structured issue forms, portable development guidance,
   package/repository metadata, and an explicit open-source publication
   checklist. Adopted Apache-2.0 with project NOTICE and SPDX package metadata.
-  Public visibility remains blocked on credential-incident closure,
-  public-default integration cleanup, and final history/content audit.
+  Public visibility remains blocked on public-default integration cleanup and
+  final history/content audit.
 - Added a complete-history secret scan to push and pull-request CI using the
   exact Gitleaks `8.30.1` Windows archive and its published SHA-256. Scanner
   output is fully redacted, the checkout includes every ref, and the dependency
@@ -54,8 +54,8 @@
   committed synthetic token fail.
 - Removed the historical plaintext GitHub-token field from the documented local
   Claude configuration while preserving working GitHub CLI keyring access. Added
-  a value-free incident record; closure remains blocked until owner confirmation
-  of revocation and absence from known logs or screenshots.
+  a value-free incident record. Owner-confirmed revocation, replacement, and
+  absence from known logs or screenshots closed the incident on 2026-09-12.
 - Required deliberate confirmation for every interactive transition into YOLO,
   rejected headless activation, and made the post-splash footer and transition
   use the shared danger treatment. Denial preserves the current mode, tools, and

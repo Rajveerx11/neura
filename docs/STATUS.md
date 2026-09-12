@@ -18,9 +18,9 @@ This revision includes Apache-2.0, community policies, and package metadata.
 Repository visibility remains private pending the
 [publication checklist](OPEN_SOURCE.md). Historical `v2.5.1` release
 remains usable for its documented personal, single-user scope.
-Production-readiness audit still has blockers in unattended
-execution, executable dependency trust, installation reproducibility, and
-credential-incident closure. Human Away remains preview-only.
+Production-readiness audit still has blockers in unattended execution,
+executable dependency trust, and installation reproducibility. Human Away
+remains preview-only.
 
 The canonical hardening backlog is
 [GitHub issue #31](https://github.com/Rajveerx11/neura/issues/31). Detailed
@@ -31,7 +31,7 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Public release | Blocked | Credential revocation confirmation, public-default configuration cleanup, final history/content audit, and GitHub settings remain. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
+| Public release | Blocked | Public-default configuration cleanup, final history/content audit, and GitHub settings remain. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
 | Pi and live Neura | Source verified; live status unverified | Source and CI pin Pi `0.84.4`. A fresh owner-authorized install and drift check are separate from merge. |
 | Dependency graphs | Verified at Learn delivery | Both lockfile graphs reported zero known vulnerabilities on 2026-09-07; Learn runtime verified 31 registry signatures and 13 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
 | Core harness | Ready for covered behavior | PR #44 passed Windows harness and Linux portable CI, 17 isolated suites/17 extensions, typecheck, docs, and real Learn/Plan browser checks. This is not a fresh live WSL replay. |
@@ -40,7 +40,7 @@ release gates and issue ownership live in
 | Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
 | Automatic execution | Remaining dependency-trust gap | Work proof is isolated and YOLO proof uses the host. `/ship` only verifies; it does not publish Git changes. Executable provenance remains [#22](https://github.com/Rajveerx11/neura/issues/22). |
 | Installation | Blocked | Atomic activation, rollback, file hashes, and unknown-extension detection are missing. Track [#21](https://github.com/Rajveerx11/neura/issues/21). |
-| Credential incident | Blocked | Historical GitHub-token rotation must be verified and documented. Track [#36](https://github.com/Rajveerx11/neura/issues/36). |
+| Credential incident | Closed | Owner confirmed revocation and replacement on 2026-09-12; complete-history scanning and negative regressions passed. See [#36](https://github.com/Rajveerx11/neura/issues/36) and [SECURITY_INCIDENTS.md](SECURITY_INCIDENTS.md). |
 | Plan confidentiality | Major gap | Broad searches can discover ignored or historical secrets. Track [#35](https://github.com/Rajveerx11/neura/issues/35). |
 | Approvals | Partially hardened | Cross-process locking, flushed appends, bounded Windows contention retries, and corruption/crash rejection are covered. Automatic recovery, authenticated tamper evidence, and stronger remote binding remain [#33](https://github.com/Rajveerx11/neura/issues/33). |
 | Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |

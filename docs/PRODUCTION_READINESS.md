@@ -19,12 +19,11 @@ Roadmap: [#31](https://github.com/Rajveerx11/neura/issues/31)
 
 ## P0 release blockers
 
-Issue state checked 2026-09-07. Merged source improvements remain unreleased;
+Issue state checked 2026-09-12. Merged source improvements remain unreleased;
 closing one issue does not establish production readiness.
 
 | Issue | Required outcome |
 |---|---|
-| [#36](https://github.com/Rajveerx11/neura/issues/36) | Close the historical credential exposure and enforce secret scanning. |
 | [#24](https://github.com/Rajveerx11/neura/issues/24) | Make Human Away transactional and resource bounded. |
 | [#22](https://github.com/Rajveerx11/neura/issues/22) | Pin and contain every automatically executed dependency. |
 | [#21](https://github.com/Rajveerx11/neura/issues/21) | Add a complete runtime manifest, atomic install, and rollback. |
@@ -46,6 +45,7 @@ closing one issue does not establish production readiness.
 
 | Delivery | Covered outcome |
 |---|---|
+| [#36](https://github.com/Rajveerx11/neura/issues/36), closed | Owner-confirmed token revocation and replacement, value-free incident record, complete-history secret scanning, and negative regression coverage. |
 | [#23](https://github.com/Rajveerx11/neura/issues/23), closed | Work is default; `work_exec` uses network-disabled WSL2 bubblewrap. This does not close every search/confidentiality gap. |
 | [#27](https://github.com/Rajveerx11/neura/issues/27), closed | Isolated modular suites, seeded fuzzing, approval concurrency/crash rejection, and content-bound verification receipts. Strict typing remains #26. |
 | [#37](https://github.com/Rajveerx11/neura/issues/37), closed | Deliberate YOLO confirmation, persistent danger treatment, and generated Plan accessibility coverage. |

@@ -20,7 +20,7 @@ release; do not retrofit their behavior into historical v2.5.1 notes.
 
 Before first public release, complete every unchecked item in
 [OPEN_SOURCE.md](OPEN_SOURCE.md). Repository must remain private while
-credential-incident closure or public-default cleanup is incomplete.
+public-default cleanup or another publication gate is incomplete.
 
 Public visibility and production readiness are independent. Public release notes
 must say `experimental` until production gate below passes.

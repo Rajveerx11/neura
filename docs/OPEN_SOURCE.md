@@ -33,7 +33,7 @@ unreleased additions to `2.5.1`, not evidence that a new public release exists.
 
 ## Required before changing visibility
 
-- [ ] Owner confirms historical token revocation and closes remaining evidence
+- [x] Owner confirmed historical token revocation and closed remaining evidence
       in [SECURITY_INCIDENTS.md](SECURITY_INCIDENTS.md) and
       [#36](https://github.com/Rajveerx11/neura/issues/36).
 - [ ] After license commit is pushed, verify GitHub recognizes Apache-2.0.
@@ -70,7 +70,7 @@ unreleased additions to `2.5.1`, not evidence that a new public release exists.
 
 ## Current blockers
 
-Publication should not occur while credential incident lacks owner-confirmed
-closure or public defaults expose machine-specific integration configuration.
+Publication should not occur while public defaults expose machine-specific
+integration configuration or the remaining checklist is incomplete.
 Production use has additional blockers in
 [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
