@@ -34,6 +34,27 @@ try {
 assert.deepEqual(store.verifyApprovalAudit(),{valid:true,events:48});
 assert.equal(store.listPending().length,48,'concurrent writers lost decisions');
 
+const extended=select('extended-lock');
+const extendedLock=path.join(extended,'writer.lock');
+fs.mkdirSync(extendedLock);
+const waiting=spawn(process.execPath,[worker,extended,'extended','barrier'],{env:process.env,windowsHide:true,stdio:'ignore'});
+const waitingDone=new Promise((resolve,reject)=>{waiting.once('error',reject);waiting.once('close',code=>code===0?resolve():reject(new Error(`extended lock writer failed with exit ${code}`)));});
+try {
+  const deadline=Date.now()+10000;
+  while(!fs.existsSync(path.join(extended,'ready-extended'))) {
+    assert.ok(Date.now()<deadline,'extended lock writer startup timed out');
+    await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  fs.writeFileSync(path.join(extended,'go'),'go');
+  await new Promise(resolve=>setTimeout(resolve,2500));
+  fs.rmdirSync(extendedLock);
+  await waitingDone;
+} finally {
+  if(fs.existsSync(extendedLock)) fs.rmdirSync(extendedLock);
+  if(waiting.exitCode===null) waiting.kill();
+}
+assert.equal(store.verifyApprovalAudit().events,8,'writer did not survive contention beyond the old deadline');
+
 // Reproduce Windows's transient EPERM on mkdir without changing the real lock,
 // append, or audit validation. Permanent denial must retain the bounded failure.
 const originalMkdir = fs.mkdirSync;
