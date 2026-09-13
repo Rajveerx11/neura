@@ -133,7 +133,7 @@ other lesson IDs remain separately labelled, unverified history, including after
 
 ## Limits and deliberate boundaries
 
-- Node.js 24.10+ is required. Runtime dependencies have a separate exact lockfile;
+- Node.js 24.15+ is required. Runtime dependencies have a separate exact lockfile;
   install with `npm ci --prefix agent/neura --ignore-scripts` for development.
 - At most 12 materials per learning session, 25 MiB and 100 pages/slides per file.
   OCR is offline English. Full PPTX layout, SmartArt, charts, and legacy PPT require
@@ -171,7 +171,7 @@ Independent review findings were fixed and rechecked. Final head `c66c88c` passe
 and Greptile review (5/5, no actionable findings), then merged as `d3e77c6`.
 This evidence does not claim a live installation or release.
 
-- `verify-harness.mjs`: 17 isolated suites, real Pi loader, all 17 extensions, mode/provider boundaries,
+- `verify-harness.mjs`: 17 isolated suites, real Pi loader, all 18 extensions, mode/provider boundaries,
   private reads/ADS/hardlinks, background hooks, restore, and existing-mode regressions.
 - `verify-learn-materials.mjs`: real synthetic PDF/PPTX/OCR and malformed-input tests.
 - `verify-learn-workshop.mjs`: diagram validation, escaping, exercise grading, SQL

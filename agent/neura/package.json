@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Pinned local document extraction and offline OCR for Learn Mode",
-  "engines": { "node": ">=24.10.0" },
+  "engines": { "node": ">=24.15.0" },
   "dependencies": {
     "@napi-rs/canvas": "1.0.8",
     "@tesseract.js-data/eng": "1.0.0",

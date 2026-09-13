@@ -337,6 +337,9 @@ assert.deepEqual(stock.errors, []);
 for (const extension of stock.extensions) {
   assert.equal(extension.commands.size + extension.tools.size + extension.handlers.size, 0, `Plain Pi acquired ${extension.resolvedPath}`);
 }
+const stockMcp = await loadExtensions([path.join(extensionDir, "mcp.ts")], repoRoot);
+assert.deepEqual(stockMcp.errors, []);
+assert.equal(stockMcp.extensions[0].commands.has("mcp"), true, "Plain Pi lost its configured MCP package");
 process.env.NEURA = "1";
 
 console.log('PASS learn: migrated mode, provider, private-read, background, and stock Pi regressions');

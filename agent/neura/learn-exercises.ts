@@ -75,7 +75,7 @@ process.stdin.on('end', () => {
   try {
     const { tables, query } = JSON.parse(input);
     db = new DatabaseSync(':memory:', { allowExtension: false, enableDoubleQuotedStringLiterals: false });
-    if (typeof db.setAuthorizer !== 'function') throw new Error('SQL practice requires Node 24.10 or later.');
+    if (typeof db.setAuthorizer !== 'function') throw new Error('SQL practice requires Node 24.15 or later.');
     db.exec('PRAGMA temp_store=MEMORY; PRAGMA hard_heap_limit=33554432; PRAGMA journal_mode=MEMORY;');
     for (const table of tables) {
       db.exec('CREATE TABLE "'+table.name+'" ('+table.columns.map(col=>'"'+col.name+'" '+col.type).join(',')+')');
@@ -128,7 +128,7 @@ async function runSql(tables: LearnTable[], answer: string): Promise<{ rows: Rec
       if (error) reject(error); else resolve(result!);
     };
     const timer = setTimeout(() => finish(new Error("Query exceeded the 3 second lab limit. Simplify the query.")), 3000);
-    child.on("error", () => finish(new Error("Could not start SQL lab. Node 24.10 or later is required.")));
+    child.on("error", () => finish(new Error("Could not start SQL lab. Node 24.15 or later is required.")));
     child.stdin.on("error", () => {});
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {

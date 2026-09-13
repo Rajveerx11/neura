@@ -75,7 +75,7 @@ resumed sources must be reimported before new verified citations. See the
 ## Requirements
 
 - Windows 11 or a current supported Windows release.
-- PowerShell, Git, Node.js **24.10+** with npm, and Pi `0.84.4`.
+- PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.84.4`.
   CI exercises Node `24.16.0`.
 - `uvx` for proof-of-work checks.
 - WSL2 plus `bubblewrap` for Work execution/proof and Human Away Preview.
@@ -147,7 +147,7 @@ git diff --check
 powershell -File .\install.ps1 -Check
 ```
 
-`verify-harness.mjs` runs 17 isolated suites and loads all 17 extensions through
+`verify-harness.mjs` runs 17 isolated suites and loads all 18 extensions through
 the checkout's Pi loader, including Learn's five nonbrowser suites. Browser
 checks need Edge; sandbox replay needs WSL2/bubblewrap. `install.ps1 -Check`
 checks live drift and Learn runtime provisioning without installing anything.

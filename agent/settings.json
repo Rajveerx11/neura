@@ -6,7 +6,10 @@
     "npm:@spences10/pi-redact@0.0.14",
     "npm:@spences10/pi-lsp@0.0.44",
     "npm:pi-subagents@0.41.0",
-    "npm:@spences10/pi-mcp@0.0.58",
+    {
+      "source": "npm:@spences10/pi-mcp@0.0.58",
+      "extensions": []
+    },
     "npm:@spences10/pi-context@0.1.15"
   ],
   "skills": [

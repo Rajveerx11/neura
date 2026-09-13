@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Kept MCP discovery off Learn, Plan, Work, and Human Away prompt paths. MCP
+  servers now connect explicitly through `/mcp connect` in YOLO and reconnect
+  on demand only when a connected MCP tool is selected. Closed #49.
 - Updated checkout and Node setup actions to their Node 24-native releases using
   immutable commit pins, and refreshed the CI-only uv pin to `0.12.11`.
 - Increased the fail-closed approval writer-lock deadline from two to ten seconds
@@ -23,7 +26,7 @@
   page previews and offline English OCR, choice/short/open-ended/SQL practice,
   and explicit save/resume. Browser progress uses a revision-bound terminal
   handoff; resumed sources are unverified until reimported.
-- Added a separately locked and reviewed Learn runtime, Node 24.10+ requirement,
+- Added a separately locked and reviewed Learn runtime, Node 24.15+ requirement,
   bounded document workers, and controlled `.neura-learning/` storage. First store
   creation requires native Windows. PPTX full layouts/charts require PDF export;
   parser process limits are not OS security isolation.

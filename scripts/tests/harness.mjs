@@ -11,6 +11,10 @@ export const repoRoot = path.resolve(import.meta.dirname, '../..');
 export const scratchRoot = isolate();
 process.env.NEURA = '1';
 process.env.NEURA_HEADMASTER = 'off';
+process.env.MY_PI_MCP_EAGER_CONNECT = '1';
+fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'mcp.json'), JSON.stringify({
+  mcpServers: { fixture: { url: 'https://mcp.fixture.test' } },
+}));
 const { loaderPath, tuiPath } = pinnedPi(repoRoot);
 const { loadExtensions } = await import(pathToFileURL(loaderPath).href);
 const { visibleWidth } = await import(pathToFileURL(tuiPath).href);
@@ -41,8 +45,9 @@ const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.
 const loaded = await loadExtensions(files, repoRoot);
 
 assert.deepEqual(loaded.errors, [], `extension load errors: ${JSON.stringify(loaded.errors)}`);
+assert.equal(process.env.MY_PI_MCP_EAGER_CONNECT, '1', "MCP wrapper did not restore eager-connect environment");
 assert.equal(loaded.extensions.length, files.length, "not every extension loaded");
-assert.equal(loaded.extensions.length, 17, "expected Neura's 17 extensions including Learn");
+assert.equal(loaded.extensions.length, 18, "expected Neura's 18 extensions including MCP gating");
 
 // loadExtensions deliberately leaves action methods unbound. Bind the small runtime
 // surface exercised by this deterministic harness without constructing an AgentSession.
@@ -117,6 +122,7 @@ const cockpitState = await import('../../agent/neura/cockpit-state.ts');
 const guardrail = loaded.extensions.find(e => e.resolvedPath.endsWith(path.sep + 'guardrail.ts'));
 const guard = firstHandler(guardrail, 'tool_call');
 const modes = extensionWithCommand('mode');
+const mcp = extensionWithCommand('mcp');
 const stripAnsi = value => value.replace(/\x1b\[[0-9;]*m/g, '');
 const widthOf = visibleWidth;
 export { assert, execFileSync, spawnSync, createHash, fs, os, path, pathToFileURL,
@@ -126,4 +132,4 @@ export { assert, execFileSync, spawnSync, createHash, fs, os, path, pathToFileUR
   healthLines, parseRuntimeContract, piRuntimeStatus, files, runtimeContract, packageManifest,
   loaded, registeredToolNames, state, appendedEntries, sentUserMessages, extensionWithCommand,
   extensionWithTool, firstHandler, widgets, statuses, notices, ui, context, modeState,
-  cockpitState, guardrail, guard, modes, stripAnsi, widthOf, loadExtensions, extensionDir };
+  cockpitState, guardrail, guard, modes, mcp, stripAnsi, widthOf, loadExtensions, extensionDir };

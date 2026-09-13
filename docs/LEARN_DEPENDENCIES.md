@@ -5,7 +5,7 @@ the document runtime; repository development dependencies remain separate.
 Install with `npm ci --prefix agent/neura --ignore-scripts`. The Neura installer
 must copy the manifest, lockfile, and worker alongside the TypeScript modules,
 then run the same locked install in the generated `neura` directory. Do not copy
-development `node_modules` or enable lifecycle scripts. Learn Mode requires Node 24.10+ for the SQLite authorizer;
+development `node_modules` or enable lifecycle scripts. Learn Mode requires Node 24.15+ for the SQLite authorizer;
 the exercised Windows runtime is Node 24.16.0.
 
 ## Exact direct dependencies and source review

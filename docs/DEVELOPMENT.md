@@ -8,7 +8,7 @@ changes back later. Live harness is an installation target, not source.
 ## Prerequisites
 
 - Current supported Windows and PowerShell.
-- Node.js 24.10+ and npm; CI uses 24.16.0.
+- Node.js 24.15+ and npm; CI uses 24.16.0.
 - Git.
 - Pi `0.84.4` for current `main`.
 - `uvx` for proof-of-work.
@@ -78,7 +78,7 @@ or approval state between worktrees.
 ## Verification scope
 
 `scripts/verify-harness.mjs` launches 17 isolated suites, including five Learn
-suites, and loads all 17 extensions through the checkout's Pi loader. See
+suites, and loads all 18 extensions through the checkout's Pi loader. See
 [VERIFICATION.md](VERIFICATION.md) for focused commands, temporary-home
 isolation, seeded fuzzing, race/crash cases, and Linux coverage.
 
