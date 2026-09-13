@@ -84,8 +84,8 @@ response-time or embargo guarantee is offered.
   guardrail never expands the selected mode's tool allowlist.
 - Headmaster cannot widen deterministic policy.
 - Work and YOLO proof run only in the network-disabled WSL sandbox with the
-  exact hash-verified uv bundle and wheelhouse mounted read-only; the fresh
-  cache is sandbox-local. Unavailable execution never falls back to the host.
+  exact hash-verified uv bundle, CPython interpreter, and wheelhouse mounted
+  read-only; the fresh cache is sandbox-local. Unavailable execution never falls back to the host.
   `/ship` verifies and does not publish Git changes.
 - Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
 - `/health` executes only existing absolute stdio MCP binaries and sends

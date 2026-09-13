@@ -77,8 +77,8 @@ claim to solve all concurrent filesystem races or Plan confidentiality (#35).
 ## Approval failures and remaining gates
 
 Work and YOLO proof execute only inside the network-disabled WSL2 bubblewrap
-environment. Its exact hash-verified uv binaries and proof wheelhouse mount
-read-only, while each run uses a fresh sandbox-local cache. Unavailable sandbox
+environment. Its exact hash-verified uv binaries, CPython interpreter, and proof
+wheelhouse mount read-only, while each run uses a fresh sandbox-local cache. Unavailable sandbox
 execution reports unavailable, without host fallback. Both modes block mode
 changes during capture and verification. Learn, Plan, and Human Away do not run
 this proof hook.

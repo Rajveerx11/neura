@@ -12,6 +12,11 @@
       "archiveSha256": "4ae93e0f148a18434cc094072547cec88912fc4a72b984183c7d0d0e9586cb5e",
       "uvSha256": "215990511ac349fb8c46457774f5e65dbaf4aa313fac429fbd2e35254250c932",
       "uvxSha256": "ff2b9c72535d011d08bb2c916ff12d40246b225763ad176838842efd50d8d482",
+      "python": {
+        "path": "/usr/bin/python3.12",
+        "version": "3.12.3",
+        "sha256": "e1efa562c2cc2e35521a5c9c9b9939921001ff8ca9708a13ef15ace68cc2ccd7"
+      },
       "wheels": {
         "proof_of_work_agent-0.2.0-py3-none-any.whl": "e1dc9a077eb2039eced85e9c2e78c85d6d3ffc7054559f7c4df044d940aae6c6",
         "cryptography-49.0.0-cp311-abi3-manylinux_2_34_x86_64.whl": "cbc77da8c523d5abd028635ba850a6966fcee2c82e2bf65a41d1d8afe0f98be9",

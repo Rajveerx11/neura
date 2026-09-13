@@ -12,7 +12,7 @@ import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/co
 import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "../neura/process-security.ts";
 
-type Snap = { tree: string; root: string; directory: string; files: { name: string; mode: number }[]; when: string; label: string };
+type Snap = { tree: string; root: string; directory: string; files: { name: string; mode: number }[]; when: string; label: string; recoveryDirectories?: string[] };
 const MAX_FILES = 50_000;
 const MAX_BYTES = 64 * 1024 * 1024;
 
@@ -30,7 +30,10 @@ function git(cwd: string, args: string[]): Promise<string | null> {
 }
 
 function removeSnapshot(snap: Snap | null): void {
-  if (snap) try { fs.rmSync(snap.directory, { recursive: true, force: true }); } catch {}
+  if (!snap) return;
+  for (const directory of [snap.directory, ...(snap.recoveryDirectories ?? [])]) {
+    try { fs.rmSync(directory, { recursive: true, force: true }); } catch {}
+  }
 }
 
 function inside(root: string, target: string): boolean {
@@ -52,14 +55,57 @@ function sourceFile(root: string, name: string): { path: string; stat: fs.Stats 
   return { path: canonical, stat: fs.statSync(canonical) };
 }
 
-function replaceFile(source: string, target: string, mode: number): void {
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const temporary = path.join(path.dirname(target), `.neura-restore-${process.pid}-${path.basename(target)}.tmp`);
+function readFileNoFollow(source: string, sourceRoot: string): Buffer {
+  const root = fs.realpathSync(sourceRoot);
+  const before = fs.lstatSync(source);
+  if (!before.isFile() || before.isSymbolicLink()) throw new Error("Checkpoint source is not a regular file.");
+  const canonical = fs.realpathSync(source);
+  if (!inside(root, canonical)) throw new Error("Checkpoint source escaped its snapshot.");
+  const descriptor = fs.openSync(canonical, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
   try {
-    fs.copyFileSync(source, temporary);
-    fs.chmodSync(temporary, mode);
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.size > MAX_BYTES) {
+      throw new Error("Checkpoint source changed before restore.");
+    }
+    const content = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    if (after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) {
+      throw new Error("Checkpoint source changed during restore.");
+    }
+    return content;
+  } finally { fs.closeSync(descriptor); }
+}
+
+function writeExclusiveCopy(source: string, sourceRoot: string, destination: string, mode: number): void {
+  const content = readFileNoFollow(source, sourceRoot);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const descriptor = fs.openSync(destination,
+    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+  try {
+    fs.writeFileSync(descriptor, content);
+    fs.fchmodSync(descriptor, mode);
+    fs.fsyncSync(descriptor);
+  } finally { fs.closeSync(descriptor); }
+}
+
+function replaceFile(source: string, sourceRoot: string, target: string, targetRoot: string, mode: number): void {
+  const parent = path.dirname(target);
+  fs.mkdirSync(parent, { recursive: true });
+  const canonicalRoot = fs.realpathSync(targetRoot);
+  const canonicalParent = fs.realpathSync(parent);
+  if (!inside(canonicalRoot, canonicalParent) || fs.lstatSync(parent).isSymbolicLink()) {
+    throw new Error("Checkpoint target directory escaped the workspace.");
+  }
+  const temporaryDirectory = fs.mkdtempSync(path.join(canonicalParent, ".neura-restore-"));
+  const temporary = path.join(temporaryDirectory, "replacement");
+  try {
+    writeExclusiveCopy(source, sourceRoot, temporary, mode);
+    if (fs.realpathSync(parent) !== canonicalParent) throw new Error("Checkpoint target directory changed during restore.");
     fs.renameSync(temporary, target);
-  } finally { try { fs.unlinkSync(temporary); } catch {} }
+  } finally {
+    try { fs.unlinkSync(temporary); } catch {}
+    try { fs.rmdirSync(temporaryDirectory); } catch {}
+  }
 }
 
 // Snapshot raw bytes outside Git's object database. Git only enumerates names;
@@ -115,10 +161,11 @@ export async function captureCheckpoint(cwd: string): Promise<Snap | null> {
 // ponytail: files CREATED after the snapshot are left behind (deleting untracked
 // files is how you lose real work) — surfaced in the /undo notice instead.
 export async function restoreCheckpoint(cwd: string, snap: Snap,
-  options: { beforeWrite?: (name: string, index: number) => void } = {}): Promise<boolean> {
+  options: { beforeWrite?: (name: string, index: number) => void; beforeRollbackWrite?: (name: string, index: number) => void } = {}): Promise<boolean> {
   const release = acquireHostOperation();
   if (!release) return false;
   let rollbackDirectory: string | null = null;
+  let preserveRollback = false;
   try {
     const top = await git(cwd, ["rev-parse", "--show-toplevel"]);
     if (!top || fs.realpathSync(top) !== snap.root) return false;
@@ -141,29 +188,33 @@ export async function restoreCheckpoint(cwd: string, snap: Snap,
     for (const entry of valid) {
       if (!entry.existed) continue;
       const backup = path.join(rollbackDirectory, ...entry.file.name.split("/"));
-      fs.mkdirSync(path.dirname(backup), { recursive: true });
-      fs.copyFileSync(entry.target, backup);
+      writeExclusiveCopy(entry.target, snap.root, backup, entry.mode);
     }
     try {
       valid.forEach((entry, index) => {
         options.beforeWrite?.(entry.file.name, index);
-        replaceFile(entry.source, entry.target, entry.file.mode);
+        replaceFile(entry.source, snap.directory, entry.target, snap.root, entry.file.mode);
       });
       return true;
     } catch {
       let rolledBack = true;
-      for (const entry of [...valid].reverse()) {
+      for (const [index, entry] of [...valid].reverse().entries()) {
         try {
-          if (entry.existed) replaceFile(path.join(rollbackDirectory, ...entry.file.name.split("/")), entry.target, entry.mode);
+          options.beforeRollbackWrite?.(entry.file.name, index);
+          if (entry.existed) replaceFile(path.join(rollbackDirectory, ...entry.file.name.split("/")), rollbackDirectory, entry.target, snap.root, entry.mode);
           else if (fs.existsSync(entry.target)) fs.unlinkSync(entry.target);
         } catch { rolledBack = false; }
       }
-      if (!rolledBack) throw new Error("Checkpoint rollback failed.");
+      if (!rolledBack) {
+        snap.recoveryDirectories ??= [];
+        snap.recoveryDirectories.push(rollbackDirectory);
+        preserveRollback = true;
+      }
       return false;
     }
   } catch { return false; }
   finally {
-    if (rollbackDirectory) try { fs.rmSync(rollbackDirectory, { recursive: true, force: true }); } catch {}
+    if (rollbackDirectory && !preserveRollback) try { fs.rmSync(rollbackDirectory, { recursive: true, force: true }); } catch {}
     release();
   }
 }
@@ -242,11 +293,17 @@ export default function (pi) {
         const after = await captureCheckpoint(ctx.cwd);
         const unchanged = !!now && !!after && now.tree === after.tree;
         removeSnapshot(after);
-        removeSnapshot(now);
+        if (unchanged) removeSnapshot(now);
+        else if (now) {
+          now.when = new Date().toTimeString().slice(0, 5);
+          now.label = "(pre-undo recovery)";
+          snaps.push(now);
+        }
         snaps.push(snap); // restore failed, keep it available
+        while (snaps.length > 20) removeSnapshot(snaps.shift() ?? null);
         patchCockpit({ phase: "RECOVERY", checkpoint: "failed", operation: undefined });
         const detail = unchanged ? "Rollback restored the pre-undo state; snapshot remains available."
-          : "Pre-undo state could not be confirmed; inspect the worktree before continuing.";
+          : "Pre-undo state could not be confirmed; recovery snapshots remain available for retry or inspection.";
         addCockpitNotice({ id: "checkpoint", message: "Snapshot restore failed", detail, tone: "error", persistent: true });
         ctx.ui.notify(`restore failed · ${detail.toLowerCase()}`, "error");
       }

@@ -78,8 +78,9 @@ resumed sources must be reimported before new verified citations. See the
 - Windows 11 or a current supported Windows release.
 - PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.84.4`.
   CI exercises Node `24.16.0`.
-- uv/`uvx` `0.12.11` and the five reviewed proof wheels in a dedicated WSL
-  wheelhouse configured by `NEURA_WSL_UV_DIR` and `NEURA_WSL_PROOF_WHEELHOUSE`.
+- uv/`uvx` `0.12.11`, hash-pinned WSL CPython `3.12.3`, and the five reviewed
+  proof wheels in a dedicated wheelhouse configured by `NEURA_WSL_UV_DIR` and
+  `NEURA_WSL_PROOF_WHEELHOUSE`.
 - WSL2 plus `bubblewrap` for Work execution/proof and Human Away Preview.
   Work and YOLO proof require the exact runner and packages already available
   offline inside WSL; unavailable isolation never falls back to host execution.

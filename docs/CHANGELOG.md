@@ -9,7 +9,7 @@
   the unreliable two-window handoff; terminal `neura` stays in place. The profile
   suppresses its update card, and duplicate auto-discovered skill roots are excluded
   so the first viewport stays clean. No runtime dependency or network fetch was added.
-- Pinned and hash-verified uv, Git, and the proof runner's complete runtime
+- Pinned and hash-verified uv, CPython, Git, and the proof runner's complete runtime
   closure; mounted the WSL proof binaries/wheelhouse read-only with a fresh
   sandbox-local cache; and routed Work/YOLO proof through bubblewrap with no
   host fallback. Hardened automatic Git against repository hooks, filters,

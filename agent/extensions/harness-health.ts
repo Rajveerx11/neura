@@ -603,7 +603,7 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
     getGitHealth(cwd),
     probeLocalProvider(fetch, signal),
     humanAwaySandboxAvailable(),
-    inspectProofSandboxRuntime(signal),
+    inspectProofSandboxRuntime(signal, cwd),
     mcpHealth(cwd, signal),
   ]);
   const pi = piRuntimeStatus(PI_VERSION, requiredPiVersion());

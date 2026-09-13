@@ -25,6 +25,12 @@ function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Test-ProofRuntime {
+    if (-not (Test-Command "node")) { return $false }
+    & node (Join-Path $repo "scripts\check-proof-runtime.mjs") *> $null
+    return $LASTEXITCODE -eq 0
+}
+
 function Normalize-Text($Value) {
     $normalized = $Value -replace "`r`n?", "`n"
     return $normalized.TrimEnd([char[]]@([char]10))
@@ -106,12 +112,15 @@ if ($Check) {
     } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]'24.15.0') {
         $drift += "Node.js 24.15 or newer is required for Neura"
     }
-    foreach ($cmd in @("pi", "git", "uvx")) {
+    foreach ($cmd in @("pi", "git")) {
         if (-not (Test-Command $cmd)) { $missing += $cmd }
     }
     if (Test-Command "pi") {
         $piVersion = (& pi --version).Trim()
         if ($piVersion -ne $requiredPiVersion) { $drift += "Pi $piVersion installed; required $requiredPiVersion" }
+    }
+    if (-not (Test-ProofRuntime)) {
+        $drift += "WSL proof runtime unavailable or different from runtime-contract.json"
     }
     $pairs = @(
         @("$repo\agent\extensions", "$agent\extensions"),
@@ -329,5 +338,5 @@ if ((Test-Path $target) -and -not $ForceSettings) {
     Copy-Item "$repo\agent\settings.json" $target -Force
 }
 
-if (-not (Test-Command "uvx")) { Write-Warning "uvx missing: proof-of-work verification will be unavailable." }
+if (-not (Test-ProofRuntime)) { Write-Warning "WSL proof runtime unavailable or different from runtime-contract.json; proof will remain unavailable." }
 Write-Host "Neura installed. Run 'pi update --extensions --approve', then 'neura' and '/health'."

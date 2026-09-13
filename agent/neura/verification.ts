@@ -149,12 +149,17 @@ export async function runProof(cwd: string, quick: boolean, options: {
 }
 
 export const PROOF_UV_VERSION = "0.12.11";
+export const PROOF_PYTHON = "/tmp/neura-bin/python3.12";
 const PROOF_RUNTIME_PINS = ["cryptography==49.0.0", "cffi==2.1.0", "pycparser==3.0", "PyYAML==6.0.3"] as const;
 
-export function proofRunnerArguments(quick: boolean): string[] {
-  return ["--isolated", "--offline", "--no-config", "--no-index", "--find-links", "/tmp/proof-wheels",
+export function proofRuntimeArguments(): string[] {
+  return ["--python", PROOF_PYTHON, "--isolated", "--offline", "--no-config", "--no-index", "--find-links", "/tmp/proof-wheels",
     "--from", "proof-of-work-agent==0.2.0",
-    ...PROOF_RUNTIME_PINS.flatMap((dependency) => ["--with", dependency]),
+    ...PROOF_RUNTIME_PINS.flatMap((dependency) => ["--with", dependency])];
+}
+
+export function proofRunnerArguments(quick: boolean): string[] {
+  return [...proofRuntimeArguments(),
     "proof-of-work", "check", "--json", "--base", "HEAD", ...(quick ? ["--no-tests"] : [])];
 }
 

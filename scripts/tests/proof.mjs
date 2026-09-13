@@ -6,7 +6,7 @@ import { isolate } from './isolation.mjs';
 import { repository, git } from './git-fixture.mjs';
 const scratch = isolate();
 process.env.NEURA = '1';
-const { captureWorktree, changedFiles, execute, PROOF_UV_VERSION, proofRunnerArguments, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
+const { captureWorktree, changedFiles, execute, PROOF_PYTHON, PROOF_UV_VERSION, proofRunnerArguments, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
 const { registerCheckGate, runModeProof } = await import('../../agent/extensions/check-gate.ts');
 const { captureCheckpoint, restoreCheckpoint } = await import('../../agent/extensions/checkpoint.ts');
 const { getGitHealth } = await import('../../agent/neura/core.ts');
@@ -14,6 +14,8 @@ const { setMode } = await import('../../agent/neura/mode-state.ts');
 const root = repository(scratch);
 const runtimeContract = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../agent/neura/runtime-contract.json'), 'utf8'));
 assert.equal(PROOF_UV_VERSION, runtimeContract.automaticExecutables.proof.uvVersion, 'proof uv version drifted from runtime contract');
+assert.equal(PROOF_PYTHON, '/tmp/neura-bin/python3.12', 'proof Python path drifted from sandbox mount');
+assert.deepEqual(proofRunnerArguments(true).slice(0, 2), ['--python', PROOF_PYTHON], 'proof did not select the pinned Python interpreter');
 // Reconciliation keeps Work proof in the OS sandbox and Learn fully read-only.
 let sandboxProofCalls = 0, hostProofCalls = 0;
 const hostProof = async () => { hostProofCalls++; return { ok: true, completed: true, stdout: '{"passed":true,"reasons":[]}' }; };
@@ -125,8 +127,16 @@ const checkpoint = await captureCheckpoint(root);
 assert.ok(checkpoint, 'safe checkpoint failed');
 assert.equal(fs.existsSync(marker), false, 'checkpoint capture ran a repository filter');
 fs.writeFileSync(path.join(root, 'tracked.txt'), 'changed after checkpoint\n');
+const outsideRestore = path.join(scratch, 'outside-restore.txt');
+const predictableRestore = path.join(root, `.neura-restore-${process.pid}-tracked.txt.tmp`);
+fs.writeFileSync(outsideRestore, 'outside stays unchanged\n');
+try { fs.symlinkSync(outsideRestore, predictableRestore, 'file'); }
+catch { fs.linkSync(outsideRestore, predictableRestore); }
 assert.equal(await restoreCheckpoint(root, checkpoint), true, 'safe checkpoint restore failed');
 assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'checkpoint content\n');
+assert.equal(fs.readFileSync(outsideRestore, 'utf8'), 'outside stays unchanged\n', 'predictable restore temporary followed an outside link');
+assert.equal(fs.lstatSync(path.join(root, 'tracked.txt')).isSymbolicLink(), false, 'restored target became a symlink');
+fs.unlinkSync(predictableRestore);
 assert.equal(fs.existsSync(marker), false, 'checkpoint restore ran a repository helper');
 fs.rmSync(checkpoint.directory, { recursive: true, force: true });
 
@@ -144,6 +154,20 @@ assert.equal(await restoreCheckpoint(root, transactional, { beforeWrite(name) {
 } }), false, 'mid-restore fault unexpectedly succeeded');
 assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'current one\n', 'rollback lost the first pre-undo file');
 assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'current two\n', 'rollback lost the second pre-undo file');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'recovery current one\n');
+fs.writeFileSync(path.join(root, 'transaction-two.txt'), 'recovery current two\n');
+assert.equal(await restoreCheckpoint(root, transactional, {
+  beforeWrite(name) { if (name === 'transaction-two.txt') throw new Error('synthetic restore failure'); },
+  beforeRollbackWrite(name) { if (name === 'tracked.txt') throw new Error('synthetic rollback failure'); },
+}), false, 'rollback-failure fault unexpectedly succeeded');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'transaction snapshot one\n', 'rollback failure state was reported as recovered');
+assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'recovery current two\n', 'rollback failure corrupted an untouched file');
+assert.equal(transactional.recoveryDirectories?.length, 1, 'rollback failure discarded recovery evidence');
+assert.ok(fs.existsSync(transactional.recoveryDirectories[0]), 'rollback recovery evidence was deleted');
+assert.equal(await restoreCheckpoint(root, transactional), true, 'checkpoint retry was not idempotent');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'transaction snapshot one\n');
+assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'transaction snapshot two\n');
+for (const directory of transactional.recoveryDirectories) fs.rmSync(directory, { recursive: true, force: true });
 fs.rmSync(transactional.directory, { recursive: true, force: true });
 setMode('work');
 

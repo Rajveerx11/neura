@@ -42,9 +42,12 @@ uv `0.12.11` and uses `--isolated --offline --no-config --no-index`; a
 repository cannot provide uv configuration or trigger a download. The runtime
 contract pins official Linux x86-64 archive SHA-256
 `4ae93e0f148a18434cc094072547cec88912fc4a72b984183c7d0d0e9586cb5e`
-and the extracted uv/uvx hashes. Their configured WSL directory and the exact
-five-wheel directory are verified, mounted read-only, and installed into a
-fresh sandbox-local cache. The command pins
+and the extracted uv/uvx hashes. CPython `3.12.3` at `/usr/bin/python3.12` is
+pinned by executable SHA-256
+`e1efa562c2cc2e35521a5c9c9b9939921001ff8ca9708a13ef15ace68cc2ccd7`.
+The configured uv directory, interpreter, and exact five-wheel directory are
+verified, mounted read-only, and exercised inside the sandbox with a fresh
+local cache. The command passes the mounted interpreter through `--python` and pins
 `proof-of-work-agent==0.2.0` and its complete runtime closure:
 `cryptography==49.0.0`, `cffi==2.1.0`, `pycparser==3.0`, and `PyYAML==6.0.3`.
 
@@ -112,7 +115,8 @@ development APIs, and CI still pin `0.84.4`; verify live installations separatel
 6. Record behavior, migration, and rollback in the changelog and release notes.
 
 For a proof-runner update, review its source tag and full lockfile, update every
-inline runtime pin and recorded hash together, then populate a dedicated WSL
+inline runtime pin and recorded hash together, verify the pinned WSL CPython,
+then populate a dedicated WSL
 wheelhouse and configure `NEURA_WSL_UV_DIR` plus
 `NEURA_WSL_PROOF_WHEELHOUSE` during an authorized release rehearsal. Roll back
 by restoring the previous constants
