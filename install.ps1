@@ -69,9 +69,9 @@ if ($Check) {
     $drift = @()
     $credentialWarnings = @()
     if (-not (Test-Command "node")) {
-        $missing += "Node.js 24.10 or newer"
-    } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]'24.10.0') {
-        $drift += "Node.js 24.10 or newer is required for the Learn SQL lab"
+        $missing += "Node.js 24.15 or newer"
+    } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]'24.15.0') {
+        $drift += "Node.js 24.15 or newer is required for Neura"
     }
     foreach ($cmd in @("pi", "git", "uvx")) {
         if (-not (Test-Command $cmd)) { $missing += $cmd }
@@ -188,9 +188,9 @@ if ($piVersion -ne $requiredPiVersion) {
 }
 
 if (-not (Test-Command "npm")) { throw "npm is required to install the Learn document runtime." }
-if (-not (Test-Command "node")) { throw "Node.js 24.10 or newer is required for Learn Mode." }
+if (-not (Test-Command "node")) { throw "Node.js 24.15 or newer is required for Neura." }
 $learnNodeVersion = (& node --version).Trim().TrimStart('v')
-if ([version]$learnNodeVersion -lt [version]'24.10.0') { throw "Node.js 24.10 or newer is required for the contained Learn SQL lab." }
+if ([version]$learnNodeVersion -lt [version]'24.15.0') { throw "Node.js 24.15 or newer is required for Neura." }
 New-Item -ItemType Directory -Force "$agent\extensions", "$agent\themes", "$agent\neura", $bin | Out-Null
 foreach ($name in $retiredExtensions) {
     $retiredPath = Join-Path "$agent\extensions" $name

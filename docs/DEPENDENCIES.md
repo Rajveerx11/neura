@@ -20,7 +20,7 @@ npm ci --prefix agent/neura --ignore-scripts
 ```
 
 The installer provisions the nested graph with scripts disabled and records a
-lock receipt. It does not make installation atomic. Node 24.10+ is required for
+lock receipt. It does not make installation atomic. Node 24.15+ is required for
 Learn's SQLite authorizer; CI exercises 24.16.0.
 
 ## Reviewed runtime surface

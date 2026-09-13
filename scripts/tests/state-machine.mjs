@@ -62,9 +62,30 @@ const fetchesAfterConnect = mcpFetches;
 await mcpBeforeAgentStart({ systemPromptOptions: { selectedTools: [fixtureTool] } }, context);
 assert.equal(mcpFetches, fetchesAfterConnect, "connected YOLO MCP tool reinitialized its server");
 await firstHandler(mcp, "session_shutdown")({}, context);
-await mcpBeforeAgentStart({ systemPromptOptions: { selectedTools: [fixtureTool] } }, context);
+let releaseReconnect;
+globalThis.fetch = async (_url, init) => {
+  mcpFetches++;
+  const request = JSON.parse(init.body);
+  if (!releaseReconnect) await new Promise((resolve) => { releaseReconnect = resolve; });
+  const result = request.method === "server/discover"
+    ? { supportedVersions: ["2026-07-28"] }
+    : request.method === "tools/list"
+      ? { tools: [{ name: "ping", description: "fixture", inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false } }] }
+      : {};
+  return new Response(request.id === undefined ? null : JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), {
+    status: request.id === undefined ? 204 : 200,
+    headers: { "content-type": "application/json" },
+  });
+};
+const reconnect = mcpBeforeAgentStart({ systemPromptOptions: { selectedTools: [fixtureTool] } }, context);
+while (!releaseReconnect) await new Promise((resolve) => setTimeout(resolve, 5));
+assert.equal(modeState.isHostOperationActive(), true, "MCP reconnect did not hold a YOLO operation lease");
+const restoredMode = modeState.restoreMode("work");
+assert.equal(modeState.isModeRestorePending(), true, "session replacement did not wait for MCP reconnect");
+releaseReconnect();
+await reconnect;
+assert.equal(await restoredMode, true, "restricted session did not resume after MCP reconnect drained");
 assert.ok(mcpFetches > fetchesAfterConnect, "selected YOLO MCP tool did not reconnect on demand");
-modeState.setMode("work");
 await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
 assert.equal(state.activeTools.includes(fixtureTool), false, "late MCP tool leaked into restricted mode");
 const restrictedMcpPayload = await firstHandler(modes, "before_provider_request")({ payload: {

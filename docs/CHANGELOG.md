@@ -26,7 +26,7 @@
   page previews and offline English OCR, choice/short/open-ended/SQL practice,
   and explicit save/resume. Browser progress uses a revision-bound terminal
   handoff; resumed sources are unverified until reimported.
-- Added a separately locked and reviewed Learn runtime, Node 24.10+ requirement,
+- Added a separately locked and reviewed Learn runtime, Node 24.15+ requirement,
   bounded document workers, and controlled `.neura-learning/` storage. First store
   creation requires native Windows. PPTX full layouts/charts require PDF export;
   parser process limits are not OS security isolation.

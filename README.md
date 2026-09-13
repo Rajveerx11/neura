@@ -75,7 +75,7 @@ resumed sources must be reimported before new verified citations. See the
 ## Requirements
 
 - Windows 11 or a current supported Windows release.
-- PowerShell, Git, Node.js **24.10+** with npm, and Pi `0.84.4`.
+- PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.84.4`.
   CI exercises Node `24.16.0`.
 - `uvx` for proof-of-work checks.
 - WSL2 plus `bubblewrap` for Work execution/proof and Human Away Preview.

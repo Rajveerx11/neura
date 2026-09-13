@@ -4,7 +4,7 @@ Last documentation audit: 2026-09-07
 
 Latest release: `2.5.1`. Current merged source: `d3e77c6`, including Work,
 modular verification, and Learn Mode; these changes are unreleased. Required Pi:
-`0.84.4`; Node: `24.10+` (CI `24.16.0`).
+`0.84.4`; Node: `24.15+` (CI `24.16.0`).
 
 Live installation: not refreshed by the Learn delivery or this documentation
 audit. No new live-drift result is claimed. These docs describe merged source;
