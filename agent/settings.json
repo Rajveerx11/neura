@@ -14,8 +14,7 @@
   ],
   "skills": [
     "~/.claude/skills",
-    "!skills/agent-reach",
-    "!skills/find-skills"
+    "!skills/**"
   ],
   "lastChangelogVersion": "0.81.1",
   "theme": "dark",

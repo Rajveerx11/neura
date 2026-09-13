@@ -81,6 +81,10 @@ function Get-NeuraTerminalFragment($ProfileId, $LauncherPath, $ArtworkPath) {
                 opacity = 100
                 padding = "12"
                 useAcrylic = $false
+                environment = [ordered]@{
+                    NEURA_TERMINAL_PROFILE = "1"
+                    PI_SKIP_VERSION_CHECK = "1"
+                }
             }
         )
     } | ConvertTo-Json -Depth 10
