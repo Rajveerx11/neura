@@ -1,4 +1,4 @@
-import { repoRoot, scratchRoot, assert, fs, path, HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, bubblewrapArguments, registeredToolNames, state, appendedEntries, firstHandler, widgets, ui, context, modeState, guard, modes, stripAnsi } from './harness.mjs';
+import { repoRoot, scratchRoot, assert, fs, path, HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, bubblewrapArguments, loaded, registeredToolNames, state, appendedEntries, firstHandler, widgets, ui, context, modeState, guard, modes, mcp, stripAnsi } from './harness.mjs';
 // Mode spine: safe WORK startup, persisted transitions, exact tool boundaries, and Shift+Tab.
 
 assert.ok(modes.commands.has("approvals"), "/approvals command missing");
@@ -17,6 +17,66 @@ assert.ok(state.activeTools.includes("read") && state.activeTools.includes("edit
   "WORK startup omitted structured workspace or sandbox tools");
 assert.equal(state.activeTools.includes("publish_plan"), false, "WORK startup exposed the Plan publisher");
 assert.equal(state.activeTools.includes("web_fetch"), false, "WORK startup exposed unrestricted network fetch");
+
+assert.equal(loaded.extensions.filter((extension) => extension.commands.has("mcp")).length, 1, "MCP command registered more than once");
+await firstHandler(mcp, "session_start")({}, context);
+assert.equal(process.env.MY_PI_MCP_EAGER_CONNECT, "1", "MCP session startup did not restore eager-connect environment");
+delete process.env.MY_PI_MCP_EAGER_CONNECT;
+const mcpBeforeAgentStart = firstHandler(mcp, "before_agent_start");
+const originalFetch = globalThis.fetch;
+let mcpFetches = 0;
+globalThis.fetch = () => {
+  mcpFetches++;
+  return new Promise(() => {});
+};
+for (const restricted of ["learn", "plan", "work", "human-away"]) {
+  modeState.setMode(restricted);
+  const completed = await Promise.race([
+    Promise.resolve(mcpBeforeAgentStart({ systemPromptOptions: { selectedTools: ["read"] } }, context)).then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+  assert.equal(completed, true, `${restricted} awaited stalled MCP initialization`);
+}
+await mcp.commands.get("mcp").handler("connect fixture", context);
+assert.equal(mcpFetches, 0, "restricted /mcp command started a connection");
+
+modeState.setMode("yolo");
+globalThis.fetch = async (_url, init) => {
+  mcpFetches++;
+  const request = JSON.parse(init.body);
+  const result = request.method === "server/discover"
+    ? { supportedVersions: ["2026-07-28"] }
+    : request.method === "tools/list"
+      ? { tools: [{ name: "ping", description: "fixture", inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false } }] }
+      : {};
+  return new Response(request.id === undefined ? null : JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), {
+    status: request.id === undefined ? 204 : 200,
+    headers: { "content-type": "application/json" },
+  });
+};
+await mcp.commands.get("mcp").handler("connect fixture", context);
+const fixtureTool = "mcp__fixture__ping";
+assert.equal(mcp.tools.has(fixtureTool), true, "explicit YOLO connection did not discover its MCP tool");
+assert.equal(state.activeTools.includes(fixtureTool), true, "explicit YOLO connection did not activate its MCP tool");
+const fetchesAfterConnect = mcpFetches;
+await mcpBeforeAgentStart({ systemPromptOptions: { selectedTools: [fixtureTool] } }, context);
+assert.equal(mcpFetches, fetchesAfterConnect, "connected YOLO MCP tool reinitialized its server");
+await firstHandler(mcp, "session_shutdown")({}, context);
+await mcpBeforeAgentStart({ systemPromptOptions: { selectedTools: [fixtureTool] } }, context);
+assert.ok(mcpFetches > fetchesAfterConnect, "selected YOLO MCP tool did not reconnect on demand");
+modeState.setMode("work");
+await firstHandler(modes, "before_agent_start")({ systemPrompt: "base" }, context);
+assert.equal(state.activeTools.includes(fixtureTool), false, "late MCP tool leaked into restricted mode");
+const restrictedMcpPayload = await firstHandler(modes, "before_provider_request")({ payload: {
+  tools: [
+    { type: "function", function: { name: "read", parameters: {} } },
+    { type: "function", function: { name: fixtureTool, parameters: {} } },
+  ],
+} }, context);
+assert.deepEqual(restrictedMcpPayload.tools.map((tool) => tool.function.name), ["read"],
+  "late MCP tool leaked into restricted provider payload");
+await firstHandler(mcp, "session_shutdown")({}, context);
+globalThis.fetch = originalFetch;
 
 const workProviderPayload = await firstHandler(modes, "before_provider_request")({ payload: {
   tools: [

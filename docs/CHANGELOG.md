@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Kept MCP discovery off Learn, Plan, Work, and Human Away prompt paths. MCP
+  servers now connect explicitly through `/mcp connect` in YOLO and reconnect
+  on demand only when a connected MCP tool is selected. Closed #49.
 - Updated checkout and Node setup actions to their Node 24-native releases using
   immutable commit pins, and refreshed the CI-only uv pin to `0.12.11`.
 - Increased the fail-closed approval writer-lock deadline from two to ten seconds

@@ -31,7 +31,8 @@ function Normalize-Text($Value) {
 }
 
 function Get-PackageIdentity($Spec) {
-    $value = [string]$Spec
+    $source = $Spec.PSObject.Properties["source"]
+    $value = if ($source) { [string]$source.Value } else { [string]$Spec }
     if (-not $value.StartsWith("npm:")) { return $value }
     $package = $value.Substring(4)
     if ($package.StartsWith("@")) {
@@ -42,6 +43,10 @@ function Get-PackageIdentity($Spec) {
     }
     if ($versionAt -gt 0) { $package = $package.Substring(0, $versionAt) }
     return "npm:$package"
+}
+
+function Test-PackageSpecEqual($Left, $Right) {
+    return ($Left | ConvertTo-Json -Depth 20 -Compress) -ceq ($Right | ConvertTo-Json -Depth 20 -Compress)
 }
 
 function Test-SameFile($Source, $Target) {
@@ -147,7 +152,7 @@ if ($Check) {
             foreach ($desiredPackage in $desiredPackages) {
                 $identity = Get-PackageIdentity $desiredPackage
                 $sameIdentity = @($livePackages | Where-Object { (Get-PackageIdentity $_) -eq $identity })
-                if ($sameIdentity.Count -ne 1 -or $sameIdentity[0] -ne $desiredPackage) {
+                if ($sameIdentity.Count -ne 1 -or -not (Test-PackageSpecEqual $sameIdentity[0] $desiredPackage)) {
                     $drift += "settings.json runtime package is not exactly pinned: $identity"
                 }
             }
@@ -239,7 +244,7 @@ if ((Test-Path $target) -and -not $ForceSettings) {
     foreach ($desiredPackage in $desiredPackages) {
         $identity = Get-PackageIdentity $desiredPackage
         $sameIdentity = @($livePackages | Where-Object { (Get-PackageIdentity $_) -eq $identity })
-        if ($sameIdentity.Count -ne 1 -or $sameIdentity[0] -ne $desiredPackage) {
+        if ($sameIdentity.Count -ne 1 -or -not (Test-PackageSpecEqual $sameIdentity[0] $desiredPackage)) {
             $livePackages = @($livePackages | Where-Object { (Get-PackageIdentity $_) -ne $identity }) + $desiredPackage
             $settingsChanged = $true
         }

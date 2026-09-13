@@ -1,7 +1,8 @@
 # Dependency policy and review
 
 Pi/development source review: 2026-09-03. Learn runtime review: 2026-09-07.
-Documentation reconciled with merged source: 2026-09-07.
+MCP lifecycle source review: 2026-09-13. Documentation reconciled with merged
+source: 2026-09-07.
 
 Neura uses exact runtime and development pins. `package-lock.json` is the
 reproducible development graph. Pi-managed runtime extensions are pinned in
@@ -31,7 +32,7 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
 | `pi-subagents` | `0.41.0` | [Source](https://github.com/nicobailon/pi-subagents); exposes a manual CLI installer but no npm install lifecycle hook. Registry signature verified. | Starts isolated Pi child processes and manages local delegation state. Human Away does not expose this tool. |
-| `@spences10/pi-mcp` | `0.0.58` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-mcp); no install hook. Registry signature verified. | Starts configured MCP processes or HTTP clients, filters child environment, and stores oversized responses through `pi-context`. Human Away removes MCP tools. |
+| `@spences10/pi-mcp` | `0.0.58` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-mcp); no install hook. Registry signature verified. Its package extension is filtered out so Neura's owned wrapper controls lifecycle. | `/mcp connect` discovers configured tools only in YOLO; selected connected tools can reconnect on demand. Restricted modes neither start nor await MCP connections. |
 | `@spences10/pi-context` | `0.1.15` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-context); no install hook. Registry signature verified. | Writes a local SQLite context sidecar under the live harness. |
 
 ## Reviewed CI security tools
@@ -46,7 +47,9 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 
 `package.json` pins Pi `0.84.4`, Pi API/TUI types `0.84.4`, Playwright Core
 `1.62.1`, axe-core `4.13.0`, Typebox `1.3.7`, TypeScript `7.0.2`, and Node types
-`26.2.0`. Installation uses `npm ci --ignore-scripts` in CI. Playwright Core has
+`26.2.0`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
+wrapper runs against the reviewed package in tests. Installation uses
+`npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
 already present on the Windows runner. axe-core has no consumer install hook and
 runs only against generated local Plan and Learn HTML. Browser contexts receive no
@@ -54,8 +57,8 @@ credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
 Learn browser assertions also run in CI; the current artifact step is Plan-specific.
 
-The 2026-09-03 review found zero known npm vulnerabilities; all 251 audited
-packages had verified registry signatures and 52 had attestations.
+The 2026-09-13 root-graph review found zero known npm vulnerabilities; all 241
+audited packages had verified registry signatures and 52 had attestations.
 
 Pi `0.83.0` was rejected for stable release because its locked `undici` and
 `brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`
@@ -78,6 +81,7 @@ development APIs, and CI still pin `0.84.4`; verify live installations separatel
 
 Never use `*`, `latest`, caret, or tilde ranges for Neura runtime packages.
 
-Mode availability narrows package capability: Learn and Human Away exclude
-subagent and MCP tools; Learn also excludes direct `web_fetch`, `grep`, and
-`find`. Merely installing an extension does not authorize it in every mode.
+Mode availability narrows package capability: Learn, Plan, Work, and Human Away
+exclude MCP connection and tools; Learn and Human Away also exclude subagents,
+while Learn excludes direct `web_fetch`, `grep`, and `find`. Merely installing an
+extension does not authorize it in every mode.

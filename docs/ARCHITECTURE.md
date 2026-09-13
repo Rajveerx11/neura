@@ -55,6 +55,7 @@ agent_settled
 |---|---|---|
 | `neura.ts` | Identity, theme, `/dash`, `/notices`, persona injection | `NEURA.md`, cockpit state |
 | `modes.ts` | Mode switching, active-tool boundary, approval UI | Session entries, approval store |
+| `mcp.ts` | Explicit YOLO-only MCP discovery and reconnect gating | Filtered `@spences10/pi-mcp` package, `mcp.json` |
 | `guardrail.ts` | Plan, Work, Human Away, and Learn policy; explicit YOLO bypass | Action policy, Headmaster, Learn policy |
 | `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
 | `human-away-sandbox.ts` | Registers `work_exec` and Human Away's sole execution tool | WSL2, bubblewrap |

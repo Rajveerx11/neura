@@ -9,6 +9,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { isolate } from './isolation.mjs';
 const scratchRoot = isolate();
 const repoRoot = path.resolve(import.meta.dirname, '../..');
+const { mcpModuleSpecifier } = await import('../../agent/extensions/mcp.ts');
 const {
   inspect,
   inspectMcpConfig,
@@ -259,10 +260,16 @@ assert.equal(invalidProvider.problem.code, "schema", "provider schema mismatch w
 delete process.env.HEALTH_TEST_TOKEN;
 delete process.env.MY_PI_MCP_ENV_ALLOWLIST;
 const settings = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "settings.json"), "utf-8"));
+const syntheticAgentDir = path.join(scratchRoot, "agent");
+const installedMcpPath = path.join(syntheticAgentDir, "npm", "node_modules", "@spences10", "pi-mcp", "dist", "index.js");
+assert.equal(mcpModuleSpecifier(syntheticAgentDir, () => false), "@spences10/pi-mcp", "development MCP fallback changed");
+assert.equal(mcpModuleSpecifier(syntheticAgentDir, () => true), pathToFileURL(installedMcpPath).href, "installed MCP path changed");
 assert.ok(settings.skills.includes("!skills/agent-reach"), "agent-reach collision exclusion missing");
 assert.ok(settings.skills.includes("!skills/find-skills"), "find-skills collision exclusion missing");
-assert.ok(settings.packages.includes("npm:@spences10/pi-mcp@0.0.58"), "verified pi-mcp version is not pinned");
-assert.ok(settings.packages.every((entry) => /^npm:(?:@[^/]+\/[^@]+|[^@]+)@\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(entry)), "runtime package is not exactly pinned");
+const packageSources = settings.packages.map((entry) => typeof entry === "string" ? entry : entry.source);
+const mcpPackage = settings.packages.find((entry) => typeof entry === "object" && entry.source === "npm:@spences10/pi-mcp@0.0.58");
+assert.deepEqual(mcpPackage?.extensions, [], "pi-mcp upstream extension autoload was not disabled");
+assert.ok(packageSources.every((entry) => /^npm:(?:@[^/]+\/[^@]+|[^@]+)@\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(entry)), "runtime package is not exactly pinned");
 
 const syntheticProviderToken = ["github", "pat", "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"].join("_");
 const syntheticJwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "syntheticSignatureValue1234567890"].join(".");

@@ -147,7 +147,7 @@ git diff --check
 powershell -File .\install.ps1 -Check
 ```
 
-`verify-harness.mjs` runs 17 isolated suites and loads all 17 extensions through
+`verify-harness.mjs` runs 17 isolated suites and loads all 18 extensions through
 the checkout's Pi loader, including Learn's five nonbrowser suites. Browser
 checks need Edge; sandbox replay needs WSL2/bubblewrap. `install.ps1 -Check`
 checks live drift and Learn runtime provisioning without installing anything.
