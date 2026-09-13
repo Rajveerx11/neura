@@ -82,6 +82,7 @@ const widgets = new Map();
 const statuses = new Map();
 const notices = [];
 const customOverlays = [];
+let editorFactory;
 
 const testTheme = {
   fg: (_color, value) => value,
@@ -92,6 +93,7 @@ const testTheme = {
 
 
 const ui = {
+  theme: testTheme,
   getTheme: () => null,
   setTheme() {},
   setTitle(value) { state.title = value; },
@@ -106,6 +108,8 @@ const ui = {
     if (value === undefined) widgets.delete(id);
     else widgets.set(id, value);
   },
+  setEditorComponent(value) { editorFactory = value; },
+  getEditorComponent() { return editorFactory; },
   custom(factory, options = {}) {
     let resolve;
     const result = new Promise((done) => { resolve = done; });
@@ -156,5 +160,5 @@ export { assert, execFileSync, spawnSync, createHash, fs, os, path, pathToFileUR
   HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, assertWorkspaceHasNoLinks, bubblewrapArguments,
   healthLines, parseRuntimeContract, piRuntimeStatus, files, runtimeContract, packageManifest,
   loaded, registeredToolNames, state, appendedEntries, sentUserMessages, extensionWithCommand,
-  extensionWithTool, firstHandler, widgets, statuses, notices, customOverlays, ui, context, modeState,
+  extensionWithTool, firstHandler, widgets, statuses, notices, customOverlays, editorFactory, ui, context, modeState,
   cockpitState, guardrail, guard, modes, mcp, stripAnsi, widthOf, loadExtensions, extensionDir };

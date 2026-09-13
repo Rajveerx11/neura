@@ -1,10 +1,4 @@
 @echo off
-if defined NEURA_TERMINAL_PROFILE goto terminal_ready
-where wt >nul 2>&1 || goto terminal_ready
-wt -w new nt -p Neura cmd.exe /d /s /c ""%~f0" %*"
-exit /b %errorlevel%
-
-:terminal_ready
 title neura
 set "NEURA=1"
 

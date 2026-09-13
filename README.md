@@ -113,9 +113,9 @@ Existing model and credential choices in `settings.json` are preserved unless
 `-ForceSettings` is supplied. The installer also provisions Learn's separate
 locked runtime with lifecycle scripts disabled and records the runtime lock receipt.
 When Windows Terminal is available, it adds an isolated current-user `Neura`
-profile fragment without editing `settings.json`. Running `neura` routes into
-that image-backed profile automatically; systems without Windows Terminal retain
-the logo-only fallback.
+profile fragment and a `Neura` Start-menu shortcut without editing `settings.json`.
+Open that shortcut for the single-window image-backed launch. Running `neura`
+inside an existing terminal stays in that window and uses the logo-only fallback.
 
 Do not run installer against an important profile until you have reviewed
 source and current blockers. Installation is not atomic and does not yet

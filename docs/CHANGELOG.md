@@ -4,9 +4,10 @@
 
 - Added the image-backed centred launch tracked by #53 and #54. A generated,
   isolated Windows Terminal profile renders the bundled local artwork while Pi
-  renders the non-capturing wordmark/prompt surface; regular terminals retain a
-  logo-only fallback. The launcher now routes ordinary shells into that profile,
-  suppresses its update card, and excludes duplicate auto-discovered skill roots
+  renders a centred wordmark around its real task editor; regular terminals retain a
+  logo-only fallback. A direct Start-menu shortcut opens the image profile without
+  the unreliable two-window handoff; terminal `neura` stays in place. The profile
+  suppresses its update card, and duplicate auto-discovered skill roots are excluded
   so the first viewport stays clean. No runtime dependency or network fetch was added.
 - Kept MCP discovery off Learn, Plan, Work, and Human Away prompt paths. MCP
   servers now connect explicitly through `/mcp connect` in YOLO and reconnect

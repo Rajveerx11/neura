@@ -80,10 +80,7 @@ export function footerLine(
   const branch = data.branch ? fg(MUT, data.branch) : "";
   const context = data.context ?? "";
   const cost = data.cost ?? "";
-  if (data.launchVisible) {
-    const launchParts = tier === "micro" || tier === "narrow" ? [model] : [model, context];
-    return truncateToWidth(` ${joinFitting(launchParts, separator, Math.max(1, width - 1))}`, width);
-  }
+  if (data.launchVisible) return "";
   const parts = tier === "wide"
     ? [mode, model, branch, context, cost]
     : tier === "standard"
@@ -182,6 +179,7 @@ export default function (pi) {
           const context = contextTag(ctx);
           const cost = sessionCost(ctx);
           const state = getCockpitState();
+          if (state.launchVisible) return [];
           const lines = [footerLine(width, {
             mode: getMode(),
             model: ctx.model?.id ?? "no model",

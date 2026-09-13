@@ -25,6 +25,8 @@ assert.match(installerSource, /function Get-NeuraTerminalFragment/, "installer c
 assert.match(installerSource, /Windows Terminal\\Fragments\\Neura/, "installer does not isolate the Windows Terminal fragment");
 assert.match(installerSource, /launch-artwork\.png/, "installer does not connect the bundled launch artwork");
 assert.match(installerSource, /backgroundImageStretchMode = "uniform"/, "installer can distort launch artwork");
+assert.match(installerSource, /Start Menu\\Programs\\Neura\.lnk/, "installer does not create the single-window Neura shortcut");
+assert.match(installerSource, /Arguments = "-w new -p Neura"/, "Neura shortcut does not launch the image profile directly");
 assert.equal(createHash("sha256").update(fs.readFileSync(artworkPath)).digest("hex"), "6f7f01d54fe31eb1b8ba0f07542158eac2fc9a4a0320c5071a591952bcc7c244", "launch artwork changed without provenance update");
 assert.doesNotMatch(installerSource, /C:\\Users\\rajve/i, "installer contains a machine-specific artwork path");
 assert.match(installerSource, /\$requiredPiVersion\s*=\s*\[string\]\$runtimeContract\.piVersion/, "installer does not enforce the runtime contract Pi version");

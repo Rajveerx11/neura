@@ -51,6 +51,5 @@ if ($profile.commandline -notlike '*neura.cmd*') { throw 'Terminal profile launc
 if ($profile.backgroundImage -ne 'C:\Users\Test\.pi\agent\neura\launch-artwork.png') { throw 'Terminal profile artwork missing' }
 if ($profile.backgroundImageAlignment -ne 'center' -or $profile.backgroundImageStretchMode -ne 'uniform') { throw 'Terminal artwork geometry changed' }
 if ($profile.backgroundImageOpacity -ne 0.42) { throw 'Terminal artwork opacity changed' }
-if ($profile.environment.NEURA_TERMINAL_PROFILE -ne '1') { throw 'Terminal launcher recursion guard missing' }
 if ($profile.environment.PI_SKIP_VERSION_CHECK -ne '1') { throw 'Terminal startup update notice is not suppressed' }
 [Console]::WriteLine('PASS installer functions')

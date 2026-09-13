@@ -12,7 +12,7 @@ bone text, and semantic colors used only for real outcomes.
 ## Product principles
 
 1. **Identity before activity.** The dedicated terminal profile opens on local
-   artwork with a centred Neura wordmark and compact prompt/status strips.
+   artwork with a centred Neura wordmark and the real task editor.
    Working state appears after the first task begins.
 2. **One active signal.** Copper identifies Neura, current focus, and the primary
    action. It is not decoration.
@@ -74,10 +74,10 @@ Color rules:
 
 The dedicated Windows Terminal profile supplies the local 16:9 artwork as a
 centred, uniformly scaled background over the tungsten canvas. Pi supplies a
-centred, non-capturing overlay: the responsive NEURA wordmark, one prompt strip,
-and one Work/model/workspace strip. The surface stays within ten lines, clears
-when work begins, and `/dash` toggles it on demand. Regular terminals and missing
-profile support fall back to the copper wordmark without blocking startup.
+centred launch editor: the responsive NEURA wordmark, a task label, and Pi's real
+input control. The surface stays within ten lines, clears when work begins, and
+`/dash` toggles it on demand. Regular terminals and missing profile support fall
+back to the copper wordmark without blocking startup.
 
 The artwork is bundled locally and never fetched at runtime. Its opacity is kept
 below the text layer so the prompt remains readable; cropping and distortion are
@@ -133,6 +133,6 @@ with changed scope, evidence, and one manual next action.
 THESIS: Neura launches as a quiet image-backed identity surface, then yields to work.
 OWN-WORLD: Tungsten neutrals, burnt copper, bone text, flat one-cell rules.
 STORY: Operator sees Neura, then starts work in composer.
-FIRST VIEWPORT: Centred artwork, NEURA wordmark, prompt strip, and compact status.
+FIRST VIEWPORT: Centred artwork, NEURA wordmark, and one real task editor.
 FORM: Operate-mode terminal instrument; focused, responsive, and state-driven.
 -->

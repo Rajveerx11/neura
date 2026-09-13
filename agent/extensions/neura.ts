@@ -4,8 +4,8 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import type { OverlayHandle } from "@earendil-works/pi-tui";
+import { CustomEditor, type ExtensionAPI, type KeybindingsManager, type Theme } from "@earendil-works/pi-coding-agent";
+import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, onCockpitChange, patchCockpit, resetCockpit } from "../neura/cockpit-state.ts";
 import { padAnsi, PALETTE, fg } from "../neura/core.ts";
@@ -40,15 +40,27 @@ function centered(line: string, width: number): string {
   return " ".repeat(Math.max(0, Math.floor((width - visibleWidth(value)) / 2))) + value;
 }
 
-export function launchSurfaceLines(width: number, theme: Theme, model: string, workspace: string): string[] {
+export function launchSurfaceLines(width: number, theme: Theme, editorLines: string[]): string[] {
   const safeWidth = Math.max(1, width);
-  const status = padAnsi(truncateToWidth(`  WORK  ${model}  ${workspace}`, safeWidth, "…", true), safeWidth);
   return [
     ...wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth)),
-    "",
-    theme.bg("customMessageBg", theme.fg("text", padAnsi("  TYPE YOUR TASK BELOW", safeWidth))),
-    theme.bg("selectedBg", theme.fg("muted", status)),
+    theme.bg("customMessageBg", theme.fg("text", padAnsi("  TYPE YOUR TASK", safeWidth))),
+    ...editorLines,
   ];
+}
+
+class LaunchEditor extends CustomEditor {
+  constructor(tui: TUI, editorTheme: EditorTheme, keybindings: KeybindingsManager, private readonly presentationTheme: Theme) {
+    super(tui, editorTheme, keybindings);
+  }
+
+  render(width: number): string[] {
+    const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
+    const content = launchSurfaceLines(contentWidth, this.presentationTheme, super.render(contentWidth));
+    const left = " ".repeat(Math.max(0, Math.floor((width - contentWidth) / 2)));
+    const top = Math.max(0, Math.floor((this.tui.terminal.rows - content.length - 1) / 2));
+    return [...Array(top).fill(""), ...content.map((line) => left + line)];
+  }
 }
 
 function noticeLines(width: number): string[] {
@@ -76,9 +88,8 @@ export default function (pi: ExtensionAPI) {
   let visible = false;
   let noticesVisible = false;
   let activeContext: any;
-  let launchHandle: OverlayHandle | undefined;
-  let finishLaunch: (() => void) | undefined;
-  let launchGeneration = 0;
+  let previousEditorFactory: any;
+  let launchEditorActive = false;
   let persona = "";
   let unsubscribeCockpit = () => {};
   try { persona = fs.readFileSync(path.join(NEURA_DIR, "NEURA.md"), "utf-8"); } catch {}
@@ -99,54 +110,21 @@ export default function (pi: ExtensionAPI) {
   };
 
   const show = (ctx) => {
-    const generation = ++launchGeneration;
-    if (ctx.mode !== "tui" || typeof ctx.ui.custom !== "function") {
+    if (ctx.mode !== "tui" || typeof ctx.ui.setEditorComponent !== "function") {
       showFallback(ctx);
       return;
     }
+    if (!launchEditorActive) previousEditorFactory = ctx.ui.getEditorComponent?.();
+    ctx.ui.setEditorComponent((tui, editorTheme, keybindings) => new LaunchEditor(tui, editorTheme, keybindings, ctx.ui.theme));
+    launchEditorActive = true;
     markVisible();
-    const model = ctx.model?.id || "model pending";
-    const workspace = path.basename(ctx.cwd) || ctx.cwd;
-    void ctx.ui.custom(
-      (_tui, theme, _keybindings, done) => {
-        finishLaunch = done;
-        return {
-          render: (width: number) => launchSurfaceLines(width, theme, model, workspace),
-          invalidate() {},
-        };
-      },
-      {
-        overlay: true,
-        overlayOptions: {
-          width: "72%",
-          minWidth: 30,
-          maxHeight: 10,
-          anchor: "center",
-          margin: 1,
-          nonCapturing: true,
-        },
-        onHandle: (handle) => {
-          if (generation !== launchGeneration || !visible) handle.hide();
-          else launchHandle = handle;
-        },
-      },
-    ).catch(() => {
-      if (generation === launchGeneration && visible) showFallback(ctx);
-    }).finally(() => {
-      if (generation === launchGeneration) {
-        launchHandle = undefined;
-        finishLaunch = undefined;
-      }
-    });
   };
 
   const hide = (ctx) => {
     try {
-      launchGeneration++;
-      finishLaunch?.();
-      finishLaunch = undefined;
-      launchHandle?.hide();
-      launchHandle = undefined;
+      if (launchEditorActive) ctx.ui.setEditorComponent(previousEditorFactory);
+      launchEditorActive = false;
+      previousEditorFactory = undefined;
       ctx.ui.setWidget("neura-launch", undefined);
       visible = false;
       if (getCockpitState().launchVisible) patchCockpit({ launchVisible: false });

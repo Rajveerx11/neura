@@ -1,4 +1,4 @@
-import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, customOverlays, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
+import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, editorFactory, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
 const repairAction = `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`;
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
@@ -68,32 +68,32 @@ assert.ok(optionalGapLines.some((line) => line.includes("manifest abcdef012345")
 
 const identityExtension = extensionWithCommand("dash");
 await firstHandler(identityExtension, "session_start")({}, context);
-assert.equal(customOverlays.length, 1, "launch overlay missing");
+assert.equal(typeof editorFactory, "function", "centred launch editor missing");
 assert.equal(widgets.has("neura-launch"), false, "TUI launch unexpectedly used the fallback widget");
 assert.equal(widgets.has("neura-logo"), false, "legacy logo widget still registered");
 assert.equal(widgets.has("neura-dash"), false, "legacy dashboard widget still registered");
 assert.match(state.title, /^Neura · /, "terminal title was not set");
 
-const launch = customOverlays.at(-1);
-assert.equal(launch.options.overlay, true, "launch surface is not an overlay");
-assert.equal(launch.options.overlayOptions.anchor, "center", "launch surface is not centered");
-assert.equal(launch.options.overlayOptions.nonCapturing, true, "launch surface captures keyboard input");
-assert.equal(launch.options.overlayOptions.maxHeight, 10, "launch surface can exceed Pi's ten-line cap");
+const launchEditor = editorFactory(
+  { terminal: { rows: 40, columns: 120 }, requestRender() {} },
+  { borderColor: (value) => value, selectList: {} },
+  { matches: () => false },
+);
 for (const width of [30, 40, 56, 72, 92, 120]) {
-  const rawLines = launch.component.render(width);
+  const rawLines = launchEditor.render(width);
   const launchText = rawLines.map(stripAnsi).join("\n");
-  assert.equal(rawLines.length, width < 56 ? 8 : 9, `launch height is wrong at ${width} columns`);
-  assert.match(launchText, width < 56 ? /N   N EEEEE/ : /███╗   ██╗/, `ASCII wordmark missing at ${width} columns`);
-  assert.match(launchText, /TYPE YOUR TASK BELOW/, `launch prompt missing at ${width} columns`);
-  assert.match(launchText, /WORK/, `safe-mode status missing at ${width} columns`);
-  if (width >= 40) assert.match(launchText, /gpt-5\.5/, `model identity missing at ${width} columns`);
+  const contentLines = rawLines.filter((line) => line.length > 0);
+  const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
+  assert.equal(contentLines.length, contentWidth < 56 ? 9 : 10, `launch content height is wrong at ${width} columns`);
+  assert.match(launchText, contentWidth < 56 ? /N   N EEEEE/ : /███╗   ██╗/, `ASCII wordmark missing at ${width} columns`);
+  assert.match(launchText, /TYPE YOUR TASK/, `launch prompt missing at ${width} columns`);
+  assert.ok(rawLines.findIndex((line) => line.length > 0) > 0, `launch surface is not vertically centred at ${width} columns`);
   assert.ok(rawLines.every((line) => widthOf(line) <= width), `launch surface overflows at ${width} columns`);
 }
 await firstHandler(identityExtension, "agent_start")({}, context);
-assert.equal(launch.handle.hidden, true, "launch surface did not hide when work started");
+assert.equal(editorFactory, undefined, "launch editor did not restore Pi's editor when work started");
 await identityExtension.commands.get("dash").handler("", context);
-assert.equal(customOverlays.length, 2, "/dash did not restore the launch surface");
-assert.equal(customOverlays.at(-1).handle.hidden, false, "/dash restored a hidden launch surface");
+assert.equal(typeof editorFactory, "function", "/dash did not restore the launch editor");
 await identityExtension.commands.get("dash").handler("", context);
 
 const fallbackContext = { ...context, mode: "rpc", ui: { ...ui, custom: undefined } };
@@ -281,8 +281,7 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
   assert.ok(lines.every((line) => widthOf(line) <= width), `footer overflows at ${width} columns`);
 }
 const launchFooterText = footer.render(120).map(stripAnsi).join("\n");
-assert.match(launchFooterText, /gpt-5\.5-engineering-preview/, "launch footer lost model identity");
-assert.doesNotMatch(launchFooterText, /YOLO|feature\/agentic/, "logo view does not keep the footer quiet");
+assert.equal(launchFooterText, "", "launch footer competes with the centred editor");
 await identityExtension.commands.get("dash").handler("", context);
 const idleFooterText = footer.render(120).map(stripAnsi).join("\n");
 assert.match(idleFooterText, /WORK/, "idle footer lost the safe default WORK state");

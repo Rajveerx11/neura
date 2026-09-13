@@ -82,7 +82,6 @@ function Get-NeuraTerminalFragment($ProfileId, $LauncherPath, $ArtworkPath) {
                 padding = "12"
                 useAcrylic = $false
                 environment = [ordered]@{
-                    NEURA_TERMINAL_PROFILE = "1"
                     PI_SKIP_VERSION_CHECK = "1"
                 }
             }
@@ -93,6 +92,7 @@ function Get-NeuraTerminalFragment($ProfileId, $LauncherPath, $ArtworkPath) {
 $terminalProfileId = "{7e8b22c4-2cd7-5f7c-b5a8-a461f718bdaf}"
 $terminalFragmentDirectory = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\Neura"
 $terminalFragmentPath = Join-Path $terminalFragmentDirectory "Neura.json"
+$terminalShortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Neura.lnk"
 $launchArtworkTarget = Join-Path "$agent\neura" "launch-artwork.png"
 $launcherTarget = Join-Path $bin "neura.cmd"
 $terminalFragment = Get-NeuraTerminalFragment $terminalProfileId $launcherTarget $launchArtworkTarget
@@ -155,6 +155,16 @@ if ($Check) {
             $drift += "Windows Terminal Neura profile missing"
         } elseif ((Normalize-Text ([System.IO.File]::ReadAllText($terminalFragmentPath))) -cne (Normalize-Text $terminalFragment)) {
             $drift += "Windows Terminal Neura profile differs"
+        }
+        if (-not (Test-Path -LiteralPath $terminalShortcutPath)) {
+            $drift += "Neura Start menu shortcut missing"
+        } else {
+            try {
+                $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($terminalShortcutPath)
+                if ($shortcut.Arguments -ne "-w new -p Neura") { $drift += "Neura Start menu shortcut differs" }
+            } catch {
+                $drift += "Neura Start menu shortcut unreadable"
+            }
         }
     }
     $desiredKeybindings = Get-Content "$repo\agent\keybindings.json" -Raw | ConvertFrom-Json
@@ -253,7 +263,16 @@ if (Test-Command "wt.exe") {
     New-Item -ItemType Directory -Force $terminalFragmentDirectory | Out-Null
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($terminalFragmentPath, $terminalFragment, $utf8NoBom)
-    Write-Host "Windows Terminal profile installed. Open it with: wt.exe -p Neura"
+    $terminalCommand = Get-Command "wt.exe"
+    $shortcutShell = New-Object -ComObject WScript.Shell
+    $shortcut = $shortcutShell.CreateShortcut($terminalShortcutPath)
+    $shortcut.TargetPath = $terminalCommand.Source
+    $shortcut.Arguments = "-w new -p Neura"
+    $shortcut.WorkingDirectory = $HOME
+    $shortcut.Description = "Launch Neura with its image-backed terminal profile"
+    $shortcut.IconLocation = "$($terminalCommand.Source),0"
+    $shortcut.Save()
+    Write-Host "Windows Terminal profile and Start menu shortcut installed."
 } else {
     Write-Warning "Windows Terminal not found: Neura will use its logo-only launch fallback."
 }

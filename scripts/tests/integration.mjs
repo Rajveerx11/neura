@@ -7,8 +7,7 @@ assert.match(launcher, /GetEnvironmentVariable\(\$name,'User'\)/, "launcher does
 assert.equal(launcher.match(/powershell\s+-NoProfile/g)?.length, 1, "launcher starts more than one environment-refresh process");
 assert.match(launcher, /if defined COMPOSIO_API_KEY if defined MY_PI_MCP_ENV_ALLOWLIST goto environment_ready/, "launcher does not skip refresh when inherited values exist");
 assert.match(launcher, /MY_PI_MCP_ENV_ALLOWLIST=COMPOSIO_API_KEY,/, "launcher does not allowlist the Composio key for pi-mcp");
-assert.match(launcher, /if defined NEURA_TERMINAL_PROFILE goto terminal_ready/, "launcher does not recognize the image-backed profile");
-assert.match(launcher, /wt -w new nt -p Neura/, "launcher does not route ordinary shells into the Neura profile");
+assert.doesNotMatch(launcher, /\bwt(?:\.exe)?\b/i, "terminal launcher still opens a second Windows Terminal window");
 assert.match(launcher, /where pi >nul 2>&1[\s\S]+Neura requires Pi\./, "launcher does not clearly report missing Pi");
 assert.doesNotMatch(`${JSON.stringify(mcpConfig)}\n${launcher}`, /\b(?:ak|sk)_[A-Za-z0-9_-]{12,}\b/, "Gmail MCP configuration contains a literal credential");
 
@@ -52,28 +51,6 @@ if (process.platform === "win32") {
     assert.equal(run.status, 1, "launcher did not fail when Pi was unavailable");
     assert.match(run.stderr, /Neura requires Pi\./, "launcher did not explain that Pi was unavailable");
 
-    fs.rmSync(resultFile, { force: true });
-    const terminalCalls = path.join(bin, "terminal-calls.txt");
-    fs.writeFileSync(path.join(bin, "wt.cmd"), [
-      "@echo off",
-      ">\"%LAUNCHER_CALLS%\" echo %*",
-      "exit /b 0",
-    ].join("\r\n"));
-    run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd"), "--print"], {
-      env: { ...env, LAUNCHER_CALLS: terminalCalls, COMPOSIO_API_KEY: "inherited-key", MY_PI_MCP_ENV_ALLOWLIST: "BASE_TOKEN" },
-      encoding: "utf8", windowsHide: true,
-    });
-    assert.equal(run.status, 0, "launcher did not hand off to Windows Terminal");
-    assert.match(fs.readFileSync(terminalCalls, "utf8"), /-w new nt -p Neura[\s\S]*neura\.cmd[\s\S]*--print/i, "terminal handoff lost the profile, launcher, or arguments");
-    assert.equal(fs.existsSync(resultFile), false, "outer launcher started Pi before terminal handoff");
-
-    fs.rmSync(terminalCalls);
-    run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
-      env: { ...env, LAUNCHER_CALLS: terminalCalls, NEURA_TERMINAL_PROFILE: "1", COMPOSIO_API_KEY: "inherited-key", MY_PI_MCP_ENV_ALLOWLIST: "BASE_TOKEN" },
-      encoding: "utf8", windowsHide: true,
-    });
-    assert.equal(run.status, 7, "Neura profile did not start Pi directly");
-    assert.equal(fs.existsSync(terminalCalls), false, "Neura profile recursively relaunched Windows Terminal");
   } finally {
     fs.rmSync(bin, { recursive: true, force: true });
   }
