@@ -174,7 +174,7 @@ export default function (pi) {
       lastUserText = "";
       state.nextStep = params.steps[params.currentStep];
       display(ctx);
-      return result({ board, message: "Open this local HTML file in your browser. Explain the active concept briefly, then invite an attempt. Use /learn answer to record browser practice in Neura; /learn save explicitly saves progress.", citationCheck: "Source identity, page/slide, and exact excerpt verified. This checks citation existence, not whether it supports every claim." });
+      return { ...result({ board, message: "Open this local HTML file in your browser. Explain the active concept briefly, then invite an attempt. Use /learn answer to record browser practice in Neura; /learn save explicitly saves progress.", citationCheck: "Source identity, page/slide, and exact excerpt verified. This checks citation existence, not whether it supports every claim." }), terminate: true };
     },
   });
 
@@ -187,7 +187,7 @@ export default function (pi) {
       assertActive(signal);
       if (!lastUserText || normalize(lastUserText) !== normalize(params.answer)) throw new Error("Submit the learner's complete latest answer once. Use /learn answer for an exact submission.");
       lastUserText = "";
-      return result(await answer(params.answer, ctx, signal, params.assisted === true));
+      return { ...result(await answer(params.answer, ctx, signal, params.assisted === true)), terminate: true };
     },
   });
 
