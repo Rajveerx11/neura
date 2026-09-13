@@ -15,7 +15,7 @@ type ProofTrust = {
   uvVersion: string;
   uvSha256: string;
   uvxSha256: string;
-  python: { path: string; version: string; sha256: string };
+  python: { path: string; version: string; package: string; packageVersion: string; architecture: string; sha256: string };
   wheels: Record<string, string>;
 };
 export type ProofSandboxRuntime = { uv: string; uvx: string; python: string; wheelhouse: string; trust: ProofTrust };
@@ -74,12 +74,16 @@ function proofTrust(): ProofTrust | null {
     if (typeof trust?.uvVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(trust.uvVersion)
         || !/^[a-f0-9]{64}$/.test(trust.uvSha256) || !/^[a-f0-9]{64}$/.test(trust.uvxSha256)
         || !safeWslPath(trust?.python?.path) || !/^\d+\.\d+\.\d+$/.test(trust?.python?.version)
+        || !/^[a-z0-9][a-z0-9.+-]*$/.test(trust?.python?.package)
+        || !/^[0-9A-Za-z.+:~-]+$/.test(trust?.python?.packageVersion)
+        || !/^[a-z0-9]+$/.test(trust?.python?.architecture)
         || !/^[a-f0-9]{64}$/.test(trust?.python?.sha256)
         || !trust.wheels || typeof trust.wheels !== "object" || Array.isArray(trust.wheels)) return null;
     const wheels = Object.entries(trust.wheels);
     if (!wheels.length || wheels.some(([name, hash]) => !/^[A-Za-z0-9_.-]+\.whl$/.test(name) || !/^[a-f0-9]{64}$/.test(String(hash)))) return null;
     return { uvVersion: trust.uvVersion, uvSha256: trust.uvSha256, uvxSha256: trust.uvxSha256,
-      python: { path: trust.python.path, version: trust.python.version, sha256: trust.python.sha256 },
+      python: { path: trust.python.path, version: trust.python.version, package: trust.python.package,
+        packageVersion: trust.python.packageVersion, architecture: trust.python.architecture, sha256: trust.python.sha256 },
       wheels: Object.fromEntries(wheels) as Record<string, string> };
   } catch { return null; }
 }
@@ -92,13 +96,15 @@ export function validateProofRuntimeInventory(output: string, uvDirectory: strin
   trust: ProofTrust): ProofSandboxRuntime | null {
   const lines = output.trim().split(/\r?\n/);
   const expected = Object.entries(trust.wheels);
-  if (lines.length !== 8 + expected.length || lines[0] !== path.posix.join(uvDirectory, "uv")
+  if (lines.length !== 9 + expected.length || lines[0] !== path.posix.join(uvDirectory, "uv")
       || lines[1] !== path.posix.join(uvDirectory, "uvx") || lines[2] !== trust.python.path
       || lines[3] !== wheelhouse || lines[4] !== trust.uvSha256 || lines[5] !== trust.uvxSha256
-      || lines[6] !== trust.python.sha256 || lines[7 + expected.length] !== String(expected.length)) return null;
+      || lines[6] !== trust.python.sha256
+      || lines[7] !== `${trust.python.package}\t${trust.python.packageVersion}\t${trust.python.architecture}`
+      || lines[8 + expected.length] !== String(expected.length)) return null;
   for (let index = 0; index < expected.length; index++) {
     const [name, hash] = expected[index];
-    if (lines[7 + index] !== `${name}\t${hash}`) return null;
+    if (lines[8 + index] !== `${name}\t${hash}`) return null;
   }
   return { uv: lines[0], uvx: lines[1], python: lines[2], wheelhouse: lines[3], trust };
 }
@@ -120,11 +126,12 @@ export async function inspectProofSandboxRuntime(signal?: AbortSignal, workspace
   const script = 'set -eu; uvdir=$(readlink -f -- "$1"); wheels=$(readlink -f -- "$2"); python=$(readlink -f -- "$3"); '
     + 'test -d "$uvdir" -a -d "$wheels" -a -f "$uvdir/uv" -a -x "$uvdir/uv" -a -f "$uvdir/uvx" -a -x "$uvdir/uvx" -a -f "$python" -a -x "$python" -a ! -L "$python"; '
     + 'printf "%s\\n%s\\n%s\\n%s\\n" "$uvdir/uv" "$uvdir/uvx" "$python" "$wheels"; '
-    + 'sha256sum "$uvdir/uv" "$uvdir/uvx" "$python" | cut -d" " -f1; shift 3; '
+    + 'sha256sum "$uvdir/uv" "$uvdir/uvx" "$python" | cut -d" " -f1; test -z "$(dpkg -V "$4")"; '
+    + 'dpkg-query -W -f="\\${binary:Package}\\t\\${Version}\\t\\${Architecture}\\n" "$4"; shift 4; '
     + 'for name do test -f "$wheels/$name" -a ! -L "$wheels/$name"; printf "%s\\t" "$name"; sha256sum "$wheels/$name" | cut -d" " -f1; done; '
     + 'find "$wheels" -mindepth 1 -maxdepth 1 | wc -l';
   try {
-    const result = await runWsl(["sh", "-c", script, "neura-proof", uvDirectory, wheelhouse, trust.python.path, ...names], 15_000, signal, false);
+    const result = await runWsl(["sh", "-c", script, "neura-proof", uvDirectory, wheelhouse, trust.python.path, trust.python.package, ...names], 15_000, signal, false);
     if (result.code !== 0) return { ready: false, detail: "trusted WSL proof files are unavailable", action };
     const runtime = validateProofRuntimeInventory(result.stdout, uvDirectory, wheelhouse, trust);
     if (!runtime) return { ready: false, detail: "WSL proof runtime integrity mismatch", action };
@@ -170,12 +177,12 @@ async function toWslPath(workspace: string): Promise<string> {
 
 export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime): string[] {
   const verifiedCommand = proof
-    ? `printf '%s\\n' ${[
+    ? `set -eu; printf '%s\\n' ${[
       `${proof.trust.uvSha256}  /tmp/neura-bin/uv`,
       `${proof.trust.uvxSha256}  /tmp/neura-bin/uvx`,
       `${proof.trust.python.sha256}  ${PROOF_PYTHON}`,
       ...Object.entries(proof.trust.wheels).map(([name, hash]) => `${hash}  /tmp/proof-wheels/${name}`),
-    ].map((line) => `'${line}'`).join(" ")} | sha256sum -c - >/dev/null && mkdir /tmp/uv-cache && UV_CACHE_DIR=/tmp/uv-cache ${command}`
+    ].map((line) => `'${line}'`).join(" ")} | sha256sum -c - >/dev/null; mkdir -m 700 /tmp/uv-cache; export UV_CACHE_DIR=/tmp/uv-cache; exec sh -lc "$1"`
     : command;
   return [
     "--unshare-all",
@@ -205,7 +212,7 @@ export function bubblewrapArguments(wslWorkspace: string, command: string, proof
     "--setenv", "HOME", "/tmp/home",
     "--setenv", "PATH", `${proof ? "/tmp/neura-bin:" : ""}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
     "--setenv", "LANG", "C.UTF-8",
-    "--", "sh", "-lc", verifiedCommand,
+    "--", "sh", "-lc", verifiedCommand, ...(proof ? ["neura-proof", command] : []),
   ];
 }
 

@@ -15,6 +15,9 @@
       "python": {
         "path": "/usr/bin/python3.12",
         "version": "3.12.3",
+        "package": "python3.12-minimal",
+        "packageVersion": "3.12.3-1ubuntu0.13",
+        "architecture": "amd64",
         "sha256": "e1efa562c2cc2e35521a5c9c9b9939921001ff8ca9708a13ef15ace68cc2ccd7"
       },
       "wheels": {

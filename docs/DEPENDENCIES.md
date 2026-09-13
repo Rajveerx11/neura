@@ -45,6 +45,16 @@ contract pins official Linux x86-64 archive SHA-256
 and the extracted uv/uvx hashes. CPython `3.12.3` at `/usr/bin/python3.12` is
 pinned by executable SHA-256
 `e1efa562c2cc2e35521a5c9c9b9939921001ff8ca9708a13ef15ace68cc2ccd7`.
+The inspected WSL distribution reports Ubuntu Noble
+[`python3.12-minimal`](https://packages.ubuntu.com/noble-updates/python3.12-minimal)
+`3.12.3-1ubuntu0.13` for `amd64`, built from source package `python3.12` at the
+same version. Local APT policy records `noble-updates/main` and
+`noble-security/main` as the candidate origins, and `dpkg -V` reported no
+installed-package differences on 2026-09-13. That exact package tuple and the
+stronger installed-binary SHA-256 are runtime requirements. The installed
+version's `.deb` archive and detached signature were not retained locally, so
+Neura does not claim independent archive-signature verification; any package,
+version, architecture, or binary-digest mismatch makes proof unavailable.
 The configured uv directory, interpreter, and exact five-wheel directory are
 verified, mounted read-only, and exercised inside the sandbox with a fresh
 local cache. The command passes the mounted interpreter through `--python` and pins
