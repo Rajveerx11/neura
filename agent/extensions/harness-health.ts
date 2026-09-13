@@ -16,7 +16,9 @@ import {
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
 import { humanAwaySandboxAvailable } from "../neura/human-away-sandbox.ts";
 import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
+import { scopedProcessEnvironment } from "../neura/process-security.ts";
 import { redactSensitiveText } from "../neura/redaction.ts";
+import { PROOF_UV_VERSION } from "../neura/verification.ts";
 import { fitLine } from "../neura/ui-tokens.ts";
 
 export type HealthState = "missing" | "disabled" | "unhealthy" | "degraded" | "ready";
@@ -350,12 +352,7 @@ export async function probeHttpMcp(
 }
 
 function healthEnvironment(): NodeJS.ProcessEnv {
-  const result: NodeJS.ProcessEnv = {};
-  const names = new Set([
-    "PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
-  ]);
-  for (const name of names) if (process.env[name] !== undefined) result[name] = process.env[name];
-  return result;
+  return scopedProcessEnvironment();
 }
 
 function jsonRpcFromOutput(output: string): unknown | null {
@@ -598,9 +595,9 @@ export function requiredHealthState(capabilities: CapabilityHealth[]): HealthRep
 
 export async function inspect(cwd: string, signal?: AbortSignal): Promise<HealthReport> {
   const [piVersion, gitVersion, uvxVersion, git, qwen, sandbox, mcp] = await Promise.all([
-    commandVersion("pi"),
-    commandVersion("git"),
-    commandVersion("uvx"),
+    commandVersion("pi", ["--version"], cwd),
+    commandVersion("git", ["--version"], cwd),
+    commandVersion("uvx", ["--version"], cwd),
     getGitHealth(cwd),
     probeLocalProvider(fetch, signal),
     humanAwaySandboxAvailable(),
@@ -623,7 +620,9 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
     capability("workspace", true, git.isRepo ? "ready" : "degraded", git.isRepo ? git.branch : "not a Git workspace", git.isRepo ? null : "open a Git workspace"),
     capability("modes", true, modes && modeKeys ? "ready" : "degraded", modes && modeKeys ? "extension and keybinding ready" : "extension or keybinding missing", modes && modeKeys ? null : "sync extensions and keybindings"),
     capability("sandbox", true, sandbox ? "ready" : "degraded", sandbox ? "WSL2 and bubblewrap ready" : "unavailable", sandbox ? null : "install WSL2 + bubblewrap"),
-    capability("proof", true, gate && !!uvxVersion ? "ready" : "degraded", gate && uvxVersion ? versionLabel(uvxVersion) : "gate or uvx missing", gate && uvxVersion ? null : "sync proof gate and install uv"),
+    capability("proof", true, gate && versionLabel(uvxVersion ?? "") === PROOF_UV_VERSION ? "ready" : "degraded",
+      gate && uvxVersion ? versionLabel(uvxVersion) : "gate or uvx missing",
+      gate && versionLabel(uvxVersion ?? "") === PROOF_UV_VERSION ? null : `install uv ${PROOF_UV_VERSION} and cache the pinned proof runner`),
     capability("checkpoint", true, checkpoint ? "ready" : "missing", checkpoint ? "undo available" : "extension missing", checkpoint ? null : "sync checkpoint extension"),
     capability("persona", true, persona ? "ready" : "missing", persona ? "loaded" : "missing", persona ? null : "restore persona"),
     capability("memory", false, memory ? "ready" : "disabled", memory ? "configured" : "not configured", null),

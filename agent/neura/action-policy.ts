@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./human-away-sandbox.ts";
 import { redactSensitiveText } from "./redaction.ts";
+import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "./process-security.ts";
 
 export type PolicyRoute = "allow" | "review" | "human" | "deny";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
@@ -136,13 +137,12 @@ function pathState(target: string | undefined): string {
 }
 
 function git(workspace: string, args: string[], encoding: BufferEncoding | null = "utf-8") {
-  return spawnSync("git", [
-    "--no-pager", "--no-optional-locks", "--no-lazy-fetch",
-    "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
-    ...args,
-  ], {
+  const executable = resolveExecutable("git", workspace);
+  if (!executable) throw new Error("Git executable unavailable.");
+  return spawnSync(executable, [...AUTOMATIC_GIT_ARGUMENTS, ...args], {
     cwd: workspace,
     encoding,
+    env: automaticGitEnvironment(),
     windowsHide: true,
     timeout: 2_500,
     maxBuffer: 16 * 1024 * 1024,
@@ -274,12 +274,7 @@ function targetFacts(raw: string, workspace: string, executionCwd = workspace): 
   facts.generated = GENERATED_PATH.test(path.relative(workspace, target));
   if (facts.insideWorkspace) {
     const relative = path.relative(workspace, target);
-    const tracked = spawnSync("git", ["ls-files", "--error-unmatch", "--", relative], {
-      cwd: workspace,
-      encoding: "utf-8",
-      windowsHide: true,
-      timeout: 1_000,
-    });
+    const tracked = git(workspace, ["ls-files", "--error-unmatch", "--", relative]);
     facts.tracked = tracked.status === 0;
   }
   return facts;

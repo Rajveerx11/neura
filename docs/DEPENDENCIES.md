@@ -1,8 +1,8 @@
 # Dependency policy and review
 
 Pi/development source review: 2026-09-03. Learn runtime review: 2026-09-07.
-MCP lifecycle source review: 2026-09-13. Documentation reconciled with merged
-source: 2026-09-07.
+MCP lifecycle and automatic-execution review: 2026-09-13. Documentation
+reconciled with source: 2026-09-13.
 
 Neura uses exact runtime and development pins. `package-lock.json` is the
 reproducible development graph. Pi-managed runtime extensions are pinned in
@@ -35,13 +35,32 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 | `@spences10/pi-mcp` | `0.0.58` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-mcp); no install hook. Registry signature verified. Its package extension is filtered out so Neura's owned wrapper controls lifecycle. | `/mcp connect` discovers configured tools only in YOLO; selected connected tools can reconnect on demand. Restricted modes neither start nor await MCP connections. |
 | `@spences10/pi-context` | `0.1.15` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-context); no install hook. Registry signature verified. | Writes a local SQLite context sidecar under the live harness. |
 
+## Reviewed proof runner
+
+Work and YOLO proof share the network-disabled WSL2 bubblewrap path. It requires
+uv `0.12.11` and uses `--isolated --offline --no-config`; a repository cannot
+provide uv configuration or trigger a download. The command pins
+`proof-of-work-agent==0.2.0` and its complete runtime closure:
+`cryptography==49.0.0`, `cffi==2.1.0`, `pycparser==3.0`, and `PyYAML==6.0.3`.
+
+The reviewed [v0.2.0 source](https://github.com/Rajveerx11/proof-of-work/tree/v0.2.0)
+resolves to commit `914e1b7e62acc4e24b767a9d61946cbf8808fb75`; its checked-in `uv.lock`
+records the same closure and artifact hashes. PyPI publishes wheel SHA-256
+`e1dc9a077eb2039eced85e9c2e78c85d6d3ffc7054559f7c4df044d940aae6c6` and
+sdist SHA-256 `d34bb9f77d90431b6bcc94375031a38192ad76845c95efa30e46466d44cd541e`.
+The Git tag and PyPI artifacts have no publisher signature or Trusted Publishing
+attestation; that absence was reviewed and is recorded here rather than claimed
+as verified. Exact pins, reviewed hashes, an offline cache, network isolation,
+and no host fallback are the compensating controls. Missing or wrong versions
+degrade proof only; they do not weaken another mode or start a download.
+
 ## Reviewed CI security tools
 
 | Tool | Pin and integrity | Source and lifecycle review | Privileged behavior |
 |---|---|---|---|
 | Gitleaks CLI | `8.30.1`; Windows x64 archive SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` | [Official release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). CI downloads the exact archive, verifies its published digest, then extracts it. No installer or floating action tag runs. | Reads the complete Git history in CI. Findings are fully redacted; checkout credentials are removed before the scanner starts. |
 | GitHub Actions | `actions/checkout` `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` `v7.0.0` (`820762786026740c76f36085b0efc47a31fe5020`), and `actions/upload-artifact` `v7.0.1` (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`) | Official GitHub-maintained actions, pinned to immutable commits. Checkout and setup-node use the supported Node 24 action runtime. | Checkout reads repository history, setup-node provisions the pinned Node version and npm cache, and upload-artifact stores generated Plan evidence for seven days. |
-| uv CLI | `0.12.11` | [Official release](https://github.com/astral-sh/uv/releases/tag/0.12.11). CI installs the exact PyPI version; the 0.12 behavior changes do not affect Neura's `uvx --from ...` proof invocation. | Resolves and runs the proof-of-work verifier during the isolated installer rehearsal. |
+| uv CLI | `0.12.11` | [Official release](https://github.com/astral-sh/uv/releases/tag/0.12.11). CI installs the exact PyPI version. Runtime proof checks this exact version and refuses user or repository uv configuration. | Resolves the fully pinned proof environment from an existing offline cache during the isolated installer rehearsal and live checks. |
 
 ## Development graph
 
@@ -78,6 +97,14 @@ development APIs, and CI still pin `0.84.4`; verify live installations separatel
 5. Run typecheck, harness verification, sandbox replay, docs validation, and the
    Windows live-drift check.
 6. Record behavior, migration, and rollback in the changelog and release notes.
+
+For a proof-runner update, review its source tag and full lockfile, update every
+inline runtime pin and recorded hash together, then populate the WSL cache during
+an authorized release rehearsal. Roll back by restoring the previous constants
+and source installation; in-session checkpoints are disposable temp copies and
+need no migration. Optional MCP commands removed from the default configuration
+must stay absent unless replaced by a reviewed HTTPS endpoint or a separately
+pinned and manifested executable.
 
 Never use `*`, `latest`, caret, or tilde ranges for Neura runtime packages.
 

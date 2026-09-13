@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "./process-security.ts";
 import { redactSensitiveText } from "./redaction.ts";
 
 export type TreeSnapshot = { root: string; fingerprint: string; files: Record<string, string> };
@@ -22,17 +23,16 @@ export type VerificationReceipt = {
   incremental?: IncrementalEvidence & { source: "workspace-report"; current: boolean };
 };
 
-const gitOptions = ["--no-pager", "--no-optional-locks", "--no-lazy-fetch",
-  "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
 const outsideRoot = (relative: string) => relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
 
 export function execute(file: string, args: string[], options: {
-  cwd: string; timeoutMs: number; signal?: AbortSignal; maxBuffer?: number;
+  cwd: string; timeoutMs: number; signal?: AbortSignal; maxBuffer?: number; env?: NodeJS.ProcessEnv;
 }): Promise<{ ok: boolean; stdout: string; completed?: boolean }> {
   return new Promise(resolve => {
     execFile(file, args, {
       cwd: options.cwd, timeout: options.timeoutMs, signal: options.signal,
       windowsHide: true, maxBuffer: options.maxBuffer ?? 1024 * 1024,
+      env: options.env,
     }, (error, stdout) => resolve({ ok: !error,
       completed: !error || (typeof error.code === "number" && !error.killed),
       stdout: String(stdout ?? "") }));
@@ -47,15 +47,17 @@ export async function captureWorktree(cwd: string, options: {
   const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? 10_000),
     ...(options.signal ? [options.signal] : [])]);
   try {
-    const git = (args: string[]) => execute("git", [...gitOptions, ...args], {
-      cwd, signal, timeoutMs: 10_000, maxBuffer: 8 * 1024 * 1024,
+    const executable = resolveExecutable("git", cwd);
+    if (!executable) return null;
+    const git = (args: string[]) => execute(executable, [...AUTOMATIC_GIT_ARGUMENTS, ...args], {
+      cwd, signal, timeoutMs: 10_000, maxBuffer: 8 * 1024 * 1024, env: automaticGitEnvironment(),
     });
     const top = await git(["rev-parse", "--show-toplevel"]);
     if (!top.ok) return null;
     const root = await fs.realpath(top.stdout.trim());
     // Enumeration is rooted at the repository, even when a session starts below it.
-    const run = (args: string[]) => execute("git", [...gitOptions, ...args], {
-      cwd: root, signal, timeoutMs: 10_000, maxBuffer: 8 * 1024 * 1024,
+    const run = (args: string[]) => execute(executable, [...AUTOMATIC_GIT_ARGUMENTS, ...args], {
+      cwd: root, signal, timeoutMs: 10_000, maxBuffer: 8 * 1024 * 1024, env: automaticGitEnvironment(),
     });
     const [head, index, untracked] = await Promise.all([
       run(["rev-parse", "--verify", "HEAD"]),
@@ -129,9 +131,9 @@ export async function runProof(cwd: string, quick: boolean, options: {
   signal?: AbortSignal; timeoutMs?: number;
   execute?: typeof execute;
 } = {}): Promise<ProofResult> {
-  const args = ["--from", "proof-of-work-agent", "proof-of-work", "check", "--json", "--base", "HEAD"];
-  if (quick) args.push("--no-tests");
-  const result = await (options.execute ?? execute)("uvx", args, {
+  const args = proofRunnerArguments(quick);
+  if (!options.execute) return { status: "unavailable", reasons: ["Proof execution requires the isolated runner."] };
+  const result = await options.execute("uvx", args, {
     cwd, signal: options.signal, timeoutMs: options.timeoutMs ?? (quick ? 90_000 : 600_000),
   });
   try {
@@ -144,6 +146,15 @@ export async function runProof(cwd: string, quick: boolean, options: {
     return { status: value.passed ? "passed" : "failed",
       reasons: value.reasons.slice(0, 20).map((reason: string) => redactSensitiveText(reason, 500)) };
   } catch { return { status: "unavailable", reasons: ["Proof runner did not return a complete bounded verdict."] }; }
+}
+
+export const PROOF_UV_VERSION = "0.12.11";
+const PROOF_RUNTIME_PINS = ["cryptography==49.0.0", "cffi==2.1.0", "pycparser==3.0", "PyYAML==6.0.3"] as const;
+
+export function proofRunnerArguments(quick: boolean): string[] {
+  return ["--isolated", "--offline", "--no-config", "--from", "proof-of-work-agent==0.2.0",
+    ...PROOF_RUNTIME_PINS.flatMap((dependency) => ["--with", dependency]),
+    "proof-of-work", "check", "--json", "--base", "HEAD", ...(quick ? ["--no-tests"] : [])];
 }
 
 export function makeReceipt(scope: "quick" | "full", before: TreeSnapshot, after: TreeSnapshot | null,

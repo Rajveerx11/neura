@@ -78,10 +78,10 @@ resumed sources must be reimported before new verified citations. See the
 - Windows 11 or a current supported Windows release.
 - PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.84.4`.
   CI exercises Node `24.16.0`.
-- `uvx` for proof-of-work checks.
+- uv/`uvx` `0.12.11` with the reviewed proof runner already cached for offline checks.
 - WSL2 plus `bubblewrap` for Work execution/proof and Human Away Preview.
-  Work proof requires its runner and packages already available offline inside WSL;
-  unavailable isolation never falls back to host execution.
+  Work and YOLO proof require the exact runner and packages already available
+  offline inside WSL; unavailable isolation never falls back to host execution.
 - Provider credentials for whichever models or optional integrations you enable.
 
 The complete application workflow is supported on Windows. Linux CI covers
@@ -125,9 +125,10 @@ provide automatic rollback. Track this in
 ## Configure
 
 Credentials belong in user environment variables or provider-managed stores,
-never in this repository. Optional MCP servers are examples and may require
-local path or endpoint changes before use. Disable integrations you have not
-reviewed.
+never in this repository. The default MCP configuration uses reviewed HTTP(S)
+endpoints only. Add a local MCP command only after pinning and manifesting its
+absolute executable and dependency closure; project configuration is not a
+trusted source of automatic executables.
 
 Gmail requires `COMPOSIO_API_KEY`. Other optional servers remain disabled until
 configured. Review [dependency policy](docs/DEPENDENCIES.md) before enabling any

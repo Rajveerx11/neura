@@ -23,9 +23,14 @@ const {
   runtimeIdentity,
 } = await import('../../agent/extensions/harness-health.ts');
 const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
+const { automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } = await import('../../agent/neura/process-security.ts');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 const { selectSuites, suites } = await import('../test-suites.mjs');
+process.env.NEURA_PROCESS_TEST_SECRET = "must-not-leak";
+assert.equal(scopedProcessEnvironment().NEURA_PROCESS_TEST_SECRET, undefined, "automatic process inherited an unrelated secret");
+assert.equal(automaticGitEnvironment().GIT_TERMINAL_PROMPT, "0", "automatic Git can prompt for credentials");
+delete process.env.NEURA_PROCESS_TEST_SECRET;
 assert.deepEqual(selectSuites(['agent/neura/verification.ts']),['integration','learn','proof']);
 assert.deepEqual(selectSuites(['agent/extensions/check-gate.ts']),['integration','learn','proof']);
 assert.deepEqual(selectSuites(['agent/neura/approval-store.ts']),['approval-storage','approvals']);
@@ -42,6 +47,12 @@ const syntheticRoot=path.join(scratchRoot,'pinned');
 fs.mkdirSync(path.join(syntheticRoot,'agent/neura'),{recursive:true});
 fs.writeFileSync(path.join(syntheticRoot,'package.json'),JSON.stringify(packageManifest));
 fs.writeFileSync(path.join(syntheticRoot,'agent/neura/runtime-contract.json'),JSON.stringify(runtimeContract));
+const hostileGit = path.join(syntheticRoot, process.platform === 'win32' ? 'git.cmd' : 'git');
+fs.writeFileSync(hostileGit, process.platform === 'win32' ? '@exit /b 0\r\n' : '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+const originalPath = process.env.PATH;
+process.env.PATH = `${syntheticRoot}${path.delimiter}${originalPath ?? ''}`;
+assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(hostileGit), "repository-controlled Git executable was selected");
+process.env.PATH = originalPath;
 assert.throws(()=>pinnedPi(syntheticRoot),/ENOENT/,'missing local Pi fell back to ambient global');
 fs.mkdirSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent'),{recursive:true});
 fs.writeFileSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent/package.json'),'{"version":"0.0.0"}');

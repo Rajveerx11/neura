@@ -62,8 +62,8 @@ agent_settled
 | `human-away-sandbox.ts` | Registers `work_exec` and Human Away's sole execution tool | WSL2, bubblewrap |
 | `learn.ts` | Lessons, document imports, exercises, progress, `/learn` | Controlled `.neura-learning/` store; locked parser runtime |
 | `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
-| `checkpoint.ts` | YOLO-only pre-turn snapshots and `/undo` | Git object database, temp index |
-| `check-gate.ts` | Work/YOLO quick proof and full `/ship`; no Git publishing | Work sandbox or YOLO host proof, content-bound receipts |
+| `checkpoint.ts` | YOLO-only pre-turn raw-byte snapshots and `/undo` | Bounded OS-temp copies; Git enumerates names with hostile execution paths disabled |
+| `check-gate.ts` | Work/YOLO quick proof and full `/ship`; no Git publishing | Shared WSL2 sandbox, exact offline proof closure, content-bound receipts |
 | `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |
 | `harness-health.ts` | YOLO-only required/optional capability health and bounded integration probes | Exact Pi runtime contract, Git, uvx, MCP initialization, local Qwen |
 | `transcript-actions.ts` | Answer/code copy | Pi clipboard API |
@@ -81,6 +81,7 @@ agent_settled
 | `approval-store.ts` | Hash-chained JSONL, one-use grants, cross-process writer lock, fail-closed corruption/crash handling |
 | `headmaster.ts` | Isolated no-tool reviewer subprocess and verdict parsing |
 | `mode-state.ts` | Five modes, Work default, operation leases, deferred session restoration |
+| `process-security.ts` | Scoped child environments, repository-binary rejection, hardened automatic Git configuration |
 | `learn-policy.ts` | Learn tool allowlist and bounded private-path denial |
 | `learn-schema.ts`, `learn-renderer.ts` | Structured lessons and escaped standalone HTML/SVG boards |
 | `learn-exercises.ts` | Practice grading and bounded disposable SQLite evaluation |

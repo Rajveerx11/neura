@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { InspectedAction } from "./action-policy.ts";
 import type { ReviewVerdict } from "./approval-store.ts";
+import { scopedProcessEnvironment } from "./process-security.ts";
 import { redactSensitiveValue } from "./redaction.ts";
 
 type RawVerdict = {
@@ -16,6 +17,7 @@ type HeadmasterOptions = {
   provider?: string;
   modelId?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 function policyText(): string {
@@ -133,14 +135,14 @@ function runHeadmaster(action: InspectedAction, options: HeadmasterOptions): Pro
   }
   args.push(dossier);
 
-  const env: NodeJS.ProcessEnv = { ...process.env, NEURA_HEADMASTER: "1" };
-  delete env.NEURA;
+  const env = scopedProcessEnvironment({ NEURA_HEADMASTER: "1" });
   return new Promise((resolve) => {
     execFile(process.execPath, args, {
       cwd: action.workspace,
       env,
       windowsHide: true,
       timeout: options.timeoutMs ?? 60_000,
+      signal: options.signal,
       maxBuffer: 512 * 1024,
     }, (error, stdout) => resolve(error ? null : parseVerdict(String(stdout ?? ""))));
   });

@@ -6,8 +6,10 @@ import { isolate } from './isolation.mjs';
 import { repository, git } from './git-fixture.mjs';
 const scratch = isolate();
 process.env.NEURA = '1';
-const { captureWorktree, changedFiles, execute, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
+const { captureWorktree, changedFiles, execute, PROOF_UV_VERSION, proofRunnerArguments, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
 const { registerCheckGate, runModeProof } = await import('../../agent/extensions/check-gate.ts');
+const { captureCheckpoint, restoreCheckpoint } = await import('../../agent/extensions/checkpoint.ts');
+const { getGitHealth } = await import('../../agent/neura/core.ts');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
 const root = repository(scratch);
 // Reconciliation keeps Work proof in the OS sandbox and Learn fully read-only.
@@ -18,7 +20,7 @@ for (const quick of [true, false]) {
   const modeProof = await runModeProof(root, quick, { execute: hostProof }, async (cwd, command, timeout) => {
     sandboxProofCalls++;
     assert.equal(cwd, root);
-    assert.equal(command, 'uvx --from proof-of-work-agent proof-of-work check --json --base HEAD' + (quick ? ' --no-tests' : ''));
+    assert.equal(command, `test "$(uvx --version)" = "uvx ${PROOF_UV_VERSION}" && exec uvx ${proofRunnerArguments(quick).join(' ')}`);
     assert.ok(timeout > 0);
     return { code: 0, completed: true, stdout: '{"passed":true,"reasons":[]}', stderr: '' };
   });
@@ -34,9 +36,10 @@ assert.equal((await runModeProof(root, true, { execute: hostProof }, async () =>
 assert.equal(sandboxProofCalls, 2);
 assert.equal(hostProofCalls, 0);
 setMode('yolo');
-assert.equal((await runModeProof(root, true, { execute: hostProof })).status, 'passed');
-assert.equal(hostProofCalls, 1);
+assert.equal((await runModeProof(root, true, { execute: hostProof }, async () => ({ code: 0, completed: true, stdout: '{"passed":true,"reasons":[]}', stderr: '' }))).status, 'passed');
+assert.equal(hostProofCalls, 0, 'YOLO proof executed an ambient host runner');
 setMode('work');
+assert.equal((await runProof(root, true)).status, 'unavailable', 'proof ran without an isolated executor');
 const { changedPaths, selectSuites, suites } = await import('../test-suites.mjs');
 const renameRoot = repository(scratch,'rename');
 fs.mkdirSync(path.join(renameRoot,'docs'));
@@ -109,6 +112,22 @@ for (const setting of ['diff.external', 'diff.test.textconv', 'filter.test.clean
 fs.writeFileSync(path.join(root, '.gitattributes'), '*.txt diff=test filter=test\n');
 assert.ok(await captureWorktree(root));
 assert.equal(fs.existsSync(marker), false, 'automatic fingerprint ran a repository executable');
+fs.appendFileSync(path.join(root, 'tracked.txt'), 'health change\n');
+await getGitHealth(root);
+assert.equal(fs.existsSync(marker), false, 'health Git ran a repository filter or monitor');
+
+// Checkpoints copy raw bytes and must not invoke clean/smudge filters or checkout helpers.
+setMode('yolo');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'checkpoint content\n');
+const checkpoint = await captureCheckpoint(root);
+assert.ok(checkpoint, 'safe checkpoint failed');
+assert.equal(fs.existsSync(marker), false, 'checkpoint capture ran a repository filter');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'changed after checkpoint\n');
+assert.equal(await restoreCheckpoint(root, checkpoint), true, 'safe checkpoint restore failed');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'checkpoint content\n');
+assert.equal(fs.existsSync(marker), false, 'checkpoint restore ran a repository helper');
+fs.rmSync(checkpoint.directory, { recursive: true, force: true });
+setMode('work');
 
 const verdict = (value, ok = true) => async () => ({ ok, stdout: JSON.stringify(value) });
 assert.equal((await runProof(root, true, { execute: verdict({ passed: true, reasons: [] }) })).status, 'passed');

@@ -1,15 +1,11 @@
 {
   "mcpServers": {
-    "gfi-scout": {
-      "command": "C:\\Users\\rajve\\.local\\bin\\gfi-scout.exe"
-    },
     "paper": {
       "url": "http://127.0.0.1:29979/mcp",
       "disabled": true
     },
     "context7": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@upstash/context7-mcp"]
+      "url": "https://mcp.context7.com/mcp"
     },
     "gmail": {
       "type": "streamable-http",
@@ -17,16 +13,6 @@
       "headers": {
         "x-api-key": "${COMPOSIO_API_KEY}"
       }
-    },
-    "supabase": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@supabase/mcp-server-supabase", "--read-only"],
-      "disabled": true
-    },
-    "notion": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@notionhq/notion-mcp-server"],
-      "disabled": true
     }
   }
 }

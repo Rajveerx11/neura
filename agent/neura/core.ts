@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
+import * as path from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } from "./process-security.ts";
 import { PALETTE } from "./ui-tokens.ts";
 
 export { PALETTE } from "./ui-tokens.ts";
@@ -39,7 +41,7 @@ export type ProcessResult = {
 export function runProcess(
   file: string,
   args: string[],
-  options: { cwd?: string; timeoutMs?: number } = {},
+  options: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<ProcessResult> {
   return new Promise((resolve) => {
     execFile(
@@ -50,6 +52,7 @@ export function runProcess(
         timeout: options.timeoutMs ?? 3_000,
         windowsHide: true,
         maxBuffer: 4 * 1024 * 1024,
+        env: options.env,
       },
       (error, stdout, stderr) => {
         resolve({
@@ -62,10 +65,17 @@ export function runProcess(
   });
 }
 
-export async function commandVersion(command: string, args = ["--version"]): Promise<string | null> {
-  const result = process.platform === "win32"
-    ? await runProcess("cmd", ["/d", "/s", "/c", command, ...args])
-    : await runProcess(command, args);
+export async function commandVersion(command: string, args = ["--version"], cwd = process.cwd()): Promise<string | null> {
+  const executable = resolveExecutable(command, cwd);
+  if (!executable) return null;
+  let result: ProcessResult;
+  if (process.platform === "win32" && [".bat", ".cmd"].includes(path.extname(executable).toLowerCase())) {
+    const shell = resolveExecutable(process.env.ComSpec ?? "C:\\Windows\\System32\\cmd.exe", cwd);
+    if (!shell) return null;
+    result = await runProcess(shell,
+      ["/d", "/s", "/c", `"${executable}" ${args.map((argument) => `"${argument.replaceAll('"', '""')}"`).join(" ")}`],
+      { env: scopedProcessEnvironment() });
+  } else result = await runProcess(executable, args, { env: scopedProcessEnvironment() });
   if (!result.ok) return null;
   return (result.stdout || result.stderr).split(/\r?\n/, 1)[0]?.trim() || null;
 }
@@ -79,7 +89,11 @@ export type GitHealth = {
 };
 
 export async function getGitHealth(cwd: string): Promise<GitHealth> {
-  const result = await runProcess("git", ["status", "--porcelain=v1", "--branch"], { cwd });
+  const executable = resolveExecutable("git", cwd);
+  if (!executable) return { isRepo: false, branch: "", changed: 0, ahead: 0, behind: 0 };
+  const result = await runProcess(executable,
+    [...AUTOMATIC_GIT_ARGUMENTS, "status", "--porcelain=v1", "--branch", "--ignore-submodules=all"],
+    { cwd, env: automaticGitEnvironment() });
   if (!result.ok) return { isRepo: false, branch: "", changed: 0, ahead: 0, behind: 0 };
 
   const lines = result.stdout.split(/\r?\n/).filter(Boolean);
