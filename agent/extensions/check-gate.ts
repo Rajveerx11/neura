@@ -1,12 +1,12 @@
 // Quick verification follows changed bytes; /ship always obtains a fresh full verdict.
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
 import { acquireHostOperation, getMode, isModeRestorePending } from "../neura/mode-state.ts";
-import { runInHumanAwaySandbox } from "../neura/human-away-sandbox.ts";
+import { runProofInSandbox } from "../neura/human-away-sandbox.ts";
 import { captureWorktree, changedFiles, makeReceipt, PROOF_UV_VERSION, proofRunnerArguments, readIncrementalEvidence, runProof } from "../neura/verification.ts";
 import type { ProofResult, TreeSnapshot, VerificationReceipt } from "../neura/verification.ts";
 
 export async function runModeProof(cwd: string, quick: boolean, options: Parameters<typeof runProof>[2] = {},
-  sandbox = runInHumanAwaySandbox): Promise<ProofResult> {
+  sandbox = runProofInSandbox): Promise<ProofResult> {
   if (isModeRestorePending()) return { status: "unavailable", reasons: ["Session restoration is pending."] };
   const mode = getMode();
   if (mode !== "work" && mode !== "yolo") return { status: "unavailable", reasons: ["Verification is unavailable in this mode."] };

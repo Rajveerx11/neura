@@ -76,11 +76,12 @@ claim to solve all concurrent filesystem races or Plan confidentiality (#35).
 
 ## Approval failures and remaining gates
 
-Work proof executes only inside the existing network-disabled WSL2 bubblewrap
-environment, with its runner and packages already available. Unavailable sandbox
-execution reports unavailable, without host fallback. YOLO retains bounded host
-proof. Both modes block mode changes during capture and verification. Learn, Plan,
-and Human Away do not run this proof hook.
+Work and YOLO proof execute only inside the network-disabled WSL2 bubblewrap
+environment. Its exact hash-verified uv binaries and proof wheelhouse mount
+read-only, while each run uses a fresh sandbox-local cache. Unavailable sandbox
+execution reports unavailable, without host fallback. Both modes block mode
+changes during capture and verification. Learn, Plan, and Human Away do not run
+this proof hook.
 
 Approval writers hold a cross-process directory lock across read, deduplication,
 and append. Short writes retry; completed appends are flushed. Lock waits stop

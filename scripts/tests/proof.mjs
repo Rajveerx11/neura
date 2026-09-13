@@ -12,6 +12,8 @@ const { captureCheckpoint, restoreCheckpoint } = await import('../../agent/exten
 const { getGitHealth } = await import('../../agent/neura/core.ts');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
 const root = repository(scratch);
+const runtimeContract = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../agent/neura/runtime-contract.json'), 'utf8'));
+assert.equal(PROOF_UV_VERSION, runtimeContract.automaticExecutables.proof.uvVersion, 'proof uv version drifted from runtime contract');
 // Reconciliation keeps Work proof in the OS sandbox and Learn fully read-only.
 let sandboxProofCalls = 0, hostProofCalls = 0;
 const hostProof = async () => { hostProofCalls++; return { ok: true, completed: true, stdout: '{"passed":true,"reasons":[]}' }; };
@@ -127,6 +129,22 @@ assert.equal(await restoreCheckpoint(root, checkpoint), true, 'safe checkpoint r
 assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'checkpoint content\n');
 assert.equal(fs.existsSync(marker), false, 'checkpoint restore ran a repository helper');
 fs.rmSync(checkpoint.directory, { recursive: true, force: true });
+
+// A failure after one replacement must restore every pre-undo byte.
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'transaction snapshot one\n');
+fs.writeFileSync(path.join(root, 'transaction-two.txt'), 'transaction snapshot two\n');
+const transactional = await captureCheckpoint(root);
+assert.ok(transactional, 'transaction checkpoint failed');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'current one\n');
+fs.writeFileSync(path.join(root, 'transaction-two.txt'), 'current two\n');
+let replacedTracked = false;
+assert.equal(await restoreCheckpoint(root, transactional, { beforeWrite(name) {
+  if (name === 'tracked.txt') replacedTracked = true;
+  if (name === 'transaction-two.txt' && replacedTracked) throw new Error('synthetic mid-restore failure');
+} }), false, 'mid-restore fault unexpectedly succeeded');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'current one\n', 'rollback lost the first pre-undo file');
+assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'current two\n', 'rollback lost the second pre-undo file');
+fs.rmSync(transactional.directory, { recursive: true, force: true });
 setMode('work');
 
 const verdict = (value, ok = true) => async () => ({ ok, stdout: JSON.stringify(value) });

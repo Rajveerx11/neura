@@ -9,12 +9,13 @@
   the unreliable two-window handoff; terminal `neura` stays in place. The profile
   suppresses its update card, and duplicate auto-discovered skill roots are excluded
   so the first viewport stays clean. No runtime dependency or network fetch was added.
-- Pinned uv and the proof runner's complete runtime closure, disabled uv config
-  and network resolution, and routed both Work and YOLO proof through WSL2
-  bubblewrap with no host fallback. Hardened automatic Git against repository
-  hooks, filters, text conversion, external diff, prompts, and fs monitors.
-- Replaced Git filter-capable checkpoint staging/restoration with bounded raw-byte
-  temp snapshots, removed floating and user-local MCP commands from the default
+- Pinned and hash-verified uv, Git, and the proof runner's complete runtime
+  closure; mounted the WSL proof binaries/wheelhouse read-only with a fresh
+  sandbox-local cache; and routed Work/YOLO proof through bubblewrap with no
+  host fallback. Hardened automatic Git against repository hooks, filters,
+  text conversion, external diff, prompts, and fs monitors.
+- Replaced Git filter-capable checkpoint staging/restoration with bounded raw-byte,
+  rollback-safe temp snapshots, removed floating and user-local MCP commands from the default
   configuration, and scoped automatic child environments. Missing optional
   integrations now remove only that capability. Addresses #22.
 - Kept MCP discovery off Learn, Plan, Work, and Human Away prompt paths. MCP

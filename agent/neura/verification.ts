@@ -152,7 +152,8 @@ export const PROOF_UV_VERSION = "0.12.11";
 const PROOF_RUNTIME_PINS = ["cryptography==49.0.0", "cffi==2.1.0", "pycparser==3.0", "PyYAML==6.0.3"] as const;
 
 export function proofRunnerArguments(quick: boolean): string[] {
-  return ["--isolated", "--offline", "--no-config", "--from", "proof-of-work-agent==0.2.0",
+  return ["--isolated", "--offline", "--no-config", "--no-index", "--find-links", "/tmp/proof-wheels",
+    "--from", "proof-of-work-agent==0.2.0",
     ...PROOF_RUNTIME_PINS.flatMap((dependency) => ["--with", dependency]),
     "proof-of-work", "check", "--json", "--base", "HEAD", ...(quick ? ["--no-tests"] : [])];
 }

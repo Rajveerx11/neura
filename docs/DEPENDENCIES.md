@@ -38,8 +38,13 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 ## Reviewed proof runner
 
 Work and YOLO proof share the network-disabled WSL2 bubblewrap path. It requires
-uv `0.12.11` and uses `--isolated --offline --no-config`; a repository cannot
-provide uv configuration or trigger a download. The command pins
+uv `0.12.11` and uses `--isolated --offline --no-config --no-index`; a
+repository cannot provide uv configuration or trigger a download. The runtime
+contract pins official Linux x86-64 archive SHA-256
+`4ae93e0f148a18434cc094072547cec88912fc4a72b984183c7d0d0e9586cb5e`
+and the extracted uv/uvx hashes. Their configured WSL directory and the exact
+five-wheel directory are verified, mounted read-only, and installed into a
+fresh sandbox-local cache. The command pins
 `proof-of-work-agent==0.2.0` and its complete runtime closure:
 `cryptography==49.0.0`, `cffi==2.1.0`, `pycparser==3.0`, and `PyYAML==6.0.3`.
 
@@ -50,9 +55,17 @@ records the same closure and artifact hashes. PyPI publishes wheel SHA-256
 sdist SHA-256 `d34bb9f77d90431b6bcc94375031a38192ad76845c95efa30e46466d44cd541e`.
 The Git tag and PyPI artifacts have no publisher signature or Trusted Publishing
 attestation; that absence was reviewed and is recorded here rather than claimed
-as verified. Exact pins, reviewed hashes, an offline cache, network isolation,
+as verified. Exact pins, reviewed hashes, a read-only wheelhouse, network isolation,
 and no host fallback are the compensating controls. Missing or wrong versions
 degrade proof only; they do not weaken another mode or start a download.
+
+Automatic Windows Git resolves only from the Git for Windows installation,
+then must match `2.50.1.windows.1` and SHA-256
+`c954fcc8e65a38450895ca65d308ecaee63f044d16494b5385faa5e036a3facb`
+from the runtime contract. The reviewed executable has a valid Authenticode
+signature from Johannes Schindelin (certificate thumbprint
+`3EB14A3AEF84B7153E139397F0A49E2FAC662B0E`) and comes from the
+[official release](https://github.com/git-for-windows/git/releases/tag/v2.50.1.windows.1).
 
 ## Reviewed CI security tools
 
@@ -60,7 +73,7 @@ degrade proof only; they do not weaken another mode or start a download.
 |---|---|---|---|
 | Gitleaks CLI | `8.30.1`; Windows x64 archive SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` | [Official release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). CI downloads the exact archive, verifies its published digest, then extracts it. No installer or floating action tag runs. | Reads the complete Git history in CI. Findings are fully redacted; checkout credentials are removed before the scanner starts. |
 | GitHub Actions | `actions/checkout` `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` `v7.0.0` (`820762786026740c76f36085b0efc47a31fe5020`), and `actions/upload-artifact` `v7.0.1` (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`) | Official GitHub-maintained actions, pinned to immutable commits. Checkout and setup-node use the supported Node 24 action runtime. | Checkout reads repository history, setup-node provisions the pinned Node version and npm cache, and upload-artifact stores generated Plan evidence for seven days. |
-| uv CLI | `0.12.11` | [Official release](https://github.com/astral-sh/uv/releases/tag/0.12.11). CI installs the exact PyPI version. Runtime proof checks this exact version and refuses user or repository uv configuration. | Resolves the fully pinned proof environment from an existing offline cache during the isolated installer rehearsal and live checks. |
+| uv CLI | `0.12.11` | [Official release](https://github.com/astral-sh/uv/releases/tag/0.12.11). CI installs the exact PyPI version. Runtime proof verifies the official Linux binaries by hash and refuses user or repository uv configuration. | Resolves the fully pinned proof environment from a verified read-only wheelhouse into a fresh sandbox-local cache. |
 
 ## Development graph
 
@@ -99,8 +112,10 @@ development APIs, and CI still pin `0.84.4`; verify live installations separatel
 6. Record behavior, migration, and rollback in the changelog and release notes.
 
 For a proof-runner update, review its source tag and full lockfile, update every
-inline runtime pin and recorded hash together, then populate the WSL cache during
-an authorized release rehearsal. Roll back by restoring the previous constants
+inline runtime pin and recorded hash together, then populate a dedicated WSL
+wheelhouse and configure `NEURA_WSL_UV_DIR` plus
+`NEURA_WSL_PROOF_WHEELHOUSE` during an authorized release rehearsal. Roll back
+by restoring the previous constants
 and source installation; in-session checkpoints are disposable temp copies and
 need no migration. Optional MCP commands removed from the default configuration
 must stay absent unless replaced by a reviewed HTTPS endpoint or a separately

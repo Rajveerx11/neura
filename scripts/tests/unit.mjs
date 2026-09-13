@@ -53,6 +53,18 @@ const originalPath = process.env.PATH;
 process.env.PATH = `${syntheticRoot}${path.delimiter}${originalPath ?? ''}`;
 assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(hostileGit), "repository-controlled Git executable was selected");
 process.env.PATH = originalPath;
+const workspaceMcp = await probeStdioMcp('workspace-fixture', { command: hostileGit, args: [] }, undefined, 100, syntheticRoot);
+assert.equal(workspaceMcp.state, 'degraded', 'workspace-controlled absolute MCP executable was probed');
+assert.match(workspaceMcp.problem?.message ?? '', /existing absolute executable/, 'workspace MCP rejection was not containment failure');
+const outsideMcp = path.join(scratchRoot, 'outside-mcp');
+fs.mkdirSync(outsideMcp);
+fs.writeFileSync(path.join(outsideMcp, path.basename(hostileGit)), '', { mode: 0o755 });
+const linkedMcp = path.join(syntheticRoot, 'linked-mcp');
+fs.symlinkSync(outsideMcp, linkedMcp, process.platform === 'win32' ? 'junction' : 'dir');
+const linkedWorkspaceMcp = await probeStdioMcp('linked-workspace-fixture', {
+  command: path.join(linkedMcp, path.basename(hostileGit)), args: [],
+}, undefined, 100, syntheticRoot);
+assert.match(linkedWorkspaceMcp.problem?.message ?? '', /existing absolute executable/, 'workspace symlink path escaped MCP containment');
 assert.throws(()=>pinnedPi(syntheticRoot),/ENOENT/,'missing local Pi fell back to ambient global');
 fs.mkdirSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent'),{recursive:true});
 fs.writeFileSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent/package.json'),'{"version":"0.0.0"}');

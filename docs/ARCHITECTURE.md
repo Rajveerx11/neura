@@ -65,7 +65,7 @@ agent_settled
 | `checkpoint.ts` | YOLO-only pre-turn raw-byte snapshots and `/undo` | Bounded OS-temp copies; Git enumerates names with hostile execution paths disabled |
 | `check-gate.ts` | Work/YOLO quick proof and full `/ship`; no Git publishing | Shared WSL2 sandbox, exact offline proof closure, content-bound receipts |
 | `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |
-| `harness-health.ts` | YOLO-only required/optional capability health and bounded integration probes | Exact Pi runtime contract, Git, uvx, MCP initialization, local Qwen |
+| `harness-health.ts` | YOLO-only required/optional capability health and bounded integration probes | Exact Pi/runtime executable contract, WSL proof wheelhouse, Git, MCP initialization, local Qwen |
 | `transcript-actions.ts` | Answer/code copy | Pi clipboard API |
 | `neura-memory.ts` | YOLO-only local cross-session facts | `~/.pi/agent/neura/MEMORY.md` |
 | `presets.ts` | GPT, Opus, local Qwen switching | Provider login or llama.cpp |

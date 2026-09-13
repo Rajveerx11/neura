@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
 import {
   PALETTE,
   commandVersion,
@@ -14,11 +15,10 @@ import {
   truncateText,
 } from "../neura/core.ts";
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
-import { humanAwaySandboxAvailable } from "../neura/human-away-sandbox.ts";
+import { humanAwaySandboxAvailable, inspectProofSandboxRuntime } from "../neura/human-away-sandbox.ts";
 import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
-import { scopedProcessEnvironment } from "../neura/process-security.ts";
+import { resolveExecutable, scopedProcessEnvironment } from "../neura/process-security.ts";
 import { redactSensitiveText } from "../neura/redaction.ts";
-import { PROOF_UV_VERSION } from "../neura/verification.ts";
 import { fitLine } from "../neura/ui-tokens.ts";
 
 export type HealthState = "missing" | "disabled" | "unhealthy" | "degraded" | "ready";
@@ -375,8 +375,11 @@ export function probeStdioMcp(
   entry: McpServerEntry,
   signal?: AbortSignal,
   timeoutMs = PROBE_TIMEOUT_MS,
+  workspace = process.cwd(),
 ): Promise<CapabilityHealth> {
-  if (typeof entry.command !== "string" || !path.isAbsolute(entry.command) || !fs.existsSync(entry.command)) {
+  const executable = typeof entry.command === "string" && path.isAbsolute(entry.command)
+    ? resolveExecutable(entry.command, workspace) : null;
+  if (!executable) {
     return Promise.resolve(capability(name, false, "degraded", "startup not safely probeable", "configure an absolute MCP executable", cleanProblem("configuration", "MCP command must be an existing absolute executable")));
   }
   if (entry.args !== undefined && (!Array.isArray(entry.args) || entry.args.some((argument) => typeof argument !== "string"))) {
@@ -384,7 +387,7 @@ export function probeStdioMcp(
   }
   return new Promise((resolve) => {
     const combined = probeSignal(signal, timeoutMs);
-    const child = spawn(entry.command as string, (entry.args as string[] | undefined) ?? [], {
+    const child = spawn(executable, (entry.args as string[] | undefined) ?? [], {
       env: healthEnvironment(),
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
@@ -456,6 +459,7 @@ export async function inspectMcpConfig(
   fetchImpl: typeof fetch = fetch,
   signal?: AbortSignal,
   untrustedServers = new Set<string>(),
+  workspace = process.cwd(),
 ): Promise<CapabilityHealth> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return capability("MCP", false, "unhealthy", "configuration invalid", "repair mcp.json", cleanProblem("configuration", "MCP configuration must be an object"));
@@ -478,7 +482,7 @@ export async function inspectMcpConfig(
     }
     return typeof entry.url === "string"
       ? probeHttpMcp(name, entry, fetchImpl, signal)
-      : probeStdioMcp(name, entry, signal);
+      : probeStdioMcp(name, entry, signal, PROBE_TIMEOUT_MS, workspace);
   }));
   const ready = results.filter((result) => result.state === "ready").length;
   const firstFailure = results.find((result) => result.state !== "ready");
@@ -558,7 +562,7 @@ async function mcpHealth(cwd: string, signal?: AbortSignal): Promise<CapabilityH
     const untrustedServers = projectServers && typeof projectServers === "object" && !Array.isArray(projectServers)
       ? new Set(Object.keys(projectServers))
       : new Set<string>();
-    return inspectMcpConfig(mergeMcpConfigs(globalValue, projectValue), fetch, signal, untrustedServers);
+    return inspectMcpConfig(mergeMcpConfigs(globalValue, projectValue), fetch, signal, untrustedServers, cwd);
   } catch (error) {
     return capability(
       "MCP",
@@ -594,16 +598,15 @@ export function requiredHealthState(capabilities: CapabilityHealth[]): HealthRep
 }
 
 export async function inspect(cwd: string, signal?: AbortSignal): Promise<HealthReport> {
-  const [piVersion, gitVersion, uvxVersion, git, qwen, sandbox, mcp] = await Promise.all([
-    commandVersion("pi", ["--version"], cwd),
+  const [gitVersion, git, qwen, sandbox, proof, mcp] = await Promise.all([
     commandVersion("git", ["--version"], cwd),
-    commandVersion("uvx", ["--version"], cwd),
     getGitHealth(cwd),
     probeLocalProvider(fetch, signal),
     humanAwaySandboxAvailable(),
+    inspectProofSandboxRuntime(signal),
     mcpHealth(cwd, signal),
   ]);
-  const pi = piRuntimeStatus(piVersion, requiredPiVersion());
+  const pi = piRuntimeStatus(PI_VERSION, requiredPiVersion());
   const identity = currentRuntimeIdentity();
 
   const checkpoint = fs.existsSync(path.join(AGENT_DIR, "extensions", "checkpoint.ts"));
@@ -620,9 +623,8 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
     capability("workspace", true, git.isRepo ? "ready" : "degraded", git.isRepo ? git.branch : "not a Git workspace", git.isRepo ? null : "open a Git workspace"),
     capability("modes", true, modes && modeKeys ? "ready" : "degraded", modes && modeKeys ? "extension and keybinding ready" : "extension or keybinding missing", modes && modeKeys ? null : "sync extensions and keybindings"),
     capability("sandbox", true, sandbox ? "ready" : "degraded", sandbox ? "WSL2 and bubblewrap ready" : "unavailable", sandbox ? null : "install WSL2 + bubblewrap"),
-    capability("proof", true, gate && versionLabel(uvxVersion ?? "") === PROOF_UV_VERSION ? "ready" : "degraded",
-      gate && uvxVersion ? versionLabel(uvxVersion) : "gate or uvx missing",
-      gate && versionLabel(uvxVersion ?? "") === PROOF_UV_VERSION ? null : `install uv ${PROOF_UV_VERSION} and cache the pinned proof runner`),
+    capability("proof", true, gate && sandbox && proof.ready ? "ready" : "degraded",
+      gate ? proof.detail : "gate missing", gate && sandbox && proof.ready ? null : proof.action || "sync proof gate and sandbox"),
     capability("checkpoint", true, checkpoint ? "ready" : "missing", checkpoint ? "undo available" : "extension missing", checkpoint ? null : "sync checkpoint extension"),
     capability("persona", true, persona ? "ready" : "missing", persona ? "loaded" : "missing", persona ? null : "restore persona"),
     capability("memory", false, memory ? "ready" : "disabled", memory ? "configured" : "not configured", null),

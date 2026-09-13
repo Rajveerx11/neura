@@ -83,9 +83,10 @@ response-time or embargo guarantee is offered.
   avoid a prompt; other actions confirm interactively or block headless. This
   guardrail never expands the selected mode's tool allowlist.
 - Headmaster cannot widen deterministic policy.
-- Work proof runs only in its network-disabled WSL sandbox with an already
-  provisioned runner; unavailable execution never falls back to the host. YOLO
-  retains host proof. `/ship` verifies and does not publish Git changes.
+- Work and YOLO proof run only in the network-disabled WSL sandbox with the
+  exact hash-verified uv bundle and wheelhouse mounted read-only; the fresh
+  cache is sandbox-local. Unavailable execution never falls back to the host.
+  `/ship` verifies and does not publish Git changes.
 - Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
 - `/health` executes only existing absolute stdio MCP binaries and sends
   bounded initialize requests only to HTTPS or loopback HTTP endpoints.

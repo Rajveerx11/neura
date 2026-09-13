@@ -11,7 +11,8 @@ changes back later. Live harness is an installation target, not source.
 - Node.js 24.15+ and npm; CI uses 24.16.0.
 - Git.
 - Pi `0.84.4` for current `main`.
-- uv/`uvx` `0.12.11`; the fully pinned proof environment must already exist in its cache.
+- uv/`uvx` `0.12.11`; set `NEURA_WSL_UV_DIR` to its reviewed WSL binary
+  directory and `NEURA_WSL_PROOF_WHEELHOUSE` to the five hash-verified wheels.
 - WSL2/bubblewrap for Work execution/proof and the live sandbox replay.
 - Microsoft Edge for Plan and Learn browser checks.
 
