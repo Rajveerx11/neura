@@ -50,6 +50,7 @@ try {
   await fs.writeFile(path.join(workspace, "booking.pdf"), pdf(["Customers have bookings.", "Each booking belongs to one customer."]));
   const imported = await app.call("learn_material", { path: "booking.pdf", ocr: false });
   const source = JSON.parse(imported.content[0].text);
+  check(imported.terminate !== true, "Material inspection continues the provider cycle");
   check(source.filename === "booking.pdf" && source.pageCount === 2 && source.verifiedThisSession, "PDF imported through actual extension tool");
   check(imported.content.some((item) => item.type === "image"), "PDF preview reaches the model for visual inspection");
   const second = JSON.parse((await app.call("learn_material", { sourceId: source.sourceId, page: 2 })).content[0].text);
@@ -78,7 +79,9 @@ try {
     exercise: { kind: "choice", prompt: "Which table contains customer_id?", options: ["Booking", "Customer"], answer: 0,
       hints: ["Which record belongs to the customer?", "Look at the booking fields."], explanation: "The booking points to the customer through customer_id." },
   };
-  const published = JSON.parse((await app.call("learn_lesson", lesson)).content[0].text);
+  const publishedResult = await app.call("learn_lesson", lesson);
+  const published = JSON.parse(publishedResult.content[0].text);
+  check(publishedResult.terminate === true, "Lesson publication ends without another provider cycle");
   check((await fs.readFile(published.board, "utf-8")).includes("Build a booking database"), "PDF/PPTX citations reach rendered lesson");
   await fs.copyFile(path.join(workspace, "booking.pdf"), path.join(workspace, "alias.pdf"));
   const alias = JSON.parse((await app.call("learn_material", { path: "alias.pdf", ocr: false })).content[0].text);
@@ -89,13 +92,17 @@ try {
   await app.fire("input", { source: "interactive", text: "Teach me 1 concept" });
   await denied(() => app.call("learn_exercise", { answer: "1" }), /complete latest answer/);
   await app.fire("input", { source: "interactive", text: "1" });
-  const attempt = JSON.parse((await app.call("learn_exercise", { answer: "1" })).content[0].text);
+  const attemptResult = await app.call("learn_exercise", { answer: "1" });
+  const attempt = JSON.parse(attemptResult.content[0].text);
+  check(attemptResult.terminate === true, "Exercise verdict ends without another provider cycle");
   check(attempt.correct === true && /not a mastery/.test(attempt.evidence), "Learner answer evaluated without mastery claim");
   await denied(() => app.call("learn_exercise", { answer: "1" }), /complete latest answer/);
   await app.command("hint");
   await app.command("answer-helped 1");
-  const progress = JSON.parse((await app.call("learn_progress", { action: "status" })).content[0].text);
+  const progressResult = await app.call("learn_progress", { action: "status" });
+  const progress = JSON.parse(progressResult.content[0].text);
   check(progress.attempts.length === 2 && progress.attempts[1].assisted, "Assisted attempt records help usage");
+  check(progressResult.terminate !== true, "Progress reads continue the provider cycle");
   await app.command("reveal");
   await app.call("learn_progress", { action: "note", note: "Needs practice choosing the foreign-key side.", nextStep: "Query the relationship." });
   await app.command("save");
