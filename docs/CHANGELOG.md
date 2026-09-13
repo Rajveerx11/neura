@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added the image-backed centred launch tracked by #53 and #54. A generated,
+  isolated Windows Terminal profile renders the bundled local artwork while Pi
+  renders the non-capturing wordmark/prompt surface; regular terminals retain a
+  logo-only fallback. No runtime dependency or network fetch was added.
 - Kept MCP discovery off Learn, Plan, Work, and Human Away prompt paths. MCP
   servers now connect explicitly through `/mcp connect` in YOLO and reconnect
   on demand only when a connected MCP tool is selected. Closed #49.

@@ -13,7 +13,7 @@ $errors = $null
 $tree = [System.Management.Automation.Language.Parser]::ParseFile($Source, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Installer parsing failed' }
 # Evaluate only comparison functions, never installation.
-foreach ($name in @('Normalize-Text', 'Get-PackageIdentity', 'Test-PackageSpecEqual', 'Test-SameFile')) {
+foreach ($name in @('Normalize-Text', 'Get-PackageIdentity', 'Test-PackageSpecEqual', 'Test-SameFile', 'Get-NeuraTerminalFragment')) {
     $definition = $tree.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (-not $definition) { throw "Missing installer function $name" }
     . ([scriptblock]::Create($definition.Extent.Text))
@@ -42,4 +42,13 @@ $binaryRight = Join-Path $Scratch 'right.bin'
 if (-not (Test-SameFile $binaryLeft $binaryRight)) { throw 'Equal binary rejected' }
 [IO.File]::WriteAllBytes($binaryRight, [byte[]]@(0,1,3))
 if (Test-SameFile $binaryLeft $binaryRight) { throw 'Binary drift missed' }
+[Console]::WriteLine('Installer functions: Windows Terminal fragment')
+$fragment = Get-NeuraTerminalFragment '{7e8b22c4-2cd7-5f7c-b5a8-a461f718bdaf}' 'C:\Users\Test\.local\bin\neura.cmd' 'C:\Users\Test\.pi\agent\neura\launch-artwork.png' | ConvertFrom-Json
+$profile = $fragment.profiles[0]
+if ($profile.name -ne 'Neura') { throw 'Terminal profile name changed' }
+if ($profile.guid -ne '{7e8b22c4-2cd7-5f7c-b5a8-a461f718bdaf}') { throw 'Terminal profile identity changed' }
+if ($profile.commandline -notlike '*neura.cmd*') { throw 'Terminal profile launcher missing' }
+if ($profile.backgroundImage -ne 'C:\Users\Test\.pi\agent\neura\launch-artwork.png') { throw 'Terminal profile artwork missing' }
+if ($profile.backgroundImageAlignment -ne 'center' -or $profile.backgroundImageStretchMode -ne 'uniform') { throw 'Terminal artwork geometry changed' }
+if ($profile.backgroundImageOpacity -ne 0.42) { throw 'Terminal artwork opacity changed' }
 [Console]::WriteLine('PASS installer functions')

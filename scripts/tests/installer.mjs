@@ -12,6 +12,7 @@ const { parseRuntimeContract } = await import('../../agent/extensions/harness-he
 const files = fs.readdirSync(path.join(repoRoot, 'agent/extensions'));
 assert.equal(files.some((file) => file === "autogit.ts"), false, "retired autogit extension still loads");
 const installerSource = fs.readFileSync(path.join(repoRoot, "install.ps1"), "utf-8");
+const artworkPath = path.join(repoRoot, "agent", "neura", "launch-artwork.png");
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 assert.match(installerSource, /\$retiredExtensions\s*=\s*@\("autogit\.ts"\)/, "installer does not retire the old autogit hook");
@@ -20,6 +21,12 @@ assert.match(installerSource, /is retired but remains installed/, "drift check d
 assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot reconcile exact runtime package pins");
 assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
 assert.match(installerSource, /runtime-contract\.json/, "installer does not consume the runtime contract");
+assert.match(installerSource, /function Get-NeuraTerminalFragment/, "installer cannot create the Windows Terminal profile");
+assert.match(installerSource, /Windows Terminal\\Fragments\\Neura/, "installer does not isolate the Windows Terminal fragment");
+assert.match(installerSource, /launch-artwork\.png/, "installer does not connect the bundled launch artwork");
+assert.match(installerSource, /backgroundImageStretchMode = "uniform"/, "installer can distort launch artwork");
+assert.equal(createHash("sha256").update(fs.readFileSync(artworkPath)).digest("hex"), "6f7f01d54fe31eb1b8ba0f07542158eac2fc9a4a0320c5071a591952bcc7c244", "launch artwork changed without provenance update");
+assert.doesNotMatch(installerSource, /C:\\Users\\rajve/i, "installer contains a machine-specific artwork path");
 assert.match(installerSource, /\$requiredPiVersion\s*=\s*\[string\]\$runtimeContract\.piVersion/, "installer does not enforce the runtime contract Pi version");
 assert.match(installerSource, /\$schemaIsInteger\s*=\s*\(\$runtimeContract\.schemaVersion -is \[int\]\) -or \(\$runtimeContract\.schemaVersion -is \[long\]\)/, "installer allows a coercible non-integer runtime contract schema");
 assert.equal(runtimeContract.schemaVersion, 1, "runtime contract schema version changed without migration");

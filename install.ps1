@@ -64,6 +64,35 @@ function Test-SameFile($Source, $Target) {
     return (Get-FileHash $Source).Hash -eq (Get-FileHash $Target).Hash
 }
 
+function Get-NeuraTerminalFragment($ProfileId, $LauncherPath, $ArtworkPath) {
+    [ordered]@{
+        profiles = @(
+            [ordered]@{
+                guid = $ProfileId
+                name = "Neura"
+                commandline = "cmd.exe /d /s /c `"`"$LauncherPath`"`""
+                startingDirectory = "%USERPROFILE%"
+                background = "#0b0c0e"
+                foreground = "#e8e2d8"
+                backgroundImage = $ArtworkPath
+                backgroundImageAlignment = "center"
+                backgroundImageOpacity = 0.42
+                backgroundImageStretchMode = "uniform"
+                opacity = 100
+                padding = "12"
+                useAcrylic = $false
+            }
+        )
+    } | ConvertTo-Json -Depth 10
+}
+
+$terminalProfileId = "{7e8b22c4-2cd7-5f7c-b5a8-a461f718bdaf}"
+$terminalFragmentDirectory = Join-Path $env:LOCALAPPDATA "Microsoft\Windows Terminal\Fragments\Neura"
+$terminalFragmentPath = Join-Path $terminalFragmentDirectory "Neura.json"
+$launchArtworkTarget = Join-Path "$agent\neura" "launch-artwork.png"
+$launcherTarget = Join-Path $bin "neura.cmd"
+$terminalFragment = Get-NeuraTerminalFragment $terminalProfileId $launcherTarget $launchArtworkTarget
+
 if ($Check) {
     $missing = @()
     $drift = @()
@@ -109,12 +138,19 @@ if ($Check) {
     }
     foreach ($pair in @(
         @("$repo\agent\mcp.json", "$agent\mcp.json"),
-        @("$repo\launcher\neura.cmd", "$bin\neura.cmd")
+        @("$repo\launcher\neura.cmd", $launcherTarget)
     )) {
         if (-not (Test-Path $pair[1])) {
             $drift += "$(Split-Path $pair[0] -Leaf) missing"
         } elseif (-not (Test-SameFile $pair[0] $pair[1])) {
             $drift += "$(Split-Path $pair[0] -Leaf) differs"
+        }
+    }
+    if (Test-Command "wt.exe") {
+        if (-not (Test-Path -LiteralPath $terminalFragmentPath)) {
+            $drift += "Windows Terminal Neura profile missing"
+        } elseif ((Normalize-Text ([System.IO.File]::ReadAllText($terminalFragmentPath))) -cne (Normalize-Text $terminalFragment)) {
+            $drift += "Windows Terminal Neura profile differs"
         }
     }
     $desiredKeybindings = Get-Content "$repo\agent\keybindings.json" -Raw | ConvertFrom-Json
@@ -206,8 +242,17 @@ Get-ChildItem -LiteralPath "$repo\agent\neura" -File | ForEach-Object {
 if ($LASTEXITCODE -ne 0) { throw "Learn document runtime installation failed. Re-run the installer after fixing npm." }
 $learnLockHash = (Get-FileHash -LiteralPath "$agent\neura\package-lock.json" -Algorithm SHA256).Hash
 [System.IO.File]::WriteAllText((Join-Path "$agent\neura" ".learn-runtime-lock"), $learnLockHash)
-Copy-Item "$repo\launcher\neura.cmd" "$bin\" -Force
+Copy-Item "$repo\launcher\neura.cmd" $launcherTarget -Force
 Copy-Item "$repo\agent\mcp.json" "$agent\" -Force  # no secrets; tokens flow via MY_PI_MCP_ENV_ALLOWLIST
+
+if (Test-Command "wt.exe") {
+    New-Item -ItemType Directory -Force $terminalFragmentDirectory | Out-Null
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($terminalFragmentPath, $terminalFragment, $utf8NoBom)
+    Write-Host "Windows Terminal profile installed. Open it with: wt.exe -p Neura"
+} else {
+    Write-Warning "Windows Terminal not found: Neura will use its logo-only launch fallback."
+}
 
 # Shift+Tab belongs to Neura mode cycling. Preserve every user binding while moving
 # pi's built-in thinking-level cycle to Ctrl+Shift+T.

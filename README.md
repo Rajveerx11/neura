@@ -23,7 +23,8 @@ preview-only and is not approved for unattended high-impact work. Read
 - Five modes: Plan, Work (default), YOLO, Human Away Preview, and Learn.
 - Practical learning with short bullets, flow/ER/sequence diagrams, exercises,
   and page/slide references from local PDFs and PPTX decks.
-- Logo-only launch and responsive Forged Tungsten terminal interface.
+- Image-backed centred launch in a dedicated Windows Terminal profile, with a
+  logo-only fallback and responsive Forged Tungsten terminal interface.
 - Local HTML plan publication with escaping, content security policy, stable
   hashes, and machine-readable lifecycle events.
 - WSL2 and bubblewrap isolation for Work execution and Human Away commands.
@@ -111,6 +112,9 @@ MCP configuration, keybinding changes, and launcher into live Pi harness.
 Existing model and credential choices in `settings.json` are preserved unless
 `-ForceSettings` is supplied. The installer also provisions Learn's separate
 locked runtime with lifecycle scripts disabled and records the runtime lock receipt.
+When Windows Terminal is available, it adds an isolated current-user `Neura`
+profile fragment without editing `settings.json`. Open the image-backed launch
+with `wt.exe -p Neura`; regular terminals retain the logo-only fallback.
 
 Do not run installer against an important profile until you have reviewed
 source and current blockers. Installation is not atomic and does not yet

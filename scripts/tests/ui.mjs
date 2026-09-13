@@ -1,4 +1,4 @@
-import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
+import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, customOverlays, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
 const repairAction = `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`;
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
@@ -68,25 +68,40 @@ assert.ok(optionalGapLines.some((line) => line.includes("manifest abcdef012345")
 
 const identityExtension = extensionWithCommand("dash");
 await firstHandler(identityExtension, "session_start")({}, context);
-assert.ok(widgets.has("neura-launch"), "logo widget missing");
+assert.equal(customOverlays.length, 1, "launch overlay missing");
+assert.equal(widgets.has("neura-launch"), false, "TUI launch unexpectedly used the fallback widget");
 assert.equal(widgets.has("neura-logo"), false, "legacy logo widget still registered");
 assert.equal(widgets.has("neura-dash"), false, "legacy dashboard widget still registered");
 assert.match(state.title, /^Neura · /, "terminal title was not set");
 
-const launchFactory = widgets.get("neura-launch");
-for (const width of [40, 56, 72, 92, 120]) {
-  const rawLines = launchFactory(null, null).render(width);
+const launch = customOverlays.at(-1);
+assert.equal(launch.options.overlay, true, "launch surface is not an overlay");
+assert.equal(launch.options.overlayOptions.anchor, "center", "launch surface is not centered");
+assert.equal(launch.options.overlayOptions.nonCapturing, true, "launch surface captures keyboard input");
+assert.equal(launch.options.overlayOptions.maxHeight, 10, "launch surface can exceed Pi's ten-line cap");
+for (const width of [30, 40, 56, 72, 92, 120]) {
+  const rawLines = launch.component.render(width);
   const launchText = rawLines.map(stripAnsi).join("\n");
-  assert.equal(rawLines.length, width < 56 ? 5 : 6, `wordmark height is wrong at ${width} columns`);
+  assert.equal(rawLines.length, width < 56 ? 8 : 9, `launch height is wrong at ${width} columns`);
   assert.match(launchText, width < 56 ? /N   N EEEEE/ : /███╗   ██╗/, `ASCII wordmark missing at ${width} columns`);
-  assert.doesNotMatch(launchText, /READY|BOUNDARY|LAST|NEXT|[@#$%]/, `non-logo launch content remains at ${width} columns`);
-  assert.doesNotMatch(rawLines.join("\n"), /\x1b\[48;2;/, "logo unexpectedly paints image backgrounds");
-  assert.ok(rawLines.every((line) => widthOf(line) <= width), `wordmark overflows at ${width} columns`);
+  assert.match(launchText, /TYPE YOUR TASK BELOW/, `launch prompt missing at ${width} columns`);
+  assert.match(launchText, /WORK/, `safe-mode status missing at ${width} columns`);
+  if (width >= 40) assert.match(launchText, /gpt-5\.5/, `model identity missing at ${width} columns`);
+  assert.ok(rawLines.every((line) => widthOf(line) <= width), `launch surface overflows at ${width} columns`);
 }
 await firstHandler(identityExtension, "agent_start")({}, context);
-assert.equal(widgets.has("neura-launch"), false, "logo did not hide when work started");
+assert.equal(launch.handle.hidden, true, "launch surface did not hide when work started");
 await identityExtension.commands.get("dash").handler("", context);
-assert.ok(widgets.has("neura-launch"), "/dash did not restore the logo");
+assert.equal(customOverlays.length, 2, "/dash did not restore the launch surface");
+assert.equal(customOverlays.at(-1).handle.hidden, false, "/dash restored a hidden launch surface");
+await identityExtension.commands.get("dash").handler("", context);
+
+const fallbackContext = { ...context, mode: "rpc", ui: { ...ui, custom: undefined } };
+await firstHandler(identityExtension, "session_start")({}, fallbackContext);
+assert.ok(widgets.has("neura-launch"), "non-TUI logo fallback missing");
+await firstHandler(identityExtension, "agent_start")({}, fallbackContext);
+assert.equal(widgets.has("neura-launch"), false, "non-TUI logo fallback did not hide");
+await identityExtension.commands.get("dash").handler("", context);
 
 const theme = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "themes", "neura-dark.json"), "utf-8"));
 assert.equal(theme.colors.accent, "#d97841", "Forged Tungsten copper accent missing");

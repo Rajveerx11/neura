@@ -11,8 +11,9 @@ bone text, and semantic colors used only for real outcomes.
 
 ## Product principles
 
-1. **Identity before activity.** Launch shows only the Neura wordmark. Working
-   state appears after first task begins.
+1. **Identity before activity.** The dedicated terminal profile opens on local
+   artwork with a centred Neura wordmark and compact prompt/status strips.
+   Working state appears after the first task begins.
 2. **One active signal.** Copper identifies Neura, current focus, and the primary
    action. It is not decoration.
 3. **Detail on demand.** Health, memory, agents, model control, proof detail, and
@@ -44,7 +45,8 @@ bone text, and semantic colors used only for real outcomes.
 Color rules:
 
 - Decorative gradients, colored glows, and tinted ambient panels are not used.
-- Copper is the primary product accent and owns the launch wordmark.
+- Copper is the primary product accent. The image-backed launch uses bone text;
+  the logo-only fallback remains copper.
 - Plan uses cyan. Human Away Preview and approvals use amber. Neither borrows success green.
 - Success, warning, and error never replace copper for identity or navigation.
 - Text must remain readable without relying on hue alone.
@@ -68,12 +70,18 @@ Color rules:
 - No emoji or Devanagari.
 - No em dash or en dash in interface copy.
 
-## Launch system: ASCII identity
+## Launch system: image-backed identity
 
-`neura` opens with only the copper NEURA wordmark. The original six-line block
-mark appears at 56 columns and above; a five-line ASCII fallback handles narrow
-terminals. There is no illustration, status ledger, or launch animation. The
-wordmark clears when work begins, and `/dash` toggles it on demand.
+The dedicated Windows Terminal profile supplies the local 16:9 artwork as a
+centred, uniformly scaled background over the tungsten canvas. Pi supplies a
+centred, non-capturing overlay: the responsive NEURA wordmark, one prompt strip,
+and one Work/model/workspace strip. The surface stays within ten lines, clears
+when work begins, and `/dash` toggles it on demand. Regular terminals and missing
+profile support fall back to the copper wordmark without blocking startup.
+
+The artwork is bundled locally and never fetched at runtime. Its opacity is kept
+below the text layer so the prompt remains readable; cropping and distortion are
+not allowed.
 
 ## Lifecycle hierarchy
 
@@ -122,9 +130,9 @@ with changed scope, evidence, and one manual next action.
 ## Direction contract
 
 <!--
-THESIS: Neura launches with one unmistakable wordmark and no competing content.
+THESIS: Neura launches as a quiet image-backed identity surface, then yields to work.
 OWN-WORLD: Tungsten neutrals, burnt copper, bone text, flat one-cell rules.
 STORY: Operator sees Neura, then starts work in composer.
-FIRST VIEWPORT: The NEURA wordmark alone.
+FIRST VIEWPORT: Centred artwork, NEURA wordmark, prompt strip, and compact status.
 FORM: Operate-mode terminal instrument; focused, responsive, and state-driven.
 -->

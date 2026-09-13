@@ -79,7 +79,7 @@ remote mutation, Plan publication, and Human Away execution are unavailable.
 Dedicated writers use canonical junction-aware containment and bounded payloads.
 Background proof, checkpoint, memory, and integration hooks must not bypass this
 boundary. Plain Pi remains stock, Plan keeps its existing contract, Human Away
-stays preview-only, and the logo-only launch remains unchanged.
+stays preview-only, and the image-backed launch remains outside Learn policy.
 
 Work remains the default; Learn is the fifth mode. Work proof uses the existing
 network-disabled WSL2 bubblewrap environment. Its runner and packages must already

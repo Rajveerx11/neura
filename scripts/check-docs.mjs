@@ -78,7 +78,8 @@ for (const file of markdownFiles) {
 
 const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf-8");
 assert.doesNotMatch(readme, /continuity launch|LAST\/NOW\/NEXT/i, "README contains superseded continuity-launch claims");
-assert.match(readme, /logo-only launch/i, "README does not state current logo-only launch");
+assert.match(readme, /image-backed centred launch/i, "README does not state current image-backed launch");
+assert.match(readme, /logo-only fallback/i, "README does not state the launch fallback");
 assert.match(readme, /not production-ready/i, "README does not state current production limit");
 assert.match(readme, /Apache License 2\.0/i, "README does not state Apache-2.0 license");
 assert.doesNotMatch(readme, /private engineering-agent harness/i, "README contains stale private-project positioning");

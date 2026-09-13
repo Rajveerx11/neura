@@ -60,7 +60,7 @@ or approval state between worktrees.
 
 ## Required invariants
 
-- Preserve the logo-only launch.
+- Preserve the image-backed launch and its logo-only fallback.
 - Every Neura-specific extension must return early when `NEURA` is absent.
 - Plan must remain read-only except for `publish_plan`.
 - Filesystem decisions must use canonical, junction-aware containment.

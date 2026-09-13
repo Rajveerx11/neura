@@ -4,9 +4,11 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import type { OverlayHandle } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, onCockpitChange, patchCockpit, resetCockpit } from "../neura/cockpit-state.ts";
-import { PALETTE, fg } from "../neura/core.ts";
+import { padAnsi, PALETTE, fg } from "../neura/core.ts";
 
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const { accent: ACC, human: HUMAN, muted: MUT, text: TXT } = PALETTE;
@@ -28,9 +30,25 @@ const COMPACT_WORDMARK = [
   "N   N EEEEE  UUU  R  RR A   A",
 ];
 
-export function wordmarkLines(width: number): string[] {
+export function wordmarkLines(width: number, color: string = ACC): string[] {
   const source = width >= 56 ? FULL_WORDMARK : COMPACT_WORDMARK;
-  return source.map((line) => truncateToWidth(fg(ACC, line), width));
+  return source.map((line) => truncateToWidth(fg(color, line), width));
+}
+
+function centered(line: string, width: number): string {
+  const value = truncateToWidth(line, width, "");
+  return " ".repeat(Math.max(0, Math.floor((width - visibleWidth(value)) / 2))) + value;
+}
+
+export function launchSurfaceLines(width: number, theme: Theme, model: string, workspace: string): string[] {
+  const safeWidth = Math.max(1, width);
+  const status = padAnsi(truncateToWidth(`  WORK  ${model}  ${workspace}`, safeWidth, "…", true), safeWidth);
+  return [
+    ...wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth)),
+    "",
+    theme.bg("customMessageBg", theme.fg("text", padAnsi("  TYPE YOUR TASK BELOW", safeWidth))),
+    theme.bg("selectedBg", theme.fg("muted", status)),
+  ];
 }
 
 function noticeLines(width: number): string[] {
@@ -52,29 +70,83 @@ function noticeLines(width: number): string[] {
   return lines.slice(0, 10);
 }
 
-export default function (pi) {
+export default function (pi: ExtensionAPI) {
   if (!process.env.NEURA) return;
 
   let visible = false;
   let noticesVisible = false;
   let activeContext: any;
+  let launchHandle: OverlayHandle | undefined;
+  let finishLaunch: (() => void) | undefined;
+  let launchGeneration = 0;
   let persona = "";
   let unsubscribeCockpit = () => {};
   try { persona = fs.readFileSync(path.join(NEURA_DIR, "NEURA.md"), "utf-8"); } catch {}
 
-  const show = (ctx) => {
+  const markVisible = () => {
+    visible = true;
+    if (!getCockpitState().launchVisible) patchCockpit({ launchVisible: true });
+  };
+
+  const showFallback = (ctx) => {
     try {
       ctx.ui.setWidget("neura-launch", () => ({
         render: (width: number) => wordmarkLines(width),
         invalidate() {},
       }));
-      visible = true;
-      if (!getCockpitState().launchVisible) patchCockpit({ launchVisible: true });
+      markVisible();
     } catch {}
+  };
+
+  const show = (ctx) => {
+    const generation = ++launchGeneration;
+    if (ctx.mode !== "tui" || typeof ctx.ui.custom !== "function") {
+      showFallback(ctx);
+      return;
+    }
+    markVisible();
+    const model = ctx.model?.id || "model pending";
+    const workspace = path.basename(ctx.cwd) || ctx.cwd;
+    void ctx.ui.custom(
+      (_tui, theme, _keybindings, done) => {
+        finishLaunch = done;
+        return {
+          render: (width: number) => launchSurfaceLines(width, theme, model, workspace),
+          invalidate() {},
+        };
+      },
+      {
+        overlay: true,
+        overlayOptions: {
+          width: "72%",
+          minWidth: 30,
+          maxHeight: 10,
+          anchor: "center",
+          margin: 1,
+          nonCapturing: true,
+        },
+        onHandle: (handle) => {
+          if (generation !== launchGeneration || !visible) handle.hide();
+          else launchHandle = handle;
+        },
+      },
+    ).catch(() => {
+      if (generation === launchGeneration && visible) showFallback(ctx);
+    }).finally(() => {
+      if (generation === launchGeneration) {
+        launchHandle = undefined;
+        finishLaunch = undefined;
+      }
+    });
   };
 
   const hide = (ctx) => {
     try {
+      launchGeneration++;
+      finishLaunch?.();
+      finishLaunch = undefined;
+      launchHandle?.hide();
+      launchHandle = undefined;
       ctx.ui.setWidget("neura-launch", undefined);
       visible = false;
       if (getCockpitState().launchVisible) patchCockpit({ launchVisible: false });
@@ -104,10 +176,13 @@ export default function (pi) {
   });
 
   pi.on("agent_start", (_event, ctx) => hide(ctx));
-  pi.on("session_shutdown", () => unsubscribeCockpit());
+  pi.on("session_shutdown", () => {
+    if (activeContext) hide(activeContext);
+    unsubscribeCockpit();
+  });
 
   pi.registerCommand("dash", {
-    description: "Toggle the Neura logo",
+    description: "Toggle the Neura launch surface",
     handler: async (_args, ctx) => (visible ? hide(ctx) : show(ctx)),
   });
 

@@ -81,6 +81,13 @@ const firstHandler = (extension, event) => {
 const widgets = new Map();
 const statuses = new Map();
 const notices = [];
+const customOverlays = [];
+
+const testTheme = {
+  fg: (_color, value) => value,
+  bg: (_color, value) => value,
+  bold: (value) => value,
+};
 
 
 
@@ -98,6 +105,24 @@ const ui = {
   setWidget(id, value) {
     if (value === undefined) widgets.delete(id);
     else widgets.set(id, value);
+  },
+  custom(factory, options = {}) {
+    let resolve;
+    const result = new Promise((done) => { resolve = done; });
+    const handle = {
+      hidden: false,
+      hide() { this.hidden = true; },
+      setHidden(value) { this.hidden = value; },
+      isHidden() { return this.hidden; },
+      focus() {},
+      unfocus() {},
+      isFocused() { return false; },
+    };
+    const component = factory({ requestRender() {} }, testTheme, {}, resolve);
+    const overlay = { component, options, handle, finish: resolve };
+    customOverlays.push(overlay);
+    options.onHandle?.(handle);
+    return result;
   },
   setStatus(id, value) {
     if (value === undefined) statuses.delete(id);
@@ -131,5 +156,5 @@ export { assert, execFileSync, spawnSync, createHash, fs, os, path, pathToFileUR
   HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, assertWorkspaceHasNoLinks, bubblewrapArguments,
   healthLines, parseRuntimeContract, piRuntimeStatus, files, runtimeContract, packageManifest,
   loaded, registeredToolNames, state, appendedEntries, sentUserMessages, extensionWithCommand,
-  extensionWithTool, firstHandler, widgets, statuses, notices, ui, context, modeState,
+  extensionWithTool, firstHandler, widgets, statuses, notices, customOverlays, ui, context, modeState,
   cockpitState, guardrail, guard, modes, mcp, stripAnsi, widthOf, loadExtensions, extensionDir };

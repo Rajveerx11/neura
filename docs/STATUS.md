@@ -1,6 +1,6 @@
 # Neura status
 
-Last documentation audit: 2026-09-07
+Last documentation audit: 2026-09-13
 
 Latest release: `2.5.1`. Current merged source: `d3e77c6`, including Work,
 modular verification, and Learn Mode; these changes are unreleased. Required Pi:
@@ -31,7 +31,7 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Public release | Blocked | Public-default configuration cleanup, final history/content audit, and GitHub settings remain. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
+| Public release | Blocked | Public-default configuration cleanup, final history/content audit, GitHub settings, and launch-artwork redistribution rights remain. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
 | Pi and live Neura | Source verified; live status unverified | Source and CI pin Pi `0.84.4`. A fresh owner-authorized install and drift check are separate from merge. |
 | Dependency graphs | Verified at Learn delivery | Both lockfile graphs reported zero known vulnerabilities on 2026-09-07; Learn runtime verified 31 registry signatures and 13 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
 | Core harness | Ready for covered behavior | PR #44 passed Windows harness and Linux portable CI, 17 isolated suites/17 extensions, typecheck, docs, and real Learn/Plan browser checks. This is not a fresh live WSL replay. |
@@ -46,7 +46,7 @@ release gates and issue ownership live in
 | Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
 | Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
 | Type and test safety | Tests improved; strict typing open | Hermetic suites, seeded fuzzing, races, crash rejection, and content-bound receipts shipped; [#27](https://github.com/Rajveerx11/neura/issues/27) is closed. Configured typecheck passes; strict migration remains [#26](https://github.com/Rajveerx11/neura/issues/26). |
-| UX and accessibility | Ready for covered surfaces | YOLO requires confirmation and persistent danger treatment. Plan and Learn boards have narrow/desktop Edge, keyboard, and axe checks. [#37](https://github.com/Rajveerx11/neura/issues/37) is closed; covered screens do not prove universal accessibility. |
+| UX and accessibility | Image-backed launch implemented; wider surfaces covered | Windows Terminal owns the local artwork and Pi owns a centred non-capturing launch overlay with a logo-only fallback. Terminal widths are regression-tested; bundled artwork rights remain a release blocker. Track [#53](https://github.com/Rajveerx11/neura/issues/53) and [#54](https://github.com/Rajveerx11/neura/issues/54). |
 | Health | Implemented, unreleased | Core readiness is separate from optional capabilities. Bounded MCP/provider probes report explicit states, redacted errors, runtime identity, and remediation. Track delivery in [#39](https://github.com/Rajveerx11/neura/issues/39). |
 | Evaluations and operations | Major gap | Privacy-preserving evaluation and observability remain open. Track [#30](https://github.com/Rajveerx11/neura/issues/30). |
 
@@ -82,7 +82,7 @@ green basic harness do not override an unmet production gate.
 
 - Repository checkout remains source of truth; live harness is generated.
 - Plain Pi stays stock unless `NEURA` is set.
-- The logo-only launch remains.
+- The image-backed launch remains local, optional, and bounded by a logo-only fallback.
 - Plan remains read-only except controlled plan publication.
 - Deterministic policy outranks model review.
 - Human Away remains preview-labelled.
