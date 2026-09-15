@@ -1,0 +1,1548 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Neura Cockpit UI/UX Overhaul · Complete Side-by-Side Architectural Blueprint</title>
+  <style>
+    :root {
+      --bg: #0b0c0e;
+      --surface: #14171a;
+      --raised: #1c2024;
+      --border: #2c3237;
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --copper: #d97841;
+      --copper-glow: rgba(217, 120, 65, 0.22);
+      --bone: #e8e2d8;
+      --muted: #a8a39b;
+      --dim: #6c737c;
+      --plan-cyan: #76b8c4;
+      --learn-blue: #86a7d7;
+      --human-amber: #d3a64a;
+      --success-green: #69c08a;
+      --error-red: #df6b63;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; background: var(--bg); }
+    body {
+      background: var(--bg);
+      color: var(--bone);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 120px;
+    }
+
+    /* Top Persistent Navigation */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(11, 12, 14, 0.94);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .top-nav-inner {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 0 28px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      color: var(--copper);
+      text-decoration: none;
+    }
+    .brand-glyph {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border: 1.5px solid var(--copper);
+      transform: rotate(45deg);
+    }
+    .brand-glyph span {
+      transform: rotate(-45deg);
+      font-size: 11px;
+    }
+    .nav-sections {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav-sections::-webkit-scrollbar { display: none; }
+    .nav-pill {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      white-space: nowrap;
+      transition: 0.15s ease all;
+    }
+    .nav-pill:hover, .nav-pill.active {
+      color: var(--bone);
+      background: var(--raised);
+      border-color: var(--border);
+    }
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(217, 120, 65, 0.15);
+      border: 1px solid var(--copper);
+      color: var(--copper);
+      letter-spacing: 0.06em;
+    }
+
+    /* Hero / Intro Banner */
+    .hero {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 64px 28px 48px;
+    }
+    .kicker {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--copper);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .kicker::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--copper);
+      border-radius: 2px;
+    }
+    .hero h1 {
+      font-size: clamp(34px, 4.2vw, 62px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.08;
+      max-width: 1200px;
+      margin-bottom: 20px;
+    }
+    .hero h1 span {
+      color: var(--copper);
+      font-weight: 400;
+    }
+    .hero-lead {
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--muted);
+      max-width: 960px;
+      margin-bottom: 36px;
+    }
+
+    /* Global View Switcher Bar */
+    .view-switcher-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 20px;
+      margin-bottom: 48px;
+    }
+    .view-switcher-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .switcher-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-right: 6px;
+    }
+    .btn-toggle {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: 0.15s ease all;
+    }
+    .btn-toggle:hover {
+      color: var(--bone);
+      border-color: var(--dim);
+    }
+    .btn-toggle.active {
+      background: var(--raised);
+      color: var(--copper);
+      border-color: var(--copper);
+    }
+
+    /* Section Container */
+    .section-wrap {
+      max-width: 1680px;
+      margin: 0 auto 80px;
+      padding: 0 28px;
+    }
+    .section-header {
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 20px;
+    }
+    .section-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--copper);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 28px;
+      font-weight: 750;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    .section-desc {
+      font-size: 15px;
+      color: var(--muted);
+      max-width: 940px;
+    }
+
+    /* Side-by-Side Comparison Grid */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-bottom: 28px;
+      align-items: start;
+    }
+    @media (max-width: 1100px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Comparison Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+    .card.before-card {
+      border-color: rgba(223, 107, 99, 0.35);
+    }
+    .card.after-card {
+      border-color: rgba(105, 192, 138, 0.45);
+    }
+    .card-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .card.before-card .card-banner {
+      background: rgba(223, 107, 99, 0.08);
+      color: var(--error-red);
+    }
+    .card.after-card .card-banner {
+      background: rgba(105, 192, 138, 0.08);
+      color: var(--success-green);
+    }
+    .card-meta {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--dim);
+    }
+
+    /* Terminal Simulator Shell */
+    .terminal-window {
+      background: #090a0c;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.5;
+      padding: 18px;
+      min-height: 380px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow-x: auto;
+    }
+    .terminal-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--dim);
+      font-size: 11px;
+    }
+    .term-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #2a2e33;
+    }
+
+    /* Terminal UI Elements */
+    .t-copper { color: var(--copper); }
+    .t-bone { color: var(--bone); }
+    .t-muted { color: var(--muted); }
+    .t-dim { color: var(--dim); }
+    .t-cyan { color: var(--plan-cyan); }
+    .t-blue { color: var(--learn-blue); }
+    .t-amber { color: var(--human-amber); }
+    .t-green { color: var(--success-green); }
+    .t-red { color: var(--error-red); }
+    .t-bold { font-weight: 700; }
+
+    .term-footer-line {
+      margin-top: auto;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .term-cockpit-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      margin-top: 12px;
+    }
+
+    /* Sparkline & Bar Gauges */
+    .spark-bar {
+      display: inline-flex;
+      gap: 1px;
+      margin: 0 4px;
+      vertical-align: middle;
+    }
+    .spark-block {
+      display: inline-block;
+      width: 4px;
+      height: 10px;
+      border-radius: 1px;
+    }
+    .spark-fill { background: var(--copper); }
+    .spark-empty { background: #23272c; }
+    .spark-warn { background: var(--human-amber); }
+    .spark-crit { background: var(--error-red); }
+
+    /* Two-Tier Rail (Target state) */
+    .dynamic-active-rail {
+      background: rgba(28, 32, 36, 0.85);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--copper);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .pulse-indicator {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--copper);
+      margin-right: 8px;
+      box-shadow: 0 0 8px var(--copper);
+      animation: pulse 1.8s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.35; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.15); }
+    }
+
+    /* YOLO Perimeter Simulation */
+    .yolo-perimeter-active {
+      border: 2px solid var(--error-red) !important;
+      box-shadow: inset 0 0 20px rgba(223, 107, 99, 0.15), 0 0 16px rgba(223, 107, 99, 0.2) !important;
+    }
+    .yolo-banner-strip {
+      background: rgba(223, 107, 99, 0.2);
+      border-bottom: 1px solid var(--error-red);
+      color: var(--error-red);
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Interactive Diff Inspection Box */
+    .diff-box {
+      background: #0e1114;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      font-size: 11.5px;
+      margin: 8px 0;
+    }
+    .diff-del {
+      background: rgba(223, 107, 99, 0.15);
+      color: #f09590;
+      display: block;
+      padding: 2px 4px;
+    }
+    .diff-add {
+      background: rgba(105, 192, 138, 0.15);
+      color: #92e0ae;
+      display: block;
+      padding: 2px 4px;
+    }
+
+    /* Explanation & Analysis Footer for each card */
+    .card-analysis {
+      padding: 18px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--raised);
+      font-size: 13px;
+    }
+    .card-analysis h4 {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .card.before-card .card-analysis h4 { color: var(--error-red); }
+    .card.after-card .card-analysis h4 { color: var(--success-green); }
+    .card-analysis ul {
+      padding-left: 18px;
+      color: var(--muted);
+    }
+    .card-analysis li {
+      margin-bottom: 5px;
+    }
+
+    /* Interactive Timeline UI */
+    .timeline-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .timeline-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+    .timeline-item.active {
+      border-color: var(--copper);
+      background: rgba(217, 120, 65, 0.1);
+    }
+    .timeline-item:hover:not(.active) {
+      border-color: var(--dim);
+    }
+
+    /* Web Artifact Browser Mockup */
+    .browser-mock {
+      background: #101316;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 380px;
+    }
+    .browser-bar {
+      height: 34px;
+      background: #161a1e;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--dim);
+    }
+    .browser-url {
+      flex: 1;
+      background: #0b0c0e;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 10px;
+      color: var(--muted);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .browser-content {
+      padding: 16px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* Matrix Table */
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      margin-top: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .spec-table th, .spec-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .spec-table th {
+      background: var(--raised);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .spec-table tr:last-child td { border-bottom: none; }
+    .spec-table tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    /* Interactive Tab Bar for Demo Switches */
+    .demo-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .btn-action {
+      background: var(--raised);
+      border: 1px solid var(--border);
+      color: var(--bone);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn-action:hover {
+      border-color: var(--copper);
+    }
+    .btn-action.active {
+      background: var(--copper);
+      color: #0b0c0e;
+      border-color: var(--copper);
+      font-weight: 700;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge-copper { background: rgba(217, 120, 65, 0.2); color: var(--copper); border: 1px solid var(--copper); }
+    .badge-red { background: rgba(223, 107, 99, 0.2); color: var(--error-red); border: 1px solid var(--error-red); }
+    .badge-green { background: rgba(105, 192, 138, 0.2); color: var(--success-green); border: 1px solid var(--success-green); }
+    .badge-cyan { background: rgba(118, 184, 196, 0.2); color: var(--plan-cyan); border: 1px solid var(--plan-cyan); }
+    .badge-amber { background: rgba(211, 166, 74, 0.2); color: var(--human-amber); border: 1px solid var(--human-amber); }
+
+    /* Keybinding Cap */
+    .kbd {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      background: #202429;
+      border: 1px solid #3c444c;
+      border-bottom: 2px solid #3c444c;
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: var(--bone);
+      margin: 0 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Persistent Top Bar -->
+  <header class="top-nav">
+    <div class="top-nav-inner">
+      <a href="#" class="brand-mark">
+        <span class="brand-glyph"><span>◆</span></span>
+        NEURA COCKPIT OVERHAUL
+      </a>
+      <nav class="nav-sections">
+        <a href="#section-telemetry" class="nav-pill active">01. Telemetry & Cockpit</a>
+        <a href="#section-launch" class="nav-pill">02. Launch & Onboarding</a>
+        <a href="#section-modes" class="nav-pill">03. Spatial Modes & YOLO</a>
+        <a href="#section-approvals" class="nav-pill">04. Approvals & Diffs</a>
+        <a href="#section-artifacts" class="nav-pill">05. Live Web Artifacts</a>
+        <a href="#section-verification" class="nav-pill">06. Verification & Time Travel</a>
+        <a href="#section-keyboard" class="nav-pill">07. Keyboard & Commands</a>
+      </nav>
+      <div class="nav-controls">
+        <span class="mode-badge">◆ FORGED TUNGSTEN v3</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Header -->
+  <main class="hero">
+    <div class="kicker">Architectural Specification & Visual Audit</div>
+    <h1>Comprehensive UI/UX Evolution: <span>Side-by-Side Blueprint</span></h1>
+    <p class="hero-lead">
+      An exhaustive visual comparison mapping every facet of the Neura developer harness—from ambient terminal telemetry and danger perimeters to live bidirectional web artifacts and time-travel rollback. Each element is presented side-by-side: the current v2.5.1 baseline versus the next-generation ergonomic cockpit.
+    </p>
+
+    <!-- Global View Switcher -->
+    <div class="view-switcher-bar">
+      <div class="view-switcher-group">
+        <span class="switcher-label">View Mode:</span>
+        <button class="btn-toggle active" id="btn-side-by-side" onclick="setViewMode('both')">Side-by-Side Comparison</button>
+        <button class="btn-toggle" id="btn-before-only" onclick="setViewMode('before')">Before Only (v2.5.1)</button>
+        <button class="btn-toggle" id="btn-after-only" onclick="setViewMode('after')">After Only (Next-Gen)</button>
+      </div>
+      <div class="view-switcher-group">
+        <span class="switcher-label">Simulate Terminal Width:</span>
+        <button class="btn-toggle active" id="w-120" onclick="setTerminalWidth('100%')">120 cols (Standard)</button>
+        <button class="btn-toggle" id="w-72" onclick="setTerminalWidth('72%')">72 cols (Compact)</button>
+        <button class="btn-toggle" id="w-48" onclick="setTerminalWidth('48%')">48 cols (Narrow)</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================== -->
+  <!-- 01. TELEMETRY & AMBIENT COCKPIT -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-telemetry">
+    <div class="section-header">
+      <div class="section-tag">Pillar 01 · In-Session Ergonomics</div>
+      <h2 class="section-title">Telemetry, Gauges & The Two-Tier Rail</h2>
+      <p class="section-desc">
+        Eliminating the congested 2-line bottom footer by separating invariant session telemetry (bottom status) from real-time operational turn state (dynamic active rail), while replacing static plain text with high-density sparkline gauges.
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current v2.5.1 Baseline</span>
+          <span class="card-meta">Congested Single Footer & Truncated Text</span>
+        </div>
+        <div class="terminal-window">
+          <div class="terminal-titlebar">
+            <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+            <span style="margin-left:auto">Neura Terminal · bash</span>
+          </div>
+
+          <div style="flex: 1; color: var(--dim)">
+            <p><span class="t-copper">neura ›</span> implement token refresh middleware with redis caching</p>
+            <p style="margin-top: 10px"><span class="t-dim">Inspecting repository structure and existing auth handlers...</span></p>
+            <p><span class="t-dim">Read 14 files under src/services/auth/...</span></p>
+          </div>
+
+          <!-- Current Below-Editor Widget -->
+          <div class="term-cockpit-box">
+            <div style="display: flex; gap: 8px; font-size: 11px;">
+              <span class="t-copper t-bold">WORK</span>
+              <span class="t-muted">step 2 · implement token refresh</span>
+            </div>
+            <div style="display: flex; gap: 8px; font-size: 11px; margin-top: 4px;">
+              <span class="t-copper">◆</span>
+              <span class="t-muted">bash · npm test tests/auth/token.test.ts</span>
+              <span class="t-dim">· Esc stops safely</span>
+            </div>
+          </div>
+
+          <!-- Current Single 1-line Footer -->
+          <div class="term-footer-line" style="font-size: 11px; color: var(--muted); margin-top: 10px;">
+            <div>
+              <span class="t-copper">◆ WORK</span>
+              <span class="t-dim"> · </span>
+              <span class="t-bone">gemini-3.8-flash-high</span>
+              <span class="t-dim"> · </span>
+              <span>feature/auth-refresh</span>
+              <span class="t-dim"> · </span>
+              <span class="t-amber">ctx 84%</span>
+              <span class="t-dim"> · </span>
+              <span>$1.42</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>Context Cliff Blindspot:</strong> <code>ctx 84%</code> is plain text. The user has no visual sense of proximity to memory compaction or token eviction until it triggers.</li>
+            <li><strong>Flat Cost Metric:</strong> <code>$1.42</code> shows total spend, but completely hides burn velocity. A runaway loop burning $0.20/turn looks identical to a calm session.</li>
+            <li><strong>Footer Overcrowding:</strong> Truncates aggressively under 72 cols, dropping Git branch, cost, and context until only the mode tag remains.</li>
+            <li><strong>Single Operation Line:</strong> No elapsed timer. If a command runs for 25s, the user cannot tell if the agent hung or is compiling.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Next-Gen Ergonomic Cockpit</span>
+          <span class="card-meta">Two-Tier Dynamic Turn Rail + Micro-Gauges</span>
+        </div>
+        <div class="terminal-window">
+          <div class="terminal-titlebar">
+            <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+            <span style="margin-left:auto">Neura Cockpit · Forged Tungsten v3</span>
+          </div>
+
+          <div style="flex: 1; color: var(--dim)">
+            <p><span class="t-copper">neura ›</span> implement token refresh middleware with redis caching</p>
+            <p style="margin-top: 10px"><span class="t-dim">Inspecting repository structure and existing auth handlers...</span></p>
+            <p><span class="t-dim">Read 14 files under src/services/auth/...</span></p>
+          </div>
+
+          <!-- PROPOSED: Dynamic Active Turn Rail (Above Editor / Float) -->
+          <div class="dynamic-active-rail">
+            <div style="display: flex; align-items: center;">
+              <span class="pulse-indicator"></span>
+              <span class="t-bold t-copper">RUNNING</span>
+              <span class="t-dim" style="margin: 0 8px">·</span>
+              <span class="t-bone">wsl2_exec</span>
+              <span class="t-muted" style="margin-left: 6px;">[npm test tests/auth/token.test.ts]</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 11px;">
+              <span class="t-amber t-bold">00:14s</span>
+              <span class="t-dim">|</span>
+              <span class="t-dim"><span class="kbd">Esc</span> abort step</span>
+            </div>
+          </div>
+
+          <!-- PROPOSED: Fixed Bottom Status Line with Micro-Gauges -->
+          <div class="term-footer-line" style="font-size: 11px; padding: 8px 0; border-top: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge badge-copper">◆ WORK · SUPERVISED</span>
+              <span class="t-bone">gemini-3.8-flash <span class="t-dim">[think: high]</span></span>
+              <span class="t-dim">·</span>
+              <span class="t-muted">feature/auth-refresh <span class="t-amber">*2</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <!-- Sparkline Gauge for Context -->
+              <div title="Context Window: 84% full (Compaction threshold: 90%)">
+                <span class="t-dim">CTX</span>
+                <span class="spark-bar">
+                  <span class="spark-block spark-fill"></span>
+                  <span class="spark-block spark-fill"></span>
+                  <span class="spark-block spark-fill"></span>
+                  <span class="spark-block spark-fill"></span>
+                  <span class="spark-block spark-fill"></span>
+                  <span class="spark-block spark-warn"></span>
+                  <span class="spark-block spark-empty"></span>
+                  <span class="spark-block spark-empty"></span>
+                </span>
+                <span class="t-amber t-bold">84%</span>
+              </div>
+              <span class="t-dim">·</span>
+              <!-- Cost Velocity -->
+              <div title="Spend: $1.42 total (+0.08 on last turn)">
+                <span class="t-bone t-bold">$1.42</span>
+                <span class="t-dim" style="font-size: 10px">(+0.08/turn)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Two-Stage Turn Pulse:</strong> Active execution lives in a dedicated, prominent rail with live elapsed seconds (<code>00:14s</code>), eliminating freeze anxiety.</li>
+            <li><strong>Micro-Block Context Sparkline:</strong> 8-segment visual density meter gives instant peripheral perception of context exhaustion without reading numbers.</li>
+            <li><strong>Cost Velocity Pacing:</strong> <code>(+0.08/turn)</code> alerts the developer to token-heavy tool loops before the bill escalates.</li>
+            <li><strong>Thinking Budget Badge:</strong> Explicitly displays <code>[think: high]</code> so the engineer understands model reasoning latency.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- 02. LAUNCH & ONBOARDING -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-launch">
+    <div class="section-header">
+      <div class="section-tag">Pillar 02 · Launch Experience</div>
+      <h2 class="section-title">Pre-Flight Diagnostics vs. Transient ASCII</h2>
+      <p class="section-desc">
+        Transforming the startup screen from an ephemeral ASCII banner into an actionable engineering cockpit briefing that verifies containment, Git hygiene, and previous session continuity.
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current v2.5.1 Launch Screen</span>
+          <span class="card-meta">Wordmark + Empty Input (Disappears on Turn 1)</span>
+        </div>
+        <div class="terminal-window" style="align-items: center; justify-content: center; text-align: center;">
+          <pre style="color: var(--copper); font-size: 10px; line-height: 1.1; margin-bottom: 20px;">
+███╗   ██╗███████╗██╗   ██╗██████╗  █████╗
+████╗  ██║██╔════╝██║   ██║██╔══██╗██╔══██╗
+██╔██╗ ██║█████╗  ██║   ██║██████╔╝███████║
+██║╚██╗██║██╔══╝  ██║   ██║██╔══██╗██╔══██║
+██║ ╚████║███████╗╚██████╔╝██║  ██║██║  ██║
+╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
+          </pre>
+          <div style="background: #14171a; border: 1px solid var(--border); padding: 8px 24px; border-radius: 6px; font-size: 11px; color: var(--bone); width: 60%;">
+            TYPE YOUR TASK
+          </div>
+          <div style="margin-top: 14px; color: var(--dim); font-size: 11px;">
+            neura › <span style="animation: pulse 1s infinite">_</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>Zero Pre-Flight Telemetry:</strong> Does not tell the engineer if WSL2 is ready, whether bubblewrap is active, or if uncommitted Git work exists.</li>
+            <li><strong>Complete Erasure on Turn 1:</strong> The moment the first prompt is sent, the entire centered launch structure is wiped into scrollback.</li>
+            <li><strong>Missing Discovery:</strong> No discoverability for first-time or returning users on available modes or shortcuts.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Next-Gen Flight Check Briefing</span>
+          <span class="card-meta">Self-Verifying Cockpit Pre-Flight HUD</span>
+        </div>
+        <div class="terminal-window">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
+            <div>
+              <span class="t-copper t-bold" style="font-size: 16px; letter-spacing: 0.08em;">◆ NEURA COCKPIT</span>
+              <span class="badge badge-copper" style="margin-left: 8px;">v2.5.2 PRE-FLIGHT</span>
+            </div>
+            <div class="t-dim" style="font-size: 11px;">Windows 11 · PowerShell 7.4 · WSL2 Ubuntu</div>
+          </div>
+
+          <!-- Pre-Flight Diagnostic Grid -->
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; font-size: 11.5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+            <span class="t-dim">WORKSPACE</span>
+            <span class="t-bone">C:\Neura <span class="t-muted">(branch: main · </span><span class="t-amber">2 uncommitted changes</span><span class="t-muted">)</span></span>
+
+            <span class="t-dim">SANDBOX</span>
+            <span><span class="t-green">✔ WSL2 Bubblewrap online</span> <span class="t-dim">· Host fs & net namespaces isolated</span></span>
+
+            <span class="t-dim">MODE</span>
+            <span><span class="badge badge-copper">WORK</span> <span class="t-muted">Supervised engineering · interactive approvals armed</span></span>
+
+            <span class="t-dim">CONTINUITY</span>
+            <span class="t-muted">Previous session: <span class="t-bone">"refactor cockpit footer"</span> (2h ago) · 1 checkpoint saved</span>
+          </div>
+
+          <!-- Accelerator Intent Chips -->
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+            <span class="t-dim" style="font-size: 11px; display: flex; align-items: center;">Quick Start:</span>
+            <span class="badge badge-cyan" style="cursor: pointer;"><span class="kbd">/plan</span> Design Architecture</span>
+            <span class="badge badge-blue" style="cursor: pointer;"><span class="kbd">/learn</span> Interactive Tutor</span>
+            <span class="badge badge-copper" style="cursor: pointer;"><span class="kbd">/ship</span> Run Verification Suite</span>
+            <span class="badge badge-amber" style="cursor: pointer;"><span class="kbd">Tab</span> Cycle Modes</span>
+          </div>
+
+          <!-- Active Prompt Input -->
+          <div style="background: #14171a; border: 1px solid var(--copper); padding: 10px 14px; border-radius: 6px; font-size: 12px; color: var(--bone);">
+            <span class="t-copper">neura ›</span> <span class="t-muted">Type task or choose accelerator...</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Instant Environmental Confidence:</strong> Confirms sandbox isolation and WSL2 status before any agent code runs.</li>
+            <li><strong>Git Awareness:</strong> Immediately warns of uncommitted dirty state so work isn't accidentally overwritten.</li>
+            <li><strong>One-Tap Accelerators:</strong> Clickable or key-chordable intent chips jump straight into <code>/plan</code>, <code>/learn</code>, or previous checkpoints.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- 03. SPATIAL MODES & YOLO WARNING -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-modes">
+    <div class="section-header">
+      <div class="section-tag">Pillar 03 · Boundary Architecture</div>
+      <h2 class="section-title">Spatial Perimeters & YOLO Intentional Friction</h2>
+      <p class="section-desc">
+        Replacing transient 340ms transition animations with persistent spatial framing, task-scoped YOLO leases, and a comprehensive operator "Welcome Back" card for Human Away mode.
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current YOLO & Mode Switching</span>
+          <span class="card-meta">Footer Badge Alone & Disappearing Animation</span>
+        </div>
+        <div class="terminal-window">
+          <div class="terminal-titlebar">
+            <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+            <span style="margin-left:auto">Neura · Session in progress</span>
+          </div>
+
+          <div style="flex: 1; color: var(--dim);">
+            <p><span class="t-red">neura (yolo) ›</span> rm -rf build/ && npm run build --force</p>
+            <p style="margin-top: 8px; color: var(--bone);">Deleting build artifacts without sandbox...</p>
+            <p class="t-muted">Running native Windows PowerShell commands...</p>
+          </div>
+
+          <!-- Cockpit Widget in YOLO -->
+          <div class="term-cockpit-box" style="border-color: rgba(223, 107, 99, 0.4);">
+            <div style="display: flex; justify-content: space-between; font-size: 11px;">
+              <span class="t-red t-bold">YOLO · FULL ACCESS</span>
+              <span class="t-dim">no sandbox · no approvals</span>
+            </div>
+          </div>
+
+          <!-- Bottom Footer -->
+          <div class="term-footer-line" style="font-size: 11px;">
+            <span class="t-red">◆ YOLO · DANGER</span>
+            <span class="t-dim"> · </span>
+            <span class="t-bone">gemini-3.8-flash-high</span>
+            <span class="t-dim"> · </span>
+            <span class="t-muted">main</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>Cognitive Drift Hazard:</strong> Once the initial confirmation is accepted, the terminal looks almost identical to normal mode. Developers forget they are in un-sandboxed YOLO.</li>
+            <li><strong>Permanent Mode Latch:</strong> Mode stays in YOLO indefinitely until the user manually changes it back with <code>/mode work</code>.</li>
+            <li><strong>Human Away Black Hole:</strong> When returning to an unattended session, the operator has to scroll through hundreds of lines of logs to discover what happened.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Spatial Boundary Perimeter & Leases</span>
+          <span class="card-meta">Persistent Visual Frame + Scoped Lease HUD</span>
+        </div>
+        <div class="terminal-window yolo-perimeter-active" style="padding: 0;">
+          <!-- Persistent Danger Strip -->
+          <div class="yolo-banner-strip">
+            <span>⚠ DANGER PERIMETER: YOLO UNSANDBOXED EXECUTION ACTIVE</span>
+            <span>LEASE: 2 TURNS REMAINING · <span class="kbd" style="background:#401512">Esc Esc</span> DROP TO WORK</span>
+          </div>
+
+          <div style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
+            <div style="flex: 1;">
+              <p><span class="t-red">neura [YOLO #2] ›</span> rm -rf build/ && npm run build --force</p>
+              <p style="margin-top: 8px; color: var(--bone);">Native Windows host execution granted for active task.</p>
+              <div class="diff-box">
+                <span class="t-red">DELETING DIRECTORY: C:\Neura\build\ (48MB, 342 files)</span>
+              </div>
+            </div>
+
+            <!-- Auto-Revert Countdown Rail -->
+            <div style="background: rgba(223, 107, 99, 0.12); border: 1px solid var(--error-red); border-radius: var(--radius-sm); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+              <span class="t-red t-bold">AUTOMATIC SAFETY LEASE:</span>
+              <span class="t-muted">Will revert to <span class="badge badge-copper">WORK</span> after current task completes.</span>
+              <button class="btn-action" style="border-color: var(--error-red); color: var(--error-red); padding: 3px 8px;">Revoke Now</button>
+            </div>
+
+            <!-- Fixed Status with Perimeter Tag -->
+            <div class="term-footer-line" style="font-size: 11px; margin-top: 10px;">
+              <span class="badge badge-red">◆ YOLO (LEASED)</span>
+              <span class="t-dim">·</span>
+              <span class="t-muted">Host Authority: Signed-in User (DESKTOP-NEURA)</span>
+              <span class="t-dim">·</span>
+              <span class="t-green">Git Checkpoint: CP-4 Auto-Captured</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Impossible to Forget:</strong> Glowing red ambient perimeter and high-contrast header strip frame the entire terminal view while in YOLO.</li>
+            <li><strong>Leased YOLO Execution:</strong> YOLO is granted for <em>N turns</em> or the current task only, automatically dropping back to supervised WORK.</li>
+            <li><strong>Panic Chord:</strong> Double tapping <span class="kbd">Esc</span> <span class="kbd">Esc</span> immediately strips privileges and restores containment.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- 04. APPROVALS & INLINE DIFFS -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-approvals">
+    <div class="section-header">
+      <div class="section-tag">Pillar 04 · Human Governance</div>
+      <h2 class="section-title">High-Density Approvals & Syntax Diffs</h2>
+      <p class="section-desc">
+        Transforming text-heavy policy pauses into high-fidelity decision prompts featuring syntax-highlighted diffs, path-scoped approvals, and feedback re-injection on denial.
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current v2.5.1 Action Request</span>
+          <span class="card-meta">Monolithic Text Lines & Single-Use Retry</span>
+        </div>
+        <div class="terminal-window">
+          <div style="border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px;">
+            <span class="t-copper t-bold">NEURA / AGENT ACTION REQUEST  1</span>
+          </div>
+          <div style="font-size: 11px; color: var(--dim); margin-bottom: 8px;">────────────────────────────────────────────────────────────────────────</div>
+
+          <div style="font-size: 11.5px; line-height: 1.6;">
+            <p><span class="t-amber">◇ Neura paused at a policy boundary</span> <span class="t-dim">req_8842</span></p>
+            <p><span class="t-dim">TASK       </span><span class="t-bone">update authentication token rotation</span></p>
+            <p><span class="t-dim">INTENT     </span><span class="t-bone">complete the active task within policy</span></p>
+            <p><span class="t-dim">ACTION     </span><span class="t-bone">write src/auth/token-manager.ts</span></p>
+            <p><span class="t-dim">EVIDENCE   </span><span class="t-muted">isolated Reviewer · high risk</span></p>
+            <p><span class="t-dim">BOUNDARY   </span><span class="t-amber">protected path requires human approval</span></p>
+            <p><span class="t-dim">FALLBACK   </span><span class="t-muted">submit proposed patch to plans/ for review</span></p>
+            <p><span class="t-amber">GRANT      one identical retry · one use · 120 s</span></p>
+          </div>
+
+          <div style="margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px;">
+            <span class="t-copper">Approve request? (y/n) ›</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>Blind Approval:</strong> Shows only the file path (<code>write src/auth/token-manager.ts</code>). The developer has no idea what code is actually changing without opening a second terminal.</li>
+            <li><strong>Binary Grant Scope:</strong> Either approve once for 120 seconds, or abort. If an agent needs to touch 5 related auth files, the user gets interrupted 5 separate times.</li>
+            <li><strong>Silent Rejection:</strong> Denying with <code>n</code> aborts the action, but doesn't pass structured corrective guidance back to the agent.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Next-Gen Approval Dialog</span>
+          <span class="card-meta">Inline Syntax Hunk Diff + 4 Scope Choices</span>
+        </div>
+        <div class="terminal-window">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 10px;">
+            <div>
+              <span class="badge badge-amber">POLICY BOUNDARY #8842</span>
+              <span class="t-bone t-bold" style="margin-left: 8px;">src/auth/token-manager.ts</span>
+            </div>
+            <span class="badge badge-red">CRITICAL RISK</span>
+          </div>
+
+          <!-- Inline Hunk Diff Preview -->
+          <div class="diff-box">
+            <div style="color: var(--dim); font-size: 10.5px; margin-bottom: 4px;">@@ -42,5 +42,5 @@ export async function validateToken(rawToken: string)</div>
+            <span class="diff-del">- if (token.expiresAt &lt; Date.now()) return refreshToken(token);</span>
+            <span class="diff-add">+ if (token.expiresAt - CLOCK_DRIFT_MS &lt; Date.now()) return rotateKey(token);</span>
+            <span class="diff-add">+ await auditLogger.recordTokenRotation(token.userId, token.id);</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 80px 1fr; gap: 4px; font-size: 11px; margin-bottom: 12px;">
+            <span class="t-dim">REASON:</span>
+            <span class="t-muted">Modifies cryptographic signing & audit trail logic</span>
+            <span class="t-dim">VERDICT:</span>
+            <span class="t-bone">Safe to grant with scoped workspace boundary</span>
+          </div>
+
+          <!-- Granular Action Selectors -->
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border);">
+            <button class="btn-action active"><span class="kbd">1</span> Approve Once</button>
+            <button class="btn-action"><span class="kbd">2</span> Approve all in src/auth/*</button>
+            <button class="btn-action"><span class="kbd">3</span> Edit Code Before Save</button>
+            <button class="btn-action" style="color: var(--error-red); border-color: var(--error-red);"><span class="kbd">N</span> Deny with Feedback</button>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Immediate Diff Context:</strong> See the exact 3-line patch before granting execution authority. Zero blind trust.</li>
+            <li><strong>Path-Scoped Grants:</strong> Option to approve all writes in <code>src/auth/*</code> for the remainder of the task, eliminating approval fatigue.</li>
+            <li><strong>Deny with Feedback:</strong> Clicking Deny prompts for a quick 1-line reason, which is re-injected into the agent's context to guide it toward a better path.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- 05. LIVE WEB ARTIFACTS (PLAN & LEARN) -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-artifacts">
+    <div class="section-header">
+      <div class="section-tag">Pillar 05 · Companion Artifacts</div>
+      <h2 class="section-title">Live Bidirectional Web Artifacts</h2>
+      <p class="section-desc">
+        Upgrading Plan mode (`plans/*.html`) and Learn mode (`/mode learn`) from static detached files into real-time synchronized dashboards with embedded runners and document viewports.
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current Static Plan HTML</span>
+          <span class="card-meta">Manual Page Refreshes & Detached State</span>
+        </div>
+        <div class="browser-mock">
+          <div class="browser-bar">
+            <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+            <div class="browser-url">file:///C:/Neura/plans/auth-refactor.html</div>
+          </div>
+          <div class="browser-content">
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--copper); margin-bottom: 6px;">01 / PLAN DOCUMENT</div>
+            <h3 style="font-size: 18px; margin-bottom: 10px;">Token Rotation Architecture</h3>
+            <p style="color: var(--muted); font-size: 12px; margin-bottom: 16px;">Static document generated at session start. Does not update during execution.</p>
+
+            <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px;">
+              <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                <span class="t-dim">[ ]</span>
+                <span>Step 01: Scaffold Redis client connection</span>
+              </div>
+              <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                <span class="t-dim">[ ]</span>
+                <span>Step 02: Implement token renewal endpoint</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <span class="t-dim">[ ]</span>
+                <span>Step 03: Run integration test suite</span>
+              </div>
+            </div>
+            <div style="margin-top: 14px; font-size: 11px; color: var(--dim); text-align: center;">
+              Requires manual browser refresh (F5) to reload edits
+            </div>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>No Execution Feedback:</strong> As the agent completes Step 1 and Step 2 in the terminal, the browser plan remains permanently unchecked.</li>
+            <li><strong>One-Way Readonly:</strong> You cannot trigger work from the browser or send clarification notes back into the terminal.</li>
+            <li><strong>Learn Mode Command Friction:</strong> Exercises force the user to memorize and type <code>/learn answer SELECT * FROM users</code> into the terminal instead of running it in the UI.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Live-Syncing Reactive Web Board</span>
+          <span class="card-meta">Real-Time WebSocket Sync + Interactive Step Trigger</span>
+        </div>
+        <div class="browser-mock">
+          <div class="browser-bar">
+            <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+            <div class="browser-url">http://127.0.0.1:4040/plan/auth-refactor</div>
+            <span class="badge badge-green" style="font-size: 10px;">● LIVE SYNCED</span>
+          </div>
+          <div class="browser-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div>
+                <span class="t-copper t-bold" style="font-size: 11px;">01 / LIVE WORKBOARD</span>
+                <h3 style="font-size: 18px;">Token Rotation Architecture</h3>
+              </div>
+              <span class="badge badge-copper">STEP 2 OF 3 IN PROGRESS</span>
+            </div>
+
+            <!-- Reactive Step Tracker -->
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+              <div style="background: rgba(105, 192, 138, 0.08); border: 1px solid var(--success-green); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <span class="t-green">✔ Step 01: Scaffold Redis client connection</span>
+                  <div class="t-dim" style="font-size: 10px; margin-left: 18px;">Passed in 3.4s · commit 4a8e91</div>
+                </div>
+                <span class="badge badge-green">COMPLETED</span>
+              </div>
+
+              <div style="background: rgba(217, 120, 65, 0.1); border: 1px solid var(--copper); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <span class="t-copper t-bold">▶ Step 02: Implement token renewal endpoint</span>
+                  <div class="t-dim" style="font-size: 10px; margin-left: 18px;">Running work_exec test suite...</div>
+                </div>
+                <span class="badge badge-copper">ACTIVE IN TUI</span>
+              </div>
+
+              <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center; opacity: 0.6;">
+                <div>
+                  <span class="t-muted">○ Step 03: Run integration test suite</span>
+                  <div class="t-dim" style="font-size: 10px; margin-left: 18px;">Pending Step 02 completion</div>
+                </div>
+                <button class="btn-action" style="font-size: 10px;">Queue Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Zero-Reload Live State:</strong> Checkboxes flip to green and show test receipts automatically as Neura finishes tasks in the terminal.</li>
+            <li><strong>Two-Way Interactive Triggers:</strong> Click "Queue Next" or "Run Step 3" directly in the web plan to send instructions into the agent harness.</li>
+            <li><strong>In-Browser Exercise Scratchpad:</strong> In Learn mode, SQL and code exercises execute directly in a WebAssembly sandbox with immediate feedback.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- 06. VERIFICATION & TIME TRAVEL -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-verification">
+    <div class="section-header">
+      <div class="section-tag">Pillar 06 · Resilience & Proof</div>
+      <h2 class="section-title">Check-Gate Matrix & Visual Time Travel</h2>
+      <p class="section-desc">
+        Replacing opaque test logs and blind `/undo` commands with structured check-gate matrices and an interactive Git checkpoint timeline browser.
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current Proof-of-Work & Undo</span>
+          <span class="card-meta">Opaque Binary Status & Blind Rollback</span>
+        </div>
+        <div class="terminal-window">
+          <div style="flex: 1; color: var(--dim);">
+            <p><span class="t-copper">neura ›</span> /ship</p>
+            <p style="margin: 8px 0;" class="t-bone">Running background proof-of-work suite in WSL2 sandbox...</p>
+            <p class="t-red">Proof verification failed. 1 test suite failed.</p>
+            <p class="t-dim">See logs in .proofofwork/runs/run-992.log for full details.</p>
+
+            <div style="margin-top: 24px;">
+              <p><span class="t-copper">neura ›</span> /undo</p>
+              <p class="t-muted">Rolled back 1 commit via git reset --hard HEAD~1.</p>
+            </div>
+          </div>
+
+          <div class="term-cockpit-box" style="border-color: rgba(223, 107, 99, 0.4);">
+            <span class="t-red">× proof failed · open /ship for evidence</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>Log Hunting:</strong> Failures dump a file path to an obscure log file instead of showing the exact failure line inline.</li>
+            <li><strong>Blind Time-Travel:</strong> Invoking <code>/undo</code> rolls back changes blindly. The developer doesn't see what commits or files will be destroyed.</li>
+            <li><strong>No Partial Reversion:</strong> It's all-or-nothing rollback without cherry-picking.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Structured Check-Gate & Timeline</span>
+          <span class="card-meta">Foldable Test Matrix + Visual Snapshot Browser</span>
+        </div>
+        <div class="terminal-window">
+          <!-- Structured Foldable Matrix -->
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+              <span class="t-bold t-copper">◆ VERIFICATION GATE RECEIPTS (WSL2)</span>
+              <span class="badge badge-red">1 FAILED</span>
+            </div>
+            <div style="font-size: 11.5px; line-height: 1.6;">
+              <div><span class="t-green">✔ Biome Lint & Format</span> <span class="t-dim">(0 errors · 12 files)</span></div>
+              <div><span class="t-green">✔ Vitest Unit Tests</span> <span class="t-dim">(42/42 passed)</span></div>
+              <div>
+                <span class="t-red">× Integration Suite:</span> <span class="t-bone">tests/e2e/auth.spec.ts:34</span>
+                <div style="background: rgba(223, 107, 99, 0.12); padding: 4px 8px; border-radius: 4px; margin: 4px 0; color: #f29b96; font-size: 11px;">
+                  Expected HTTP 200 "OK", received 401 "Invalid Refresh Token"
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visual Checkpoint Picker -->
+          <div style="font-size: 11px; color: var(--dim); margin-bottom: 4px;">INTERACTIVE TIME-TRAVEL BROWSER (/undo):</div>
+          <div class="timeline-list" style="font-size: 11px;">
+            <div class="timeline-item active">
+              <span><span class="t-copper">● [CP-3] (Active)</span> Add token rotation with clock drift</span>
+              <span class="t-amber">+18 / -4 lines</span>
+            </div>
+            <div class="timeline-item">
+              <span><span class="t-dim">○ [CP-2]</span> Scaffold redis client wrapper</span>
+              <span class="t-green">+94 lines</span>
+            </div>
+            <div class="timeline-item">
+              <span><span class="t-dim">○ [CP-1]</span> Baseline before session start</span>
+              <span class="t-dim">Clean state</span>
+            </div>
+          </div>
+          <div style="font-size: 10.5px; color: var(--dim); display: flex; justify-content: space-between; margin-top: 4px;">
+            <span>[↑/↓] Select Snapshot · [Enter] Preview Diff · [Space] Revert</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Clickable Error Jumps:</strong> The failing assertion directly names the file and line (<code>auth.spec.ts:34</code>) as a clickable link.</li>
+            <li><strong>Diff-Aware Checkpoint Browser:</strong> Preview exactly what changed between snapshots before committing to a rollback.</li>
+            <li><strong>Non-Destructive Time Travel:</strong> Reverting to an older snapshot branches safely rather than wiping history via <code>git reset --hard</code>.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- 07. KEYBOARD & COMMAND ARCHITECTURE -->
+  <!-- ========================================== -->
+  <section class="section-wrap" id="section-keyboard">
+    <div class="section-header">
+      <div class="section-tag">Pillar 07 · Speed of Thought</div>
+      <h2 class="section-title">Command Palette & Keyboard HUD</h2>
+      <p class="section-desc">
+        Eliminating hidden keybinding friction by providing an instant fuzzy command palette (<span class="kbd">Ctrl+K</span>) and context-aware single-key shortcut overlays (<span class="kbd">?</span>).
+      </p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- BEFORE -->
+      <div class="card before-card">
+        <div class="card-banner">
+          <span>BEFORE · Current Dispersed Shortcuts</span>
+          <span class="card-meta">Hidden Memorization & Muscle-Memory Clashes</span>
+        </div>
+        <div class="terminal-window" style="justify-content: center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 18px; font-size: 12px;">
+            <p class="t-copper t-bold" style="margin-bottom: 10px;">CURRENT KEYBOARD DISCOVERY:</p>
+            <p class="t-dim">No built-in cheatsheet HUD or command palette.</p>
+            <p class="t-muted" style="margin-top: 8px;">Shortcuts scattered across extensions:</p>
+            <ul style="padding-left: 18px; margin-top: 6px; color: var(--dim);">
+              <li><code>Shift+Tab</code> · Cycle modes (no direct jump)</li>
+              <li><code>Ctrl+O</code> · Expand thinking (undocumented in prompt)</li>
+              <li><code>Ctrl+X</code> / <code>Ctrl+Shift+X</code> · Copy answer / code blocks</li>
+              <li><code>Ctrl+Shift+T</code> · Toggle thinking level</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Friction & Blindspots</h4>
+          <ul>
+            <li><strong>High Cognitive Load:</strong> New engineers don't know what commands exist without reading the documentation or source files.</li>
+            <li><strong>No Direct Mode Jump:</strong> Cycling through 5 modes with <code>Shift+Tab</code> requires 4 keystrokes to reach Learn mode from YOLO.</li>
+            <li><strong>No Universal Command Launcher:</strong> Must memorize specific slash commands (<code>/dash</code>, <code>/ship</code>, <code>/notices</code>, <code>/checkpoint</code>).</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="card after-card">
+        <div class="card-banner">
+          <span>AFTER · Next-Gen Command Palette & Cheatsheet</span>
+          <span class="card-meta">Universal Fuzzy Search (Ctrl+K) & HUD (?)</span>
+        </div>
+        <div class="terminal-window" style="position: relative;">
+          <!-- Fuzzy Palette Modal Overlay Simulation -->
+          <div style="background: #14171a; border: 1.5px solid var(--copper); border-radius: var(--radius-sm); padding: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.8);">
+            <div style="display: flex; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+              <span class="t-copper" style="margin-right: 8px;">❯</span>
+              <span class="t-bone t-bold" style="font-size: 13px;">mode</span>
+              <span style="animation: pulse 1s infinite; color: var(--copper)">_</span>
+              <span class="kbd" style="margin-left: auto; font-size: 10px;">ESC to exit</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;">
+              <div style="background: rgba(217, 120, 65, 0.15); color: var(--bone); padding: 6px 10px; border-radius: 4px; display: flex; justify-content: space-between;">
+                <span><span class="badge badge-copper">1</span> Switch to <strong>Work</strong> Mode (Supervised)</span>
+                <span class="t-dim">Shift+Tab</span>
+              </div>
+              <div style="padding: 6px 10px; color: var(--muted); display: flex; justify-content: space-between;">
+                <span><span class="badge badge-cyan">2</span> Switch to <strong>Plan</strong> Mode (Research & Spec)</span>
+                <span class="t-dim">/mode plan</span>
+              </div>
+              <div style="padding: 6px 10px; color: var(--muted); display: flex; justify-content: space-between;">
+                <span><span class="badge badge-blue">3</span> Switch to <strong>Learn</strong> Mode (Visual Tutor)</span>
+                <span class="t-dim">/mode learn</span>
+              </div>
+              <div style="padding: 6px 10px; color: var(--muted); display: flex; justify-content: space-between;">
+                <span><span class="badge badge-red">4</span> Switch to <strong>YOLO</strong> Mode (Unrestricted)</span>
+                <span class="t-dim">/mode yolo</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; display: flex; justify-content: space-between; color: var(--dim);">
+            <span>Press <span class="kbd">?</span> for contextual cheatsheet</span>
+            <span><span class="kbd">Ctrl+K</span> universal action launcher</span>
+          </div>
+        </div>
+        <div class="card-analysis">
+          <h4>Ergonomic Breakthroughs</h4>
+          <ul>
+            <li><strong>Fuzzy Command Launcher:</strong> Typing <span class="kbd">Ctrl+K</span> opens an instant modal to search all modes, skills, checkpoints, and reports.</li>
+            <li><strong>Direct Numbered Chords:</strong> Switch directly to any mode with single chords (<span class="kbd">Alt+1</span> through <span class="kbd">Alt+5</span>).</li>
+            <li><strong>Contextual Shortcut HUD:</strong> Pressing <span class="kbd">?</span> overlays only the hotkeys relevant to the current screen and active mode.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- COMPLETE ARCHITECTURAL SPECIFICATION TABLE -->
+  <!-- ========================================== -->
+  <section class="section-wrap">
+    <div class="section-header">
+      <div class="section-tag">Synthesis</div>
+      <h2 class="section-title">Comprehensive UI/UX Specification Matrix</h2>
+      <p class="section-desc">Summary of all 7 pillars, contrasting current limitations against targeted design solutions.</p>
+    </div>
+
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th style="width: 20%;">Cockpit Subsystem</th>
+          <th style="width: 38%;">Current Baseline (v2.5.1)</th>
+          <th style="width: 42%;">Target Architecture (Forged Tungsten v3)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>01. Telemetry & Gauges</strong></td>
+          <td>Flat text strings (<code>ctx 84%</code>, <code>$1.42</code>) crammed in a 1-line footer; aggressive truncation at narrow widths.</td>
+          <td>Two-tier layout: Fixed status bar with 8-block sparkline gauge & spend velocity badge (<code>+$0.08/turn</code>); prominent active turn rail.</td>
+        </tr>
+        <tr>
+          <td><strong>02. Launch Experience</strong></td>
+          <td>Static centered ASCII wordmark and task box that vanishes into scrollback on turn 1; no pre-flight verification.</td>
+          <td>Pre-Flight Diagnostics HUD verifying WSL2, bubblewrap, Git dirty state, and session continuity; one-tap accelerator chips.</td>
+        </tr>
+        <tr>
+          <td><strong>03. Spatial Modes & Safety</strong></td>
+          <td>Small text badge in footer; 340ms transient animation; permanent latch into YOLO; chaotic logs upon returning from Human Away.</td>
+          <td>Persistent glowing visual perimeter frame in YOLO with turn-limited lease; "Welcome Back" executive triage card after Human Away.</td>
+        </tr>
+        <tr>
+          <td><strong>04. Approvals & Governance</strong></td>
+          <td>Opaque text prompt naming only target file path; single 120s retry grant; binary Yes/No decision without feedback.</td>
+          <td>Inline syntax-highlighted hunk diffs; 4 grant scopes (Once, Path-Scoped, Edit Code, Deny with Structured Prompt Feedback).</td>
+        </tr>
+        <tr>
+          <td><strong>05. Live Web Artifacts</strong></td>
+          <td>Disconnected static HTML dumps in <code>plans/</code>; requires manual F5 refresh; terminal text copy-paste in Learn mode.</td>
+          <td>WebSocket/file-watch dynamic synchronization; real-time step checkmarks; in-browser Wasm execution runner for code and SQL exercises.</td>
+        </tr>
+        <tr>
+          <td><strong>06. Verification & Time Travel</strong></td>
+          <td>Opaque error notices pointing to log files; destructive <code>git reset --hard</code> rollback on <code>/undo</code> with zero diff preview.</td>
+          <td>Foldable check-gate test receipt matrix with clickable file/line links; interactive visual Git checkpoint timeline browser.</td>
+        </tr>
+        <tr>
+          <td><strong>07. Keyboard & Discovery</strong></td>
+          <td>Memorized shortcuts without discovery; multi-tap <code>Shift+Tab</code> cycle; no universal command search.</td>
+          <td>Universal <span class="kbd">Ctrl+K</span> fuzzy command palette; numbered mode chords (<span class="kbd">Alt+1..5</span>); single-key <span class="kbd">?</span> contextual HUD.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <script>
+    function setViewMode(mode) {
+      document.getElementById('btn-side-by-side').classList.toggle('active', mode === 'both');
+      document.getElementById('btn-before-only').classList.toggle('active', mode === 'before');
+      document.getElementById('btn-after-only').classList.toggle('active', mode === 'after');
+
+      const beforeCards = document.querySelectorAll('.before-card');
+      const afterCards = document.querySelectorAll('.after-card');
+      const grids = document.querySelectorAll('.comparison-grid');
+
+      if (mode === 'both') {
+        beforeCards.forEach(c => c.style.display = 'flex');
+        afterCards.forEach(c => c.style.display = 'flex');
+        grids.forEach(g => g.style.gridTemplateColumns = '1fr 1fr');
+      } else if (mode === 'before') {
+        beforeCards.forEach(c => c.style.display = 'flex');
+        afterCards.forEach(c => c.style.display = 'none');
+        grids.forEach(g => g.style.gridTemplateColumns = '1fr');
+      } else if (mode === 'after') {
+        beforeCards.forEach(c => c.style.display = 'none');
+        afterCards.forEach(c => c.style.display = 'flex');
+        grids.forEach(g => g.style.gridTemplateColumns = '1fr');
+      }
+    }
+
+    function setTerminalWidth(widthPct) {
+      document.getElementById('w-120').classList.toggle('active', widthPct === '100%');
+      document.getElementById('w-72').classList.toggle('active', widthPct === '72%');
+      document.getElementById('w-48').classList.toggle('active', widthPct === '48%');
+
+      const windows = document.querySelectorAll('.terminal-window');
+      windows.forEach(w => {
+        w.style.width = widthPct;
+        w.style.margin = widthPct === '100%' ? '0' : '0 auto';
+      });
+    }
+  </script>
+</body>
+</html>
