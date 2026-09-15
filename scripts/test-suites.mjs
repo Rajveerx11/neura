@@ -18,6 +18,7 @@ export const suites = Object.freeze({
   'learn-materials': 'scripts/tests/learn-materials.mjs',
   'learn-workshop': 'scripts/tests/learn-workshop.mjs',
   'learn-storage': 'scripts/tests/learn-storage.mjs',
+  'learn-vault': 'scripts/tests/learn-vault.mjs',
   'learn-end-to-end': 'scripts/tests/learn-end-to-end.mjs',
 });
 

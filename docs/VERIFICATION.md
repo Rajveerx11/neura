@@ -1,6 +1,6 @@
 # Verification
 
-The current verifier uses 17 isolated suites and the checkout's pinned Pi loader.
+The current verifier uses 18 isolated suites and the checkout's pinned Pi loader.
 It includes Work/Learn boundaries, document and exercise behavior, and content-bound
 proof receipts. The original modular refactor closed
 [#27](https://github.com/Rajveerx11/neura/issues/27); Learn expanded it in
@@ -33,15 +33,15 @@ existing Windows CI installation/drift rehearsal remains separate.
 | `npm run test:approval-storage` | Six concurrent writers, short writes, partial tails, corruption, crash lock |
 | `npm run test:proof` | Content fingerprints, bounds, cancellation, lifecycle, full/quick/incremental receipts |
 | `npm run test:fuzz` | Fixed seed `0x27c0ffee`: 96 generated path cases and 96 shell mutations |
-| `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, storage races, end-to-end progress, and browser behavior |
+| `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, workspace storage races, automatic Obsidian event/projection security, end-to-end progress, and browser behavior |
 
 `npm run test:accessibility` is the real Plan Edge/axe browser suite.
 `node scripts/tests/learn-browser.mjs` runs Learn's isolated browser checks.
-Learn's five nonbrowser suites also run in `npm test`; its isolated browser wrapper
+Learn's six nonbrowser suites also run in `npm test`; its isolated browser wrapper
 runs separately in CI. Browser tools require Edge on the tested Windows platform.
 `npm run verify:sandbox` remains the independent live WSL2/bubblewrap replay;
 contract tests alone do not establish OS isolation. CI also runs portable proof,
-approval-storage, sandbox, and Learn storage contracts on Linux, including FIFO and executable-bit
+approval-storage, sandbox, Learn storage, and Learn vault contracts on Linux, including FIFO and executable-bit
 regressions that Windows cannot exercise.
 
 ## Changed-file checks and receipts

@@ -31,7 +31,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:accessibility": "node scripts/verify-plan-accessibility.mjs",
-    "test:learn": "node scripts/tests/learn.mjs && node scripts/tests/learn-materials.mjs && node scripts/tests/learn-workshop.mjs && node scripts/tests/learn-storage.mjs && node scripts/tests/learn-end-to-end.mjs && node scripts/tests/learn-browser.mjs",
+    "test:learn": "node scripts/tests/learn.mjs && node scripts/tests/learn-materials.mjs && node scripts/tests/learn-workshop.mjs && node scripts/tests/learn-storage.mjs && node scripts/tests/learn-vault.mjs && node scripts/tests/learn-end-to-end.mjs && node scripts/tests/learn-browser.mjs",
     "verify": "node scripts/verify-harness.mjs && node scripts/check-docs.mjs",
     "verify:sandbox": "node scripts/verify-sandbox.mjs",
     "audit:dependencies": "npm audit --audit-level=high",

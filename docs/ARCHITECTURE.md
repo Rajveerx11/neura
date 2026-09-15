@@ -60,7 +60,7 @@ agent_settled
 | `guardrail.ts` | Plan, Work, Human Away, and Learn policy; explicit YOLO bypass | Action policy, Headmaster, Learn policy |
 | `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
 | `human-away-sandbox.ts` | Registers `work_exec` and Human Away's sole execution tool | WSL2, bubblewrap |
-| `learn.ts` | Lessons, document imports, exercises, progress, `/learn` | Controlled `.neura-learning/` store; locked parser runtime |
+| `learn.ts` | Lessons, document imports, exercises, progress, automatic learning-vault capture, `/learn` | Controlled `.neura-learning/` store; optional configured Obsidian vault; locked parser runtime |
 | `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
 | `checkpoint.ts` | YOLO-only pre-turn snapshots and `/undo` | Git object database, temp index |
 | `check-gate.ts` | Work/YOLO quick proof and full `/ship`; no Git publishing | Work sandbox or YOLO host proof, content-bound receipts |
@@ -85,7 +85,9 @@ agent_settled
 | `learn-schema.ts`, `learn-renderer.ts` | Structured lessons and escaped standalone HTML/SVG boards |
 | `learn-exercises.ts` | Practice grading and bounded disposable SQLite evaluation |
 | `learn-materials.ts`, `learn-materials-worker.mjs` | Captured document bytes, parser worker, citations, offline OCR |
-| `learn-store.ts` | Owned local store, exclusive writes, explicit snapshots and resume |
+| `learn-files.ts` | Shared bounded regular-file, exclusive-write, and canonical-directory mechanics for Learn-owned stores |
+| `learn-store.ts` | Owned workspace-local store, exclusive writes, explicit snapshots and resume |
+| `learn-vault.ts` | Opt-in external-vault authorization, lock-free numbered event slots, safe Markdown projections, bounded personalization retrieval |
 | `plan-policy.ts` | Plan tool list, URL policy, plan directory rules |
 | `plan-renderer.ts` | Escaped static HTML generation |
 | `cockpit-state.ts` | Shared UI state and subscribers |
@@ -112,13 +114,17 @@ agent_settled
 | Checkpoints | Process memory plus Git objects | No |
 | Plan artifacts | Project `plans/` directory | Usually yes |
 | Learn boards and explicit snapshots | Workspace `.neura-learning/` | No; owned store includes Git exclusion |
+| Automatic Learn knowledge events | Configured Obsidian vault's owned `Neura/` subtree | No; machine-local opt-in, immutable JSON plus Markdown projections |
+| Learn vault configuration | `NEURA_LEARN_VAULT` or `~/.pi/agent/neura/learn-vault.json` | No; never created by repository install |
 | Pending Learn initialization | Sibling `.neura-learning-init-UUID` | No lesson content; metadata-only stages can remain after interruption |
 | Proof receipts | Pi `neura-verification` session entries | No |
 | Incremental suite report | `.proofofwork/neura-checks.json` | No; untrusted evidence bound to workspace fingerprint |
 
 Learn does not auto-load snapshots or sync browser state. Saved source text is
-historical and unverified until reimported; images are omitted. Store creation
-requires native Windows. See [Learn Mode](LEARN_MODE.md).
+historical and unverified until reimported; images are omitted. Workspace store
+creation requires native Windows. A separately configured Obsidian vault receives
+bounded events automatically, but its schema-validated profile is untrusted data
+and cannot widen policy. See [Learn Mode](LEARN_MODE.md).
 
 ## Trust model
 
@@ -140,7 +146,7 @@ requires native Windows. See [Learn Mode](LEARN_MODE.md).
 
 ## Verification architecture
 
-`scripts/test-suites.mjs` defines 17 suites, each launched with a temporary home,
+`scripts/test-suites.mjs` defines 18 suites, each launched with a temporary home,
 synthetic state, and the checkout's pinned Pi loader. Windows covers the full
 harness and real Plan/Learn browsers; Linux covers portable boundary contracts.
 See [VERIFICATION.md](VERIFICATION.md) for suite commands, proof fingerprints,
