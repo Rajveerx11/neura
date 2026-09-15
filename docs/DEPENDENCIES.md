@@ -91,7 +91,6 @@ and workspace-contained overrides are rejected.
 |---|---|---|---|
 | Gitleaks CLI | `8.30.1`; Windows x64 archive SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` | [Official release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). CI downloads the exact archive, verifies its published digest, then extracts it. No installer or floating action tag runs. | Reads the complete Git history in CI. Findings are fully redacted; checkout credentials are removed before the scanner starts. |
 | GitHub Actions | `actions/checkout` `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` `v7.0.0` (`820762786026740c76f36085b0efc47a31fe5020`), and `actions/upload-artifact` `v7.0.1` (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`) | Official GitHub-maintained actions, pinned to immutable commits. Checkout and setup-node use the supported Node 24 action runtime. | Checkout reads repository history, setup-node provisions the pinned Node version and npm cache, and upload-artifact stores generated Plan evidence for seven days. |
-| uv CLI | `0.12.11` | [Official release](https://github.com/astral-sh/uv/releases/tag/0.12.11). CI installs the exact PyPI version. Runtime proof verifies the official Linux binaries by hash and refuses user or repository uv configuration. | Resolves the fully pinned proof environment from a verified read-only wheelhouse into a fresh sandbox-local cache. |
 
 ## Development graph
 

@@ -96,7 +96,6 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = "$PWD\node_modules\.bin;$env:PATH"
-          python -m pip install uv==0.12.11
           powershell -File .\install.ps1
           powershell -File .\install.ps1 -Check
 

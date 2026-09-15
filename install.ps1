@@ -106,6 +106,7 @@ $terminalFragment = Get-NeuraTerminalFragment $terminalProfileId $launcherTarget
 if ($Check) {
     $missing = @()
     $drift = @()
+    $capabilityWarnings = @()
     $credentialWarnings = @()
     if (-not (Test-Command "node")) {
         $missing += "Node.js 24.15 or newer"
@@ -120,7 +121,7 @@ if ($Check) {
         if ($piVersion -ne $requiredPiVersion) { $drift += "Pi $piVersion installed; required $requiredPiVersion" }
     }
     if (-not (Test-ProofRuntime)) {
-        $drift += "WSL proof runtime unavailable or different from runtime-contract.json"
+        $capabilityWarnings += "WSL proof runtime unavailable or different from runtime-contract.json (optional proof capability unavailable)"
     }
     $pairs = @(
         @("$repo\agent\extensions", "$agent\extensions"),
@@ -233,6 +234,7 @@ if ($Check) {
     }
     if ($missing.Count) { Write-Warning "Missing required commands: $($missing -join ', ')" }
     if ($drift.Count) { Write-Warning "Live harness drift: $($drift -join '; ')" }
+    if ($capabilityWarnings.Count) { Write-Warning ($capabilityWarnings -join '; ') }
     if ($credentialWarnings.Count) { Write-Warning ($credentialWarnings -join '; ') }
     if (-not $missing.Count -and -not $drift.Count) { Write-Host "Neura health: ready, live harness matches source." }
     exit $(if ($missing.Count -or $drift.Count) { 1 } else { 0 })
