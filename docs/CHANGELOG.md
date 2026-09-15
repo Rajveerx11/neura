@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added opt-in automatic Learn-to-Obsidian knowledge capture. Configured local
+  vaults receive bounded append-only concept, practice, finding, and structured
+  preference events plus safe Markdown projections under a Neura-owned subtree.
+  Model-extracted preferences remain candidates until two distinct exact learner
+  messages agree, and current instructions always outrank stored preferences. Raw
+  answers/transcripts, unrelated vault notes, `.obsidian/`,
+  and original learning files remain untouched. `/learn save` keeps its existing
+  workspace snapshot semantics. Lock-free exclusive numbered event slots serialize
+  concurrent capacity without pathname lock recovery. UNC vault paths are rejected;
+  mapped or otherwise network-backed volumes are unsupported because they cannot be
+  identified reliably. No runtime dependency was added.
 - Added the image-backed centred launch tracked by #53 and #54. A generated,
   isolated Windows Terminal profile renders the bundled local artwork while Pi
   renders a centred wordmark around its real task editor; regular terminals retain a

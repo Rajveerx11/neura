@@ -33,7 +33,7 @@ assert.deepEqual(selectSuites(['new/unknown-code.ts']),Object.keys(suites),'unkn
 assert.deepEqual(selectSuites(['docs/DEVELOPMENT.md']),[]);
 assert.deepEqual(selectSuites(['agent/neura/headmaster-policy.md']),Object.keys(suites),'runtime policy Markdown skipped tests');
 assert.deepEqual(selectSuites(['scripts/tests/proof.mjs']),['proof']);
-for (const name of ['learn', 'learn-materials', 'learn-workshop', 'learn-storage', 'learn-end-to-end']) {
+for (const name of ['learn', 'learn-materials', 'learn-workshop', 'learn-storage', 'learn-vault', 'learn-end-to-end']) {
   assert.equal(suites[name], `scripts/tests/${name}.mjs`, `${name} omitted from full verification`);
   assert.deepEqual(selectSuites([`scripts/tests/${name}.mjs`]), [name], `${name} direct change skipped`);
 }

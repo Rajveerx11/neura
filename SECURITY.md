@@ -54,7 +54,11 @@ response-time or embargo guarantee is offered.
 - Learn permits bounded `read`, `ls`, `web_search`, `questionnaire`, and its four
   learning tools. It denies generic writes/edits/shell, `grep`/`find`, MCP, Plan
   publication, private/configuration paths, hidden files, ADS, and linked/hardlinked
-  inputs. Its writers use a marked local store and exclusive bounded files.
+  inputs. Its writers use marked owned stores and exclusive bounded files. Optional
+  automatic Obsidian capture requires a machine-local exact vault configuration,
+  validates a real `.obsidian/`, and writes only append-only minimized events and
+  new projections beneath an owned `Neura/` subtree. It never grants a generic
+  external-path writer or overwrites ambiguous/user-edited content.
 - PDF/PPTX content is untrusted reference data. Learn checks captured bytes,
   source identity, page/slide number, and quoted excerpts. It does not establish
   that a tutor's interpretation is correct. Parser workers have deadlines and
@@ -129,10 +133,18 @@ control, and tracked issue.
   a workspace boundary prevents discovery of ignored or historical secrets.
 - Learn's first store initialization requires native Windows. Existing validated
   stores work on POSIX, but first creation there fails before writing. Path/handle
-  revalidation does not isolate against a hostile same-user process moving paths.
-- Saved learning content is private local data, not encrypted or authenticated
-  evidence. Resumed excerpts are historical/unverified; new citations require
-  source reimport. Browser progress transfers only through explicit user action.
+  revalidation does not isolate against a hostile same-user process moving paths;
+  such a process can relocate a validated parent and receive bytes before the
+  post-write identity check rejects the operation. Learn vault storage is an
+  application control, not an OS confidentiality boundary between same-user processes.
+- Saved learning content and optional Obsidian events are plaintext, not encrypted
+  evidence. Numbered event envelopes detect ordinary edits with SHA-256 but are not
+  authenticated against the signed-in user. UNC vault paths are rejected; mapped or
+  otherwise network-backed volumes cannot be identified reliably and are unsupported.
+  Obsidian Sync or plugins may copy or index vault content independently. Pattern redaction and minimized schemas do
+  not guarantee detection of every secret. Resumed excerpts are historical/unverified;
+  new citations require source reimport. Browser progress transfers only through
+  explicit user action.
 - Human Away requires Windows, WSL2, and `bubblewrap`; tool execution fails closed
   when they are unavailable or a linked workspace entry is detected. It remains
   preview-labelled while field evidence accumulates.

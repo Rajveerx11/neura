@@ -45,7 +45,7 @@ Presence of a control does not establish a complete security boundary. See
 | Work (default) | Supervised implementation | Contained workspace reads/edits/writes; `work_exec` runs commands through WSL2 bubblewrap without network. Protected and remote actions require explicit interactive approval; headless requests fail closed. |
 | YOLO | Deliberate full-access work | Requires interactive confirmation. Neura application approvals and tool blocking are disabled. Native Windows gives the process the signed-in user's authority. |
 | Human Away Preview | Low-risk work while the operator is unavailable | Exposes only `human_away_exec` through WSL2 bubblewrap. Host user paths and network are hidden; only the active workspace is writable. Deterministic policy and an isolated reviewer still apply. |
-| Learn | Practical technical or nontechnical learning | Bounded reads, web search, questions, and four learning tools. Local lessons and progress use controlled storage; arbitrary shell, generic writes, and MCP tools are unavailable. |
+| Learn | Practical technical or nontechnical learning | Bounded reads, web search, questions, and four learning tools. Local lessons and progress use controlled storage; an opt-in Obsidian vault receives minimized learning events automatically through a dedicated writer. Arbitrary shell, generic writes, and MCP tools remain unavailable. |
 
 Shift+Tab cycles Plan, Work, YOLO, Human Away, and Learn.
 `/mode plan|work|yolo|human-away|learn` selects one directly.
@@ -66,6 +66,16 @@ gets at most one automatic publication retry. Consumers receive a versioned
    `/learn answer <text or SQL>` or the board's copy-to-terminal control.
 5. Use `/learn save` to keep progress; `/learn saved` and `/learn resume <filename>`
    restore it explicitly.
+
+An optional machine-local Obsidian connection can be supplied through the
+`NEURA_LEARN_VAULT` environment variable or private
+`~/.pi/agent/neura/learn-vault.json` file (`{"version":1,"vault":"<absolute non-UNC path>"}`).
+UNC paths are rejected. Mapped or otherwise network-backed volumes cannot be
+identified reliably and are unsupported. Once configured, Learn automatically records privacy-minimized concepts, practice
+evidence, findings, and structured teaching preferences under an owned `Neura/`
+subtree. No recurring vault command is required. The vault projection is separate
+from `/learn save`; it never modifies `.obsidian/`, unrelated notes, original
+materials, or stores raw exercise answers.
 
 PDFs include page previews and offline English OCR. PPTX supports text, notes,
 and embedded image previews; export slides to PDF for full layouts and charts.
@@ -152,8 +162,8 @@ git diff --check
 powershell -File .\install.ps1 -Check
 ```
 
-`verify-harness.mjs` runs 17 isolated suites and loads all 18 extensions through
-the checkout's Pi loader, including Learn's five nonbrowser suites. Browser
+`verify-harness.mjs` runs 18 isolated suites and loads all 18 extensions through
+the checkout's Pi loader, including Learn's six nonbrowser suites. Browser
 checks need Edge; sandbox replay needs WSL2/bubblewrap. `install.ps1 -Check`
 checks live drift and Learn runtime provisioning without installing anything.
 For focused commands, Linux coverage, and proof limits, see

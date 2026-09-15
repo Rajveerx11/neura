@@ -77,7 +77,7 @@ or approval state between worktrees.
 
 ## Verification scope
 
-`scripts/verify-harness.mjs` launches 17 isolated suites, including five Learn
+`scripts/verify-harness.mjs` launches 18 isolated suites, including six Learn
 suites, and loads all 18 extensions through the checkout's Pi loader. See
 [VERIFICATION.md](VERIFICATION.md) for focused commands, temporary-home
 isolation, seeded fuzzing, race/crash cases, and Linux coverage.

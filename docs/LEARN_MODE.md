@@ -55,8 +55,11 @@ project plan. Open-ended exercises receive discussion, not an automatic grade.
   against provided sample tables in a disposable in-memory SQLite process with
   an authorizer, a three-second deadline, and bounded memory/results. No arbitrary
   host-code execution. Worked SQL answer keys are checked before publication.
-- Optional local learning progress and controlled material/lesson storage. No
-  unsolicited transcript export, external sync, or modifications to source documents.
+- Optional local learning progress and controlled material/lesson storage.
+- Optional machine-local Obsidian capture: minimized concepts, practice evidence,
+  findings, and structured teaching preferences are written automatically beneath
+  an owned `Neura/` subtree. Raw answers and transcripts are not exported, and
+  source documents or unrelated vault notes are never modified.
 
 ## Implementation map
 
@@ -66,6 +69,7 @@ project plan. Open-ended exercises receive discussion, not an automatic grade.
 | Document imports | `learn-materials.ts`, `learn-materials-worker.mjs`: captured bytes, extraction/OCR, immutable identity, and citation validation |
 | Lesson workshop | `learn-schema.ts`, `learn-renderer.ts`, `learn-exercises.ts`: structured lessons, HTML/SVG, practice, and bounded SQLite |
 | Tools and persistence | `learn.ts`, `learn-store.ts`: four tools, `/learn`, controlled boards, snapshots, and explicit resume |
+| Automatic knowledge capture | `learn-vault.ts`, `learn-files.ts`: machine-local vault opt-in, immutable events, safe Markdown projections, bounded learner-profile retrieval |
 
 Tool names: `learn_material`, `learn_lesson`, `learn_exercise`, and
 `learn_progress`. Shared modules live directly under `agent/neura/`; the extension
@@ -96,7 +100,7 @@ their targets or execute preprocessors. Generic reads deny hidden paths, private
 memory/session/approval/configuration files, alternate streams, hardlinks, and
 linked paths. `ls` refuses linked children rather than following them.
 
-Learning files live in `.neura-learning/` with an ownership marker and Git exclusion.
+Workspace learning files live in `.neura-learning/` with an ownership marker and Git exclusion.
 First use prepares markers in a unique sibling directory before atomic publication,
 so concurrent saves see a complete directory and interrupted initialization can retry.
 First initialization requires native Windows: its directory publication refuses an
@@ -111,6 +115,43 @@ controls, not an OS sandbox against a hostile same-user process relocating paths
 The parser likewise uses reviewed native/WASM dependencies; resource limits do
 not eliminate native parser vulnerability risk.
 
+### Automatic Obsidian knowledge capture
+
+Vault capture is disabled unless an absolute non-UNC Obsidian vault path is
+supplied through `NEURA_LEARN_VAULT` or the private file
+`~/.pi/agent/neura/learn-vault.json` with schema
+`{"version":1,"vault":"<absolute non-UNC path>"}`. This configuration is machine
+local and is never installed, committed, or exposed to the provider. A configured
+path must already be a real, unlinked directory containing a real `.obsidian/`.
+UNC paths and linked roots fail closed. Mapped or otherwise network-backed volumes
+cannot be identified reliably and are unsupported.
+
+First capture creates and owns only the vault's `Neura/` subtree. Pre-existing
+ambiguous content is retained and rejected rather than adopted, overwritten, or
+deleted. Events use bounded, append-only numbered envelopes (`0000.json` through
+`1999.json`) with SHA-256 integrity under `Neura/_System/events/`. Writers claim
+the next exact slot through exclusive creation, so there is no mutable writer lock;
+deterministic Markdown projections are created under
+`Neura/Topics/` and `Neura/Learner/`. Projection collisions are never overwritten.
+`.obsidian/`, unrelated notes, original materials, and build artifacts are outside
+the writer's authority.
+
+Concept publication, actual practice attempts, tutor findings, and structured
+teaching preferences trigger capture automatically; no recurring learner command
+is required. Raw answers and full transcripts are omitted. Every preference
+extracted by the model remains a candidate until two distinct exact learner messages
+support the same recognized value. Matching one latest message does not confer
+explicit or authoritative provenance, and current instructions always outrank stored
+preferences. Future Learn turns receive only recognized preference enums and at
+most eight bounded difficulty counters, labelled untrusted data. This is local
+retrieval and prompt conditioning, not model training or a mastery system.
+
+Vault capture and workspace recovery have separate failure semantics. A vault
+failure produces a warning but does not undo the lesson or exercise. `/learn save`
+retains its existing explicit snapshot behavior and remains the recovery source of
+truth. Later successful captures reconcile missing immutable Markdown projections
+without replacing user-edited files.
+
 ## Commands and persistence
 
 - `/learn status`: current lesson, step, attempts, next action, and board path.
@@ -121,6 +162,12 @@ not eliminate native parser vulnerability risk.
 - `/learn save`: explicitly save the current lesson, source text/notes, and attempts.
 - `/learn saved`: newest 100 snapshots; `/learn resume <filename>` restores one.
 - `/learn reset`: clear in-memory learning state without deleting saved work.
+
+There are no recurring vault commands. Once machine-local configuration exists,
+the agent records eligible knowledge automatically through the dedicated Learn
+runtime. `learn_progress` preference capture must match the learner's complete
+latest interactive message; model-invented feedback is rejected, and no single
+model-extracted message can activate a stored preference.
 
 Browser-generated commands include a lesson revision and reject stale boards.
 New sessions start without learning content until explicitly resumed. Saved
@@ -145,6 +192,10 @@ other lesson IDs remain separately labelled, unverified history, including after
   ignores ordering, and does not grade truncated output. No mastery score is inferred.
 - Browser progress is local until handed to Neura. This is a self-study workshop,
   not an exam system: browser source contains the worked answers.
+- Vault capture holds at most 2,000 immutable events per managed subtree and fails
+  closed when that bound, an integrity check, ownership, or path validation fails.
+- Obsidian content is plaintext and may be synced or indexed by Obsidian or its
+  plugins independently of Neura. Pattern-based redaction cannot recognize every secret.
 
 ## Maintenance and verification
 
@@ -184,6 +235,18 @@ This evidence does not claim a live installation or release.
   controls, CSP and no-network assertions, and axe accessibility scans.
 - Independent reviews cross-checked components authored in separate agent
   worktrees. Valid findings received fixes and regression coverage before merge.
+
+### Current PR evidence
+
+PR #56 validation on 2026-09-15 separately passed TypeScript, documentation and
+whitespace checks, all 18 harness suites, 38 Learn-vault checks, and 83 integrated
+Learn assertions. `verify-learn-vault.mjs` covers opt-in configuration, owned
+subtrees, numbered-envelope integrity, structured-event redaction, cross-process
+initialization and capacity contention, gap rejection, safe Markdown,
+repeated-evidence preferences, bounded retrieval, and denied UNC, linked,
+relative, unowned, malformed, and oversized inputs. This current-PR evidence is
+not attributed to the historical `c66c88c` Learn delivery and does not claim a
+live installation or a write to the configured personal vault.
 
 ## Inspiration
 
