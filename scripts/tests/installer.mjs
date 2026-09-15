@@ -22,6 +22,7 @@ assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot 
 assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
 assert.match(installerSource, /runtime-contract\.json/, "installer does not consume the runtime contract");
 assert.match(installerSource, /scripts\\check-proof-runtime\.mjs/, "installer does not validate the WSL proof runtime");
+assert.match(installerSource, /\$ErrorActionPreference = "SilentlyContinue"/, "optional proof probe stderr can still terminate the installer");
 assert.match(installerSource, /\$capabilityWarnings \+= "WSL proof runtime unavailable/, "missing optional proof runtime is not reported");
 assert.doesNotMatch(installerSource, /\$drift \+= "WSL proof runtime unavailable/, "missing optional proof runtime still fails live drift checks");
 assert.doesNotMatch(installerSource, /@\("pi", "git", "uvx"\)/, "installer still requires ambient Windows uvx");

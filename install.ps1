@@ -27,8 +27,16 @@ function Test-Command($Name) {
 
 function Test-ProofRuntime {
     if (-not (Test-Command "node")) { return $false }
-    & node (Join-Path $repo "scripts\check-proof-runtime.mjs") *> $null
-    return $LASTEXITCODE -eq 0
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        # Windows PowerShell promotes native stderr to NativeCommandError when
+        # the optional runtime reports unavailable. Keep the probe non-fatal.
+        $ErrorActionPreference = "SilentlyContinue"
+        & node (Join-Path $repo "scripts\check-proof-runtime.mjs") *> $null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
 }
 
 function Normalize-Text($Value) {
