@@ -36,6 +36,7 @@ function namedCandidates(command: string): string[] {
   const name = command.toLowerCase().replace(/\.(?:cmd|exe)$/i, "");
   if (process.platform === "win32") {
     if (name === "git") return [
+      ...(process.env.NEURA_GIT_EXECUTABLE ? [process.env.NEURA_GIT_EXECUTABLE] : []),
       "C:\\Program Files\\Git\\cmd\\git.exe",
       "C:\\Program Files\\Git\\bin\\git.exe",
     ];
@@ -80,7 +81,8 @@ export function resolveExecutable(command: string, cwd = process.cwd()): string 
   for (const candidate of namedCandidates(command)) {
     try {
       const canonical = fs.realpathSync(candidate);
-      if (fs.statSync(canonical).isFile() && !inside(boundary, canonical) && trustedIdentity(command, canonical)) return canonical;
+      if (fs.statSync(canonical).isFile() && !inside(boundary, path.resolve(candidate))
+        && !inside(boundary, canonical) && trustedIdentity(command, canonical)) return canonical;
     } catch {}
   }
   return null;

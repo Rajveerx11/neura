@@ -26,6 +26,14 @@ const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
 const { automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } = await import('../../agent/neura/process-security.ts');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+const verifyWorkflow = fs.readFileSync(path.join(repoRoot, ".github", "workflows", "verify.yml"), "utf-8");
+const windowsGitContract = runtimeContract.automaticExecutables.git;
+assert.match(windowsGitContract.windowsArchive, /^PortableGit-[\w.-]+\.7z\.exe$/, "pinned Git archive name is invalid");
+assert.match(windowsGitContract.windowsArchiveUrl, /^https:\/\/github\.com\/git-for-windows\/git\/releases\/download\//, "pinned Git archive source is not the official release repository");
+assert.match(windowsGitContract.windowsArchiveSha256, /^[a-f0-9]{64}$/, "pinned Git archive hash is invalid");
+for (const field of ["windowsArchive", "windowsArchiveUrl", "windowsArchiveSha256"]) {
+  assert.match(verifyWorkflow, new RegExp(`\\$git\\.${field}\\b`), `CI does not source ${field} from the runtime contract`);
+}
 const { selectSuites, suites } = await import('../test-suites.mjs');
 process.env.NEURA_PROCESS_TEST_SECRET = "must-not-leak";
 assert.equal(scopedProcessEnvironment().NEURA_PROCESS_TEST_SECRET, undefined, "automatic process inherited an unrelated secret");
@@ -53,6 +61,35 @@ const originalPath = process.env.PATH;
 process.env.PATH = `${syntheticRoot}${path.delimiter}${originalPath ?? ''}`;
 assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(hostileGit), "repository-controlled Git executable was selected");
 process.env.PATH = originalPath;
+if (process.platform === 'win32') {
+  const trustedGit = resolveExecutable('git', syntheticRoot);
+  assert.ok(trustedGit, 'pinned Git fixture unavailable');
+  const alternateGit = path.join(path.dirname(path.dirname(trustedGit)), 'bin', 'git.exe');
+  process.env.NEURA_GIT_EXECUTABLE = alternateGit;
+  assert.equal(resolveExecutable('git', syntheticRoot), fs.realpathSync(alternateGit), 'verified Git override was ignored');
+
+  const workspaceGit = path.join(syntheticRoot, 'trusted-copy', 'git.exe');
+  fs.mkdirSync(path.dirname(workspaceGit));
+  fs.copyFileSync(trustedGit, workspaceGit);
+  process.env.NEURA_GIT_EXECUTABLE = workspaceGit;
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(workspaceGit), 'byte-identical workspace Git override was trusted');
+
+  const trustedGitRoot = path.dirname(path.dirname(trustedGit));
+  const alternateGitRelative = path.relative(trustedGitRoot, alternateGit);
+  const workspaceJunction = path.join(syntheticRoot, 'outside-git-link');
+  fs.symlinkSync(trustedGitRoot, workspaceJunction, 'junction');
+  process.env.NEURA_GIT_EXECUTABLE = path.join(workspaceJunction, alternateGitRelative);
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(path.join(workspaceJunction, alternateGitRelative)), 'workspace junction bypassed lexical executable containment');
+
+  const outsideJunction = path.join(scratchRoot, 'workspace-git-link');
+  fs.symlinkSync(path.dirname(workspaceGit), outsideJunction, 'junction');
+  process.env.NEURA_GIT_EXECUTABLE = path.join(outsideJunction, 'git.exe');
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(path.join(outsideJunction, 'git.exe')), 'outside junction bypassed canonical executable containment');
+
+  process.env.NEURA_GIT_EXECUTABLE = hostileGit;
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(hostileGit), 'workspace Git override was trusted');
+  delete process.env.NEURA_GIT_EXECUTABLE;
+}
 const workspaceMcp = await probeStdioMcp('workspace-fixture', { command: hostileGit, args: [] }, undefined, 100, syntheticRoot);
 assert.equal(workspaceMcp.state, 'degraded', 'workspace-controlled absolute MCP executable was probed');
 assert.match(workspaceMcp.problem?.message ?? '', /existing absolute executable/, 'workspace MCP rejection was not containment failure');

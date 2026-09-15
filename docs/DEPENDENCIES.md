@@ -79,6 +79,11 @@ from the runtime contract. The reviewed executable has a valid Authenticode
 signature from Johannes Schindelin (certificate thumbprint
 `3EB14A3AEF84B7153E139397F0A49E2FAC662B0E`) and comes from the
 [official release](https://github.com/git-for-windows/git/releases/tag/v2.50.1.windows.1).
+CI reads the official portable archive URL and SHA-256
+`c45a7dfa2bde34059f6dbd85f49a95d73d5aea29305f51b79595e56e4f323a3d` from
+`runtime-contract.json`, verifies the download before extraction, then sets
+`NEURA_GIT_EXECUTABLE`; the same executable version and hash checks still apply,
+and workspace-contained overrides are rejected.
 
 ## Reviewed CI security tools
 
