@@ -229,16 +229,24 @@ This evidence does not claim a live installation or release.
   denial/resource limits, and numeric edge cases.
 - `verify-learn-storage.mjs`: real filesystem link/open interleavings, no content
   disclosure through tested swaps, and static hardlink/path denials.
-- `verify-learn-vault.mjs`: opt-in configuration, owned subtree, numbered-envelope
-  integrity, structured-event redaction, cross-process initialization, ordinary and
-  limit contention, gap rejection, safe Markdown, repeated-evidence preferences,
-  bounded retrieval, and denied UNC, linked, relative, unowned, malformed, and oversized inputs.
 - `verify-learn.mjs`: actual tools from PDF/PPTX import through cited lesson, attempt,
   SQL, explicit save/resume, forged/stale answers, and saved-input limits.
 - `verify-learn-browser.mjs`: desktop/mobile Edge, keyboard interactions, functional
   controls, CSP and no-network assertions, and axe accessibility scans.
 - Independent reviews cross-checked components authored in separate agent
   worktrees. Valid findings received fixes and regression coverage before merge.
+
+### Current PR evidence
+
+PR #56 validation on 2026-09-15 separately passed TypeScript, documentation and
+whitespace checks, all 18 harness suites, 38 Learn-vault checks, and 83 integrated
+Learn assertions. `verify-learn-vault.mjs` covers opt-in configuration, owned
+subtrees, numbered-envelope integrity, structured-event redaction, cross-process
+initialization and capacity contention, gap rejection, safe Markdown,
+repeated-evidence preferences, bounded retrieval, and denied UNC, linked,
+relative, unowned, malformed, and oversized inputs. This current-PR evidence is
+not attributed to the historical `c66c88c` Learn delivery and does not claim a
+live installation or a write to the configured personal vault.
 
 ## Inspiration
 

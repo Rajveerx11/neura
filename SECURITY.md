@@ -133,7 +133,10 @@ control, and tracked issue.
   a workspace boundary prevents discovery of ignored or historical secrets.
 - Learn's first store initialization requires native Windows. Existing validated
   stores work on POSIX, but first creation there fails before writing. Path/handle
-  revalidation does not isolate against a hostile same-user process moving paths.
+  revalidation does not isolate against a hostile same-user process moving paths;
+  such a process can relocate a validated parent and receive bytes before the
+  post-write identity check rejects the operation. Learn vault storage is an
+  application control, not an OS confidentiality boundary between same-user processes.
 - Saved learning content and optional Obsidian events are plaintext, not encrypted
   evidence. Numbered event envelopes detect ordinary edits with SHA-256 but are not
   authenticated against the signed-in user. UNC vault paths are rejected; mapped or

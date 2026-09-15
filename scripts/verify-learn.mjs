@@ -174,6 +174,13 @@ try {
   check(/Practice attempts: 1; current lesson only/.test(app.messages.at(-1)), "Status command excludes other lesson attempts");
   const mixedPrompt = await app.fire("before_agent_start", { systemPrompt: "base" });
   check(mixedPrompt.systemPrompt.includes('"practiceAttempts":1'), "Tutor brief counts only active lesson attempts");
+  process.env.NEURA_LEARN_VAULT = path.join(scratch, "missing-vault");
+  const warningCount = app.notifications.length;
+  const unreadableStatus = JSON.parse((await app.call("learn_progress", { action: "status" })).content[0].text);
+  check(unreadableStatus.learnerProfile.enabled === false && app.notifications.length === warningCount + 1 && /profile could not be read/.test(app.notifications.at(-1)), "Progress reports an unreadable configured learner profile before using the empty fallback");
+  const unreadablePrompt = await app.fire("before_agent_start", { systemPrompt: "base" });
+  check(unreadablePrompt.systemPrompt.includes('"enabled":false') && app.notifications.length === warningCount + 2 && /profile could not be read/.test(app.notifications.at(-1)), "Prompt loading reports an unreadable configured learner profile before using the empty fallback");
+  process.env.NEURA_LEARN_VAULT = vault;
   const noLessonHistory = structuredClone(mixedHistory); delete noLessonHistory.lesson;
   const noLessonPath = await writeLearnArtifact(workspace, "progress", JSON.stringify(noLessonHistory));
   await app.command(`resume ${path.basename(noLessonPath)}`);
