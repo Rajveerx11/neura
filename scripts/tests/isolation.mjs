@@ -7,7 +7,9 @@ export function isolate() {
   // Windows CI may spell TEMP through an 8.3 alias. Synthetic workspaces use
   // the actual directory spelling, just like an ordinary canonical checkout.
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-test-'));
-  const keep = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext', 'temp', 'tmp']);
+  // CI may inject a downloaded Git candidate; production code still verifies
+  // its location, pinned hash, and version before use.
+  const keep = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext', 'temp', 'tmp', 'neura_git_executable']);
   for (const key of Object.keys(process.env)) {
     if (!keep.has(key.toLowerCase())) delete process.env[key];
   }
