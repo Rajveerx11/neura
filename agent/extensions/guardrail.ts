@@ -86,6 +86,7 @@ export default function (pi) {
     const verdict = await reviewWithHeadmaster(action, {
       provider: ctx.model?.provider,
       modelId: ctx.model?.id,
+      signal: ctx.signal,
     });
     try { if (ctx.hasUI) ctx.ui.setStatus("neura-headmaster", undefined); } catch {}
 

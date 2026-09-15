@@ -1,14 +1,46 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isolate } from './isolation.mjs';
 const scratch = isolate();
-const {bubblewrapArguments,assertWorkspaceHasNoLinks} = await import('../../agent/neura/human-away-sandbox.ts');
+const {bubblewrapArguments,assertWorkspaceHasNoLinks,validateProofRuntimeInventory,validateProofRuntimeProbe} = await import('../../agent/neura/human-away-sandbox.ts');
 const args=bubblewrapArguments('/workspace-fixture','printf synthetic');
 for(const flag of ['--unshare-all','--clearenv','--die-with-parent','--new-session']) assert.ok(args.includes(flag));
 assert.deepEqual(args.slice(-3),['sh','-lc','printf synthetic']);
 assert.equal(args.includes('/mnt/c'),false);
 assert.equal(args.includes(process.env.USERPROFILE),false);
+const trust={uvVersion:'0.12.11',uvSha256:'a'.repeat(64),uvxSha256:'b'.repeat(64),
+  python:{path:'/usr/bin/python3.12',version:'3.12.3',package:'python3.12-minimal',packageVersion:'3.12.3-1ubuntu0.13',architecture:'amd64',sha256:'d'.repeat(64)},
+  wheels:{'proof.whl':'c'.repeat(64)}};
+const inventory=['/trusted/uv/uv','/trusted/uv/uvx',trust.python.path,'/trusted/wheels',trust.uvSha256,trust.uvxSha256,
+  trust.python.sha256,`${trust.python.package}\t${trust.python.packageVersion}\t${trust.python.architecture}`,`proof.whl\t${'c'.repeat(64)}`,'1'].join('\n');
+const runtime=validateProofRuntimeInventory(inventory,'/trusted/uv','/trusted/wheels',trust);
+assert.ok(runtime,'valid proof runtime inventory rejected');
+assert.equal(validateProofRuntimeInventory('', '/trusted/uv','/trusted/wheels',trust),null,'missing proof inventory accepted');
+assert.equal(validateProofRuntimeInventory(inventory.replace('/usr/bin/python3.12','/tmp/python'),'/trusted/uv','/trusted/wheels',trust),null,'wrong Python path accepted');
+assert.equal(validateProofRuntimeInventory(inventory.replace(trust.python.sha256,'e'.repeat(64)),'/trusted/uv','/trusted/wheels',trust),null,'tampered Python accepted');
+assert.equal(validateProofRuntimeInventory(inventory.replace('3.12.3-1ubuntu0.13','3.12.3-1ubuntu0.12'),'/trusted/uv','/trusted/wheels',trust),null,'wrong Python package build accepted');
+assert.equal(validateProofRuntimeInventory(inventory.replace('c'.repeat(64),'f'.repeat(64)),'/trusted/uv','/trusted/wheels',trust),null,'tampered proof wheel accepted');
+const probe=`uvx ${trust.uvVersion}\n${trust.python.version}\nproof-ready`;
+assert.equal(validateProofRuntimeProbe(probe,trust),true,'valid sandbox runtime probe rejected');
+assert.equal(validateProofRuntimeProbe('',trust),false,'missing sandbox runtime probe accepted');
+assert.equal(validateProofRuntimeProbe(probe.replace('3.12.3','3.12.4'),trust),false,'wrong Python version accepted');
+assert.equal(validateProofRuntimeProbe(probe.replace('uvx 0.12.11','uvx 0.12.10'),trust),false,'wrong uvx version accepted');
+const guardedCommand='printf "uvx\\npython\\nentrypoint\\nproof-ready\\n" > guarded-proof-marker';
+const proofArgs=bubblewrapArguments('/workspace-fixture',guardedCommand,validateProofRuntimeInventory(inventory,'/trusted/uv','/trusted/wheels',trust));
+assert.ok(proofArgs.includes('/tmp/proof-wheels') && proofArgs.includes('/tmp/neura-bin/uvx') && proofArgs.includes('/tmp/neura-bin/python3.12'),'proof dependencies were not mounted read-only');
+const proofTail=proofArgs.slice(proofArgs.lastIndexOf('--'));
+assert.deepEqual(proofTail.slice(0,3),['--','sh','-lc']);
+assert.equal(proofTail[4],'neura-proof');
+assert.equal(proofTail[5],guardedCommand,'guarded proof command was not passed as inert shell data');
+assert.doesNotMatch(proofTail[3],/proof-ready|entrypoint/,'guarded proof command was interpolated into integrity wrapper');
+assert.match(proofTail[3],/^set -eu;[^]*sha256sum -c -[^]*export UV_CACHE_DIR=\/tmp\/uv-cache; exec sh -lc "\$1"$/,'proof wrapper does not fail closed before isolated command execution');
+const shell=process.platform==='win32'?'C:\\Program Files\\Git\\bin\\sh.exe':'/bin/sh';
+const failed=spawnSync(shell,['-lc',proofTail[3],proofTail[4],proofTail[5]],{cwd:scratch,encoding:'utf8',windowsHide:true});
+assert.notEqual(failed.status,0,'failed integrity check returned success');
+assert.equal(fs.existsSync(path.join(scratch,'guarded-proof-marker')),false,'failed integrity check executed uvx, Python, or proof entrypoint');
+assert.doesNotMatch(failed.stdout ?? '',/proof-ready/,'failed health integrity check printed proof-ready');
 fs.mkdirSync(path.join(scratch,'inside'));
 fs.mkdirSync(path.join(scratch,'outside'));
 assert.doesNotThrow(()=>assertWorkspaceHasNoLinks(path.join(scratch,'inside')));

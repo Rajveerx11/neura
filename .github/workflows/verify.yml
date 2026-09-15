@@ -33,6 +33,19 @@ jobs:
           node-version: "24.16.0"
           cache: npm
 
+      - name: Provision pinned Git runtime
+        shell: pwsh
+        run: |
+          $contract = Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json
+          $git = $contract.automaticExecutables.git
+          $archive = Join-Path $env:RUNNER_TEMP $git.windowsArchive
+          $destination = Join-Path $env:RUNNER_TEMP "neura-git-2.50.1"
+          Invoke-WebRequest -Uri $git.windowsArchiveUrl -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $git.windowsArchiveSha256) { throw "Pinned Git archive integrity check failed." }
+          $extract = Start-Process -FilePath $archive -ArgumentList "-o$destination", "-y" -Wait -PassThru -WindowStyle Hidden
+          if ($extract.ExitCode -ne 0) { throw "Pinned Git extraction failed with exit code $($extract.ExitCode)." }
+          "NEURA_GIT_EXECUTABLE=$(Join-Path $destination 'cmd\git.exe')" >> $env:GITHUB_ENV
+
       - name: Install locked development dependencies
         run: npm ci --ignore-scripts
 
@@ -83,7 +96,6 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = "$PWD\node_modules\.bin;$env:PATH"
-          python -m pip install uv==0.12.11
           powershell -File .\install.ps1
           powershell -File .\install.ps1 -Check
 
@@ -97,6 +109,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.16.0"
+          cache: npm
+      - run: npm ci --ignore-scripts
       - run: node scripts/verify-harness.mjs --suite proof
       - run: node scripts/verify-harness.mjs --suite approval-storage
       - run: node scripts/verify-harness.mjs --suite sandbox

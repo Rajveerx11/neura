@@ -11,7 +11,9 @@ changes back later. Live harness is an installation target, not source.
 - Node.js 24.15+ and npm; CI uses 24.16.0.
 - Git.
 - Pi `0.84.4` for current `main`.
-- `uvx` for proof-of-work.
+- uv/`uvx` `0.12.11` and CPython `3.12.3` at the runtime-contract path; set
+  `NEURA_WSL_UV_DIR` to the reviewed WSL binary directory and
+  `NEURA_WSL_PROOF_WHEELHOUSE` to the five hash-verified wheels.
 - WSL2/bubblewrap for Work execution/proof and the live sandbox replay.
 - Microsoft Edge for Plan and Learn browser checks.
 
@@ -89,7 +91,8 @@ live WSL replay checks remain separate; report unavailable prerequisites honestl
 
 `install.ps1 -Check` compares repository and live files. Text comparison ignores
 line-ending and final-newline differences but still reports semantic drift.
-It also checks Learn runtime provisioning and its lock receipt. Drift is not
+It also checks the actual sandboxed WSL proof runtime, Learn runtime
+provisioning, and its lock receipt. Drift is not
 permission to install. Docs may describe unreleased merged main while an older
 working checkout or live install still differs; record the tested revision.
 

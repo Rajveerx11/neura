@@ -1,25 +1,26 @@
 // Quick verification follows changed bytes; /ship always obtains a fresh full verdict.
 import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/cockpit-state.ts";
 import { acquireHostOperation, getMode, isModeRestorePending } from "../neura/mode-state.ts";
-import { runInHumanAwaySandbox } from "../neura/human-away-sandbox.ts";
-import { captureWorktree, changedFiles, makeReceipt, readIncrementalEvidence, runProof } from "../neura/verification.ts";
+import { runProofInSandbox } from "../neura/human-away-sandbox.ts";
+import { captureWorktree, changedFiles, makeReceipt, PROOF_UV_VERSION, proofRunnerArguments, readIncrementalEvidence, runProof } from "../neura/verification.ts";
 import type { ProofResult, TreeSnapshot, VerificationReceipt } from "../neura/verification.ts";
 
 export async function runModeProof(cwd: string, quick: boolean, options: Parameters<typeof runProof>[2] = {},
-  sandbox = runInHumanAwaySandbox): Promise<ProofResult> {
+  sandbox = runProofInSandbox): Promise<ProofResult> {
   if (isModeRestorePending()) return { status: "unavailable", reasons: ["Session restoration is pending."] };
   const mode = getMode();
-  if (mode === "yolo") return runProof(cwd, quick, options);
-  if (mode !== "work") return { status: "unavailable", reasons: ["Verification is unavailable in this mode."] };
+  if (mode !== "work" && mode !== "yolo") return { status: "unavailable", reasons: ["Verification is unavailable in this mode."] };
   try {
     return await runProof(cwd, quick, { ...options, execute: async (file, args, execution) => {
-      // runProof supplies only fixed arguments. Never route Work to a host
-      // executable or fall back when WSL, uvx, or its cached package is missing.
-      if (file !== "uvx" || args.some((argument) => !/^[A-Za-z0-9_-]+$/.test(argument))) throw new Error("Unexpected proof command.");
-      const result = await sandbox(execution.cwd, [file, ...args].join(" "), execution.timeoutMs, execution.signal);
+      const expected = proofRunnerArguments(quick);
+      if (file !== "uvx" || args.length !== expected.length || args.some((argument, index) => argument !== expected[index])) {
+        throw new Error("Unexpected proof command.");
+      }
+      const command = `test "$(uvx --version)" = "uvx ${PROOF_UV_VERSION}" && exec ${[file, ...args].join(" ")}`;
+      const result = await sandbox(execution.cwd, command, execution.timeoutMs, execution.signal);
       return { ok: result.code === 0, stdout: result.stdout, completed: result.completed ?? result.code === 0 };
     } });
-  } catch { return { status: "unavailable", reasons: ["WORK verification requires the offline proof runner inside WSL2 bubblewrap. No host fallback was used."] }; }
+  } catch { return { status: "unavailable", reasons: ["Verification requires proof-of-work-agent 0.2.0 inside WSL2 bubblewrap. No host fallback was used."] }; }
 }
 
 export function registerCheckGate(pi, dependencies = { captureWorktree, runProof: runModeProof }) {

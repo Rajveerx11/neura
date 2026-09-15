@@ -85,10 +85,10 @@ Background proof, checkpoint, memory, and integration hooks must not bypass this
 boundary. Plain Pi remains stock, Plan keeps its existing contract, Human Away
 stays preview-only, and the image-backed launch remains outside Learn policy.
 
-Work remains the default; Learn is the fifth mode. Work proof uses the existing
-network-disabled WSL2 bubblewrap environment. Its runner and packages must already
-be available there; unavailable proof never falls back to host execution. YOLO
-retains bounded host proof. Mode changes are locked during capture and verification.
+Work remains the default; Learn is the fifth mode. Work and YOLO proof use the
+existing network-disabled WSL2 bubblewrap environment. The exact runner and
+packages must already be available there; unavailable proof never falls back to
+host execution. Mode changes are locked during capture and verification.
 If a new session starts before old background work finishes, it holds safe Work
 state with tools paused, then restores the requested restricted mode after drain.
 Saved YOLO still requires fresh confirmation; old verification cannot earn a new receipt.

@@ -25,6 +25,20 @@ function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Test-ProofRuntime {
+    if (-not (Test-Command "node")) { return $false }
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        # Windows PowerShell promotes native stderr to NativeCommandError when
+        # the optional runtime reports unavailable. Keep the probe non-fatal.
+        $ErrorActionPreference = "SilentlyContinue"
+        & node (Join-Path $repo "scripts\check-proof-runtime.mjs") *> $null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+}
+
 function Normalize-Text($Value) {
     $normalized = $Value -replace "`r`n?", "`n"
     return $normalized.TrimEnd([char[]]@([char]10))
@@ -100,18 +114,22 @@ $terminalFragment = Get-NeuraTerminalFragment $terminalProfileId $launcherTarget
 if ($Check) {
     $missing = @()
     $drift = @()
+    $capabilityWarnings = @()
     $credentialWarnings = @()
     if (-not (Test-Command "node")) {
         $missing += "Node.js 24.15 or newer"
     } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]'24.15.0') {
         $drift += "Node.js 24.15 or newer is required for Neura"
     }
-    foreach ($cmd in @("pi", "git", "uvx")) {
+    foreach ($cmd in @("pi", "git")) {
         if (-not (Test-Command $cmd)) { $missing += $cmd }
     }
     if (Test-Command "pi") {
         $piVersion = (& pi --version).Trim()
         if ($piVersion -ne $requiredPiVersion) { $drift += "Pi $piVersion installed; required $requiredPiVersion" }
+    }
+    if (-not (Test-ProofRuntime)) {
+        $capabilityWarnings += "WSL proof runtime unavailable or different from runtime-contract.json (optional proof capability unavailable)"
     }
     $pairs = @(
         @("$repo\agent\extensions", "$agent\extensions"),
@@ -224,6 +242,7 @@ if ($Check) {
     }
     if ($missing.Count) { Write-Warning "Missing required commands: $($missing -join ', ')" }
     if ($drift.Count) { Write-Warning "Live harness drift: $($drift -join '; ')" }
+    if ($capabilityWarnings.Count) { Write-Warning ($capabilityWarnings -join '; ') }
     if ($credentialWarnings.Count) { Write-Warning ($credentialWarnings -join '; ') }
     if (-not $missing.Count -and -not $drift.Count) { Write-Host "Neura health: ready, live harness matches source." }
     exit $(if ($missing.Count -or $drift.Count) { 1 } else { 0 })
@@ -329,5 +348,5 @@ if ((Test-Path $target) -and -not $ForceSettings) {
     Copy-Item "$repo\agent\settings.json" $target -Force
 }
 
-if (-not (Test-Command "uvx")) { Write-Warning "uvx missing: proof-of-work verification will be unavailable." }
+if (-not (Test-ProofRuntime)) { Write-Warning "WSL proof runtime unavailable or different from runtime-contract.json; proof will remain unavailable." }
 Write-Host "Neura installed. Run 'pi update --extensions --approve', then 'neura' and '/health'."

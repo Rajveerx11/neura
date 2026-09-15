@@ -21,6 +21,11 @@ assert.match(installerSource, /is retired but remains installed/, "drift check d
 assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot reconcile exact runtime package pins");
 assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
 assert.match(installerSource, /runtime-contract\.json/, "installer does not consume the runtime contract");
+assert.match(installerSource, /scripts\\check-proof-runtime\.mjs/, "installer does not validate the WSL proof runtime");
+assert.match(installerSource, /\$ErrorActionPreference = "SilentlyContinue"/, "optional proof probe stderr can still terminate the installer");
+assert.match(installerSource, /\$capabilityWarnings \+= "WSL proof runtime unavailable/, "missing optional proof runtime is not reported");
+assert.doesNotMatch(installerSource, /\$drift \+= "WSL proof runtime unavailable/, "missing optional proof runtime still fails live drift checks");
+assert.doesNotMatch(installerSource, /@\("pi", "git", "uvx"\)/, "installer still requires ambient Windows uvx");
 assert.match(installerSource, /function Get-NeuraTerminalFragment/, "installer cannot create the Windows Terminal profile");
 assert.match(installerSource, /Windows Terminal\\Fragments\\Neura/, "installer does not isolate the Windows Terminal fragment");
 assert.match(installerSource, /launch-artwork\.png/, "installer does not connect the bundled launch artwork");

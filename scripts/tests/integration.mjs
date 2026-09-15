@@ -1,6 +1,9 @@
 import { repoRoot, assert, fs, os, path, spawnSync, loaded, extensionWithCommand, firstHandler, notices, ui, context, modeState, guardrail, guard } from './harness.mjs';
 const mcpConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "mcp.json"), "utf-8"));
 assert.equal(mcpConfig.mcpServers.gmail.headers["x-api-key"], "${COMPOSIO_API_KEY}", "Gmail MCP header lost its environment placeholder");
+assert.equal(mcpConfig.mcpServers.context7.url, "https://mcp.context7.com/mcp", "Context7 did not use its reviewed remote endpoint");
+assert.equal(Object.values(mcpConfig.mcpServers).some((server) => "command" in server), false, "MCP config retained an automatically executable local command");
+assert.doesNotMatch(JSON.stringify(mcpConfig), /\b(?:npx|uvx|latest)\b|[A-Z]:\\Users\\/i, "MCP config retained a floating or user-local executable");
 const launcher = fs.readFileSync(path.join(repoRoot, "launcher", "neura.cmd"), "utf-8");
 assert.match(launcher, /\$names='COMPOSIO_API_KEY','MY_PI_MCP_ENV_ALLOWLIST'/, "launcher does not refresh both user-scoped MCP values");
 assert.match(launcher, /GetEnvironmentVariable\(\$name,'User'\)/, "launcher does not refresh values from the user environment");

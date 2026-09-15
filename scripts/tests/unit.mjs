@@ -23,9 +23,22 @@ const {
   runtimeIdentity,
 } = await import('../../agent/extensions/harness-health.ts');
 const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
+const { automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } = await import('../../agent/neura/process-security.ts');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+const verifyWorkflow = fs.readFileSync(path.join(repoRoot, ".github", "workflows", "verify.yml"), "utf-8");
+const windowsGitContract = runtimeContract.automaticExecutables.git;
+assert.match(windowsGitContract.windowsArchive, /^PortableGit-[\w.-]+\.7z\.exe$/, "pinned Git archive name is invalid");
+assert.match(windowsGitContract.windowsArchiveUrl, /^https:\/\/github\.com\/git-for-windows\/git\/releases\/download\//, "pinned Git archive source is not the official release repository");
+assert.match(windowsGitContract.windowsArchiveSha256, /^[a-f0-9]{64}$/, "pinned Git archive hash is invalid");
+for (const field of ["windowsArchive", "windowsArchiveUrl", "windowsArchiveSha256"]) {
+  assert.match(verifyWorkflow, new RegExp(`\\$git\\.${field}\\b`), `CI does not source ${field} from the runtime contract`);
+}
 const { selectSuites, suites } = await import('../test-suites.mjs');
+process.env.NEURA_PROCESS_TEST_SECRET = "must-not-leak";
+assert.equal(scopedProcessEnvironment().NEURA_PROCESS_TEST_SECRET, undefined, "automatic process inherited an unrelated secret");
+assert.equal(automaticGitEnvironment().GIT_TERMINAL_PROMPT, "0", "automatic Git can prompt for credentials");
+delete process.env.NEURA_PROCESS_TEST_SECRET;
 assert.deepEqual(selectSuites(['agent/neura/verification.ts']),['integration','learn','proof']);
 assert.deepEqual(selectSuites(['agent/extensions/check-gate.ts']),['integration','learn','proof']);
 assert.deepEqual(selectSuites(['agent/neura/approval-store.ts']),['approval-storage','approvals']);
@@ -42,6 +55,53 @@ const syntheticRoot=path.join(scratchRoot,'pinned');
 fs.mkdirSync(path.join(syntheticRoot,'agent/neura'),{recursive:true});
 fs.writeFileSync(path.join(syntheticRoot,'package.json'),JSON.stringify(packageManifest));
 fs.writeFileSync(path.join(syntheticRoot,'agent/neura/runtime-contract.json'),JSON.stringify(runtimeContract));
+const hostileGit = path.join(syntheticRoot, process.platform === 'win32' ? 'git.cmd' : 'git');
+fs.writeFileSync(hostileGit, process.platform === 'win32' ? '@exit /b 0\r\n' : '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+const originalPath = process.env.PATH;
+process.env.PATH = `${syntheticRoot}${path.delimiter}${originalPath ?? ''}`;
+assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(hostileGit), "repository-controlled Git executable was selected");
+process.env.PATH = originalPath;
+if (process.platform === 'win32') {
+  const trustedGit = resolveExecutable('git', syntheticRoot);
+  assert.ok(trustedGit, 'pinned Git fixture unavailable');
+  const alternateGit = path.join(path.dirname(path.dirname(trustedGit)), 'bin', 'git.exe');
+  process.env.NEURA_GIT_EXECUTABLE = alternateGit;
+  assert.equal(resolveExecutable('git', syntheticRoot), fs.realpathSync(alternateGit), 'verified Git override was ignored');
+
+  const workspaceGit = path.join(syntheticRoot, 'trusted-copy', 'git.exe');
+  fs.mkdirSync(path.dirname(workspaceGit));
+  fs.copyFileSync(trustedGit, workspaceGit);
+  process.env.NEURA_GIT_EXECUTABLE = workspaceGit;
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(workspaceGit), 'byte-identical workspace Git override was trusted');
+
+  const trustedGitRoot = path.dirname(path.dirname(trustedGit));
+  const alternateGitRelative = path.relative(trustedGitRoot, alternateGit);
+  const workspaceJunction = path.join(syntheticRoot, 'outside-git-link');
+  fs.symlinkSync(trustedGitRoot, workspaceJunction, 'junction');
+  process.env.NEURA_GIT_EXECUTABLE = path.join(workspaceJunction, alternateGitRelative);
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(path.join(workspaceJunction, alternateGitRelative)), 'workspace junction bypassed lexical executable containment');
+
+  const outsideJunction = path.join(scratchRoot, 'workspace-git-link');
+  fs.symlinkSync(path.dirname(workspaceGit), outsideJunction, 'junction');
+  process.env.NEURA_GIT_EXECUTABLE = path.join(outsideJunction, 'git.exe');
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(path.join(outsideJunction, 'git.exe')), 'outside junction bypassed canonical executable containment');
+
+  process.env.NEURA_GIT_EXECUTABLE = hostileGit;
+  assert.notEqual(resolveExecutable('git', syntheticRoot), fs.realpathSync(hostileGit), 'workspace Git override was trusted');
+  delete process.env.NEURA_GIT_EXECUTABLE;
+}
+const workspaceMcp = await probeStdioMcp('workspace-fixture', { command: hostileGit, args: [] }, undefined, 100, syntheticRoot);
+assert.equal(workspaceMcp.state, 'degraded', 'workspace-controlled absolute MCP executable was probed');
+assert.match(workspaceMcp.problem?.message ?? '', /existing absolute executable/, 'workspace MCP rejection was not containment failure');
+const outsideMcp = path.join(scratchRoot, 'outside-mcp');
+fs.mkdirSync(outsideMcp);
+fs.writeFileSync(path.join(outsideMcp, path.basename(hostileGit)), '', { mode: 0o755 });
+const linkedMcp = path.join(syntheticRoot, 'linked-mcp');
+fs.symlinkSync(outsideMcp, linkedMcp, process.platform === 'win32' ? 'junction' : 'dir');
+const linkedWorkspaceMcp = await probeStdioMcp('linked-workspace-fixture', {
+  command: path.join(linkedMcp, path.basename(hostileGit)), args: [],
+}, undefined, 100, syntheticRoot);
+assert.match(linkedWorkspaceMcp.problem?.message ?? '', /existing absolute executable/, 'workspace symlink path escaped MCP containment');
 assert.throws(()=>pinnedPi(syntheticRoot),/ENOENT/,'missing local Pi fell back to ambient global');
 fs.mkdirSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent'),{recursive:true});
 fs.writeFileSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent/package.json'),'{"version":"0.0.0"}');

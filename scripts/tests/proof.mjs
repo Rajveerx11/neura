@@ -6,10 +6,16 @@ import { isolate } from './isolation.mjs';
 import { repository, git } from './git-fixture.mjs';
 const scratch = isolate();
 process.env.NEURA = '1';
-const { captureWorktree, changedFiles, execute, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
+const { captureWorktree, changedFiles, execute, PROOF_PYTHON, PROOF_UV_VERSION, proofRunnerArguments, runProof, makeReceipt, readIncrementalEvidence } = await import('../../agent/neura/verification.ts');
 const { registerCheckGate, runModeProof } = await import('../../agent/extensions/check-gate.ts');
+const { captureCheckpoint, restoreCheckpoint } = await import('../../agent/extensions/checkpoint.ts');
+const { getGitHealth } = await import('../../agent/neura/core.ts');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
 const root = repository(scratch);
+const runtimeContract = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../agent/neura/runtime-contract.json'), 'utf8'));
+assert.equal(PROOF_UV_VERSION, runtimeContract.automaticExecutables.proof.uvVersion, 'proof uv version drifted from runtime contract');
+assert.equal(PROOF_PYTHON, '/tmp/neura-bin/python3.12', 'proof Python path drifted from sandbox mount');
+assert.deepEqual(proofRunnerArguments(true).slice(0, 2), ['--python', PROOF_PYTHON], 'proof did not select the pinned Python interpreter');
 // Reconciliation keeps Work proof in the OS sandbox and Learn fully read-only.
 let sandboxProofCalls = 0, hostProofCalls = 0;
 const hostProof = async () => { hostProofCalls++; return { ok: true, completed: true, stdout: '{"passed":true,"reasons":[]}' }; };
@@ -18,7 +24,7 @@ for (const quick of [true, false]) {
   const modeProof = await runModeProof(root, quick, { execute: hostProof }, async (cwd, command, timeout) => {
     sandboxProofCalls++;
     assert.equal(cwd, root);
-    assert.equal(command, 'uvx --from proof-of-work-agent proof-of-work check --json --base HEAD' + (quick ? ' --no-tests' : ''));
+    assert.equal(command, `test "$(uvx --version)" = "uvx ${PROOF_UV_VERSION}" && exec uvx ${proofRunnerArguments(quick).join(' ')}`);
     assert.ok(timeout > 0);
     return { code: 0, completed: true, stdout: '{"passed":true,"reasons":[]}', stderr: '' };
   });
@@ -34,9 +40,10 @@ assert.equal((await runModeProof(root, true, { execute: hostProof }, async () =>
 assert.equal(sandboxProofCalls, 2);
 assert.equal(hostProofCalls, 0);
 setMode('yolo');
-assert.equal((await runModeProof(root, true, { execute: hostProof })).status, 'passed');
-assert.equal(hostProofCalls, 1);
+assert.equal((await runModeProof(root, true, { execute: hostProof }, async () => ({ code: 0, completed: true, stdout: '{"passed":true,"reasons":[]}', stderr: '' }))).status, 'passed');
+assert.equal(hostProofCalls, 0, 'YOLO proof executed an ambient host runner');
 setMode('work');
+assert.equal((await runProof(root, true)).status, 'unavailable', 'proof ran without an isolated executor');
 const { changedPaths, selectSuites, suites } = await import('../test-suites.mjs');
 const renameRoot = repository(scratch,'rename');
 fs.mkdirSync(path.join(renameRoot,'docs'));
@@ -109,6 +116,60 @@ for (const setting of ['diff.external', 'diff.test.textconv', 'filter.test.clean
 fs.writeFileSync(path.join(root, '.gitattributes'), '*.txt diff=test filter=test\n');
 assert.ok(await captureWorktree(root));
 assert.equal(fs.existsSync(marker), false, 'automatic fingerprint ran a repository executable');
+fs.appendFileSync(path.join(root, 'tracked.txt'), 'health change\n');
+await getGitHealth(root);
+assert.equal(fs.existsSync(marker), false, 'health Git ran a repository filter or monitor');
+
+// Checkpoints copy raw bytes and must not invoke clean/smudge filters or checkout helpers.
+setMode('yolo');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'checkpoint content\n');
+const checkpoint = await captureCheckpoint(root);
+assert.ok(checkpoint, 'safe checkpoint failed');
+assert.equal(fs.existsSync(marker), false, 'checkpoint capture ran a repository filter');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'changed after checkpoint\n');
+const outsideRestore = path.join(scratch, 'outside-restore.txt');
+const predictableRestore = path.join(root, `.neura-restore-${process.pid}-tracked.txt.tmp`);
+fs.writeFileSync(outsideRestore, 'outside stays unchanged\n');
+try { fs.symlinkSync(outsideRestore, predictableRestore, 'file'); }
+catch { fs.linkSync(outsideRestore, predictableRestore); }
+assert.equal(await restoreCheckpoint(root, checkpoint), true, 'safe checkpoint restore failed');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'checkpoint content\n');
+assert.equal(fs.readFileSync(outsideRestore, 'utf8'), 'outside stays unchanged\n', 'predictable restore temporary followed an outside link');
+assert.equal(fs.lstatSync(path.join(root, 'tracked.txt')).isSymbolicLink(), false, 'restored target became a symlink');
+fs.unlinkSync(predictableRestore);
+assert.equal(fs.existsSync(marker), false, 'checkpoint restore ran a repository helper');
+fs.rmSync(checkpoint.directory, { recursive: true, force: true });
+
+// A failure after one replacement must restore every pre-undo byte.
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'transaction snapshot one\n');
+fs.writeFileSync(path.join(root, 'transaction-two.txt'), 'transaction snapshot two\n');
+const transactional = await captureCheckpoint(root);
+assert.ok(transactional, 'transaction checkpoint failed');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'current one\n');
+fs.writeFileSync(path.join(root, 'transaction-two.txt'), 'current two\n');
+let replacedTracked = false;
+assert.equal(await restoreCheckpoint(root, transactional, { beforeWrite(name) {
+  if (name === 'tracked.txt') replacedTracked = true;
+  if (name === 'transaction-two.txt' && replacedTracked) throw new Error('synthetic mid-restore failure');
+} }), false, 'mid-restore fault unexpectedly succeeded');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'current one\n', 'rollback lost the first pre-undo file');
+assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'current two\n', 'rollback lost the second pre-undo file');
+fs.writeFileSync(path.join(root, 'tracked.txt'), 'recovery current one\n');
+fs.writeFileSync(path.join(root, 'transaction-two.txt'), 'recovery current two\n');
+assert.equal(await restoreCheckpoint(root, transactional, {
+  beforeWrite(name) { if (name === 'transaction-two.txt') throw new Error('synthetic restore failure'); },
+  beforeRollbackWrite(name) { if (name === 'tracked.txt') throw new Error('synthetic rollback failure'); },
+}), false, 'rollback-failure fault unexpectedly succeeded');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'transaction snapshot one\n', 'rollback failure state was reported as recovered');
+assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'recovery current two\n', 'rollback failure corrupted an untouched file');
+assert.equal(transactional.recoveryDirectories?.length, 1, 'rollback failure discarded recovery evidence');
+assert.ok(fs.existsSync(transactional.recoveryDirectories[0]), 'rollback recovery evidence was deleted');
+assert.equal(await restoreCheckpoint(root, transactional), true, 'checkpoint retry was not idempotent');
+assert.equal(fs.readFileSync(path.join(root, 'tracked.txt'), 'utf8'), 'transaction snapshot one\n');
+assert.equal(fs.readFileSync(path.join(root, 'transaction-two.txt'), 'utf8'), 'transaction snapshot two\n');
+for (const directory of transactional.recoveryDirectories) fs.rmSync(directory, { recursive: true, force: true });
+fs.rmSync(transactional.directory, { recursive: true, force: true });
+setMode('work');
 
 const verdict = (value, ok = true) => async () => ({ ok, stdout: JSON.stringify(value) });
 assert.equal((await runProof(root, true, { execute: verdict({ passed: true, reasons: [] }) })).status, 'passed');
