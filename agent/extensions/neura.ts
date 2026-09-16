@@ -1,5 +1,7 @@
 // Neura identity: one responsive launch wordmark, /dash, /notices,
-// session title, and persona injection. Plain pi stays stock.
+// session title, and persona injection. The exact supplied mark is rendered by
+// Neura's Windows Terminal profile; this terminal-native layer stays readable
+// over it. Plain Pi stays stock.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -44,7 +46,7 @@ export function launchSurfaceLines(width: number, theme: Theme, editorLines: str
   const safeWidth = Math.max(1, width);
   return [
     ...wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth)),
-    theme.bg("customMessageBg", theme.fg("text", padAnsi("  TYPE YOUR TASK", safeWidth))),
+    theme.bg("customMessageBg", theme.fg("text", padAnsi(truncateToWidth("  NEURA AGENT · TYPE YOUR TASK", safeWidth), safeWidth))),
     ...editorLines,
   ];
 }

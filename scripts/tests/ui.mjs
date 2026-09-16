@@ -86,7 +86,7 @@ for (const width of [30, 40, 56, 72, 92, 120]) {
   const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
   assert.equal(contentLines.length, contentWidth < 56 ? 9 : 10, `launch content height is wrong at ${width} columns`);
   assert.match(launchText, contentWidth < 56 ? /N   N EEEEE/ : /███╗   ██╗/, `ASCII wordmark missing at ${width} columns`);
-  assert.match(launchText, /TYPE YOUR TASK/, `launch prompt missing at ${width} columns`);
+  assert.match(launchText, /NEURA AGENT · TYPE YOUR TASK/, `Neura-only launch prompt missing at ${width} columns`);
   assert.ok(rawLines.findIndex((line) => line.length > 0) > 0, `launch surface is not vertically centred at ${width} columns`);
   assert.ok(rawLines.every((line) => widthOf(line) <= width), `launch surface overflows at ${width} columns`);
 }
@@ -104,13 +104,13 @@ assert.equal(widgets.has("neura-launch"), false, "non-TUI logo fallback did not 
 await identityExtension.commands.get("dash").handler("", context);
 
 const theme = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "themes", "neura-dark.json"), "utf-8"));
-assert.equal(theme.colors.accent, "#d97841", "Forged Tungsten copper accent missing");
-assert.equal(theme.colors.selectedBg, "#1c2024", "Forged Tungsten raised surface missing");
-assert.equal(theme.colors.borderAccent, theme.colors.border, "editor rails still use a full-width copper accent");
+assert.equal(theme.colors.accent, "#2979ff", "Neura logo-blue accent missing");
+assert.equal(theme.colors.selectedBg, "#151c2d", "Neura raised surface missing");
+assert.equal(theme.colors.borderAccent, theme.colors.border, "editor rails do not use Neura's quiet border");
 assert.equal(theme.colors.mdHeading, theme.colors.accent, "theme introduces a second heading accent");
-assert.equal(theme.colors.mdLink, "#86a7d7", "answer links lack the cool information accent");
-assert.equal(theme.colors.syntaxFunction, "#76b8c4", "code functions lack the Plan cyan accent");
-assert.equal(theme.colors.dim, "#7a828b", "dim text token does not meet the approved contrast target");
+assert.equal(theme.colors.mdLink, "#7cc7ff", "answer links lack Neura's information blue");
+assert.equal(theme.colors.syntaxFunction, "#7cc7ff", "code functions lack Neura's cyan accent");
+assert.equal(theme.colors.dim, "#8894a8", "dim text token does not meet the approved contrast target");
 const relativeLuminance = (hex) => {
   const channel = (value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
   const [red, green, blue] = [1, 3, 5].map((index) => channel(Number.parseInt(hex.slice(index, index + 2), 16) / 255));
@@ -122,7 +122,7 @@ const contrast = (foreground, background) => {
   return (high + 0.05) / (low + 0.05);
 };
 for (const token of ["text", "muted", "dim", "accent", "success", "warning", "error", "mdLink", "syntaxFunction"]) {
-  assert.ok(contrast(theme.colors[token], "#0b0c0e") >= 4.5, `${token} fails 4.5:1 contrast on the Neura canvas`);
+  assert.ok(contrast(theme.colors[token], "#080a0f") >= 4.5, `${token} fails 4.5:1 contrast on the Neura canvas`);
 }
 const healthExtension = extensionWithCommand("health");
 await healthExtension.commands.get("health").handler("close", context);
