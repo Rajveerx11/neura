@@ -14,8 +14,9 @@ bone text, and semantic colors used only for real outcomes.
 1. **Identity before activity.** The dedicated terminal profile opens on local
    artwork with a centred Neura wordmark and the real task editor.
    Working state appears after the first task begins.
-2. **One active signal.** Copper identifies Neura, current focus, and the primary
-   action. It is not decoration.
+2. **One active signal.** Copper identifies current focus and the primary
+   in-product action. The blue owner-supplied logo is reserved for brand artwork,
+   not ambient interface decoration.
 3. **Detail on demand.** Health, memory, agents, model control, proof detail, and
    recovery stay hidden until invoked.
 4. **Evidence over activity.** Show milestones, verdicts, and recovery. Do not turn
@@ -45,8 +46,8 @@ bone text, and semantic colors used only for real outcomes.
 Color rules:
 
 - Decorative gradients, colored glows, and tinted ambient panels are not used.
-- Copper is the primary product accent. The image-backed launch uses bone text;
-  the logo-only fallback remains copper.
+- Copper is the primary interface accent. The image-backed launch may use the
+  blue brand logo behind bone text; the terminal-only fallback remains copper.
 - Plan uses cyan. Human Away Preview and approvals use amber. Neither borrows success green.
 - Success, warning, and error never replace copper for identity or navigation.
 - Text must remain readable without relying on hue alone.
@@ -72,8 +73,8 @@ Color rules:
 
 ## Launch system: image-backed identity
 
-The dedicated Windows Terminal profile supplies the local 16:9 artwork as a
-centred, uniformly scaled background over the tungsten canvas. Pi supplies a
+The dedicated Windows Terminal profile supplies the local square logo artwork as
+a centred, uniformly scaled background over the tungsten canvas. Pi supplies a
 centred launch editor: the responsive NEURA wordmark, a task label, and Pi's real
 input control. The surface stays within ten lines, clears when work begins, and
 `/dash` toggles it on demand. Regular terminals and missing profile support fall

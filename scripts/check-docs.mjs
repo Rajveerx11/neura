@@ -6,8 +6,14 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const required = [
   ".gitattributes",
+  ".gitleaksignore",
   "AGENTS.md",
   "CLAUDE.md",
+  "agent/neura/launch-artwork.md",
+  "agent/neura/launch-artwork.png",
+  "assets/screenshots/README.md",
+  "assets/screenshots/learn-workshop.png",
+  "assets/screenshots/plan-review.png",
   "CODE_OF_CONDUCT.md",
   "CONTRIBUTING.md",
   "DESIGN.md",
@@ -23,6 +29,10 @@ const required = [
   ".github/ISSUE_TEMPLATE/config.yml",
   ".github/ISSUE_TEMPLATE/feature_request.yml",
   ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/dependabot.yml",
+  ".github/release.yml",
+  ".github/workflows/codeql.yml",
+  ".github/workflows/release.yml",
   ".github/workflows/verify.yml",
   "docs/ARCHITECTURE.md",
   "docs/CHANGELOG.md",
@@ -44,6 +54,15 @@ for (const relative of required) {
 
 const version = fs.readFileSync(path.join(repoRoot, "VERSION"), "utf-8").trim();
 assert.match(version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, `invalid VERSION: ${version}`);
+const rootPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+const rootLock = JSON.parse(fs.readFileSync(path.join(repoRoot, "package-lock.json"), "utf-8"));
+const nestedPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "package.json"), "utf-8"));
+const nestedLock = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "package-lock.json"), "utf-8"));
+assert.equal(rootPackage.version, version, "package.json version does not match VERSION");
+assert.equal(rootLock.version, version, "package-lock.json version does not match VERSION");
+assert.equal(rootLock.packages?.[""]?.version, version, "root lock package version does not match VERSION");
+assert.equal(nestedLock.version, nestedPackage.version, "nested package and lock versions differ");
+assert.equal(nestedLock.packages?.[""]?.version, nestedPackage.version, "nested lock root version differs");
 const releasePath = path.join(repoRoot, "docs", "releases", `v${version}.md`);
 assert.ok(fs.existsSync(releasePath), `release notes missing: docs/releases/v${version}.md`);
 
@@ -85,12 +104,17 @@ assert.match(readme, /Apache License 2\.0/i, "README does not state Apache-2.0 l
 assert.doesNotMatch(readme, /private engineering-agent harness/i, "README contains stale private-project positioning");
 assert.match(fs.readFileSync(path.join(repoRoot, "plans", "README.md"), "utf-8"), /polish-neura-launch-screen-plan\.html[^\n]*Superseded/i, "launch-polish plan is not marked superseded");
 
-for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "agent/neura/runtime-contract.json", "package.json", "package-lock.json", "tsconfig.json"]) {
+for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "agent/neura/runtime-contract.json", "agent/neura/package.json", "agent/neura/package-lock.json", "package.json", "package-lock.json", "tsconfig.json"]) {
   JSON.parse(fs.readFileSync(path.join(repoRoot, relative), "utf-8"));
 }
 
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 assert.equal(packageMetadata.license, "Apache-2.0", "package.json license is not Apache-2.0");
+assert.equal(packageMetadata.private, true, "package.json must remain private");
+assert.equal(nestedPackage.license, "Apache-2.0", "nested package license is not Apache-2.0");
+assert.equal(nestedPackage.private, true, "nested package must remain private");
+assert.equal(nestedPackage.repository?.url, packageMetadata.repository?.url, "nested package repository URL differs");
+assert.equal(nestedPackage.repository?.directory, "agent/neura", "nested package repository directory is missing");
 const license = fs.readFileSync(path.join(repoRoot, "LICENSE"), "utf-8");
 assert.match(license, /Apache License\s+Version 2\.0, January 2004/, "LICENSE is not Apache-2.0");
 assert.match(license, /END OF TERMS AND CONDITIONS/, "Apache-2.0 LICENSE is incomplete");

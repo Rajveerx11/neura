@@ -1,8 +1,15 @@
-# Neura
+<p align="center">
+  <img src="agent/neura/launch-artwork.png" width="190" alt="Neura logo">
+</p>
 
-[![Verify](https://github.com/Rajveerx11/neura/actions/workflows/verify.yml/badge.svg)](https://github.com/Rajveerx11/neura/actions/workflows/verify.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-experimental-amber.svg)](docs/STATUS.md)
+<h1 align="center">Neura</h1>
+
+<p align="center">
+  <a href="https://github.com/Rajveerx11/neura/actions/workflows/verify.yml"><img src="https://github.com/Rajveerx11/neura/actions/workflows/verify.yml/badge.svg" alt="Neura CI"></a>
+  <a href="https://github.com/Rajveerx11/neura/actions/workflows/codeql.yml"><img src="https://github.com/Rajveerx11/neura/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"></a>
+  <a href="docs/STATUS.md"><img src="https://img.shields.io/badge/status-experimental-f59e0b.svg" alt="Experimental status"></a>
+</p>
 
 Neura is a Windows-first engineering-agent harness built on
 [`@earendil-works/pi-coding-agent`](https://pi.dev). It adds a focused terminal
@@ -12,9 +19,10 @@ model presets, and policy guardrails around stock Pi.
 Latest release: **2.5.1**. Current `main` targets Pi `0.84.4` and includes
 unreleased Work, Learn, and verification improvements. These docs describe that
 merged source; older checkouts and live installations may differ. Neura is
-Apache-2.0-licensed experimental software; public repository visibility is
-still pending. It is **not production-ready**. Human Away remains
-preview-only and is not approved for unattended high-impact work. Read
+Apache-2.0-licensed experimental software in a public repository. It is **not
+production-ready**. Human Away remains preview-only and is not approved for
+unattended high-impact work. Public source availability is not a production or
+security guarantee. Read
 [current status](docs/STATUS.md), [security policy](SECURITY.md), and
 [known production blockers](docs/PRODUCTION_READINESS.md) before use.
 
@@ -36,6 +44,17 @@ preview-only and is not approved for unattended high-impact work. Read
 
 Presence of a control does not establish a complete security boundary. See
 [Security](#security-and-limitations) for limits that matter.
+
+## Screenshots
+
+These are generated from Neura's real offline Plan and Learn renderers and are
+recreated by the browser verification suites. They contain synthetic fixture
+data only.
+
+| Plan review | Learn workshop |
+|---|---|
+| [![Generated Neura plan review](assets/screenshots/plan-review.png)](assets/screenshots/plan-review.png) | [![Generated Neura Learn workshop](assets/screenshots/learn-workshop.png)](assets/screenshots/learn-workshop.png) |
+| Structured evidence, implementation steps, risks, proof, and an explicit approval gate. | Interactive concept map, exercise feedback, references, and terminal handoff. |
 
 ## Modes
 
@@ -100,8 +119,9 @@ The complete application workflow is supported on Windows. Linux CI covers
 selected portable contracts, not a supported Linux installation. Learn store
 creation requires native Windows; existing validated stores can be used on POSIX.
 
-`"private": true` in `package.json` prevents accidental npm publication. It
-does not determine GitHub repository visibility or software license.
+Both npm package manifests remain `"private": true`; this repository does not
+publish packages to npm. Package privacy does not determine GitHub repository
+visibility or software license.
 
 ## Install from source
 
@@ -152,8 +172,9 @@ server or extension.
 npm ci --ignore-scripts
 npm ci --prefix agent/neura --ignore-scripts
 npm run typecheck
-npm audit --audit-level=high
-npm audit --prefix agent/neura --audit-level=high
+npm run audit:dependencies
+npm run audit:signatures
+npm run test:release
 powershell -NoProfile -File .\scripts\verify-secrets.ps1
 powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
 npm run test:accessibility
@@ -171,6 +192,20 @@ checks need Edge; sandbox replay needs WSL2/bubblewrap. `install.ps1 -Check`
 checks live drift and Learn runtime provisioning without installing anything.
 For focused commands, Linux coverage, and proof limits, see
 [Verification](docs/VERIFICATION.md). Passing checks prove covered behavior only.
+
+Pull requests to `main`, pushes to `main`, merge queues, and manual runs execute
+pinned Windows and Ubuntu CI. The existing required checks remain `harness` and
+`portable-proof`; `Required CI` is a stable aggregate, and pull requests also
+receive dependency review. CodeQL analyzes JavaScript/TypeScript on those branch
+events, weekly, and on demand.
+
+Tags do not publish npm packages. An annotated `v*` tag contained in `origin/main`
+can only produce a **draft prerelease** after version, release-note, status,
+verification, audit, browser, secret-scan, and installer gates pass. The workflow
+builds a deterministic source archive, SPDX SBOM snapshots for both lockfiles, and checksums.
+Stable automation is blocked while status says Neura is not production-ready;
+maintainers must inspect and approve any draft manually. See
+[Releasing](docs/RELEASING.md).
 
 ## Commands
 

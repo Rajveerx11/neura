@@ -26,7 +26,7 @@ closed when documentation already answers them or required evidence is missing.
 | Symptom | Check or next step |
 |---|---|
 | Work command or proof is unavailable | Verify WSL2/bubblewrap. Proof also needs its runner and packages available offline inside WSL. There is no automatic host fallback. |
-| Learn reports a missing runtime | Check Node 24.10+ and the nested locked dependency install. Source development needs `npm ci --prefix agent/neura --ignore-scripts`; live provisioning is a separate intentional install. |
+| Learn reports a missing runtime | Check Node 24.15+ and the nested locked dependency install. Source development needs `npm ci --prefix agent/neura --ignore-scripts`; live provisioning is a separate intentional install. |
 | Learn cannot create its store | First creation requires native Windows and an unlinked workspace. Existing unowned `.neura-learning` content is rejected; do not delete it blindly. |
 | Learn does not update Obsidian | Vault capture is opt-in. Check `NEURA_LEARN_VAULT` or private `~/.pi/agent/neura/learn-vault.json`, confirm the absolute non-UNC path contains a real `.obsidian/`, and ensure `Neura/` is absent or already has Neura's ownership marker. Mapped or otherwise network-backed volumes are unsupported. Never delete an unowned subtree merely to bypass the refusal. |
 | Learn warns that the vault could not be updated | The lesson or attempt still succeeded. Check for linked paths, modified or non-contiguous numbered events, the 2,000-event bound, or projection collisions. Neura retains ambiguous files instead of overwriting them. |

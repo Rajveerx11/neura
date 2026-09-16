@@ -1,18 +1,26 @@
-name: verify
+name: Neura CI
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
-  pull_request:
+  merge_group:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   harness:
-    runs-on: windows-latest
-    timeout-minutes: 20
+    name: harness
+    runs-on: windows-2025
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +40,9 @@ jobs:
         with:
           node-version: "24.16.0"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            agent/neura/package-lock.json
 
       - name: Provision pinned Git runtime
         shell: pwsh
@@ -54,28 +65,21 @@ jobs:
 
       - name: Audit dependency vulnerabilities and registry signatures
         run: |
-          npm audit --audit-level=high
-          npm audit signatures
-          npm audit --prefix agent/neura --audit-level=high
-          npm audit signatures --prefix agent/neura
+          npm run audit:dependencies
+          npm run audit:signatures
 
-      - name: Verify Pi version and TypeScript
+      - name: Verify Pi version
         shell: pwsh
         run: |
           if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne '0.84.4') { throw 'Unexpected repository Pi version' }
-          npm run typecheck
 
-      - name: Verify independent hermetic suites
-        run: node scripts\verify-harness.mjs
+      - name: Verify repository
+        run: npm run verify
 
-      - name: Verify Learn workshop in browser
-        run: node scripts/tests/learn-browser.mjs
-
-      - name: Verify generated plan accessibility
-        shell: pwsh
+      - name: Verify browsers
         env:
           NEURA_A11Y_OUTPUT: ${{ runner.temp }}\neura-a11y
-        run: npm run test:accessibility
+        run: npm run test:browser
 
       - name: Upload plan accessibility snapshots
         if: always()
@@ -86,11 +90,31 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Verify documentation and release files
-        run: node scripts\check-docs.mjs
-
-      - name: Check whitespace
-        run: git diff --check HEAD~1 HEAD
+      - name: Check changed whitespace
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          MERGE_BASE: ${{ github.event.merge_group.base_sha }}
+          MERGE_HEAD: ${{ github.event.merge_group.head_sha }}
+        run: |
+          $zero = '0000000000000000000000000000000000000000'
+          if ($env:EVENT_NAME -eq 'pull_request') {
+            git diff --check $env:PR_BASE $env:PR_HEAD
+          } elseif ($env:EVENT_NAME -eq 'push' -and $env:PUSH_BEFORE -and $env:PUSH_BEFORE -ne $zero) {
+            git diff --check $env:PUSH_BEFORE $env:PUSH_AFTER
+          } elseif ($env:EVENT_NAME -eq 'push') {
+            git diff-tree --check --root --no-commit-id -r $env:PUSH_AFTER
+          } elseif ($env:EVENT_NAME -eq 'merge_group') {
+            git diff --check $env:MERGE_BASE $env:MERGE_HEAD
+          } elseif (git rev-parse --verify HEAD^ 2>$null) {
+            git diff --check HEAD^ HEAD
+          } else {
+            git diff-tree --check --root --no-commit-id -r HEAD
+          }
 
       - name: Verify Windows installer and live drift check
         shell: pwsh
@@ -100,7 +124,8 @@ jobs:
           powershell -File .\install.ps1 -Check
 
   portable-proof:
-    runs-on: ubuntu-latest
+    name: portable-proof
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,9 +135,38 @@ jobs:
         with:
           node-version: "24.16.0"
           cache: npm
+          cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts
       - run: node scripts/verify-harness.mjs --suite proof
       - run: node scripts/verify-harness.mjs --suite approval-storage
       - run: node scripts/verify-harness.mjs --suite sandbox
       - run: node scripts/verify-harness.mjs --suite learn-storage
       - run: node scripts/verify-harness.mjs --suite learn-vault
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48
+
+  required-ci:
+    name: Required CI
+    if: always()
+    needs: [harness, portable-proof, dependency-review]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Enforce required results
+        env:
+          HARNESS_RESULT: ${{ needs.harness.result }}
+          PORTABLE_RESULT: ${{ needs.portable-proof.result }}
+          DEPENDENCY_RESULT: ${{ needs.dependency-review.result }}
+        run: |
+          test "$HARNESS_RESULT" = success
+          test "$PORTABLE_RESULT" = success
+          test "$DEPENDENCY_RESULT" = success -o "$DEPENDENCY_RESULT" = skipped

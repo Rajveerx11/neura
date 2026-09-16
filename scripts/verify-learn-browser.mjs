@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import { renderLearnHtml, learnLessonRevision } from "../agent/neura/learn-renderer.ts";
 import { workshopFixture, sqlExercise } from "./learn-workshop-fixture.mjs";
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-const output = mkdtempSync(join(tmpdir(), 'neura-learn-browser-'));
+const output = process.env.NEURA_LEARN_BROWSER_OUTPUT
+  ? resolve(process.env.NEURA_LEARN_BROWSER_OUTPUT)
+  : mkdtempSync(join(tmpdir(), 'neura-learn-browser-'));
+mkdirSync(output, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.NEURA_BROWSER_CHANNEL || 'msedge', headless: true });
 try {
   for (const width of [390, 1280]) {
