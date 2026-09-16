@@ -60,7 +60,7 @@
   "devDependencies": {
     "@earendil-works/pi-ai": "0.84.4",
     "@earendil-works/pi-coding-agent": "0.84.4",
-    "@earendil-works/pi-tui": "0.84.4",
+    "@earendil-works/pi-tui": "0.85.1",
     "@spences10/pi-mcp": "0.0.58",
     "@types/node": "26.2.0",
     "axe-core": "4.13.0",
