@@ -1,14 +1,15 @@
 # Open-source publication checklist
 
-Publication checklist established: 2026-09-04. Status reconciled: 2026-09-07.
+Publication checklist established: 2026-09-04. Public-state reconciliation: 2026-09-13.
 
 This checklist separates repository publication from production readiness.
 Neura can be open source while remaining experimental and unsuitable for
 production or unattended high-impact work.
 
-GitHub visibility remains private. This revision includes Apache-2.0, community
-files, and package metadata. GitHub license recognition must be verified after
-push. Public visibility and live installation remain separate owner actions.
+The GitHub repository is public. It includes Apache-2.0, community files, CI,
+security automation, and package metadata. Both npm manifests remain private and
+no workflow publishes to a package registry. Public source visibility, release
+approval, live installation, and production readiness are separate decisions.
 
 ## Included in this revision
 
@@ -28,39 +29,47 @@ push. Public visibility and live installation remain separate owner actions.
 - [x] Historical release records remain labelled with channel that applied when
       published.
 
-Merged main also contains Work, Learn, and the 17-suite verifier. These are
+Merged main also contains Work, Learn, and the 18-suite verifier. These are
 unreleased additions to `2.5.1`, not evidence that a new public release exists.
 
-## Required before changing visibility
+## Remaining public-release work
 
 - [x] Owner confirmed historical token revocation and closed remaining evidence
       in [SECURITY_INCIDENTS.md](SECURITY_INCIDENTS.md) and
       [#36](https://github.com/Rajveerx11/neura/issues/36).
-- [ ] After license commit is pushed, verify GitHub recognizes Apache-2.0.
-- [ ] Re-run complete-history secret scan from clean checkout immediately before
-      publication.
+- [x] GitHub recognizes Apache-2.0 on the public repository.
+- [x] Complete-history Gitleaks scan passed immediately after publication on
+      2026-09-15; rerun it before every release.
 - [ ] Review Git author metadata, issue content, pull-request content, release
       text, Actions artifacts, screenshots, and historical plans for personal or
       confidential information.
 - [ ] Replace or disable machine-specific MCP paths and provider-specific
       endpoints in public defaults; verify installer behavior after change.
-- [ ] Confirm all bundled images and text may be redistributed under project
-      license or carry their own notices.
-- [ ] Confirm repository description and topics match README.
-- [ ] Configure default branch protection to require `verify` checks and review
-      before merge.
-- [ ] Enable private vulnerability reporting and dependency/security alerts.
-- [ ] Review Actions token permissions, fork pull-request behavior, and artifact
-      retention for public-repository threat model.
-- [ ] Decide whether GitHub Discussions and Projects should remain disabled or
-      private; do not enable unused surfaces.
-- [ ] Make repository public only after preceding checks pass.
+- [x] Replaced the undocumented launch image with the owner-supplied Neura logo;
+      [provenance and Apache-2.0 distribution terms](../agent/neura/launch-artwork.md)
+      are recorded. README screenshots are generated from synthetic fixtures by
+      the repository's browser suites.
+- [x] Repository description and topics match README.
+- [x] Protect `main` with strict up-to-date `harness` and `portable-proof`
+      checks, one approval, code-owner and stale-review enforcement,
+      conversation resolution, linear history, and no force push or deletion.
+      Administrator enforcement remains off, so sole administrator Rajveerx11
+      can bypass.
+- [x] Enable private vulnerability reporting, Dependabot security updates,
+      secret scanning, and push protection.
+- [x] Set Actions defaults read-only, prevent Actions from approving pull
+      requests, and limit use to GitHub-owned SHA-pinned actions.
+- [x] GitHub Discussions, Projects, and Wiki remain disabled until a maintained
+      workflow justifies enabling them.
+- [x] Repository visibility is public. Unchecked release and production gates
+      remain blockers despite that visibility.
 
-## After publication
+## Public-repository follow-up
 
-- [ ] Verify Community Standards profile recognizes README, license, contributing
-      guide, code of conduct, issue templates, pull-request template, and
-      security policy.
+- [x] GitHub Community Standards reports 100% and recognizes README, license,
+      contributing guide, code of conduct, pull-request template, and security
+      policy. The API does not surface structured issue forms in its legacy
+      `issue_template` field.
 - [ ] Verify clone and documented install from a new, unprivileged Windows test
       profile.
 - [ ] Verify badge, issue forms, private advisory flow, branch protection, and CI
@@ -70,7 +79,7 @@ unreleased additions to `2.5.1`, not evidence that a new public release exists.
 
 ## Current blockers
 
-Publication should not occur while public defaults expose machine-specific
-integration configuration or the remaining checklist is incomplete.
-Production use has additional blockers in
+A promoted release should not occur while public defaults expose machine-specific
+integration configuration or the remaining checklist is incomplete. Public
+visibility does not waive those blockers. Production use has additional blockers in
 [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).

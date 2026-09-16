@@ -22,7 +22,7 @@ for reproducible defects and scoped proposals.
 
 ## Development setup
 
-Use Node 24.10+ (CI: 24.16.0). Install both locked graphs; a global Pi or live
+Use Node 24.15+ (CI: 24.16.0). Install both locked graphs; a global Pi or live
 harness installation is not required for development tests.
 
 ```powershell

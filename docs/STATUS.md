@@ -1,8 +1,8 @@
 # Neura status
 
-Last documentation audit: 2026-09-13
+Last documentation audit: 2026-09-15
 
-Latest release: `2.5.1`. Current merged source: `d3e77c6`, including Work,
+Latest release: `2.5.1`. Current merged source: `59c6e1d`, including Work,
 modular verification, and Learn Mode; these changes are unreleased. Required Pi:
 `0.84.4`; Node: `24.15+` (CI `24.16.0`).
 
@@ -12,11 +12,14 @@ older working checkouts and live installations can differ.
 
 ## Release decision
 
+Release channel: experimental
+
 **Public-release candidate. Neura is not production-ready.**
 
-This revision includes Apache-2.0, community policies, and package metadata.
-Repository visibility remains private pending the
-[publication checklist](OPEN_SOURCE.md). Historical `v2.5.1` release
+This public repository includes Apache-2.0, community policies, private npm
+package metadata, pinned CI, CodeQL, dependency updates, and guarded draft-
+prerelease automation. Publication of source does not imply production
+readiness. Historical `v2.5.1` release
 remains usable for its documented personal, single-user scope.
 Production-readiness audit still has blockers in unattended execution,
 executable dependency trust, and installation reproducibility. Human Away
@@ -31,7 +34,7 @@ release gates and issue ownership live in
 
 | Area | State | Evidence or blocker |
 |---|---|---|
-| Public release | Blocked | Public-default configuration cleanup, final history/content audit, GitHub settings, and launch-artwork redistribution rights remain. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
+| Public source | Available; release blocked | The repository is public, GitHub recognizes Apache-2.0, the owner-supplied logo has documented redistribution terms, and a complete-history secret scan passed on 2026-09-15. Final content/default review and clean-profile install evidence remain release blockers. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
 | Pi and live Neura | Source verified; live status unverified | Source and CI pin Pi `0.84.4`. A fresh owner-authorized install and drift check are separate from merge. |
 | Dependency graphs | Verified at Learn delivery | Both lockfile graphs reported zero known vulnerabilities on 2026-09-07; Learn runtime verified 31 registry signatures and 13 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
 | Core harness | Ready for covered behavior | PR #44 passed Windows harness and Linux portable CI, 17 isolated suites/17 extensions, typecheck, docs, and real Learn/Plan browser checks. This is not a fresh live WSL replay. |
@@ -46,9 +49,32 @@ release gates and issue ownership live in
 | Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
 | Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
 | Type and test safety | Tests improved; strict typing open | Hermetic suites, seeded fuzzing, races, crash rejection, and content-bound receipts shipped; [#27](https://github.com/Rajveerx11/neura/issues/27) is closed. Configured typecheck passes; strict migration remains [#26](https://github.com/Rajveerx11/neura/issues/26). |
-| UX and accessibility | Image-backed launch implemented; wider surfaces covered | Windows Terminal owns the local artwork and Pi owns a centred functional launch editor with a logo-only fallback. Terminal widths are regression-tested; bundled artwork rights remain a release blocker. Track [#53](https://github.com/Rajveerx11/neura/issues/53) and [#54](https://github.com/Rajveerx11/neura/issues/54). |
+| CI and releases | Guarded experimental path | Windows `harness`, Ubuntu `portable-proof`, dependency review, aggregate CI, and CodeQL use explicit runners and immutable GitHub-owned action pins. Tag automation publishes no npm package and can create only a draft prerelease after release gates; stable tags are blocked while this status says not production-ready. |
+| UX and accessibility | Owner-supplied logo and image-backed launch implemented; wider surfaces covered | Windows Terminal owns the local logo artwork and Pi owns a centred functional launch editor with a logo-only fallback. Terminal widths are regression-tested. Fresh Plan and Learn screenshots use synthetic fixtures and passed real-Edge browser checks during this update. Track [#53](https://github.com/Rajveerx11/neura/issues/53) and [#54](https://github.com/Rajveerx11/neura/issues/54). |
 | Health | Implemented, unreleased | Core readiness is separate from optional capabilities. Bounded MCP/provider probes report explicit states, redacted errors, runtime identity, and remediation. Track delivery in [#39](https://github.com/Rajveerx11/neura/issues/39). |
 | Evaluations and operations | Major gap | Privacy-preserving evaluation and observability remain open. Track [#30](https://github.com/Rajveerx11/neura/issues/30). |
+
+## GitHub repository controls
+
+The current repository settings reported for this infrastructure update are:
+
+- `main` protection is strict/up-to-date and requires `harness` and
+  `portable-proof`; it also requires one approval, code-owner review, dismissal
+  of stale reviews, conversation resolution, linear history, and blocks force
+  pushes and branch deletion.
+- Administrator enforcement is off. The sole current administrator,
+  `Rajveerx11`, can therefore bypass protection; no other bypass actor is
+  reported.
+- Actions token defaults are read-only and Actions cannot approve pull requests.
+  Actions are limited to GitHub-owned actions pinned by full commit SHA.
+- Private vulnerability reporting, Dependabot security updates, secret scanning,
+  and push protection are enabled.
+
+These are configuration facts, not claims that GitHub settings or automated
+checks establish runtime correctness or production readiness. Logo redistribution
+is documented separately in `agent/neura/launch-artwork.md`.
+The stable aggregate `Required CI` is additive: preserving the required job names
+`harness` and `portable-proof` keeps current protection satisfiable.
 
 ## Production claim gate
 

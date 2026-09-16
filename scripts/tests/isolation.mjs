@@ -9,7 +9,7 @@ export function isolate() {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-test-'));
   // CI may inject a downloaded Git candidate; production code still verifies
   // its location, pinned hash, and version before use.
-  const keep = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext', 'temp', 'tmp', 'neura_git_executable']);
+  const keep = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext', 'temp', 'tmp', 'neura_git_executable', 'neura_learn_browser_output']);
   for (const key of Object.keys(process.env)) {
     if (!keep.has(key.toLowerCase())) delete process.env[key];
   }

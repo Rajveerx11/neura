@@ -16,14 +16,13 @@ Latest release remains `2.5.1`. Work, modular verification, and Learn are merged
 but unreleased. Prepare a new version and release note for their eventual
 release; do not retrofit their behavior into historical v2.5.1 notes.
 
-## Open-source publication gate
+## Open-source release gate
 
-Before first public release, complete every unchecked item in
-[OPEN_SOURCE.md](OPEN_SOURCE.md). Repository must remain private while
-public-default cleanup or another publication gate is incomplete.
-
-Public visibility and production readiness are independent. Public release notes
-must say `experimental` until production gate below passes.
+The repository is public, but a promoted release still requires every applicable
+item in [OPEN_SOURCE.md](OPEN_SOURCE.md). Public visibility, a GitHub draft,
+package publication, live installation, and production readiness are independent.
+Both npm manifests stay private and release automation must never publish to a
+package registry.
 
 ## Stable-release gate
 
@@ -36,7 +35,7 @@ All items must pass:
       `npm audit signatures` pass from clean lockfile installs. Repeat both
       audit commands with `--prefix agent/neura` for the Learn runtime graph.
 - [ ] Plan accessibility and `node scripts\tests\learn-browser.mjs` pass in real
-      Edge at narrow/desktop widths; the 17-suite harness includes nonbrowser Learn checks.
+      Edge at narrow/desktop widths; the 18-suite harness includes nonbrowser Learn checks.
 - [ ] `node scripts\check-docs.mjs` passes.
 - [ ] Windows and Linux portable CI pass on the release commit. Contract tests
       do not replace the Windows live WSL2/bubblewrap rehearsal.
@@ -80,19 +79,51 @@ A production-ready claim additionally requires:
 Production claims follow evidence, not dates. Exceptions require a named owner,
 expiry, compensating control, and tracked issue.
 
-## Release commands
+## Automated draft-prerelease path
 
-Run only after the checklist passes and release is approved:
+Tag automation accepts only an annotated `v*` tag whose target is contained in
+`origin/main`. `VERSION`, root package and lock versions, nested package/lock
+versions, and `docs/releases/v$version.md` must agree. Run locally before tagging:
+
+```powershell
+$version = (Get-Content .\VERSION -Raw).Trim()
+npm run test:release
+npm run verify:release -- --tag "v$version"
+```
+
+Every prerelease note must declare `Channel: prerelease` and state all of:
+
+- This release is experimental and not production-ready.
+- Human Away remains preview-only and is not approved for unattended high-impact work.
+- No npm package is published by this release.
+
+The tag workflow reruns repository, browser, audit, signature, secret-history,
+and ephemeral installer checks. It builds a deterministic source tarball, SPDX
+SBOM snapshots for both lockfiles, and `SHA256SUMS`, then retains that workflow artifact
+for three days. Only the final job receives `contents: write`, and it uses GitHub
+CLI to create a **draft prerelease**. It never publishes npm packages and never
+promotes or publishes the GitHub draft. A maintainer must inspect any draft and
+all remaining gates manually.
+
+Stable semantic-version tags are deliberately rejected unless
+[STATUS.md](STATUS.md) contains the exact machine-readable line
+`Release channel: stable-ready` and no `not production-ready` statement. A
+release candidate such as `v2.6.0-rc.1` is the only currently eligible automated
+channel.
+
+## Tag commands
+
+Run only after the checklist passes, the RC release note is present, `main` is
+pushed, and the tag operation is approved:
 
 ```powershell
 $version = (Get-Content .\VERSION -Raw).Trim()
 git tag -a "v$version" -m "Neura v$version"
-git push origin main
 git push origin "v$version"
 ```
 
-Create the GitHub release from `docs/releases/v$version.md`. Do not tag an RC as
-stable or describe preview boundaries as production-safe.
+Do not tag an RC as stable or describe preview boundaries as production-safe.
+Tagging starts automation; it is not approval to publish the resulting draft.
 
 ## Rollback
 

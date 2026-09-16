@@ -1,15 +1,31 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import { renderLearnHtml, learnLessonRevision } from "../agent/neura/learn-renderer.ts";
 import { workshopFixture, sqlExercise } from "./learn-workshop-fixture.mjs";
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-const output = mkdtempSync(join(tmpdir(), 'neura-learn-browser-'));
+async function captureScreenshot(page, screenshotPath) {
+  let failure;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      return;
+    } catch (error) {
+      failure = error;
+      if (attempt === 0) await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+    }
+  }
+  throw failure;
+}
+const output = process.env.NEURA_LEARN_BROWSER_OUTPUT
+  ? resolve(process.env.NEURA_LEARN_BROWSER_OUTPUT)
+  : mkdtempSync(join(tmpdir(), 'neura-learn-browser-'));
+mkdirSync(output, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.NEURA_BROWSER_CHANNEL || 'msedge', headless: true });
 try {
   for (const width of [390, 1280]) {
@@ -62,7 +78,7 @@ try {
     await page.evaluate(axeSource);
     const a11y = await page.evaluate(async () => globalThis.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } }));
     assert.deepEqual(a11y.violations.map(violation => ({ id: violation.id, nodes: violation.nodes.map(node => node.target) })), []);
-    await page.screenshot({ path: join(output, `learn-${width}.png`), fullPage: true });
+    await captureScreenshot(page, join(output, `learn-${width}.png`));
     assert.deepEqual(errors, []); assert.deepEqual(requests, []);
     for (const kind of ['flow', 'sequence']) {
       const next = structuredClone(workshopFixture); next.diagram.kind = kind;
@@ -73,7 +89,7 @@ try {
       await page.locator('#exercise-form button[type=submit]').click();
       if (kind === 'flow') assert.match(await page.locator('#feedback').innerText(), /Matches/);
       else assert.equal(await page.locator('#handoff-command').inputValue(), `/learn answer-for ${learnLessonRevision(next)} ${sqlExercise.solution}`);
-      await page.screenshot({ path: join(output, `${kind}-${width}.png`), fullPage: true });
+      await captureScreenshot(page, join(output, `${kind}-${width}.png`));
     }
     const subjective = structuredClone(workshopFixture);
     subjective.exercise = { kind: 'short', prompt: 'Explain your design choice', acceptedAnswers: [], hints: ['Discuss the tradeoff.'], explanation: 'Several designs can work; compare their consequences.' };

@@ -13,6 +13,20 @@ const { renderPlanHtml } = await import(
   pathToFileURL(path.join(repoRoot, "agent", "neura", "plan-renderer.ts")).href
 );
 
+async function captureScreenshot(page, screenshotPath) {
+  let failure;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      return;
+    } catch (error) {
+      failure = error;
+      if (attempt === 0) await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+    }
+  }
+  throw failure;
+}
+
 const outputRoot = process.env.NEURA_A11Y_OUTPUT
   ? path.resolve(process.env.NEURA_A11Y_OUTPUT)
   : fs.mkdtempSync(path.join(os.tmpdir(), "neura-plan-accessibility-"));
@@ -88,7 +102,7 @@ try {
     try {
       await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "load" });
       const screenshotPath = path.join(outputRoot, `plan-${viewport.width}x${viewport.height}.png`);
-      await page.screenshot({ path: screenshotPath, fullPage: true });
+      await captureScreenshot(page, screenshotPath);
 
       const layout = await page.evaluate(() => ({
         clientWidth: document.documentElement.clientWidth,

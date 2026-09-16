@@ -2,8 +2,18 @@
   "name": "neura-learning-runtime",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Pinned local document extraction and offline OCR for Learn Mode",
+  "homepage": "https://github.com/Rajveerx11/neura#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rajveerx11/neura.git",
+    "directory": "agent/neura"
+  },
+  "bugs": {
+    "url": "https://github.com/Rajveerx11/neura/issues"
+  },
   "engines": { "node": ">=24.15.0" },
   "dependencies": {
     "@napi-rs/canvas": "1.0.8",

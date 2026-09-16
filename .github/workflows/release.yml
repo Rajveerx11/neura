@@ -1,0 +1,155 @@
+name: Draft prerelease
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-gate:
+    name: Release gate
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify annotated tag on main
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ((git cat-file -t "refs/tags/$env:TAG").Trim() -ne 'tag') { throw 'Release tag must be annotated.' }
+          $commit = (git rev-parse "$env:TAG^{}").Trim()
+          if ($commit -ne $env:GITHUB_SHA) { throw 'Tag target does not match the workflow commit.' }
+          git merge-base --is-ancestor $commit origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release commit is not contained in origin/main.' }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.16.0"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            agent/neura/package-lock.json
+      - name: Install locked dependency graphs
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix agent/neura --ignore-scripts
+      - name: Verify release policy and repository
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          npm run verify:release -- --tag "$env:TAG"
+          npm run audit:dependencies
+          npm run audit:signatures
+          npm run verify
+      - name: Verify browser contracts
+        shell: pwsh
+        env:
+          NEURA_A11Y_OUTPUT: ${{ runner.temp }}\neura-release-a11y
+        run: npm run test:browser
+      - name: Verify complete history secret scan
+        shell: pwsh
+        run: |
+          powershell -NoProfile -File .\scripts\verify-secrets.ps1
+          powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
+      - name: Verify installer on ephemeral runner
+        shell: pwsh
+        run: |
+          $env:PATH = "$PWD\node_modules\.bin;$env:PATH"
+          powershell -File .\install.ps1
+          powershell -File .\install.ps1 -Check
+
+  package:
+    name: Release assets
+    needs: release-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.16.0"
+      - name: Recheck tag and release metadata
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$(git cat-file -t "refs/tags/$TAG")" = tag
+          test "$(git rev-parse "$TAG^{}")" = "$GITHUB_SHA"
+          npm run verify:release -- --tag "$TAG"
+      - name: Build source archive and SPDX SBOMs
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          mkdir -p dist/release
+          git archive --format=tar --prefix="neura-v${version}/" "$GITHUB_SHA" | gzip -n -9 > "dist/release/neura-v${version}.tar.gz"
+          npm sbom --package-lock-only --sbom-format spdx > "dist/release/spdx-root.json"
+          npm sbom --prefix agent/neura --package-lock-only --sbom-format spdx > "dist/release/spdx-learning-runtime.json"
+          cp "docs/releases/v${version}.md" dist/release/RELEASE_NOTES.md
+          (
+            cd dist/release
+            sha256sum "neura-v${version}.tar.gz" spdx-root.json spdx-learning-runtime.json | LC_ALL=C sort > SHA256SUMS
+          )
+      - name: Upload gated release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    name: Create draft prerelease
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Revalidate remote annotated tag
+        run: |
+          set -euo pipefail
+          tag_object="$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq '.object | select(.type == "tag") | .sha')"
+          test -n "$tag_object"
+          commit="$(gh api "repos/$GH_REPO/git/tags/$tag_object" --jq '.object | select(.type == "commit") | .sha')"
+          test "$commit" = "$GITHUB_SHA"
+      - name: Download gated artifact with GitHub CLI
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/$GH_REPO/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[] | select(.name == "release-assets" and .expired == false) | .id')"
+          test -n "$artifact_id"
+          gh api "repos/$GH_REPO/actions/artifacts/$artifact_id/zip" > release-assets.zip
+          mkdir release-assets
+          unzip -q release-assets.zip -d release-assets
+      - name: Create draft prerelease with GitHub CLI
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            release-assets/neura-*.tar.gz \
+            release-assets/spdx-root.json \
+            release-assets/spdx-learning-runtime.json \
+            release-assets/SHA256SUMS \
+            --draft \
+            --prerelease \
+            --verify-tag \
+            --title "Neura $TAG" \
+            --notes-file release-assets/RELEASE_NOTES.md

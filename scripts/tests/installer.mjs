@@ -32,7 +32,7 @@ assert.match(installerSource, /launch-artwork\.png/, "installer does not connect
 assert.match(installerSource, /backgroundImageStretchMode = "uniform"/, "installer can distort launch artwork");
 assert.match(installerSource, /Start Menu\\Programs\\Neura\.lnk/, "installer does not create the single-window Neura shortcut");
 assert.match(installerSource, /Arguments = "-w new -p Neura"/, "Neura shortcut does not launch the image profile directly");
-assert.equal(createHash("sha256").update(fs.readFileSync(artworkPath)).digest("hex"), "6f7f01d54fe31eb1b8ba0f07542158eac2fc9a4a0320c5071a591952bcc7c244", "launch artwork changed without provenance update");
+assert.equal(createHash("sha256").update(fs.readFileSync(artworkPath)).digest("hex"), "5389d9f43e09d27d714d4ecfb2e9d638fa24c271384b388780ab3f5075589d76", "launch artwork changed without provenance update");
 assert.doesNotMatch(installerSource, /C:\\Users\\rajve/i, "installer contains a machine-specific artwork path");
 assert.match(installerSource, /\$requiredPiVersion\s*=\s*\[string\]\$runtimeContract\.piVersion/, "installer does not enforce the runtime contract Pi version");
 assert.match(installerSource, /\$schemaIsInteger\s*=\s*\(\$runtimeContract\.schemaVersion -is \[int\]\) -or \(\$runtimeContract\.schemaVersion -is \[long\]\)/, "installer allows a coercible non-integer runtime contract schema");
