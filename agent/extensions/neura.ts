@@ -15,26 +15,12 @@ import { padAnsi, PALETTE, fg } from "../neura/core.ts";
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const { accent: ACC, human: HUMAN, muted: MUT, text: TXT } = PALETTE;
 
-const FULL_WORDMARK = [
-  "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
-  "████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔══██╗",
-  "██╔██╗ ██║ █████╗   ██║   ██║ ██████╔╝ ███████║",
-  "██║╚██╗██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██╔══██║",
-  "██║ ╚████║ ███████╗ ╚██████╔╝ ██║  ██║ ██║  ██║",
-  "╚═╝  ╚═══╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝",
-];
-
-const COMPACT_WORDMARK = [
-  "N   N EEEEE U   U RRRR   AAA",
-  "NN  N E     U   U R   R A   A",
-  "N N N EEEE  U   U RRRR  AAAAA",
-  "N  NN E     U   U R R   A   A",
-  "N   N EEEEE  UUU  R  RR A   A",
-];
-
-export function wordmarkLines(width: number, color: string = ACC): string[] {
-  const source = width >= 56 ? FULL_WORDMARK : COMPACT_WORDMARK;
-  return source.map((line) => truncateToWidth(fg(color, line), width));
+// Keep the terminal launch as compact as the reference UI. The exact supplied
+// Neura mark remains the Windows Terminal profile artwork; this ANSI mark is
+// its intentionally small, image-free fallback for every other terminal.
+export function wordmarkLines(width: number, color: string = TXT): string[] {
+  const mark = `${fg(ACC, "›")}${fg(PALETTE.learn, "_")}`;
+  return [truncateToWidth(`${mark}  ${fg(color, "NEURA")}`, width)];
 }
 
 function centered(line: string, width: number): string {
