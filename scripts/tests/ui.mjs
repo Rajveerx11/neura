@@ -84,10 +84,11 @@ for (const width of [30, 40, 56, 72, 92, 120]) {
   const launchText = rawLines.map(stripAnsi).join("\n");
   const contentLines = rawLines.filter((line) => line.length > 0);
   const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
-  assert.equal(contentLines.length, 5, `launch content height is wrong at ${width} columns`);
-  assert.match(launchText, /NEURA/, `compact Neura wordmark missing at ${width} columns`);
+  assert.equal(contentLines.length, 9, `launch content height is wrong at ${width} columns`);
+  assert.match(launchText, /Neura Agent is ready\./, `launch status missing at ${width} columns`);
+  assert.match(launchText, /Neura Agent v2\.5\.1/, `launch version missing at ${width} columns`);
   assert.match(launchText, /NEURA AGENT · TYPE YOUR TASK/, `Neura-only launch prompt missing at ${width} columns`);
-  assert.ok(rawLines.findIndex((line) => line.length > 0) > 0, `launch surface is not vertically centred at ${width} columns`);
+  assert.equal(rawLines.findIndex((line) => line.length > 0), 0, `launch surface is not top-aligned at ${width} columns`);
   assert.ok(rawLines.every((line) => widthOf(line) <= width), `launch surface overflows at ${width} columns`);
 }
 await firstHandler(identityExtension, "agent_start")({}, context);
