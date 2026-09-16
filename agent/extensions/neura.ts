@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { CustomEditor, type ExtensionAPI, type KeybindingsManager, type Theme } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, onCockpitChange, patchCockpit, resetCockpit } from "../neura/cockpit-state.ts";
 import { padAnsi, PALETTE, fg } from "../neura/core.ts";
 
@@ -34,12 +34,19 @@ export function wordmarkLines(width: number, color: string = TXT): string[] {
   return NEURA_WORDMARK.map((line, index) => truncateToWidth(`${NEURA_MARK[index]}   ${fg(color, line)}`, width));
 }
 
+function centered(line: string, width: number): string {
+  const value = truncateToWidth(line, width, "");
+  return `${" ".repeat(Math.max(0, Math.floor((width - visibleWidth(value)) / 2)))}${value}`;
+}
+
 export function launchSurfaceLines(width: number, theme: Theme, editorLines: string[]): string[] {
   const safeWidth = Math.max(1, width);
+  const identity = wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth));
+  const status = `${fg(MUT, "Neura Agent v2.5.1")}${fg(HUMAN, "  ·  READY")}`;
   return [
-    fg(HUMAN, "Neura Agent is ready."),
-    ...wordmarkLines(safeWidth, TXT),
-    fg(MUT, "Neura Agent v2.5.1"),
+    ...identity,
+    centered(status, safeWidth),
+    "",
     theme.bg("customMessageBg", theme.fg("text", padAnsi(truncateToWidth("  NEURA AGENT · TYPE YOUR TASK", safeWidth), safeWidth))),
     ...editorLines,
   ].map((line) => truncateToWidth(line, safeWidth));
@@ -51,8 +58,11 @@ class LaunchEditor extends CustomEditor {
   }
 
   render(width: number): string[] {
-    const contentWidth = Math.max(1, width);
-    return launchSurfaceLines(contentWidth, this.presentationTheme, super.render(contentWidth));
+    const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
+    const content = launchSurfaceLines(contentWidth, this.presentationTheme, super.render(contentWidth));
+    const left = " ".repeat(Math.max(0, Math.floor((width - contentWidth) / 2)));
+    const top = Math.max(0, Math.floor((this.tui.terminal.rows - content.length - 1) / 2));
+    return [...Array(top).fill(""), ...content.map((line) => left + line)];
   }
 }
 

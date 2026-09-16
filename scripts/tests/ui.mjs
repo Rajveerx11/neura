@@ -82,13 +82,15 @@ const launchEditor = editorFactory(
 for (const width of [30, 40, 56, 72, 92, 120]) {
   const rawLines = launchEditor.render(width);
   const launchText = rawLines.map(stripAnsi).join("\n");
-  const contentLines = rawLines.filter((line) => line.length > 0);
+  const contentLines = rawLines.filter((line) => stripAnsi(line).trim().length > 0);
   const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
-  assert.equal(contentLines.length, 9, `launch content height is wrong at ${width} columns`);
-  assert.match(launchText, /Neura Agent is ready\./, `launch status missing at ${width} columns`);
-  assert.match(launchText, /Neura Agent v2\.5\.1/, `launch version missing at ${width} columns`);
+  assert.equal(contentLines.length, 7, `launch content height is wrong at ${width} columns`);
+  assert.match(launchText, /Neura Agent v2\.5\.1\s+·\s+READY/, `launch status missing at ${width} columns`);
   assert.match(launchText, /NEURA AGENT · TYPE YOUR TASK/, `Neura-only launch prompt missing at ${width} columns`);
-  assert.equal(rawLines.findIndex((line) => line.length > 0), 0, `launch surface is not top-aligned at ${width} columns`);
+  const firstContentLine = rawLines.findIndex((line) => line.length > 0);
+  assert.ok(firstContentLine > 0, `launch surface is not vertically centred at ${width} columns`);
+  const promptLine = rawLines.find((line) => stripAnsi(line).includes("NEURA AGENT · TYPE YOUR TASK"));
+  assert.equal(stripAnsi(promptLine).match(/^ */)[0].length, Math.floor((width - contentWidth) / 2) + 2, `launch editor is not horizontally centred at ${width} columns`);
   assert.ok(rawLines.every((line) => widthOf(line) <= width), `launch surface overflows at ${width} columns`);
 }
 await firstHandler(identityExtension, "agent_start")({}, context);
