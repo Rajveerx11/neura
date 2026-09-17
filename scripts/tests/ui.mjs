@@ -84,7 +84,11 @@ for (const width of [30, 40, 56, 72, 92, 120]) {
   const launchText = rawLines.map(stripAnsi).join("\n");
   const contentLines = rawLines.filter((line) => stripAnsi(line).trim().length > 0);
   const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
-  assert.equal(contentLines.length, 7, `launch content height is wrong at ${width} columns`);
+  assert.equal(contentLines.length, 9, `launch content height is wrong at ${width} columns`);
+  const wordmarkRows = contentLines.slice(0, 5);
+  assert.equal(new Set(wordmarkRows.map(widthOf)).size, 1, `launch wordmark is not a fixed-width face at ${width} columns`);
+  assert.ok(wordmarkRows.every((line) => /[█▀▄]/.test(stripAnsi(line))), `launch wordmark is not block-rendered at ${width} columns`);
+  assert.doesNotMatch(launchText, /▌|▐/, `approximated ANSI mark still overdraws the image-backed launch at ${width} columns`);
   assert.match(launchText, /Neura Agent v2\.5\.1\s+·\s+READY/, `launch status missing at ${width} columns`);
   assert.match(launchText, /NEURA AGENT · TYPE YOUR TASK/, `Neura-only launch prompt missing at ${width} columns`);
   const firstContentLine = rawLines.findIndex((line) => line.length > 0);

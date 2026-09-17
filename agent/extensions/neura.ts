@@ -15,28 +15,30 @@ import { padAnsi, PALETTE, fg } from "../neura/core.ts";
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const { accent: ACC, human: HUMAN, muted: MUT, text: TXT } = PALETTE;
 
-// The image-backed Windows Terminal profile renders the exact supplied mark.
-// This deliberately prominent ANSI fallback keeps Neura recognisable in every
-// other terminal, where inline image protocols are not dependable.
+// The image-backed Windows Terminal profile renders the exact supplied mark,
+// so this terminal layer adds only the wordmark and never overdraws the
+// artwork with a second, approximated mark. The glyphs below are a fixed-width
+// five-row block face: every letter occupies the same columns on every row, so
+// "NEURA" stays aligned and legible over any artwork or plain background.
 const NEURA_WORDMARK = [
-  "█▄ █  █▀▀  █ █  █▀▄  ▄▀█",
-  "█ ▀█  █▀   █ █  █▀▄  █▀█",
-  "▀  ▀  ▀▀▀  ▀▀▀  ▀ ▀  ▀ ▀",
-];
-
-const NEURA_MARK = [
-  `${fg(ACC, "▌")}  ${fg(PALETTE.learn, "▐")}`,
-  `${fg(ACC, "▌▌")} ${fg(PALETTE.learn, "▐")}`,
-  `${fg(ACC, "▌")} ${fg(PALETTE.learn, "▌▐")}`,
+  "█  █ █▀▀▀ █  █ █▀▀▄ ▄▀▀▄",
+  "██ █ █▀▀  █  █ █  █ █  █",
+  "█ ██ ██▀▀ █  █ █▀▀  █▀▀█",
+  "█  █ █▀▀  █  █ █ ▀▄ █  █",
+  "▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀",
 ];
 
 export function wordmarkLines(width: number, color: string = TXT): string[] {
-  return NEURA_WORDMARK.map((line, index) => truncateToWidth(`${NEURA_MARK[index]}   ${fg(color, line)}`, width));
+  return NEURA_WORDMARK.map((line) => truncateToWidth(fg(color, line), width));
 }
 
 function centered(line: string, width: number): string {
   const value = truncateToWidth(line, width, "");
   return `${" ".repeat(Math.max(0, Math.floor((width - visibleWidth(value)) / 2)))}${value}`;
+}
+
+function logoLines(width: number, color: string = TXT): string[] {
+  return wordmarkLines(width, color).map((line) => centered(line, width));
 }
 
 export function launchSurfaceLines(width: number, theme: Theme, editorLines: string[]): string[] {
@@ -105,7 +107,7 @@ export default function (pi: ExtensionAPI) {
   const showFallback = (ctx) => {
     try {
       ctx.ui.setWidget("neura-launch", () => ({
-        render: (width: number) => wordmarkLines(width),
+        render: (width: number) => logoLines(width),
         invalidate() {},
       }));
       markVisible();
