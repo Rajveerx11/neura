@@ -94,13 +94,13 @@ and workspace-contained overrides are rejected.
 
 ## Development graph
 
-`package.json` pins Pi `0.84.4`, Pi API/TUI types `0.84.4`, Playwright Core
-`1.62.1`, axe-core `4.13.0`, Typebox `1.3.7`, TypeScript `7.0.2`, and Node types
-`26.2.0`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
+`package.json` pins Pi `0.85.1`, Pi API/TUI types `0.85.1`, Playwright Core
+`1.63.0`, axe-core `4.13.0`, Typebox `1.3.34`, TypeScript `7.0.2`, and Node types
+`26.6.2`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
-already present on the Windows runner. axe-core has no consumer install hook and
+already present on the Windows runner. Version `1.63.0` retains Node 20+ support; rollback restores the prior manifest and lockfile together. axe-core has no consumer install hook and
 runs only against generated local Plan and Learn HTML. Browser contexts receive no
 credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
