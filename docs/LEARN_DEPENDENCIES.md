@@ -14,6 +14,10 @@ This review inspected the published packages installed from the lockfile. It is
 a scoped review of the integration and entry points, not a complete audit of
 PDF.js, Skia, or Tesseract's native/WASM implementations.
 
+The 1.0.9 canvas refresh retains the reviewed JavaScript loaders and has no
+consumer install hook; it updates the native Skia payload and font-cache
+behavior. Rollback restores both nested manifest and lockfile before reinstall.
+
 | Package | Version | License | Purpose and reviewed surface |
 |---|---|---|---|
 | `pdfjs-dist` | `6.3.289` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `isEvalSupported:false`, `useWorkerFetch:false`, and disabled system fonts. Never invoke document JavaScript, actions, attachments, or links. |
