@@ -1,5 +1,7 @@
 // Neura identity: one responsive launch wordmark, /dash, /notices,
-// session title, and persona injection. Plain pi stays stock.
+// session title, and persona injection. The exact supplied mark is rendered by
+// Neura's Windows Terminal profile; this terminal-native layer stays readable
+// over it. Plain Pi stays stock.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -13,40 +15,43 @@ import { padAnsi, PALETTE, fg } from "../neura/core.ts";
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const { accent: ACC, human: HUMAN, muted: MUT, text: TXT } = PALETTE;
 
-const FULL_WORDMARK = [
-  "███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   █████╗ ",
-  "████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔══██╗",
-  "██╔██╗ ██║ █████╗   ██║   ██║ ██████╔╝ ███████║",
-  "██║╚██╗██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██╔══██║",
-  "██║ ╚████║ ███████╗ ╚██████╔╝ ██║  ██║ ██║  ██║",
-  "╚═╝  ╚═══╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝",
+// The image-backed Windows Terminal profile renders the exact supplied mark,
+// so this terminal layer adds only the wordmark and never overdraws the
+// artwork with a second, approximated mark. The glyphs below are a fixed-width
+// five-row block face: every letter occupies the same columns on every row, so
+// "NEURA" stays aligned and legible over any artwork or plain background.
+const NEURA_WORDMARK = [
+  "█  █ █▀▀▀ █  █ █▀▀▄ ▄▀▀▄",
+  "██ █ █▀▀  █  █ █  █ █  █",
+  "█ ██ ██▀▀ █  █ █▀▀  █▀▀█",
+  "█  █ █▀▀  █  █ █ ▀▄ █  █",
+  "▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀",
 ];
 
-const COMPACT_WORDMARK = [
-  "N   N EEEEE U   U RRRR   AAA",
-  "NN  N E     U   U R   R A   A",
-  "N N N EEEE  U   U RRRR  AAAAA",
-  "N  NN E     U   U R R   A   A",
-  "N   N EEEEE  UUU  R  RR A   A",
-];
-
-export function wordmarkLines(width: number, color: string = ACC): string[] {
-  const source = width >= 56 ? FULL_WORDMARK : COMPACT_WORDMARK;
-  return source.map((line) => truncateToWidth(fg(color, line), width));
+export function wordmarkLines(width: number, color: string = TXT): string[] {
+  return NEURA_WORDMARK.map((line) => truncateToWidth(fg(color, line), width));
 }
 
 function centered(line: string, width: number): string {
   const value = truncateToWidth(line, width, "");
-  return " ".repeat(Math.max(0, Math.floor((width - visibleWidth(value)) / 2))) + value;
+  return `${" ".repeat(Math.max(0, Math.floor((width - visibleWidth(value)) / 2)))}${value}`;
+}
+
+function logoLines(width: number, color: string = TXT): string[] {
+  return wordmarkLines(width, color).map((line) => centered(line, width));
 }
 
 export function launchSurfaceLines(width: number, theme: Theme, editorLines: string[]): string[] {
   const safeWidth = Math.max(1, width);
+  const identity = wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth));
+  const status = `${fg(MUT, "Neura Agent v2.5.1")}${fg(HUMAN, "  ·  READY")}`;
   return [
-    ...wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth)),
-    theme.bg("customMessageBg", theme.fg("text", padAnsi("  TYPE YOUR TASK", safeWidth))),
+    ...identity,
+    centered(status, safeWidth),
+    "",
+    theme.bg("customMessageBg", theme.fg("text", padAnsi(truncateToWidth("  NEURA AGENT · TYPE YOUR TASK", safeWidth), safeWidth))),
     ...editorLines,
-  ];
+  ].map((line) => truncateToWidth(line, safeWidth));
 }
 
 class LaunchEditor extends CustomEditor {
@@ -102,7 +107,7 @@ export default function (pi: ExtensionAPI) {
   const showFallback = (ctx) => {
     try {
       ctx.ui.setWidget("neura-launch", () => ({
-        render: (width: number) => wordmarkLines(width),
+        render: (width: number) => logoLines(width),
         invalidate() {},
       }));
       markVisible();

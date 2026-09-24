@@ -33,5 +33,9 @@ updates:
       timezone: Etc/UTC
     target-branch: main
     open-pull-requests-limit: 5
+    groups:
+      codeql-actions:
+        patterns:
+          - "github/codeql-action/*"
     labels:
       - dependencies

@@ -32,7 +32,7 @@ security guarantee. Read
 - Practical learning with short bullets, flow/ER/sequence diagrams, exercises,
   and page/slide references from local PDFs and PPTX decks.
 - Image-backed centred launch in a dedicated Windows Terminal profile, with a
-  logo-only fallback and responsive Forged Tungsten terminal interface.
+  logo-only fallback and responsive logo-blue terminal interface.
 - Local HTML plan publication with escaping, content security policy, stable
   hashes, and machine-readable lifecycle events.
 - WSL2 and bubblewrap isolation for Work execution and Human Away commands.
