@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "neuraVersion": "2.5.1",
-  "piVersion": "0.85.1",
+  "piVersion": "0.87.1",
   "automaticExecutables": {
     "git": {
       "windowsVersion": "git version 2.50.1.windows.1",

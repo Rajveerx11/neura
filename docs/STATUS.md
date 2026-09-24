@@ -1,10 +1,10 @@
 # Neura status
 
-Last documentation audit: 2026-09-15
+Last documentation audit: 2026-09-24
 
 Latest release: `2.5.1`. Current merged source: `59c6e1d`, including Work,
 modular verification, and Learn Mode; these changes are unreleased. Required Pi:
-`0.84.4`; Node: `24.15+` (CI `24.16.0`).
+`0.87.1`; Node: `24.15+` (CI `24.16.0`).
 
 Live installation: not refreshed by the Learn delivery or this documentation
 audit. No new live-drift result is claimed. These docs describe merged source;
@@ -35,8 +35,8 @@ release gates and issue ownership live in
 | Area | State | Evidence or blocker |
 |---|---|---|
 | Public source | Available; release blocked | The repository is public, GitHub recognizes Apache-2.0, the owner-supplied logo has documented redistribution terms, and a complete-history secret scan passed on 2026-09-15. Final content/default review and clean-profile install evidence remain release blockers. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
-| Pi and live Neura | Source verified; live status unverified | Source and CI pin Pi `0.84.4`. A fresh owner-authorized install and drift check are separate from merge. |
-| Dependency graphs | Verified at Learn delivery | Both lockfile graphs reported zero known vulnerabilities on 2026-09-07; Learn runtime verified 31 registry signatures and 13 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
+| Pi and live Neura | Pi 0.87.1 source verified; complete live match not yet claimed | Source and CI pin Pi `0.87.1`. Typecheck, 18 harness suites, and dependency audit/signatures passed locally on 2026-09-24. The cockpit and contract were synced separately; verify the complete installation before claiming full live parity. |
+| Dependency graphs | Verified 2026-09-24 | Both graphs report zero known high vulnerabilities; root verified 246 registry signatures and 86 attestations, Learn 21 signatures and 3 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
 | Core harness | Ready for covered behavior | PR #44 passed Windows harness and Linux portable CI, 17 isolated suites/17 extensions, typecheck, docs, and real Learn/Plan browser checks. This is not a fresh live WSL replay. |
 | Default mode | Implemented, unreleased | Work is default; execution uses network-disabled WSL2 bubblewrap, with no host fallback. [#23](https://github.com/Rajveerx11/neura/issues/23) is closed. |
 | Learn Mode | Implemented, unreleased | Practical lessons, diagrams, PDF/PPTX/OCR, bounded SQL, citations, explicit save/resume, and machine-local opt-in automatic Obsidian knowledge capture. The vault writer is application-controlled preview behavior; no live install or real-vault write is claimed. First workspace-store creation requires native Windows. Parser process limits are not OS isolation. See [LEARN_MODE.md](LEARN_MODE.md). |

@@ -16,7 +16,7 @@ Neura is a Windows-first engineering-agent harness built on
 interface, explicit operating modes, verification, recovery, local memory,
 model presets, and policy guardrails around stock Pi.
 
-Latest release: **2.5.1**. Current `main` targets Pi `0.84.4` and includes
+Latest release: **2.5.1**. Current `main` targets Pi `0.87.1` and includes
 unreleased Work, Learn, and verification improvements. These docs describe that
 merged source; older checkouts and live installations may differ. Neura is
 Apache-2.0-licensed experimental software in a public repository. It is **not
@@ -105,7 +105,7 @@ resumed sources must be reimported before new verified citations. See the
 ## Requirements
 
 - Windows 11 or a current supported Windows release.
-- PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.84.4`.
+- PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.87.1`.
   CI exercises Node `24.16.0`.
 - uv/`uvx` `0.12.11`, hash-pinned WSL CPython `3.12.3`, and the five reviewed
   proof wheels in a dedicated wheelhouse configured by `NEURA_WSL_UV_DIR` and
@@ -128,7 +128,7 @@ visibility or software license.
 Review [security limits](SECURITY.md) and installer before running it.
 
 ```powershell
-npm install -g @earendil-works/pi-coding-agent@0.84.4
+npm install -g @earendil-works/pi-coding-agent@0.87.1
 git clone https://github.com/Rajveerx11/neura.git
 Set-Location .\neura
 npm ci --ignore-scripts

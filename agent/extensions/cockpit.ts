@@ -26,10 +26,12 @@ export function modeTag(mode = getMode()): string {
 function contextTag(ctx): string | null {
   try {
     const usage = ctx.getContextUsage?.();
-    const pct = usage?.percent ?? (usage?.tokens && usage?.contextWindow ? (usage.tokens / usage.contextWindow) * 100 : null);
-    if (pct == null) return null;
-    const color = pct >= 90 ? RED : pct >= 70 ? WARN : MUT;
-    return fg(color, `ctx ${Math.round(pct)}%`);
+    const window = usage?.contextWindow ?? ctx.model?.contextWindow;
+    if (typeof window !== "number" || window <= 0) return null;
+    const tokens = usage?.tokens;
+    const pct = usage?.percent ?? (typeof tokens === "number" ? (tokens / window) * 100 : null);
+    const color = pct != null && pct >= 90 ? RED : pct != null && pct >= 70 ? WARN : MUT;
+    return fg(color, `ctx ${typeof tokens === "number" ? tokens.toLocaleString("en-US") : "?"}/${window.toLocaleString("en-US")} (${pct == null ? "?" : Math.round(pct)}%)`);
   } catch {
     return null;
   }
@@ -38,23 +40,26 @@ function contextTag(ctx): string | null {
 function costTag(cost: number): string {
   const threshold = Number(process.env.NEURA_COST_WARNING ?? "");
   const color = Number.isFinite(threshold) && threshold > 0 && cost >= threshold ? WARN : MUT;
-  return fg(color, `$${cost.toFixed(2)}`);
+  return fg(color, `$${cost.toFixed(3)}`);
+}
+
+function usageCost(usage): number | null {
+  const cost = usage?.cost;
+  const value = typeof cost?.total === "number" ? cost.total : typeof cost === "number" ? cost : null;
+  return value !== null && Number.isFinite(value) ? value : null;
 }
 
 function sessionCost(ctx): number | null {
   try {
     let total = 0;
     let found = false;
-    for (const entry of ctx.sessionManager.getBranch()) {
-      const usage = entry?.message?.usage;
-      if (!usage) continue;
-      const cost = typeof usage.cost === "number"
-        ? usage.cost
-        : usage.cost && typeof usage.cost === "object"
-          ? Object.values(usage.cost).reduce((sum: number, value) => sum + (typeof value === "number" ? value : 0), 0)
-          : null;
-      if (cost !== null) {
-        total += cost as number;
+    for (const entry of ctx.sessionManager.getEntries()) {
+      const usage = entry?.type === "message"
+        ? (entry.message?.role === "assistant" || entry.message?.role === "toolResult" ? entry.message?.usage : undefined)
+        : (["usage", "branch_summary", "compaction"].includes(entry?.type) ? entry.usage : undefined);
+      const value = usageCost(usage);
+      if (value !== null) {
+        total += value;
         found = true;
       }
     }
@@ -82,14 +87,12 @@ export function footerLine(
   const cost = data.cost ?? "";
   if (data.launchVisible) return "";
   const parts = tier === "wide"
-    ? [mode, model, branch, context, cost]
+    ? [mode, context, cost, model, branch]
     : tier === "standard"
-      ? [mode, model, branch, context]
-      : tier === "compact"
-        ? [mode, model, context]
-        : tier === "narrow"
-          ? [mode, model]
-          : [mode];
+      ? [mode, context, cost, model]
+      : tier === "micro"
+        ? [mode, cost]
+        : [mode, context, cost];
   return truncateToWidth(` ${joinFitting(parts, separator, Math.max(1, width - 1))}`, width);
 }
 
@@ -112,7 +115,7 @@ export function cockpitLines(state: CockpitState, _mode: AgentMode, width: numbe
   const lines: string[] = [];
   const phaseDetail = [state.step, state.task].filter(Boolean).join(" · ");
   if (state.phase !== "READY") {
-    lines.push(truncateToWidth(`${fg(phaseColor(state), state.phase)}${phaseDetail ? `  ${fg(MUT, phaseDetail)}` : ""}`, width));
+    lines.push(truncateToWidth(`${fg(phaseColor(state), state.phase === "WORK" ? "RESPONDING" : state.phase)}${phaseDetail ? `  ${fg(MUT, phaseDetail)}` : ""}`, width));
   }
 
   if (state.approval) {
@@ -187,7 +190,7 @@ export default function (pi) {
             model: ctx.model?.id ?? "no model",
             branch: footerData.getGitBranch?.(),
             context,
-            cost: cost === null ? null : costTag(cost),
+            cost: cost === null ? fg(DIM, "cost n/a") : costTag(cost),
             launchVisible: state.launchVisible,
           })];
           try {
@@ -235,6 +238,14 @@ export default function (pi) {
   });
 
   pi.on("tool_execution_end", () => patchCockpit({ operation: { verb: "composing response", startedAt: Date.now() } }));
+
+  pi.on("message_end", (event) => {
+    if (event.message?.role !== "assistant" && event.message?.role !== "toolResult") return;
+    const cost = usageCost(event.message.usage);
+    if (cost === null) return;
+    cachedCost = (cachedCost ?? 0) + cost;
+    requestRender();
+  });
 
   pi.on("agent_end", (_event, ctx) => {
     cachedCost = sessionCost(ctx);

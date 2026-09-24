@@ -71,7 +71,7 @@ jobs:
       - name: Verify Pi version
         shell: pwsh
         run: |
-          if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne '0.85.1') { throw 'Unexpected repository Pi version' }
+          if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne '0.87.1') { throw 'Unexpected repository Pi version' }
 
       - name: Verify repository
         run: npm run verify

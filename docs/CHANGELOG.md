@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Updated the exact Pi runtime, AI, and TUI pins, CI check, and runtime contract
+  to `0.87.1` without downgrading the installed Pi. Reviewed the 0.86–0.87
+  session/context and footer API changes and verified the pinned graph. The
+  cockpit now labels response activity RESPONDING rather than WORK, displays
+  used/total context tokens with percent, and refreshes cached cost when a
+  billable message completes during a response.
+
 - Hardened public-repository CI with explicit Windows 2025 and Ubuntu 24.04
   runners, event-correct whitespace ranges, dependency review, an additive
   aggregate check, CodeQL, and weekly Dependabot coverage for both npm graphs
