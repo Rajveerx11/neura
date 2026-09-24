@@ -143,6 +143,9 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     activeContext = ctx;
+    // A resumed session already has chat history. The full-height launch editor
+    // belongs only to a fresh conversation; otherwise it pushes history offscreen.
+    if (launchEditorActive) hide(ctx);
     resetCockpit();
     try {
       const theme = ctx.ui.getTheme?.("neura-dark");
@@ -155,7 +158,8 @@ export default function (pi: ExtensionAPI) {
       if (visible && !getCockpitState().launchVisible) patchCockpit({ launchVisible: true });
       if (noticesVisible && activeContext) showNotices(activeContext);
     });
-    show(ctx);
+    const hasConversation = ctx.sessionManager?.getBranch?.().some((entry) => entry.type === "message");
+    if (!hasConversation && !["resume", "fork"].includes(_event?.reason)) show(ctx);
   });
 
   pi.on("agent_start", (_event, ctx) => hide(ctx));

@@ -140,6 +140,7 @@ export default function (pi) {
   if (!process.env.NEURA) return;
 
   let requestRender = () => {};
+  let cachedCost: number | null = null;
   let unsubscribeCockpit = () => {};
   let unsubscribeMode = () => {};
 
@@ -153,6 +154,7 @@ export default function (pi) {
   };
 
   pi.on("session_start", (_event, ctx) => {
+    cachedCost = sessionCost(ctx);
     try {
       ctx.ui.setHiddenThinkingLabel("Thinking · Ctrl+O expand");
       ctx.ui.setWorkingVisible(true);
@@ -170,14 +172,14 @@ export default function (pi) {
 
     ctx.ui.setFooter((tui, _theme, footerData) => {
       requestRender = () => tui.requestRender();
-      const unsubscribeBranch = footerData.onBranchChange?.(() => tui.requestRender());
+      const unsubscribeBranch = footerData.onBranchChange?.(() => { cachedCost = sessionCost(ctx); tui.requestRender(); });
       const localModeUnsubscribe = onModeChange(() => tui.requestRender());
       const localCockpitUnsubscribe = onCockpitChange(() => tui.requestRender());
       return {
         invalidate() {},
         render(width: number): string[] {
           const context = contextTag(ctx);
-          const cost = sessionCost(ctx);
+          const cost = cachedCost;
           const state = getCockpitState();
           if (state.launchVisible) return [];
           const lines = [footerLine(width, {
@@ -235,6 +237,7 @@ export default function (pi) {
   pi.on("tool_execution_end", () => patchCockpit({ operation: { verb: "composing response", startedAt: Date.now() } }));
 
   pi.on("agent_end", (_event, ctx) => {
+    cachedCost = sessionCost(ctx);
     const state = getCockpitState();
     const phase = state.approval ? "REVIEW"
       : state.degraded ? "DEGRADED"

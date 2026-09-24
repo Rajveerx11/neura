@@ -564,6 +564,9 @@ export default function (pi) {
   });
 
   pi.on("session_start", async (_event, ctx) => {
+    // A previous session's transition timer must not repaint the resumed chat.
+    ++transitionGeneration;
+    clearTransition(ctx, transitionGeneration);
     const owner = ++sessionGeneration;
     returnShown = false;
     let restored: AgentMode = "work";
@@ -590,7 +593,7 @@ export default function (pi) {
     } else await finish();
   });
 
-  pi.on("session_shutdown", () => { sessionGeneration++; });
+  pi.on("session_shutdown", () => { sessionGeneration++; transitionGeneration++; });
 
   pi.on("user_bash", () => {
     if (!isModeRestorePending()) return;

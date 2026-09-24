@@ -102,6 +102,15 @@ assert.equal(editorFactory, undefined, "launch editor did not restore Pi's edito
 await identityExtension.commands.get("dash").handler("", context);
 assert.equal(typeof editorFactory, "function", "/dash did not restore the launch editor");
 await identityExtension.commands.get("dash").handler("", context);
+const resumedContext = { ...context, sessionManager: { getBranch: () => [{ type: "message", message: { role: "user" } }] } };
+await firstHandler(identityExtension, "session_start")({ reason: "resume" }, resumedContext);
+assert.equal(editorFactory, undefined, "resuming a conversation must not replace the editor or hide chat history");
+assert.equal(cockpitState.getCockpitState().launchVisible, false, "resuming a conversation must not show the full-height launch");
+await firstHandler(identityExtension, "session_start")({ reason: "startup" }, resumedContext);
+assert.equal(editorFactory, undefined, "starting with existing history must not show the launch");
+await firstHandler(identityExtension, "session_start")({ reason: "new" }, context);
+assert.equal(typeof editorFactory, "function", "a new empty session should retain the logo-only launch");
+await firstHandler(identityExtension, "agent_start")({}, context);
 
 const fallbackContext = { ...context, mode: "rpc", ui: { ...ui, custom: undefined } };
 await firstHandler(identityExtension, "session_start")({}, fallbackContext);
@@ -214,16 +223,21 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
 }
 
 let footerFactory;
+let costReads = 0;
 const cockpitContext = {
   model: { id: "gpt-5.5-engineering-preview" },
   getContextUsage: () => ({ percent: 71 }),
-  sessionManager: { getBranch: () => [{ message: { usage: { cost: 3.14 } } }] },
+  sessionManager: { getBranch: () => { costReads++; return [{ message: { usage: { cost: 3.14 } } }]; } },
   ui: { ...ui, setFooter: (value) => { footerFactory = value; } },
 };
 const cockpit = loaded.extensions.find((extension) => extension.resolvedPath.endsWith(`${path.sep}cockpit.ts`));
 assert.ok(cockpit, "cockpit extension missing");
 await firstHandler(cockpit, "session_start")({}, cockpitContext);
 assert.ok(widgets.has("neura-cockpit"), "below-editor cockpit rail missing");
+const initialFooter = footerFactory({ requestRender() {} }, null, { getGitBranch: () => "main" });
+for (let i = 0; i < 100; i++) initialFooter.render(92);
+assert.equal(costReads, 1, "terminal renders must not rescan every entry in a long resumed session");
+initialFooter.dispose?.();
 
 const cockpitSamples = [
   { phase: "READY" },
