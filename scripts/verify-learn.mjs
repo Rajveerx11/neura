@@ -240,8 +240,8 @@ try {
   const listed = await listLearnProgress(datedDirectory);
   check(listed.length === 100 && listed[0] === path.basename(newest), "Saved listing retains newest entries beyond 100 snapshots");
   const installer = await fs.readFile(new URL("../install.ps1", import.meta.url), "utf-8");
-  const firstMutation = installer.indexOf('New-Item -ItemType Directory -Force "$agent');
-  check(installer.indexOf('if (-not (Test-Command "npm"))') < firstMutation && installer.indexOf("[version]'24.15.0'") < firstMutation, "Installer validates prerequisites before copying live files");
+  const firstMutation = installer.indexOf('& node $installer prepare');
+  check(firstMutation > 0 && installer.indexOf('if (-not (Test-Command "npm"))') < firstMutation && installer.indexOf('[version]$requiredNodeVersion') < firstMutation, "Installer validates prerequisites before staging files");
   check(installer.includes("Learn document runtime dependencies missing") && installer.includes("Node.js 24.15 or newer is required"), "Drift check covers Learn runtime and Node compatibility");
   await app.fire("session_start");
   const restarted = JSON.parse((await app.call("learn_progress", { action: "status" })).content[0].text);

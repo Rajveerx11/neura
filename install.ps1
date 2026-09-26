@@ -13,6 +13,9 @@ $runtimeContractPath = Join-Path $repo "agent\neura\runtime-contract.json"
 try {
     $runtimeContract = Get-Content $runtimeContractPath -Raw | ConvertFrom-Json
     $requiredPiVersion = [string]$runtimeContract.piVersion
+    $releaseManifest = Get-Content (Join-Path $repo 'agent\neura\release-manifest.json') -Raw | ConvertFrom-Json
+    $requiredNodeVersion = [string]$releaseManifest.nodeMinimum
+    if ($releaseManifest.schemaVersion -ne 1 -or $releaseManifest.piVersion -ne $requiredPiVersion -or $requiredNodeVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'release manifest disagrees with runtime contract' }
     $schemaIsInteger = ($runtimeContract.schemaVersion -is [int]) -or ($runtimeContract.schemaVersion -is [long])
     if (-not $schemaIsInteger -or $runtimeContract.schemaVersion -ne 1 -or $requiredPiVersion -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
         throw "unsupported runtime contract"
@@ -118,7 +121,7 @@ if ($Check) {
     $credentialWarnings = @()
     if (-not (Test-Command "node")) {
         $missing += "Node.js 24.15 or newer"
-    } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]'24.15.0') {
+    } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]$requiredNodeVersion) {
         $drift += "Node.js 24.15 or newer is required for Neura"
     }
     foreach ($cmd in @("pi", "git")) {
@@ -130,6 +133,10 @@ if ($Check) {
     }
     if (-not (Test-ProofRuntime)) {
         $capabilityWarnings += "WSL proof runtime unavailable or different from runtime-contract.json (optional proof capability unavailable)"
+    }
+    if (Test-Command 'node') {
+        & node (Join-Path $repo 'agent\neura\runtime-install.mjs') check --source
+        if ($LASTEXITCODE -ne 0) { $drift += 'release manifest, installed hashes, or extension ownership differs' }
     }
     $pairs = @(
         @("$repo\agent\extensions", "$agent\extensions"),
@@ -259,24 +266,29 @@ if ($piVersion -ne $requiredPiVersion) {
 if (-not (Test-Command "npm")) { throw "npm is required to install the Learn document runtime." }
 if (-not (Test-Command "node")) { throw "Node.js 24.15 or newer is required for Neura." }
 $learnNodeVersion = (& node --version).Trim().TrimStart('v')
-if ([version]$learnNodeVersion -lt [version]'24.15.0') { throw "Node.js 24.15 or newer is required for Neura." }
-New-Item -ItemType Directory -Force "$agent\extensions", "$agent\themes", "$agent\neura", $bin | Out-Null
-foreach ($name in $retiredExtensions) {
-    $retiredPath = Join-Path "$agent\extensions" $name
-    if (Test-Path $retiredPath) { Remove-Item -LiteralPath $retiredPath -Force }
+if ([version]$learnNodeVersion -lt [version]$requiredNodeVersion) { throw "Node.js 24.15 or newer is required for Neura." }
+# Validate private user configuration before activating managed code; never copy it to staging.
+foreach ($config in @("$agent\settings.json", "$agent\keybindings.json")) {
+    if (Test-Path $config) { try { $null = Get-Content $config -Raw | ConvertFrom-Json } catch { throw "Existing configuration is invalid: $config" } }
 }
-Copy-Item "$repo\agent\extensions\*" "$agent\extensions\" -Force
-Copy-Item "$repo\agent\themes\*" "$agent\themes\" -Force
-Get-ChildItem -LiteralPath "$repo\agent\neura" -File | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination "$agent\neura\" -Force
+$installer = Join-Path $repo 'agent\neura\runtime-install.mjs'
+$staging = & node $installer prepare
+if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare Neura release; inspect extension ownership and source hashes.' }
+try {
+    # Install only the reviewed, locked document runtime in staging, never into live Pi.
+    & npm.cmd ci --prefix (Join-Path $staging 'agent\neura') --ignore-scripts --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw 'Learn document runtime installation failed.' }
+    $learnStage = Join-Path $staging 'agent\neura'
+    $learnLockHash = (Get-FileHash -LiteralPath (Join-Path $learnStage 'package-lock.json') -Algorithm SHA256).Hash
+    [System.IO.File]::WriteAllText((Join-Path $learnStage '.learn-runtime-lock'), $learnLockHash)
+    & node $installer seal
+    if ($LASTEXITCODE -ne 0) { throw 'Staged release validation failed.' }
+    & node $installer activate
+    if ($LASTEXITCODE -ne 0) { throw 'Managed-file activation failed; previous files restored.' }
+} catch {
+    & node $installer recover
+    throw
 }
-# Install only the reviewed, locked document runtime. Never copy development node_modules.
-& npm.cmd ci --prefix "$agent\neura" --ignore-scripts --no-audit --no-fund
-if ($LASTEXITCODE -ne 0) { throw "Learn document runtime installation failed. Re-run the installer after fixing npm." }
-$learnLockHash = (Get-FileHash -LiteralPath "$agent\neura\package-lock.json" -Algorithm SHA256).Hash
-[System.IO.File]::WriteAllText((Join-Path "$agent\neura" ".learn-runtime-lock"), $learnLockHash)
-Copy-Item "$repo\launcher\neura.cmd" $launcherTarget -Force
-Copy-Item "$repo\agent\mcp.json" "$agent\" -Force  # no secrets; tokens flow via MY_PI_MCP_ENV_ALLOWLIST
 
 if (Test-Command "wt.exe") {
     New-Item -ItemType Directory -Force $terminalFragmentDirectory | Out-Null
