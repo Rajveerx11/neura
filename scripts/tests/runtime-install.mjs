@@ -33,7 +33,7 @@ try {
   write(path.join(source, 'agent/extensions/one.ts'), 'changed source');
   run('prepare', false); // source bytes must match the release manifest
   write(path.join(source, 'agent/extensions/one.ts'), 'one.ts');
-  run('prepare', false, {NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER:'1'});
+  assert.match(run('prepare', false, {NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER:'1'}).stderr, /injected staging failure/);
   assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'failed preparation left a shared transaction behind');
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
   seal(); run('activate'); run('check');

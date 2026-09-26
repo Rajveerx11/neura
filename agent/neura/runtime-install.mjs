@@ -183,6 +183,8 @@ function prepare() {
   if (exists(transaction)) throw Error('pending install exists; recover or investigate before retrying');
   const manifest = sourceManifest();
   ownership(manifest);
+  safe(path.dirname(transaction));
+  fs.mkdirSync(path.dirname(transaction), { recursive: true });
   fs.mkdirSync(transaction);
   const root = path.join(transaction, 'stage');
   try {
