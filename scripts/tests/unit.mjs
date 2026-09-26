@@ -172,6 +172,21 @@ try {
       item.name === 'checkpoint' ? item : { ...item, state: 'ready' })),
     present ? 'ready' : 'degraded', 'checkpoint loss did not block otherwise-ready inventory');
   }
+  const releaseDirectory = path.join(process.env.PI_CODING_AGENT_DIR, 'neura');
+  fs.mkdirSync(releaseDirectory, { recursive: true });
+  const releaseManifest = path.join(releaseDirectory, 'release-manifest.json');
+  const releaseHelper = path.join(releaseDirectory, 'runtime-install.mjs');
+  fs.writeFileSync(releaseManifest, '{}');
+  fs.writeFileSync(releaseHelper, 'process.exit(0)');
+  try {
+    const cancelled = new AbortController();
+    cancelled.abort();
+    const report = await inspect(scratchRoot, cancelled.signal);
+    assert.match(report.capabilities.find((item) => item.name === 'identity')?.detail ?? '', /release check cancelled/, 'cancelled health check was reported as release drift');
+  } finally {
+    fs.rmSync(releaseManifest, { force: true });
+    fs.rmSync(releaseHelper, { force: true });
+  }
 } finally {
   childProcess.execFile = originalExecFile;
   syncBuiltinESMExports();

@@ -18,7 +18,8 @@ if (process.platform === "win32") {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), "neura-launcher-"));
   const calls = path.join(bin, "refresh-calls.txt");
   const resultFile = path.join(bin, "result.txt");
-  const env = { ...process.env, PATH: `${bin};${process.env.SystemRoot}\\System32`, LAUNCHER_CALLS: calls, LAUNCHER_RESULT: resultFile };
+  const preflightCalls = path.join(bin, 'preflight-calls.txt');
+  const env = { ...process.env, PATH: `${bin};${process.env.SystemRoot}\\System32`, LAUNCHER_CALLS: calls, LAUNCHER_RESULT: resultFile, NEURA_TEST_PREFLIGHT: preflightCalls };
   delete env.Path;
   fs.writeFileSync(path.join(bin, "powershell.cmd"), [
     "@echo off",
@@ -26,6 +27,7 @@ if (process.platform === "win32") {
     "if not defined COMPOSIO_API_KEY echo COMPOSIO_API_KEY=user-key",
     "if not defined MY_PI_MCP_ENV_ALLOWLIST echo MY_PI_MCP_ENV_ALLOWLIST=BASE_TOKEN",
   ].join("\r\n"));
+  fs.writeFileSync(path.join(bin, 'node.cmd'), ['@echo off', '>>"%NEURA_TEST_PREFLIGHT%" echo check', 'if defined NEURA_TEST_PREFLIGHT_FAIL exit /b 1', 'exit /b 0'].join('\r\n'));
   fs.writeFileSync(path.join(bin, "pi.cmd"), [
     "@echo off",
     ">\"%LAUNCHER_RESULT%\" echo %COMPOSIO_API_KEY%^|%MY_PI_MCP_ENV_ALLOWLIST%^|%NEURA%",
@@ -36,19 +38,28 @@ if (process.platform === "win32") {
       env: { ...env, COMPOSIO_API_KEY: "inherited-key" }, encoding: "utf8", windowsHide: true,
     });
     assert.equal(run.status, 7, "launcher did not preserve Pi's exit code");
+    assert.equal(fs.readFileSync(preflightCalls, 'utf8').trim(), 'check', 'launcher skipped manifest preflight');
     assert.equal(fs.readFileSync(calls, "utf8").trim(), "refresh", "launcher did not perform exactly one cold refresh");
     assert.equal(fs.readFileSync(resultFile, "utf8").trim(), "inherited-key|COMPOSIO_API_KEY,BASE_TOKEN|1", "launcher overwrote inherited values or lost refreshed configuration");
     assert.doesNotMatch(`${run.stdout}\n${run.stderr}`, /inherited-key|user-key|BASE_TOKEN/, "launcher printed an environment value");
 
     fs.rmSync(calls);
+    fs.rmSync(resultFile);
     run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
       env: { ...env, COMPOSIO_API_KEY: "inherited-key", MY_PI_MCP_ENV_ALLOWLIST: "BASE_TOKEN" }, encoding: "utf8", windowsHide: true,
     });
     assert.equal(run.status, 7, "warm launcher did not preserve Pi's exit code");
     assert.equal(fs.existsSync(calls), false, "launcher refreshed despite complete inherited configuration");
+    fs.rmSync(resultFile);
+    run = spawnSync(process.env.ComSpec, ['/d', '/c', path.join(repoRoot, 'launcher', 'neura.cmd')], {
+      env: { ...env, NEURA_TEST_PREFLIGHT_FAIL: '1' }, encoding: 'utf8', windowsHide: true,
+    });
+    assert.equal(run.status, 1, 'launcher ignored failed release preflight');
+    assert.equal(fs.existsSync(resultFile), false, 'launcher started Pi after failed preflight');
+    fs.rmSync(path.join(bin, 'pi.cmd'));
 
     run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
-      env: { ...env, PATH: `${process.env.SystemRoot}\\System32`, COMPOSIO_API_KEY: "inherited-key", MY_PI_MCP_ENV_ALLOWLIST: "BASE_TOKEN" },
+      env: { ...env, COMPOSIO_API_KEY: "inherited-key", MY_PI_MCP_ENV_ALLOWLIST: "BASE_TOKEN" },
       encoding: "utf8", windowsHide: true,
     });
     assert.equal(run.status, 1, "launcher did not fail when Pi was unavailable");

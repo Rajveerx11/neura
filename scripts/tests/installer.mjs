@@ -16,7 +16,9 @@ const artworkPath = path.join(repoRoot, "agent", "neura", "launch-artwork.png");
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 assert.match(installerSource, /\$retiredExtensions\s*=\s*@\("autogit\.ts"\)/, "installer does not retire the old autogit hook");
-assert.match(installerSource, /Remove-Item -LiteralPath \$retiredPath -Force/, "installer does not remove the retired autogit hook");
+assert.match(fs.readFileSync(path.join(repoRoot, 'agent/neura/runtime-install.mjs'), 'utf8'), /agent\/extensions\/autogit\.ts/, 'installer does not retire autogit');
+assert.match(installerSource, /runtime-install\.mjs'\) check --source/, 'drift check does not verify installed release');
+assert.match(installerSource, /runtime-install\.mjs/, 'installer does not stage managed release');
 assert.match(installerSource, /is retired but remains installed/, "drift check does not detect the retired autogit hook");
 assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot reconcile exact runtime package pins");
 assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
@@ -42,6 +44,9 @@ assert.equal(parseRuntimeContract(runtimeContract), runtimeContract.piVersion, "
 assert.equal(parseRuntimeContract({ schemaVersion: "1", piVersion: runtimeContract.piVersion }), null, "string runtime contract schema was coerced");
 
 console.log('PASS installer contract');
+const managedRelease = spawnSync(process.execPath, [path.join(import.meta.dirname, 'runtime-install.mjs')], {encoding:'utf8', windowsHide:true, timeout:60000});
+assert.equal(managedRelease.status, 0, `Managed release verification failed: ${managedRelease.stdout}\n${managedRelease.stderr}`);
+console.log(managedRelease.stdout.trim());
 
 const shell = process.platform === 'win32'
   ? path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : 'pwsh';

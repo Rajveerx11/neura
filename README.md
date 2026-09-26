@@ -139,8 +139,13 @@ pi update --extensions --approve
 neura
 ```
 
-`install.ps1` copies repository-controlled extensions, theme, policy modules,
-MCP configuration, keybinding changes, and launcher into live Pi harness.
+`install.ps1` stages repository-controlled extensions, theme, policy modules,
+MCP configuration, and launcher, validates SHA-256 release hashes and the staged
+locked Learn runtime, then activates only those managed files with a recovery
+journal. Neura launch checks every installed byte against the receipt; `/health`
+uses a bounded managed-file check and leaves full Learn-runtime hashing to launch
+and `install.ps1 -Check`. Plain `pi` is unchanged.
+Stop running Pi before upgrading: individual file replacement is not atomic.
 Existing model and credential choices in `settings.json` are preserved unless
 `-ForceSettings` is supplied. The installer also provisions Learn's separate
 locked runtime with lifecycle scripts disabled and records the runtime lock receipt.
@@ -150,9 +155,25 @@ Open that shortcut for the single-window image-backed launch. Running `neura`
 inside an existing terminal stays in that window and uses the logo-only fallback.
 
 Do not run installer against an important profile until you have reviewed
-source and current blockers. Installation is not atomic and does not yet
-provide automatic rollback. Track this in
-[#21](https://github.com/Rajveerx11/neura/issues/21).
+source and current blockers. A failed activation restores previous managed
+files; the next installer run recovers an interrupted activation. The launcher
+refuses an incomplete installation. User settings, credentials, sessions, and
+other Pi files are never staged or restored. Unknown extensions block install
+and Neura launch: explicitly allow user-owned extensions in
+`~/.pi/neura-user-extensions.json` as
+`{"schemaVersion":1,"extensions":{"my-extension.ts":"<64-digit SHA-256>"}}`.
+Their contents remain user-owned and are not included in the Neura release.
+An edited managed file or older unreceipted release that differs from this
+manifest is refused rather than overwritten. There is no supported in-place
+migration for an unreceipted Pi profile: back up the existing profile, install
+into a separate clean Windows user profile, and migrate only reviewed user
+settings. Keep the original profile and Learn runtime intact until its data has
+been verified. Removing only `node_modules` does not establish ownership of
+other legacy files or make an in-place upgrade safe.
+Install still is **not atomic** across Pi's extension directory, launcher,
+settings, and Windows Terminal profile. Stop Pi before installing; the terminal
+profile and user configuration remain outside rollback. Full #21 closure and
+production readiness remain blocked. See [#21](https://github.com/Rajveerx11/neura/issues/21).
 
 ## Configure
 

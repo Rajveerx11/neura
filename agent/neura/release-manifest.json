@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "neuraVersion": "2.5.1",
+  "piVersion": "0.87.1",
+  "nodeMinimum": "24.15.0",
+  "automaticExecutables": {
+    "git": {
+      "windowsVersion": "git version 2.50.1.windows.1",
+      "windowsSha256": "c954fcc8e65a38450895ca65d308ecaee63f044d16494b5385faa5e036a3facb",
+      "windowsArchive": "PortableGit-2.50.1-64-bit.7z.exe",
+      "windowsArchiveUrl": "https://github.com/git-for-windows/git/releases/download/v2.50.1.windows.1/PortableGit-2.50.1-64-bit.7z.exe",
+      "windowsArchiveSha256": "c45a7dfa2bde34059f6dbd85f49a95d73d5aea29305f51b79595e56e4f323a3d"
+    },
+    "proof": {
+      "uvVersion": "0.12.11",
+      "archiveSha256": "4ae93e0f148a18434cc094072547cec88912fc4a72b984183c7d0d0e9586cb5e",
+      "uvSha256": "215990511ac349fb8c46457774f5e65dbaf4aa313fac429fbd2e35254250c932",
+      "uvxSha256": "ff2b9c72535d011d08bb2c916ff12d40246b225763ad176838842efd50d8d482",
+      "python": {
+        "path": "/usr/bin/python3.12",
+        "version": "3.12.3",
+        "package": "python3.12-minimal",
+        "packageVersion": "3.12.3-1ubuntu0.13",
+        "architecture": "amd64",
+        "sha256": "e1efa562c2cc2e35521a5c9c9b9939921001ff8ca9708a13ef15ace68cc2ccd7"
+      },
+      "wheels": {
+        "proof_of_work_agent-0.2.0-py3-none-any.whl": "e1dc9a077eb2039eced85e9c2e78c85d6d3ffc7054559f7c4df044d940aae6c6",
+        "cryptography-49.0.0-cp311-abi3-manylinux_2_34_x86_64.whl": "cbc77da8c523d5abd028635ba850a6966fcee2c82e2bf65a41d1d8afe0f98be9",
+        "cffi-2.1.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl": "1e9f50d192a3e525b15a75ab5114e442d83d657b7ec29182a991bc9a88fd3a66",
+        "pycparser-3.0-py3-none-any.whl": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
+        "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc"
+      }
+    }
+  },
+  "runtimePackages": [
+    "npm:@ollama/pi-web-search@0.0.5",
+    "npm:@spences10/pi-redact@0.0.14",
+    "npm:@spences10/pi-lsp@0.0.44",
+    "npm:pi-subagents@0.41.0",
+    {
+      "source": "npm:@spences10/pi-mcp@0.0.58",
+      "extensions": []
+    },
+    "npm:@spences10/pi-context@0.1.15"
+  ],
+  "capabilities": {
+    "work": "default",
+    "plan": "read-only",
+    "yolo": "opt-in",
+    "learn": "preview",
+    "humanAway": "preview-only"
+  },
+  "userExtensions": {
+    "ownership": "user",
+    "allowlist": "~/.pi/neura-user-extensions.json",
+    "default": []
+  },
+  "files": {
+    "agent/extensions/check-gate.ts": "d1d3833f606753bc031437ef6db7967e0ede9a65820b08fd508847bfff5ff49c",
+    "agent/extensions/checkpoint.ts": "373b9019860664bf8d353b91887e5c7bd5dfb99d918c313d7716d64967ed910c",
+    "agent/extensions/cockpit.ts": "f98f8043130fa4b6d7f28ef17b83a8596cec79ea289d3e68a70ecb0697ea455e",
+    "agent/extensions/gmail-guardrail.ts": "a073ec161675ce81fee00fcdabb437c217cf26f6c2d6fea04867e096d07cb2dc",
+    "agent/extensions/guardrail.ts": "b934f358099d09ccf0302826a8c92f99e68da51038a4961440815658f70999b7",
+    "agent/extensions/harness-health.ts": "90f5a06d6c84273de031513cced328bdc2658d16d3ba3988c14e5ce7e79a7cd7",
+    "agent/extensions/human-away-sandbox.ts": "37567fc6b539538ae7fe3c4b88327e4d063d3f4be70b4433292d22643343ed70",
+    "agent/extensions/learn.ts": "8022fee8a1c4235043c0aae84e25bcc65170ecfa58eff3b4bfabd4e6eb541682",
+    "agent/extensions/mcp.ts": "ca0b56d4cd45df8275959837f3fafd6929a41b4754bbe65f7d05feb12b49df37",
+    "agent/extensions/modes.ts": "2b71e48f6daeda461b892c9a4c9349e76aff5e40bd68356a09088083ec7296c1",
+    "agent/extensions/neura-memory.ts": "896b30dbe39c4b190993afd8b2405d4af255076676b342a073342155dbde1160",
+    "agent/extensions/neura.ts": "33611b0b88dd1677301f73fb0081d72eb2d4372b86e88206491d58db0d48a9ee",
+    "agent/extensions/october-bus.ts": "702da7afaeefc5670fd265a97c5893d8d7df581869a5d27b67e0efcf43c98866",
+    "agent/extensions/plan-artifact.ts": "31a92daa7edb05856c27d5facf00ddb942c28bcc57217ae62c2ca704c8896073",
+    "agent/extensions/presets.ts": "40a9268042a9564606c237d18901c07048783d7869f20efcbbfff7a7f275882a",
+    "agent/extensions/ship-report.ts": "6c1139aea7ede3206e3b12c7ad89024068c602be8fa1b07b72b4c943591c2fc6",
+    "agent/extensions/skill-doctor.ts": "5faa9d57a755e713a1c14841212cb9eacbb63be93775cb99e94be2a61ffaae3a",
+    "agent/extensions/transcript-actions.ts": "9ddaa815f6e71a10bffabd6bb2ba21e923690adfa112eb216702e4df6f95ceb8",
+    "agent/themes/neura-dark.json": "77069a8bd3ae511d98f9919b1700ec95e19b74c8046e59da8e5ebd1ea754ac8a",
+    "agent/neura/action-policy.ts": "6d7f06723e39f00b97c12490c93ea6b897ca291efca3caaa9bff23ba8a5debf3",
+    "agent/neura/approval-store.ts": "b6f68b44fe639014eb94636135688d0d13655d2518c1fadc42f764149b6e1bd3",
+    "agent/neura/cockpit-state.ts": "c367ae8f3f84bbb69013013f4e673fe4448d42850b5c09356c704c2d2d19419b",
+    "agent/neura/core.ts": "b021b6ba5465d47f773076156ba2ba445825891f8038f021e3690c813b666f8b",
+    "agent/neura/headmaster-policy.md": "388fef2f4a2d13fb2b9edd2b0f105a403444942a8c2ca9979a8e76731815fe69",
+    "agent/neura/headmaster.ts": "b29510da48baa5e0857006f110e0cd2be496d9342271d58a0c652d906b4fc34e",
+    "agent/neura/human-away-sandbox.ts": "8db6ca52971ae4f7a74baef01ee3340e21a442c57b81fb5d5945ca4269184cf1",
+    "agent/neura/launch-artwork.md": "540d304cc1193e7c7745c927503c39884863a104d0c08b92e253d1554d0824b5",
+    "agent/neura/launch-artwork.png": "5389d9f43e09d27d714d4ecfb2e9d638fa24c271384b388780ab3f5075589d76",
+    "agent/neura/learn-exercises.ts": "a4755333bd325c2a5190e510332ff0a944dd8ab90d31baeb34c9ab041f3127f0",
+    "agent/neura/learn-files.ts": "87173f9bc4f6b44b6318d6a29d1b831e10b4c6dc2218cc72eb0637d143c0773b",
+    "agent/neura/learn-materials-worker.mjs": "c7ae8f185be235ce5a1983c1778b75062555dd825782ee9faadb58fc339af052",
+    "agent/neura/learn-materials.ts": "4bb1543407b64a022072b01b252dd530f0df7a68d61e62fc356f56817a4cad28",
+    "agent/neura/learn-policy.ts": "7f2dfb6ec3b0bfb51fa674a4c5382696dadfac1708f69a8151d6bb1a298f7e49",
+    "agent/neura/learn-renderer.ts": "e42451e92fe20a34459781d571eecd60f1606b3c5167077831fb19628a94d852",
+    "agent/neura/learn-schema.ts": "e9f25db71f29215c11537b5c42844198162a505c3316a5e692fd2a58f3435534",
+    "agent/neura/learn-store.ts": "04cc3099fa6b26edca3a110d43f1a80038a173bf3184e643315a8666de286605",
+    "agent/neura/learn-vault.ts": "ca5cb1b0b55e7f8905b668e967bb937a32cd63de835c66eaed0a41d1524c92fe",
+    "agent/neura/mode-state.ts": "caf7967c353a8eed28063a0ff4aadf52658cb9feb688c2b7f2daf883f288dfa0",
+    "agent/neura/NEURA.md": "6b9bd6b86dcef433409590a41bfc1ee3c0ed149e96f4c4a75eb808acd6b28063",
+    "agent/neura/package-lock.json": "24453646c23ba0e083cf8dd8c1bf799ecab3ffafc73daf49aec38fe09a01fe9f",
+    "agent/neura/package.json": "52ddf203149f4707cd879d2a039b28edb0555e6b5a658ba3e81e00a95dd6c6f9",
+    "agent/neura/plan-policy.ts": "85ca5747cae5cf0cab8840f4d574bc8f0c913e4cd1a16cb2ec4ed204cc7e8350",
+    "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
+    "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
+    "agent/neura/redaction.ts": "e4ff353a81aad268dd9dde26f9c9ff910137b6eafc170b310761b852525b336e",
+    "agent/neura/runtime-contract.json": "ea7c41d2272ca035b7da57f1db45d61d12ebf715ca8bea5e44a3894c2653ca52",
+    "agent/neura/runtime-install.mjs": "f62fbf59757bbf02b064afda9d702d86a37d41bd516af6c8281a8c4f0066c6be",
+    "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
+    "agent/neura/verification.ts": "e07a29fd7b8ecc37d05a8c832cb171dc8123b1c08aca761ddd0cefa0291b1491",
+    "agent/mcp.json": "1cf62a0bcf13cddb450228823aa0d6f1b46174c17ce07d4da088596e085a140c",
+    "launcher/neura.cmd": "e930b0325a8a202cff55fc9d9c7d184e36d2c36c696dac7659b06d9f45cfebc1"
+  }
+}

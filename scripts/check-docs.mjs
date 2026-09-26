@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -104,10 +105,24 @@ assert.match(readme, /Apache License 2\.0/i, "README does not state Apache-2.0 l
 assert.doesNotMatch(readme, /private engineering-agent harness/i, "README contains stale private-project positioning");
 assert.match(fs.readFileSync(path.join(repoRoot, "plans", "README.md"), "utf-8"), /polish-neura-launch-screen-plan\.html[^\n]*Superseded/i, "launch-polish plan is not marked superseded");
 
-for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "agent/neura/runtime-contract.json", "agent/neura/package.json", "agent/neura/package-lock.json", "package.json", "package-lock.json", "tsconfig.json"]) {
+for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "agent/neura/runtime-contract.json", "agent/neura/release-manifest.json", "agent/neura/package.json", "agent/neura/package-lock.json", "package.json", "package-lock.json", "tsconfig.json"]) {
   JSON.parse(fs.readFileSync(path.join(repoRoot, relative), "utf-8"));
 }
 
+const release = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent/neura/release-manifest.json"), "utf-8"));
+const contract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent/neura/runtime-contract.json"), "utf-8"));
+assert.equal(release.schemaVersion, 1);
+assert.equal(release.neuraVersion, version);
+assert.equal(release.piVersion, contract.piVersion);
+assert.equal(`>=${release.nodeMinimum}`, rootPackage.engines.node);
+assert.deepEqual(release.automaticExecutables, contract.automaticExecutables);
+assert.deepEqual(release.runtimePackages, JSON.parse(fs.readFileSync(path.join(repoRoot, 'agent/settings.json'))).packages);
+const managed = ['agent/extensions', 'agent/themes', 'agent/neura'].flatMap(dir => fs.readdirSync(path.join(repoRoot, dir)).filter(name => name !== 'release-manifest.json' && fs.statSync(path.join(repoRoot, dir, name)).isFile()).map(name => `${dir}/${name}`));
+managed.push('agent/mcp.json', 'launcher/neura.cmd');
+assert.deepEqual(Object.keys(release.files).sort(), managed.sort(), 'release manifest does not cover every managed file');
+for (const [name, expected] of Object.entries(release.files)) {
+  assert.equal(createHash('sha256').update(fs.readFileSync(path.join(repoRoot, name))).digest('hex'), expected, `manifest hash mismatch: ${name}`);
+}
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 assert.equal(packageMetadata.license, "Apache-2.0", "package.json license is not Apache-2.0");
 assert.equal(packageMetadata.private, true, "package.json must remain private");
