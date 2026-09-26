@@ -610,17 +610,17 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const identity = currentRuntimeIdentity();
   const releasePath = path.join(AGENT_DIR, 'neura', 'release-manifest.json');
   // Source identity is not evidence that the live Pi files match the release.
-  const releaseStatus = !fs.existsSync(releasePath) ? 'drift' : await new Promise<'ready' | 'drift' | 'timeout'>((resolve) => {
+  const releaseStatus = !fs.existsSync(releasePath) ? 'drift' : await new Promise<'ready' | 'drift' | 'timeout' | 'cancelled'>((resolve) => {
     const child = spawn(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check', '--quick'], {
       env: { ...process.env, PI_CODING_AGENT_DIR: AGENT_DIR },
       windowsHide: true, stdio: 'ignore', signal,
     });
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; child.kill(); }, 5_000);
-    child.on('error', () => { clearTimeout(timer); resolve('drift'); });
+    child.on('error', () => { clearTimeout(timer); resolve(signal?.aborted ? 'cancelled' : 'drift'); });
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve(timedOut ? 'timeout' : code === 0 ? 'ready' : 'drift');
+      resolve(signal?.aborted ? 'cancelled' : timedOut ? 'timeout' : code === 0 ? 'ready' : 'drift');
     });
   });
   const releaseValid = releaseStatus === 'ready';
@@ -634,7 +634,7 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const skills = countSkills();
   const capabilities = [
     capability("Pi", true, pi.valid ? "ready" : pi.installed ? "unhealthy" : "missing", pi.label, pi.action),
-    capability("identity", true, identity.version && releaseValid ? "ready" : "degraded", identity.label + (releaseValid ? ' · managed files checked' : releaseStatus === 'timeout' ? ' · release check timed out' : ` · release manifest missing or drifted (${releasePath})`), identity.version && releaseValid ? null : releaseStatus === 'timeout' ? "retry release check; use install.ps1 -Check for full verification" : "restore or verify release manifest"),
+    capability("identity", true, identity.version && releaseValid ? "ready" : "degraded", identity.label + (releaseValid ? ' · managed files checked' : releaseStatus === 'cancelled' ? ' · release check cancelled' : releaseStatus === 'timeout' ? ' · release check timed out' : ` · release manifest missing or drifted (${releasePath})`), identity.version && releaseValid ? null : releaseStatus === 'cancelled' ? "retry /health when ready" : releaseStatus === 'timeout' ? "retry release check; use install.ps1 -Check for full verification" : "restore or verify release manifest"),
     capability("Git", true, gitVersion ? "ready" : "missing", versionLabel(gitVersion), gitVersion ? null : "install Git"),
     capability("workspace", true, git.isRepo ? "ready" : "degraded", git.isRepo ? git.branch : "not a Git workspace", git.isRepo ? null : "open a Git workspace"),
     capability("modes", true, modes && modeKeys ? "ready" : "degraded", modes && modeKeys ? "extension and keybinding ready" : "extension or keybinding missing", modes && modeKeys ? null : "sync extensions and keybindings"),

@@ -62,7 +62,7 @@
     "agent/extensions/cockpit.ts": "f98f8043130fa4b6d7f28ef17b83a8596cec79ea289d3e68a70ecb0697ea455e",
     "agent/extensions/gmail-guardrail.ts": "a073ec161675ce81fee00fcdabb437c217cf26f6c2d6fea04867e096d07cb2dc",
     "agent/extensions/guardrail.ts": "b934f358099d09ccf0302826a8c92f99e68da51038a4961440815658f70999b7",
-    "agent/extensions/harness-health.ts": "42dd4aad51e2238796f181a7fa9bb8305894e8bbae6078be96603cab13a0ee88",
+    "agent/extensions/harness-health.ts": "90f5a06d6c84273de031513cced328bdc2658d16d3ba3988c14e5ce7e79a7cd7",
     "agent/extensions/human-away-sandbox.ts": "37567fc6b539538ae7fe3c4b88327e4d063d3f4be70b4433292d22643343ed70",
     "agent/extensions/learn.ts": "8022fee8a1c4235043c0aae84e25bcc65170ecfa58eff3b4bfabd4e6eb541682",
     "agent/extensions/mcp.ts": "ca0b56d4cd45df8275959837f3fafd6929a41b4754bbe65f7d05feb12b49df37",
