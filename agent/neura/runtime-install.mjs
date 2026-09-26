@@ -119,7 +119,7 @@ function state(manifest, root) {
   return { schemaVersion: 1, sourceCommit: commit, manifestHash: digest(path.join(root, manifestName)),
     version: manifest.neuraVersion, installedAt: new Date().toISOString(), files };
 }
-function verify(root, expectedState, checkOwnership = true) {
+function verify(root, expectedState, checkOwnership = true, quick = false) {
   const located = (name) => root === agent ? asTarget(name) : path.join(root, name);
   const manifest = valid(read(located(manifestName)));
   if (expectedState.schemaVersion !== 1 || !expectedState.files || Array.isArray(expectedState.files) ||
@@ -132,6 +132,7 @@ function verify(root, expectedState, checkOwnership = true) {
   }
   if (!Object.hasOwn(expectedState.files, 'agent/neura/.learn-runtime-lock')) throw Error('Learn runtime receipt missing');
   for (const [name, expected] of Object.entries(expectedState.files)) {
+    if (quick && name.startsWith('agent/neura/node_modules/')) continue;
     const file = located(name);
     safe(file);
     if (!exists(file) || digest(file) !== expected) throw Error(`installed file drift: ${name}`);
@@ -141,11 +142,13 @@ function verify(root, expectedState, checkOwnership = true) {
         process.versions.node.localeCompare(manifest.nodeMinimum, undefined, { numeric: true }) < 0) throw Error(`Node ${manifest.nodeMinimum}+ required`);
     ownership(manifest);
   }
-  const moduleDir = root === agent ? path.join(agent, 'neura/node_modules') : path.join(root, 'agent/neura/node_modules');
-  const expectedModules = new Set(Object.keys(expectedState.files).filter(name => name.startsWith('agent/neura/node_modules/')));
-  for (const name of listPaths(moduleDir)) {
-    const installedName = `agent/neura/node_modules/${name}`;
-    if (!expectedModules.has(installedName)) throw Error(`unknown Learn runtime file: ${installedName}`);
+  if (!quick) {
+    const moduleDir = root === agent ? path.join(agent, 'neura/node_modules') : path.join(root, 'agent/neura/node_modules');
+    const expectedModules = new Set(Object.keys(expectedState.files).filter(name => name.startsWith('agent/neura/node_modules/')));
+    for (const name of listPaths(moduleDir)) {
+      const installedName = `agent/neura/node_modules/${name}`;
+      if (!expectedModules.has(installedName)) throw Error(`unknown Learn runtime file: ${installedName}`);
+    }
   }
   return expectedState;
 }
@@ -266,8 +269,8 @@ try {
   else if (mode === 'check') {
     if (exists(path.join(transaction, 'journal.json'))) throw Error('interrupted installation; run installer to recover');
     const receipt = read(asTarget(stateName));
-    verify(agent, receipt);
+    verify(agent, receipt, true, process.argv.includes('--quick'));
     if (process.argv.includes('--source') && digest(path.join(source, manifestName)) !== receipt.manifestHash) throw Error('live manifest differs from source');
     console.log(`Neura ${receipt.version} manifest ${receipt.manifestHash.slice(0, 12)} commit ${receipt.sourceCommit} installed ${receipt.installedAt}`);
-  } else throw Error('usage: runtime-install.mjs prepare|seal|activate|recover|check [--source]');
+  } else throw Error('usage: runtime-install.mjs prepare|seal|activate|recover|check [--source] [--quick]');
 } catch (error) { console.error(`Neura install: ${error.message}`); process.exitCode = 1; }

@@ -14,7 +14,7 @@ const live = name => name.startsWith('launcher/') ? path.join(home, '.local/bin/
 const stage = path.join(home, '.pi/neura-install-pending/stage');
 const write = (file, data) => { fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, data); };
 const run = (mode, ok = true, env = {}) => {
-  const result = spawnSync(process.execPath, [helper, mode], { encoding: 'utf8', env: {...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: path.join(home, '.pi/agent'), ...env} });
+  const result = spawnSync(process.execPath, [helper, ...mode.split(' ')], { encoding: 'utf8', env: {...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: path.join(home, '.pi/agent'), ...env} });
   assert.equal(result.status === 0, ok, `${mode}: ${result.stderr}`);
   return result;
 };
@@ -62,6 +62,8 @@ try {
   assert.equal(fs.readFileSync(live('agent/settings.json'), 'utf8'), '{"credential":"synthetic-only"}');
   const liveModule = live('agent/neura/node_modules/example.js');
   write(liveModule, 'user-edited');
+  run('check', false);
+  run('check --quick'); // Health checks only managed files; launch still verifies Learn bytes.
   seal(); run('activate', false);
   run('recover');
   write(liveModule, 'pinned');
@@ -84,7 +86,7 @@ try {
   run('prepare', false); // refuse to overwrite edited live configuration
   write(live('agent/mcp.json'), '{}');
   // Tamper detection checks bytes, not normalized text or a lockfile-only receipt.
-  write(live('agent/extensions/two.ts'), 'tampered'); run('check', false);
+  write(live('agent/extensions/two.ts'), 'tampered'); run('check', false); run('check --quick', false);
   write(live('agent/extensions/two.ts'), 'two.ts');
   seal(); run('activate', false, {NEURA_INSTALL_TEST_FAIL_AFTER:'2'});
   assert.equal(fs.readFileSync(live('agent/extensions/two.ts'), 'utf8'), 'two.ts', 'failed activation did not roll back');

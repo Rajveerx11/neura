@@ -142,7 +142,9 @@ neura
 `install.ps1` stages repository-controlled extensions, theme, policy modules,
 MCP configuration, and launcher, validates SHA-256 release hashes and the staged
 locked Learn runtime, then activates only those managed files with a recovery
-journal. Neura launch checks the installed receipt; plain `pi` is unchanged.
+journal. Neura launch checks every installed byte against the receipt; `/health`
+uses a bounded managed-file check and leaves full Learn-runtime hashing to launch
+and `install.ps1 -Check`. Plain `pi` is unchanged.
 Stop running Pi before upgrading: individual file replacement is not atomic.
 Existing model and credential choices in `settings.json` are preserved unless
 `-ForceSettings` is supplied. The installer also provisions Learn's separate

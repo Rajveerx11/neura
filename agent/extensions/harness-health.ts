@@ -610,14 +610,20 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const identity = currentRuntimeIdentity();
   const releasePath = path.join(AGENT_DIR, 'neura', 'release-manifest.json');
   // Source identity is not evidence that the live Pi files match the release.
-  const releaseValid = fs.existsSync(releasePath) && await new Promise<boolean>((resolve) => {
-    const child = spawn(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check'], {
+  const releaseStatus = !fs.existsSync(releasePath) ? 'drift' : await new Promise<'ready' | 'drift' | 'timeout'>((resolve) => {
+    const child = spawn(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check', '--quick'], {
       env: { ...process.env, PI_CODING_AGENT_DIR: AGENT_DIR },
-      timeout: 5_000, windowsHide: true, stdio: 'ignore', signal,
+      windowsHide: true, stdio: 'ignore', signal,
     });
-    child.on('error', () => resolve(false));
-    child.on('close', (code) => resolve(code === 0));
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill(); }, 5_000);
+    child.on('error', () => { clearTimeout(timer); resolve('drift'); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve(timedOut ? 'timeout' : code === 0 ? 'ready' : 'drift');
+    });
   });
+  const releaseValid = releaseStatus === 'ready';
 
   const checkpoint = fs.existsSync(path.join(AGENT_DIR, "extensions", "checkpoint.ts"));
   const gate = fs.existsSync(path.join(AGENT_DIR, "extensions", "check-gate.ts"));
@@ -628,7 +634,7 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const skills = countSkills();
   const capabilities = [
     capability("Pi", true, pi.valid ? "ready" : pi.installed ? "unhealthy" : "missing", pi.label, pi.action),
-    capability("identity", true, identity.version && releaseValid ? "ready" : "degraded", identity.label + (releaseValid ? '' : ` · release manifest missing or drifted (${releasePath})`), identity.version && releaseValid ? null : "restore or verify release manifest"),
+    capability("identity", true, identity.version && releaseValid ? "ready" : "degraded", identity.label + (releaseValid ? ' · managed files checked' : releaseStatus === 'timeout' ? ' · release check timed out' : ` · release manifest missing or drifted (${releasePath})`), identity.version && releaseValid ? null : releaseStatus === 'timeout' ? "retry release check; use install.ps1 -Check for full verification" : "restore or verify release manifest"),
     capability("Git", true, gitVersion ? "ready" : "missing", versionLabel(gitVersion), gitVersion ? null : "install Git"),
     capability("workspace", true, git.isRepo ? "ready" : "degraded", git.isRepo ? git.branch : "not a Git workspace", git.isRepo ? null : "open a Git workspace"),
     capability("modes", true, modes && modeKeys ? "ready" : "degraded", modes && modeKeys ? "extension and keybinding ready" : "extension or keybinding missing", modes && modeKeys ? null : "sync extensions and keybindings"),
