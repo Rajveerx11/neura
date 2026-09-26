@@ -67,7 +67,7 @@ function ownership(manifest) {
     const previousManifestPath = asTarget(manifestName);
     if (!exists(previousManifestPath) || digest(previousManifestPath) !== previous.manifestHash) throw Error('previous release manifest drift');
     oldFiles = previousFiles(previous, valid(read(previousManifestPath)));
-  } else if (exists(path.join(agent, 'neura', 'node_modules'))) {
+  } else if (Object.keys(listFiles(path.join(agent, 'neura', 'node_modules'))).length) {
     // Legacy installs have no ownership receipt. Never delete unknown packages
     // to make a new receipt pass; migrate them only with an explicit procedure.
     throw Error('unreceipted Learn runtime present; migrate the existing install before activation');
@@ -171,8 +171,9 @@ function recover() {
   for (const [index, name] of entries.entries()) {
     const target = asTarget(name), backup = path.join(transaction, 'backup', String(index));
     safe(target); safe(backup);
+    const stagedHash = name === stateName ? digest(path.join(root, stateName)) : next.files[name];
     if (!exists(backup) && (Object.hasOwn(oldFiles, name) || (name === stateName && exists(oldStateBackup)) ||
-        (exists(target) && (!Object.hasOwn(next.files, name) || digest(target) !== next.files[name])))) {
+        (exists(target) && (!stagedHash || digest(target) !== stagedHash)))) {
       throw Error(`missing backup for existing file: ${name}`);
     }
   }

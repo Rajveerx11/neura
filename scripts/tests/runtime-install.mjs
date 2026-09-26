@@ -41,6 +41,12 @@ try {
   assert.equal(fs.readFileSync(legacyModule, 'utf8'), 'unreceipted');
   fs.rmSync(path.dirname(legacyModule), {recursive:true, force:true});
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
+  seal();
+  const freshReceipt = JSON.parse(fs.readFileSync(path.join(stage, 'agent/neura/.install-state.json'), 'utf8'));
+  run('activate', false, {NEURA_INSTALL_TEST_CRASH_AFTER: String(Object.keys(freshReceipt.files).length + 1)});
+  run('recover');
+  assert.equal(fs.existsSync(live('agent/neura/.install-state.json')), false, 'interrupted first install left a release receipt');
+  assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'interrupted first install left a journal');
   seal(); run('activate'); run('check');
   const alternateAgent = path.join(tmp, 'alternate-agent');
   fs.cpSync(path.join(home, '.pi/agent'), alternateAgent, {recursive: true});
