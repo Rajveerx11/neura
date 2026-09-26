@@ -1,8 +1,8 @@
 # Dependency policy and review
 
 Pi/development source review: 2026-09-24 (Pi 0.87.1). Learn runtime review: 2026-09-07.
-MCP lifecycle and automatic-execution review: 2026-09-13. Documentation
-reconciled with source: 2026-09-13.
+MCP lifecycle and automatic-execution review: 2026-09-13. Public-default
+configuration review: 2026-09-15.
 
 Neura uses exact runtime and development pins. `package-lock.json` is the
 reproducible development graph. Pi-managed runtime extensions are pinned in
@@ -27,7 +27,7 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 
 | Package | Pin | Source and lifecycle review | Privileged behavior |
 |---|---:|---|---|
-| `@earendil-works/pi-coding-agent` | `0.87.1` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v0.87.1); 0.86–0.87 changelog and installed context/session/footer APIs reviewed. pi-ai, pi-tui, and pi-coding-agent manifests have build and `prepublishOnly` but no consumer install hook. Registry integrity and signatures verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
+| `@earendil-works/pi-coding-agent` | `0.87.1` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v0.87.1); the 0.86–0.87 changelog and installed footer/context/session APIs were reviewed. Published pi-coding-agent, pi-ai, and pi-tui manifests have build and `prepublishOnly`, but no consumer install hook. Registry integrity and signatures were verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
 | `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
@@ -100,27 +100,33 @@ and workspace-contained overrides are rejected.
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
-already present on the Windows runner. Version `1.63.0` retains Node 20+ support; rollback restores the prior manifest and lockfile together. axe-core has no consumer install hook and
-runs only against generated local Plan and Learn HTML. Browser contexts receive no
+already present on the Windows runner. Version `1.63.0` retains Node 20+
+support; rollback restores the prior manifest and lockfile together. axe-core
+has no consumer install hook and runs only against generated local Plan and
+Learn HTML. Browser contexts receive no
 credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
 Learn browser assertions also run in CI; the current artifact step is Plan-specific.
 
-The 2026-09-24 root graph reports zero known high npm vulnerabilities; all 246
-packages have verified registry signatures and 86 attestations. The Learn graph
-reports zero known high vulnerabilities; all 21 packages have verified
-signatures and 3 attestations.
+The 2026-09-24 root-graph review found zero known high npm vulnerabilities; all
+246 audited packages had verified registry signatures and 86 had attestations.
+The Learn graph found zero known high npm vulnerabilities; all 21 audited
+packages had verified registry signatures and 3 had attestations.
 
 Pi `0.83.0` was rejected for stable release because its locked `undici` and
 `brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`
 passed Neura's offline live-startup smoke test, loader harness, typecheck,
 dependency audit, signature audit, live drift check, and WSL2 sandbox replay.
-That is historical evidence. Pi `0.87.1` passed the pinned development
-loader harness and configured typecheck after review of canonical session,
-context-edit, and footer API changes. Source, development APIs, and CI now
-pin `0.87.1`; verify live installations separately. The installer does not
-replace global Pi. Roll back the manifest, lockfile, runtime contract, and
-live Neura files together rather than downgrading global Pi silently.
+That is historical evidence. Pi `0.85.1` was source-reviewed from the installed
+release and verified through Neura's loader harness, typecheck, dependency audit,
+and full verification suite on 2026-09-15; a fresh live-drift result is recorded
+separately. Current source, development APIs, and CI pin `0.87.1`; verify live
+installations separately. The 0.87.0 canonical-session and context-edit changes
+were reviewed against Neura's session, footer, and extension APIs; the complete
+harness and configured typecheck passed on the exact 0.87.1 development graph.
+The installer does not replace a user's global Pi. Rolling back requires
+restoring the prior manifest, lockfile, runtime contract, and live Neura files
+together; do not downgrade a newer global Pi silently.
 
 ## Update policy
 

@@ -22,7 +22,8 @@ The repository is public, but a promoted release still requires every applicable
 item in [OPEN_SOURCE.md](OPEN_SOURCE.md). Public visibility, a GitHub draft,
 package publication, live installation, and production readiness are independent.
 Both npm manifests stay private and release automation must never publish to a
-package registry.
+package registry. Public release notes must say `experimental` until the
+production gate below passes.
 
 ## Stable-release gate
 

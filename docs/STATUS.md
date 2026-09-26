@@ -2,13 +2,14 @@
 
 Last documentation audit: 2026-09-24
 
-Latest release: `2.5.1`. Current merged source: `59c6e1d`, including Work,
+Latest release: `2.5.1`. Current merged source: `0dc9ce6`, including Work,
 modular verification, and Learn Mode; these changes are unreleased. Required Pi:
 `0.87.1`; Node: `24.15+` (CI `24.16.0`).
 
-Live installation: not refreshed by the Learn delivery or this documentation
-audit. No new live-drift result is claimed. These docs describe merged source;
-older working checkouts and live installations can differ.
+Live installation: a local sync was performed on 2026-09-15, then rolled back
+for touched live files at the owner's request so repository changes remain
+source-only. No current live-match claim is made. Older working checkouts and
+live installations can differ.
 
 ## Release decision
 
@@ -35,9 +36,9 @@ release gates and issue ownership live in
 | Area | State | Evidence or blocker |
 |---|---|---|
 | Public source | Available; release blocked | The repository is public, GitHub recognizes Apache-2.0, the owner-supplied logo has documented redistribution terms, and a complete-history secret scan passed on 2026-09-15. Final content/default review and clean-profile install evidence remain release blockers. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
-| Pi and live Neura | Pi 0.87.1 source verified; complete live match not yet claimed | Source and CI pin Pi `0.87.1`. Typecheck, 18 harness suites, and dependency audit/signatures passed locally on 2026-09-24. The cockpit and contract were synced separately; verify the complete installation before claiming full live parity. |
-| Dependency graphs | Verified 2026-09-24 | Both graphs report zero known high vulnerabilities; root verified 246 registry signatures and 86 attestations, Learn 21 signatures and 3 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
-| Core harness | Ready for covered behavior | PR #44 passed Windows harness and Linux portable CI, 17 isolated suites/17 extensions, typecheck, docs, and real Learn/Plan browser checks. This is not a fresh live WSL replay. |
+| Pi and live Neura | Pi 0.87.1 source verified; scoped footer installed, other live drift remains | Exact Pi `0.87.1` passed configured typecheck, 18 harness suites, dependency audit, and signatures on 2026-09-24. Only the cockpit and runtime contract were synced to the PC; other live files still differ from this dirty checkout. No complete live-match claim is made. |
+| Dependency graphs | Verified 2026-09-24 | Root and Learn lockfile graphs report zero known high vulnerabilities; root reports 246 registry signatures and 86 attestations, Learn reports 21 signatures and 3 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
+| Core harness | Ready for covered behavior | Local verification on 2026-09-15 passed typecheck, docs, sandbox replay, Learn/Plan browser checks, and 18 isolated suites loading 19 extensions. CI passed on the public-repository hardening commit. |
 | Default mode | Implemented, unreleased | Work is default; execution uses network-disabled WSL2 bubblewrap, with no host fallback. [#23](https://github.com/Rajveerx11/neura/issues/23) is closed. |
 | Learn Mode | Implemented, unreleased | Practical lessons, diagrams, PDF/PPTX/OCR, bounded SQL, citations, explicit save/resume, and machine-local opt-in automatic Obsidian knowledge capture. The vault writer is application-controlled preview behavior; no live install or real-vault write is claimed. First workspace-store creation requires native Windows. Parser process limits are not OS isolation. See [LEARN_MODE.md](LEARN_MODE.md). |
 | Human Away | Preview / blocked | Writable live-workspace mounting and repository-script indirection are unsafe for unattended production. Track [#24](https://github.com/Rajveerx11/neura/issues/24). |
@@ -46,8 +47,8 @@ release gates and issue ownership live in
 | Credential incident | Closed | Owner confirmed revocation and replacement on 2026-09-12; complete-history scanning and negative regressions passed. See [#36](https://github.com/Rajveerx11/neura/issues/36) and [SECURITY_INCIDENTS.md](SECURITY_INCIDENTS.md). |
 | Plan confidentiality | Major gap | Broad searches can discover ignored or historical secrets. Track [#35](https://github.com/Rajveerx11/neura/issues/35). |
 | Approvals | Partially hardened | Cross-process locking, flushed appends, bounded Windows contention retries, and corruption/crash rejection are covered. Automatic recovery, authenticated tamper evidence, and stronger remote binding remain [#33](https://github.com/Rajveerx11/neura/issues/33). |
-| Integrations and memory | Major gap | October, MCP, Gmail, memory, redaction, and credential scoping need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
-| Skills | Major gap | Enabled skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
+| Integrations and memory | Major gap | Public defaults no longer include a concrete Composio route, but October, MCP, Gmail, memory, redaction, and credential scoping still need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
+| Skills | Major gap | Public defaults no longer load a personal `~/.claude/skills` path, but optional skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
 | Type and test safety | Tests improved; strict typing open | Hermetic suites, seeded fuzzing, races, crash rejection, and content-bound receipts shipped; [#27](https://github.com/Rajveerx11/neura/issues/27) is closed. Configured typecheck passes; strict migration remains [#26](https://github.com/Rajveerx11/neura/issues/26). |
 | CI and releases | Guarded experimental path | Windows `harness`, Ubuntu `portable-proof`, dependency review, aggregate CI, and CodeQL use explicit runners and immutable GitHub-owned action pins. Tag automation publishes no npm package and can create only a draft prerelease after release gates; stable tags are blocked while this status says not production-ready. |
 | UX and accessibility | Owner-supplied logo and image-backed launch implemented; wider surfaces covered | Windows Terminal owns the local logo artwork and Pi owns a centred functional launch editor with a logo-only fallback. Terminal widths are regression-tested. Fresh Plan and Learn screenshots use synthetic fixtures and passed real-Edge browser checks during this update. Track [#53](https://github.com/Rajveerx11/neura/issues/53) and [#54](https://github.com/Rajveerx11/neura/issues/54). |

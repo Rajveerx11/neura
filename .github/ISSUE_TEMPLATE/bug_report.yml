@@ -14,7 +14,7 @@ body:
     id: version
     attributes:
       label: Neura version, source commit, and Pi version
-      placeholder: "Neura 2.5.1; commit from git rev-parse --short HEAD; Pi 0.84.4"
+      placeholder: "Neura 2.5.1; commit from git rev-parse --short HEAD; Pi 0.85.1"
     validations:
       required: true
   - type: dropdown

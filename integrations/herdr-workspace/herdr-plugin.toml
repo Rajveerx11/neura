@@ -1,0 +1,30 @@
+id = "neura.workspace"
+name = "Neura Workspace"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+platforms = ["windows"]
+description = "Editable Obsidian notes and Google Calendar views inside Herdr panes."
+
+[[actions]]
+id = "open-notes"
+title = "Open editable Obsidian notes"
+contexts = ["workspace", "pane"]
+command = ["node", "open-pane.mjs", "notes"]
+
+[[actions]]
+id = "open-calendar"
+title = "Open Google Calendar"
+contexts = ["workspace", "pane"]
+command = ["node", "open-pane.mjs", "calendar"]
+
+[[panes]]
+id = "notes"
+title = "Obsidian Notes"
+placement = "split"
+command = ["node", "notes.mjs"]
+
+[[panes]]
+id = "calendar"
+title = "Google Calendar"
+placement = "split"
+command = ["node", "calendar.mjs"]

@@ -1,7 +1,7 @@
 // Neura ambient cockpit: responsive footer, policy boundary, current operation,
 // proof/recovery receipts, copy rail, and a quiet interruptible working indicator.
 
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, onCockpitChange, patchCockpit, type CockpitState } from "../neura/cockpit-state.ts";
 import { PALETTE, fg, truncateText } from "../neura/core.ts";
 import { getMode, modeLabel, onModeChange, type AgentMode } from "../neura/mode-state.ts";
@@ -43,6 +43,7 @@ function costTag(cost: number): string {
   return fg(color, `$${cost.toFixed(3)}`);
 }
 
+/** Match Pi's native footer: sum all billable assistant, tool, and summary usage. */
 function usageCost(usage): number | null {
   const cost = usage?.cost;
   const value = typeof cost?.total === "number" ? cost.total : typeof cost === "number" ? cost : null;
@@ -74,26 +75,39 @@ function shortModel(modelId: string, width: number): string {
   return truncateText(modelId || "no model", limit);
 }
 
+function directoryTag(cwd: string | undefined): string {
+  const value = String(cwd ?? "").replace(/[\\/]+$/, "");
+  const leaf = value.split(/[\\/]/).filter(Boolean).pop() || value || "no directory";
+  return fg(MUT, leaf);
+}
+
+function rightFooterParts(data: { directory?: string; branch?: string; model: string; thinking?: string }, tier: ReturnType<typeof widthTier>, width: number): string[] {
+  const model = fg(TXT, shortModel(data.model, width));
+  const thinking = data.thinking ? fg(MUT, `think ${data.thinking}`) : "";
+  const branch = data.branch ? fg(MUT, data.branch) : "";
+  const directory = directoryTag(data.directory);
+  if (tier === "wide") return [directory, branch, model, thinking];
+  if (tier === "standard") return [branch, model, thinking];
+  if (tier === "compact") return [model, thinking];
+  return [model];
+}
+
 export function footerLine(
   width: number,
-  data: { mode: AgentMode; model: string; branch?: string; context?: string | null; cost?: string | null; launchVisible?: boolean },
+  data: { mode: AgentMode; model: string; branch?: string; directory?: string; thinking?: string; context?: string | null; cost?: string | null; launchVisible?: boolean },
 ): string {
+  if (data.launchVisible) return "";
   const tier = widthTier(width);
   const separator = fg(DIM, " · ");
-  const mode = modeTag(data.mode);
-  const model = fg(TXT, shortModel(data.model, width));
-  const branch = data.branch ? fg(MUT, data.branch) : "";
-  const context = data.context ?? "";
-  const cost = data.cost ?? "";
-  if (data.launchVisible) return "";
-  const parts = tier === "wide"
-    ? [mode, context, cost, model, branch]
-    : tier === "standard"
-      ? [mode, context, cost, model]
-      : tier === "micro"
-        ? [mode, cost]
-        : [mode, context, cost];
-  return truncateToWidth(` ${joinFitting(parts, separator, Math.max(1, width - 1))}`, width);
+  const left = joinFitting([modeTag(data.mode), data.context ?? "", data.cost ?? ""], separator, Math.max(1, width));
+  const right = joinFitting(rightFooterParts(data, tier, width), separator, Math.max(1, width));
+  const gap = 2;
+  if (visibleWidth(left) + gap + visibleWidth(right) <= width) {
+    return `${left}${" ".repeat(width - visibleWidth(left) - visibleWidth(right))}${right}`;
+  }
+  const availableRight = width - visibleWidth(left) - gap;
+  if (availableRight > 8) return `${left}${" ".repeat(gap)}${truncateToWidth(right, availableRight)}`;
+  return truncateToWidth(left, width);
 }
 
 function operationTarget(event): string {
@@ -189,19 +203,13 @@ export default function (pi) {
             mode: getMode(),
             model: ctx.model?.id ?? "no model",
             branch: footerData.getGitBranch?.(),
+            directory: ctx.cwd,
+            thinking: ctx.thinkingLevel,
             context,
             cost: cost === null ? fg(DIM, "cost n/a") : costTag(cost),
             launchVisible: state.launchVisible,
           })];
-          try {
-            if (state.phase !== "WORK") return lines;
-            const statuses = [...(footerData.getExtensionStatuses?.()?.entries() ?? [])]
-              .filter(([key]) => !String(key).startsWith("neura-"))
-              .filter(([, value]) => !/^\s*MCP\b/i.test(String(value)))
-              .map(([, value]) => String(value));
-            if (statuses.length) lines.push(truncateToWidth(` ${statuses.join(" · ")}`, width));
-          } catch {}
-          return lines.slice(0, 2);
+          return lines;
         },
         dispose() {
           try { unsubscribeBranch?.(); } catch {}
