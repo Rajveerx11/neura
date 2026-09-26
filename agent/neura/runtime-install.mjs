@@ -87,6 +87,7 @@ function ownership(manifest) {
     const file = path.join(dir, entry.name);
     safe(file);
     const name = `agent/extensions/${entry.name}`;
+    if (retired.includes(name) && oldFiles[name] !== digest(file)) throw Error(`unowned retired extension: ${entry.name}`);
     if (retired.includes(name) || Object.hasOwn(manifest.files, name) ||
         (Object.hasOwn(oldFiles, name) && oldFiles[name] === digest(file))) continue;
     if (!entry.isFile() || !/^[\w.-]+\.(ts|js|mjs)$/.test(entry.name) ||
@@ -187,12 +188,21 @@ function recover() {
       throw Error(`unowned file at previously absent target: ${name}`);
     }
     safe(`${target}.neura-install-${index}.tmp`);
+    safe(`${target}.neura-recover-${index}.tmp`);
   }
   for (const [index, name] of entries.entries()) {
     const target = asTarget(name), backup = path.join(transaction, 'backup', String(index));
     fs.rmSync(`${target}.neura-install-${index}.tmp`, { force: true });
-    if (exists(backup)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(backup, target); }
-    else fs.rmSync(target, { force: true });
+    const temporary = `${target}.neura-recover-${index}.tmp`;
+    fs.rmSync(temporary, { force: true }); // a prior interrupted recovery may have left a partial copy
+    if (exists(backup)) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (process.env.NEURA_INSTALL_TEST_CRASH_DURING_RECOVER === String(index + 1)) {
+        fs.writeFileSync(temporary, 'partial'); process.exit(77);
+      }
+      fs.copyFileSync(backup, temporary, fs.constants.COPYFILE_EXCL);
+      fs.renameSync(temporary, target);
+    } else fs.rmSync(target, { force: true });
   }
   fs.rmSync(transaction, { recursive: true, force: true });
 }
@@ -240,11 +250,17 @@ function activate() {
     }
   }
   const stale = Object.keys(oldFiles).filter(name => !Object.hasOwn(receipt.files, name));
+  for (const name of stale) {
+    const target = asTarget(name);
+    safe(target);
+    if (exists(target) && digest(target) !== oldFiles[name]) throw Error(`modified stale managed file: ${name}`);
+  }
   const names = [...new Set([...Object.keys(receipt.files), stateName, ...stale, ...retired])];
   for (const [index, name] of names.entries()) {
     const target = asTarget(name), temporary = `${target}.neura-install-${index}.tmp`;
-    safe(target); safe(temporary);
-    if (exists(temporary)) throw Error(`temporary install file already exists: ${name}`);
+    const recoveryTemp = `${target}.neura-recover-${index}.tmp`;
+    safe(target); safe(temporary); safe(recoveryTemp);
+    if (exists(temporary) || exists(recoveryTemp)) throw Error(`temporary install file already exists: ${name}`);
   }
   fs.mkdirSync(path.join(transaction, 'backup'), { recursive: true });
   names.forEach((name, i) => {

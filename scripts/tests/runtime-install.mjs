@@ -74,6 +74,20 @@ try {
   seal(); run('activate', false);
   run('recover');
   write(liveModule, 'pinned');
+  run('prepare');
+  write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt');
+  write(path.join(stage, 'agent/neura/node_modules/new.js'), 'pinned');
+  run('seal');
+  write(liveModule, 'edited stale module');
+  run('activate', false);
+  assert.equal(fs.readFileSync(liveModule, 'utf8'), 'edited stale module');
+  run('recover');
+  write(liveModule, 'pinned');
+  const retiredExtension = live('agent/extensions/autogit.ts');
+  write(retiredExtension, 'user-owned');
+  run('check', false); run('prepare', false);
+  assert.equal(fs.readFileSync(retiredExtension, 'utf8'), 'user-owned');
+  fs.rmSync(retiredExtension);
   const unexpectedModule = live('agent/neura/node_modules/unknown.js');
   write(unexpectedModule, 'unexpected');
   assert.match(run('check', false).stderr, /unknown Learn runtime file: agent\/neura\/node_modules\/unknown\.js/);
@@ -110,7 +124,12 @@ try {
   // Abrupt process death leaves an actual stage, backups and journal to recover.
   const pending = path.join(home, '.pi/neura-install-pending');
   seal(); run('activate', false, {NEURA_INSTALL_TEST_CRASH_AFTER:'2'});
-  run('check', false); run('prepare', false); run('recover');
+  run('check', false); run('prepare', false);
+  run('recover', false, {NEURA_INSTALL_TEST_CRASH_DURING_RECOVER:'1'});
+  const recoveryTemp = `${live('agent/extensions/two.ts')}.neura-recover-0.tmp`;
+  assert.equal(fs.readFileSync(recoveryTemp, 'utf8'), 'partial');
+  run('recover');
+  assert.equal(fs.existsSync(recoveryTemp), false, 'interrupted rollback left a partial executable file');
   assert.equal(fs.readFileSync(live('agent/extensions/two.ts'), 'utf8'), 'two.ts');
   run('check');
   // Recovery must refuse an allowed-namespace private path, not only traversal.
