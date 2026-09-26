@@ -50,7 +50,7 @@ jobs:
           $contract = Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json
           $git = $contract.automaticExecutables.git
           $archive = Join-Path $env:RUNNER_TEMP $git.windowsArchive
-          $destination = Join-Path $env:RUNNER_TEMP "neura-git-2.50.1"
+          $destination = Join-Path $env:RUNNER_TEMP "neura-pinned-git"
           Invoke-WebRequest -Uri $git.windowsArchiveUrl -OutFile $archive
           if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $git.windowsArchiveSha256) { throw "Pinned Git archive integrity check failed." }
           $extract = Start-Process -FilePath $archive -ArgumentList "-o$destination", "-y" -Wait -PassThru -WindowStyle Hidden
@@ -71,7 +71,8 @@ jobs:
       - name: Verify Pi version
         shell: pwsh
         run: |
-          if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne '0.87.1') { throw 'Unexpected repository Pi version' }
+          $requiredPi = (Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json).piVersion
+          if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne $requiredPi) { throw 'Unexpected repository Pi version' }
 
       - name: Verify repository
         run: npm run verify
@@ -166,7 +167,13 @@ jobs:
           HARNESS_RESULT: ${{ needs.harness.result }}
           PORTABLE_RESULT: ${{ needs.portable-proof.result }}
           DEPENDENCY_RESULT: ${{ needs.dependency-review.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -euo pipefail
           test "$HARNESS_RESULT" = success
           test "$PORTABLE_RESULT" = success
-          test "$DEPENDENCY_RESULT" = success -o "$DEPENDENCY_RESULT" = skipped
+          if [ "$EVENT_NAME" = pull_request ]; then
+            test "$DEPENDENCY_RESULT" = success
+          else
+            test "$DEPENDENCY_RESULT" = skipped
+          fi

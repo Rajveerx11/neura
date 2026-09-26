@@ -98,8 +98,9 @@ Every prerelease note must declare `Channel: prerelease` and state all of:
 - No npm package is published by this release.
 
 The tag workflow reruns repository, browser, audit, signature, secret-history,
-and ephemeral installer checks. It builds a deterministic source tarball, SPDX
-SBOM snapshots for both lockfiles, and `SHA256SUMS`, then retains that workflow artifact
+and ephemeral installer checks using the same hash-verified Windows Git runtime
+as PR CI. It builds a deterministic source tarball, SPDX SBOM snapshots for
+both lockfiles, and `SHA256SUMS`, then retains an attempt-scoped workflow artifact
 for three days. Only the final job receives `contents: write`, and it uses GitHub
 CLI to create a **draft prerelease**. It never publishes npm packages and never
 promotes or publishes the GitHub draft. A maintainer must inspect any draft and
