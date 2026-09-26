@@ -14,7 +14,7 @@ const live = name => name.startsWith('launcher/') ? path.join(home, '.local/bin/
 const stage = path.join(home, '.pi/neura-install-pending/stage');
 const write = (file, data) => { fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, data); };
 const run = (mode, ok = true, env = {}) => {
-  const result = spawnSync(process.execPath, [helper, mode], { encoding: 'utf8', env: {...process.env, HOME: home, USERPROFILE: home, ...env} });
+  const result = spawnSync(process.execPath, [helper, mode], { encoding: 'utf8', env: {...process.env, HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: path.join(home, '.pi/agent'), ...env} });
   assert.equal(result.status === 0, ok, `${mode}: ${result.stderr}`);
   return result;
 };
@@ -33,6 +33,8 @@ try {
   write(path.join(source, 'agent/extensions/one.ts'), 'changed source');
   run('prepare', false); // source bytes must match the release manifest
   write(path.join(source, 'agent/extensions/one.ts'), 'one.ts');
+  run('prepare', false, {NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER:'1'});
+  assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'failed preparation left a shared transaction behind');
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
   seal(); run('activate'); run('check');
   const alternateAgent = path.join(tmp, 'alternate-agent');

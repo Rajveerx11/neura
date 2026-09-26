@@ -103,10 +103,10 @@
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e4ff353a81aad268dd9dde26f9c9ff910137b6eafc170b310761b852525b336e",
     "agent/neura/runtime-contract.json": "ea7c41d2272ca035b7da57f1db45d61d12ebf715ca8bea5e44a3894c2653ca52",
-    "agent/neura/runtime-install.mjs": "8a4c86bda5692b9fa7c8baa545008c6471afd86e0ab3e386c47d0e016d109c36",
+    "agent/neura/runtime-install.mjs": "cd1bb6aba43c9c069a2dd4bac25f35e6c81c1a4edffb02738a658bf62d65a0d2",
     "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
     "agent/neura/verification.ts": "e07a29fd7b8ecc37d05a8c832cb171dc8123b1c08aca761ddd0cefa0291b1491",
     "agent/mcp.json": "1cf62a0bcf13cddb450228823aa0d6f1b46174c17ce07d4da088596e085a140c",
-    "launcher/neura.cmd": "1b2383fbb3e5de912df09cbe4dcb908241f50bbe6725b6e08f71c962810d431c"
+    "launcher/neura.cmd": "e930b0325a8a202cff55fc9d9c7d184e36d2c36c696dac7659b06d9f45cfebc1"
   }
 }

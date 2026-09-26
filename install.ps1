@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repo = $PSScriptRoot
-$agent = Join-Path $HOME ".pi\agent"
+$agent = if ($env:PI_CODING_AGENT_DIR) { [System.IO.Path]::GetFullPath($env:PI_CODING_AGENT_DIR) } else { Join-Path $HOME ".pi\agent" }
 $bin = Join-Path $HOME ".local\bin"
 $retiredExtensions = @("autogit.ts")
 $runtimeContractPath = Join-Path $repo "agent\neura\runtime-contract.json"

@@ -185,11 +185,17 @@ function prepare() {
   ownership(manifest);
   fs.mkdirSync(transaction);
   const root = path.join(transaction, 'stage');
-  for (const name of Object.keys(manifest.files).concat(manifestName)) {
-    const dest = path.join(root, name), src = path.join(source, name);
-    safe(dest); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(src, dest);
+  try {
+    for (const [index, name] of Object.keys(manifest.files).concat(manifestName).entries()) {
+      const dest = path.join(root, name), src = path.join(source, name);
+      safe(dest); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(src, dest);
+      if (process.env.NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER === String(index + 1)) throw Error('injected staging failure');
+    }
+    return root;
+  } catch (error) {
+    fs.rmSync(transaction, { recursive: true, force: true });
+    throw error;
   }
-  return root;
 }
 function seal() {
   const root = path.join(transaction, 'stage');
