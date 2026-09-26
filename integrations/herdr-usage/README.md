@@ -4,11 +4,12 @@ A global Herdr plugin that places read-only Claude Code, Codex, and Cursor CLI q
 
 ## Behavior
 
-- The plugin runs at Herdr startup and on agent/focus events, so every new or restored session receives the current token. A global Neura Pi bridge also reports the active Pi model provider when Pi runs inside Herdr.
+- When separately linked, the plugin runs at Herdr startup and on agent/focus events, so every new or restored session receives the current token. The Neura Pi bridge reports the active Pi model provider only when `NEURA` and `HERDR_ENV=1` are both set; plain Pi does not register callbacks.
 - It only queries providers represented by active Herdr agent panes.
 - Results are cached for two minutes. The `Refresh AI usage` plugin action bypasses that cache.
 - It reports only a compact remaining percentage (`5h 80% · Wk 25%`); no account identifier, response body, token, or credential path is logged or cached.
 - Authentication is read-only. Expired or unsupported credentials result in no token; the plugin never refreshes, rotates, or writes an agent credential.
+- Automatic CLI calls require Herdr to supply an existing absolute `HERDR_BIN_PATH`; no executable is resolved from the workspace or ambient PATH. Each call and HTTPS request has a deadline. Herdr resolves the plugin manifest's `node` command from its own environment; this optional plugin must be linked only in a trusted Herdr installation.
 
 ## Supported authentication
 

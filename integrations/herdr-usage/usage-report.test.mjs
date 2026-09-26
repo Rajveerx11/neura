@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage } from "./usage-report.mjs";
+import { credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
+
+test("automatic Herdr commands refuse ambient or missing executables", () => {
+  assert.equal(trustedHerdrBinary({}, () => true), undefined);
+  assert.equal(trustedHerdrBinary({ HERDR_BIN_PATH: "herdr" }, () => true), undefined);
+  assert.equal(trustedHerdrBinary({ HERDR_BIN_PATH: process.execPath }, () => false), undefined);
+  assert.equal(trustedHerdrBinary({ HERDR_BIN_PATH: process.execPath }, () => true), process.execPath);
+});
 
 test("credential readers accept only current access tokens and reject API-key/refresh-token-only input", () => {
   const candidate = () => [process.execPath];

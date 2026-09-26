@@ -128,6 +128,24 @@ The installer does not replace a user's global Pi. Rolling back requires
 restoring the prior manifest, lockfile, runtime contract, and live Neura files
 together; do not downgrade a newer global Pi silently.
 
+## Optional Herdr integrations (not in the production runtime graph)
+
+The Herdr workspace Calendar action is disabled unless the user explicitly sets
+`NEURA_GCALCLI_EXECUTABLE` to an absolute path and
+`NEURA_GCALCLI_SHA256` to its matching local file digest. The suggested manual
+pin is `gcalcli==4.5.1`: [upstream tag v4.5.1](https://github.com/insanum/gcalcli/tree/v4.5.1)
+resolves to `fd821e4f21232dbf5829775fcf85820969e19912`.
+Its `pyproject.toml` uses `setuptools.build_meta`, provides a `gcalcli` CLI
+entry point, and declares unpinned Google OAuth/API and other Python dependencies.
+That metadata inspection is **not** a full source or transitive-artifact review.
+Neura neither installs nor authenticates gcalcli; users must review the exact
+executable and dependency closure before opting into this experimental action.
+A user-supplied hash detects changes to that local executable but does not
+prove its origin. The Herdr usage plugin likewise requires Herdr-provided
+`HERDR_BIN_PATH` to be absolute and existing; it does not find a `herdr`
+executable on a workspace-controlled PATH. The plugin itself is separately
+linked by the user, not installed as a Neura default.
+
 ## Update policy
 
 1. Change one direct pin at a time.

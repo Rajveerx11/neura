@@ -4,9 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { loadVault, checkedNote, collectNotes, createNote } from "./notes.mjs";
 import { paneArgs, launchPane } from "./open-pane.mjs";
-import { calendarCommands, calendarEditArgs } from "./calendar.mjs";
+import { calendarCommands, calendarEditArgs, calendarExecutable } from "./calendar.mjs";
 
 test("Workspace manifest declares the pane actions without requiring a live plugin link", (t) => {
   const manifest = path.join(import.meta.dirname, "herdr-plugin.toml");
@@ -38,6 +39,18 @@ test("right split focuses the requested pane and prefers caller pane over worksp
   assert.equal(invocation[0], "test-herdr");
   assert.ok(invocation[1].join(" ").includes("--direction right --focus --target-pane w12:p2"));
   assert.deepEqual(invocation[2], { stdio: "inherit", windowsHide: true });
+});
+
+test("Calendar requires an explicit absolute executable with matching SHA-256", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "neura-calendar-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "gcalcli.exe");
+  fs.writeFileSync(file, "synthetic-only");
+  const digest = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  assert.equal(calendarExecutable({}), undefined);
+  assert.equal(calendarExecutable({ NEURA_GCALCLI_EXECUTABLE: "gcalcli", NEURA_GCALCLI_SHA256: digest }), undefined);
+  assert.equal(calendarExecutable({ NEURA_GCALCLI_EXECUTABLE: file, NEURA_GCALCLI_SHA256: "0".repeat(64) }), undefined);
+  assert.equal(calendarExecutable({ NEURA_GCALCLI_EXECUTABLE: file, NEURA_GCALCLI_SHA256: digest }), file);
 });
 
 test("calendar command arguments remain fixed except the edit search text", () => {

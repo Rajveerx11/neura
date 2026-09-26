@@ -2,6 +2,8 @@
 // The bridge never resolves or handles provider credentials.
 
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getCockpitState, onCockpitChange } from "../neura/cockpit-state.ts";
@@ -29,8 +31,9 @@ export function herdrMetadata(provider: unknown): { provider?: string; mode: str
 }
 
 async function report(provider: unknown, refreshUsage = false): Promise<void> {
-  if (process.env.HERDR_ENV !== "1" || !process.env.HERDR_PANE_ID) return;
-  const herdr = process.env.HERDR_BIN_PATH || "herdr";
+  if (!process.env.NEURA || process.env.HERDR_ENV !== "1" || !process.env.HERDR_PANE_ID) return;
+  const herdr = process.env.HERDR_BIN_PATH;
+  if (!herdr || !isAbsolute(herdr) || !existsSync(herdr)) return;
   const pane = process.env.HERDR_PANE_ID;
   const metadata = herdrMetadata(provider);
   const args = ["pane", "report-metadata", pane, "--source", SOURCE,
@@ -51,7 +54,7 @@ export { usageProvider };
 export default function (pi: ExtensionAPI) {
   // This is a Herdr integration, not a Neura UI/policy feature. Outside Herdr
   // it registers nothing, preserving stock Pi behavior.
-  if (process.env.HERDR_ENV !== "1") return;
+  if (!process.env.NEURA || process.env.HERDR_ENV !== "1") return;
 
   let provider: unknown;
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -63,6 +63,10 @@ function Test-PackageSpecEqual($Left, $Right) {
     return ($Left | ConvertTo-Json -Depth 20 -Compress) -ceq ($Right | ConvertTo-Json -Depth 20 -Compress)
 }
 
+function Test-KeybindingEqual($Left, $Right) {
+    return (ConvertTo-Json -InputObject $Left -Depth 10 -Compress) -ceq (ConvertTo-Json -InputObject $Right -Depth 10 -Compress)
+}
+
 function Test-SameFile($Source, $Target) {
     $textExtensions = @(".ts", ".json", ".md", ".cmd", ".ps1", ".mjs")
     $extension = [System.IO.Path]::GetExtension($Source).ToLowerInvariant()
@@ -192,10 +196,11 @@ if ($Check) {
     } else {
         try {
             $liveKeybindings = Get-Content $liveKeybindingsPath -Raw | ConvertFrom-Json
-            $desiredThinking = $desiredKeybindings.PSObject.Properties["app.thinking.cycle"].Value
-            $liveThinking = $liveKeybindings.PSObject.Properties["app.thinking.cycle"].Value
-            if ($liveThinking -ne $desiredThinking) {
-                $drift += "keybindings.json does not free Shift+Tab"
+            foreach ($binding in $desiredKeybindings.PSObject.Properties) {
+                $liveBinding = $liveKeybindings.PSObject.Properties[$binding.Name]
+                if (-not $liveBinding -or -not (Test-KeybindingEqual $liveBinding.Value $binding.Value)) {
+                    $drift += "keybindings.json differs for $($binding.Name)"
+                }
             }
         } catch {
             $drift += "keybindings.json is invalid"
@@ -296,8 +301,7 @@ if (Test-Command "wt.exe") {
     Write-Warning "Windows Terminal not found: Neura will use its logo-only launch fallback."
 }
 
-# Shift+Tab belongs to Neura mode cycling. Preserve every user binding while moving
-# pi's built-in thinking-level cycle to Ctrl+Shift+T.
+# Preserve unrelated user bindings while applying the reviewed Neura bindings.
 $keybindingsSource = Get-Content "$repo\agent\keybindings.json" -Raw | ConvertFrom-Json
 $keybindingsTarget = Join-Path $agent "keybindings.json"
 if (Test-Path $keybindingsTarget) {
@@ -306,8 +310,9 @@ if (Test-Path $keybindingsTarget) {
 } else {
     $keybindings = [PSCustomObject]@{}
 }
-$thinkingBinding = $keybindingsSource.PSObject.Properties["app.thinking.cycle"].Value
-$keybindings | Add-Member -NotePropertyName "app.thinking.cycle" -NotePropertyValue $thinkingBinding -Force
+foreach ($binding in $keybindingsSource.PSObject.Properties) {
+    $keybindings | Add-Member -NotePropertyName $binding.Name -NotePropertyValue $binding.Value -Force
+}
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($keybindingsTarget, ($keybindings | ConvertTo-Json -Depth 20), $utf8NoBom)
 

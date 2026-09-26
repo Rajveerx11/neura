@@ -2,14 +2,13 @@
 
 A local Herdr 0.9.1 plugin that keeps Obsidian notes and Google Calendar inside terminal panes.
 
-## Shortcuts
+## Actions
 
-- `Ctrl+Shift+O` or `prefix+u`: open an Obsidian note picker in a right split. Selecting a note launches GNU nano on the exact Markdown file. `Ctrl+O`, Enter saves; `Ctrl+X` returns to the picker.
-- `Ctrl+Shift+L` or `prefix+y`: open Google Calendar in a right split. Choose month, two-week, or agenda views; add and edit events without opening a website.
+Use Herdr's `Open editable Obsidian notes` or `Open Google Calendar` plugin action to open a right split. This plugin does not register keyboard shortcuts; assign them in your own Herdr configuration if desired. In Notes, selecting a note launches GNU nano on the Markdown file. `Ctrl+O`, Enter saves; `Ctrl+X` returns to the picker.
 
-The Notes pane reads the vault configured at `~/.pi/agent/neura/learn-vault.json` every time it refreshes. New notes are created below `Herdr Notes/` in that vault.
+The Notes pane reads the vault configured at `~/.pi/agent/neura/learn-vault.json` when the pane opens. Refresh updates the note list; reopen the pane after changing the vault configuration. New notes are created below `Herdr Notes/` in that vault.
 
-The Calendar pane uses **gcalcli 4.5.1** (`uv tool install 'gcalcli==4.5.1'`; for an existing install, `uv tool upgrade 'gcalcli==4.5.1'`). On first use, choose `a` and complete Google OAuth only when you are ready to grant access. Authentication files are owned by gcalcli under the user's local application-data directory and are never written to this repository or displayed in Herdr.
+Calendar is an **experimental, user-managed opt-in**, not an installed or reviewed Neura runtime dependency. If you choose to use it, review [gcalcli's source](https://github.com/insanum/gcalcli), install the exact version `gcalcli==4.5.1` yourself, then set `NEURA_GCALCLI_EXECUTABLE` to its absolute executable path and `NEURA_GCALCLI_SHA256` to that file's SHA-256 before launching Herdr. Matching a locally supplied hash pins bytes but does not establish upstream provenance. No ambient `gcalcli` on PATH is executed. On first use, choose `a` and complete Google OAuth only when you are ready to grant access. Authentication files are owned by gcalcli under the user's local application-data directory and are never written to this repository or displayed in Herdr.
 
 ## Development
 

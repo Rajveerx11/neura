@@ -6,14 +6,19 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import https from "node:https";
 
 const SOURCE = "neura.usage";
 const TTL_MS = 120_000;
 const MAX_RESPONSE_BYTES = 1_000_000;
-const HERDR = process.env.HERDR_BIN_PATH || "herdr";
+export function trustedHerdrBinary(env = process.env, exists = existsSync) {
+  const binary = env.HERDR_BIN_PATH;
+  return typeof binary === "string" && isAbsolute(binary) && exists(binary) ? binary : undefined;
+}
+const HERDR = trustedHerdrBinary();
+const CLI_OPTIONS = { encoding: "utf8", windowsHide: true, timeout: 5_000, maxBuffer: 64 * 1024 };
 const STATE_DIR = process.env.HERDR_PLUGIN_STATE_DIR || join(process.env.TEMP || process.env.TMP || homedir(), "neura-usage");
 const CACHE_PATH = join(STATE_DIR, "usage-cache.json");
 const force = process.argv.includes("--force");
@@ -71,7 +76,7 @@ export function credentialsFor(provider, env = process.env, load = readJson, can
 
 function requestJson(url, headers) {
   return new Promise((resolve, reject) => {
-    const request = https.get(url, { headers, timeout: 15_000 }, (response) => {
+    const request = https.get(url, { headers, timeout: 15_000, signal: AbortSignal.timeout(15_000) }, (response) => {
       let size = 0;
       const chunks = [];
       response.on("data", (chunk) => {
@@ -147,7 +152,7 @@ function saveCache(cache) {
 }
 
 function listAgentPanes() {
-  const result = JSON.parse(execFileSync(HERDR, ["agent", "list"], { encoding: "utf8", windowsHide: true }));
+  const result = JSON.parse(execFileSync(HERDR, ["agent", "list"], CLI_OPTIONS));
   return result?.result?.agents || [];
 }
 
@@ -167,7 +172,7 @@ function providerForPane(pane) {
   const direct = providerForAgent(pane.agent);
   if (direct || String(pane.agent).toLowerCase() !== "pi") return direct;
   try {
-    const result = JSON.parse(execFileSync(HERDR, ["pane", "get", pane.pane_id], { encoding: "utf8", windowsHide: true }));
+    const result = JSON.parse(execFileSync(HERDR, ["pane", "get", pane.pane_id], CLI_OPTIONS));
     return isSupportedProvider(result?.result?.pane?.tokens?.usage_provider);
   } catch { return undefined; }
 }
@@ -176,7 +181,7 @@ function reportToken(paneId, token) {
   const args = ["pane", "report-metadata", paneId, "--source", SOURCE];
   args.push(...(token ? ["--token", `usage=${token}`] : ["--clear-token", "usage"]));
   try {
-    execFileSync(HERDR, args, { stdio: "ignore", windowsHide: true });
+    execFileSync(HERDR, args, { stdio: "ignore", windowsHide: true, timeout: 5_000 });
     return true;
   } catch {
     // A cached pane may have closed between list and report; keep refresh best-effort.
@@ -185,16 +190,17 @@ function reportToken(paneId, token) {
 }
 
 async function main() {
+  if (!HERDR) return; // Never discover a workspace-controlled executable through PATH.
   const panes = listAgentPanes();
   const providerPanes = panes.map((pane) => ({ ...pane, provider: providerForPane(pane) })).filter((pane) => pane.provider);
   const cache = loadCache();
   const now = Date.now();
   const providers = [...new Set(providerPanes.map((pane) => pane.provider))];
   for (const provider of providers) {
-    const cached = cache.providers[provider];
-    if (!force && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
     const credentials = credentialsFor(provider);
     if (!credentials) { delete cache.providers[provider]; continue; }
+    const cached = cache.providers[provider];
+    if (!force && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
     try { cache.providers[provider] = { fetchedAt: now, token: renderUsage(await fetchUsage(provider, credentials)) }; }
     catch {
       // Failed or expired credentials must remove stale quota instead of republishing it.

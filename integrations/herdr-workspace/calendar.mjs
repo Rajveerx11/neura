@@ -1,12 +1,18 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
-const candidates = [path.join(os.homedir(), ".local", "bin", "gcalcli.exe"), "gcalcli"];
-const gcalcli = candidates.find((candidate) => candidate === "gcalcli" || fs.existsSync(candidate));
+export function calendarExecutable(env = process.env) {
+  const file = env.NEURA_GCALCLI_EXECUTABLE;
+  const expected = env.NEURA_GCALCLI_SHA256;
+  if (!file || !path.isAbsolute(file) || !/^[a-f0-9]{64}$/i.test(expected || "")) return undefined;
+  try {
+    return fs.existsSync(file) && createHash("sha256").update(fs.readFileSync(file)).digest("hex") === expected.toLowerCase() ? file : undefined;
+  } catch { return undefined; }
+}
 export const calendarCommands = Object.freeze({
   "1": ["--lineart", "unicode", "calm"],
   "2": ["--lineart", "unicode", "calw", "today", "2"],
@@ -28,7 +34,8 @@ async function main() {
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 async function pause() { await rl.question("\nPress Enter to return to Calendar."); }
 try {
-  if (!gcalcli) throw new Error("gcalcli is unavailable. Install it with: uv tool install 'gcalcli==4.5.1'");
+  const gcalcli = calendarExecutable();
+  if (!gcalcli) throw new Error("Calendar unavailable: set NEURA_GCALCLI_EXECUTABLE and its matching NEURA_GCALCLI_SHA256 before launching Herdr.");
   while (true) {
     clear();
     console.log(" NEURA / GOOGLE CALENDAR");
