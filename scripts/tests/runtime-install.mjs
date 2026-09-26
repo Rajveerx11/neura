@@ -35,6 +35,11 @@ try {
   write(path.join(source, 'agent/extensions/one.ts'), 'one.ts');
   assert.match(run('prepare', false, {NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER:'1'}).stderr, /injected staging failure/);
   assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'failed preparation left a shared transaction behind');
+  const legacyModule = live('agent/neura/node_modules/user-package.js');
+  write(legacyModule, 'unreceipted');
+  assert.match(run('prepare', false).stderr, /unreceipted Learn runtime/);
+  assert.equal(fs.readFileSync(legacyModule, 'utf8'), 'unreceipted');
+  fs.rmSync(path.dirname(legacyModule), {recursive:true, force:true});
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
   seal(); run('activate'); run('check');
   const alternateAgent = path.join(tmp, 'alternate-agent');

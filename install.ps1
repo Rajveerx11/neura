@@ -272,8 +272,18 @@ foreach ($config in @("$agent\settings.json", "$agent\keybindings.json")) {
     if (Test-Path $config) { try { $null = Get-Content $config -Raw | ConvertFrom-Json } catch { throw "Existing configuration is invalid: $config" } }
 }
 $installer = Join-Path $repo 'agent\neura\runtime-install.mjs'
-$staging = & node $installer prepare
-if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare Neura release; inspect extension ownership and source hashes.' }
+# Hold an exclusive per-user installer lock across staging, activation and configuration.
+$lockDirectory = Join-Path $HOME '.pi'
+New-Item -ItemType Directory -Force $lockDirectory | Out-Null
+try { $installLock = [System.IO.File]::Open((Join-Path $lockDirectory 'neura-install.lock'), [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None) }
+catch { throw 'Another Neura installation is in progress; do not recover its transaction.' }
+try {
+    if (Test-Path (Join-Path $lockDirectory 'neura-install-pending')) {
+        & node $installer recover
+        if ($LASTEXITCODE -ne 0) { throw 'Interrupted Neura install could not be recovered; manual inspection required.' }
+    }
+    $staging = & node $installer prepare
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare Neura release; inspect extension ownership and source hashes.' }
 try {
     # Install only the reviewed, locked document runtime in staging, never into live Pi.
     & npm.cmd ci --prefix (Join-Path $staging 'agent\neura') --ignore-scripts --no-audit --no-fund
@@ -362,3 +372,4 @@ if ((Test-Path $target) -and -not $ForceSettings) {
 
 if (-not (Test-ProofRuntime)) { Write-Warning "WSL proof runtime unavailable or different from runtime-contract.json; proof will remain unavailable." }
 Write-Host "Neura installed. Run 'pi update --extensions --approve', then 'neura' and '/health'."
+} finally { $installLock.Dispose() }

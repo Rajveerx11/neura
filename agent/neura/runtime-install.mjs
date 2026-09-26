@@ -67,6 +67,10 @@ function ownership(manifest) {
     const previousManifestPath = asTarget(manifestName);
     if (!exists(previousManifestPath) || digest(previousManifestPath) !== previous.manifestHash) throw Error('previous release manifest drift');
     oldFiles = previousFiles(previous, valid(read(previousManifestPath)));
+  } else if (exists(path.join(agent, 'neura', 'node_modules'))) {
+    // Legacy installs have no ownership receipt. Never delete unknown packages
+    // to make a new receipt pass; migrate them only with an explicit procedure.
+    throw Error('unreceipted Learn runtime present; migrate the existing install before activation');
   }
   const allowed = exists(allowlistPath) ? read(allowlistPath) : { schemaVersion: 1, extensions: {} };
   if (allowed.schemaVersion !== 1 || !allowed.extensions || Array.isArray(allowed.extensions)) throw Error('invalid user extension allowlist');
