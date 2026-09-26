@@ -297,6 +297,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Managed-file activation failed; previous files restored.' }
 } catch {
     & node $installer recover
+    if ($LASTEXITCODE -ne 0) { throw 'Neura installation failed and recovery did not complete; inspect the pending transaction before retrying.' }
     throw
 }
 

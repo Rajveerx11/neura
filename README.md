@@ -162,7 +162,12 @@ and Neura launch: explicitly allow user-owned extensions in
 `{"schemaVersion":1,"extensions":{"my-extension.ts":"<64-digit SHA-256>"}}`.
 Their contents remain user-owned and are not included in the Neura release.
 An edited managed file or older unreceipted release that differs from this
-manifest is refused rather than overwritten; back up and reconcile it manually.
+manifest is refused rather than overwritten. There is no supported in-place
+migration for an unreceipted Pi profile: back up the existing profile, install
+into a separate clean Windows user profile, and migrate only reviewed user
+settings. Keep the original profile and Learn runtime intact until its data has
+been verified. Removing only `node_modules` does not establish ownership of
+other legacy files or make an in-place upgrade safe.
 Install still is **not atomic** across Pi's extension directory, launcher,
 settings, and Windows Terminal profile. Stop Pi before installing; the terminal
 profile and user configuration remain outside rollback. Full #21 closure and

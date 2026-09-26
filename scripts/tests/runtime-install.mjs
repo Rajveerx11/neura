@@ -65,6 +65,10 @@ try {
   seal(); run('activate', false);
   run('recover');
   write(liveModule, 'pinned');
+  const unexpectedModule = live('agent/neura/node_modules/unknown.js');
+  write(unexpectedModule, 'unexpected');
+  assert.match(run('check', false).stderr, /unknown Learn runtime file: agent\/neura\/node_modules\/unknown\.js/);
+  fs.rmSync(unexpectedModule);
   // Upgrade removes only a previously owned stale extension.
   fs.rmSync(path.join(source, 'agent/extensions/one.ts'));
   build('two.ts'); seal(); run('activate'); run('check');

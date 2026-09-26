@@ -67,7 +67,7 @@ function ownership(manifest) {
     const previousManifestPath = asTarget(manifestName);
     if (!exists(previousManifestPath) || digest(previousManifestPath) !== previous.manifestHash) throw Error('previous release manifest drift');
     oldFiles = previousFiles(previous, valid(read(previousManifestPath)));
-  } else if (Object.keys(listFiles(path.join(agent, 'neura', 'node_modules'))).length) {
+  } else if (listPaths(path.join(agent, 'neura', 'node_modules')).length) {
     // Legacy installs have no ownership receipt. Never delete unknown packages
     // to make a new receipt pass; migrate them only with an explicit procedure.
     throw Error('unreceipted Learn runtime present; migrate the existing install before activation');
@@ -95,18 +95,19 @@ function ownership(manifest) {
     }
   }
 }
-function listFiles(dir, prefix = '') {
-  if (!exists(dir)) return {};
-  const result = {};
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+function listPaths(dir, prefix = '') {
+  if (!exists(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(dir, entry.name);
     safe(file);
     const relative = path.posix.join(prefix, entry.name);
-    if (entry.isDirectory()) Object.assign(result, listFiles(file, relative));
-    else if (entry.isFile()) result[relative] = digest(file);
-    else throw Error(`linked or special runtime file refused: ${relative}`);
-  }
-  return result;
+    if (entry.isDirectory()) return listPaths(file, relative);
+    if (entry.isFile()) return [relative];
+    throw Error(`linked or special runtime file refused: ${relative}`);
+  });
+}
+function listFiles(dir) {
+  return Object.fromEntries(listPaths(dir).map(name => [name, digest(path.join(dir, name))]));
 }
 function state(manifest, root) {
   const files = { ...manifest.files, [manifestName]: digest(path.join(root, manifestName)) };
@@ -140,8 +141,12 @@ function verify(root, expectedState, checkOwnership = true) {
         process.versions.node.localeCompare(manifest.nodeMinimum, undefined, { numeric: true }) < 0) throw Error(`Node ${manifest.nodeMinimum}+ required`);
     ownership(manifest);
   }
-  const actualModules = listFiles(root === agent ? path.join(agent, 'neura/node_modules') : path.join(root, 'agent/neura/node_modules'));
-  if (Object.keys(actualModules).length !== Object.keys(expectedState.files).filter(x => x.startsWith('agent/neura/node_modules/')).length) throw Error('unknown Learn runtime file');
+  const moduleDir = root === agent ? path.join(agent, 'neura/node_modules') : path.join(root, 'agent/neura/node_modules');
+  const expectedModules = new Set(Object.keys(expectedState.files).filter(name => name.startsWith('agent/neura/node_modules/')));
+  for (const name of listPaths(moduleDir)) {
+    const installedName = `agent/neura/node_modules/${name}`;
+    if (!expectedModules.has(installedName)) throw Error(`unknown Learn runtime file: ${installedName}`);
+  }
   return expectedState;
 }
 function recover() {
