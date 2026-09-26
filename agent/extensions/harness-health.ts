@@ -609,14 +609,10 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const pi = piRuntimeStatus(PI_VERSION, requiredPiVersion());
   const identity = currentRuntimeIdentity();
   const releasePath = path.join(AGENT_DIR, 'neura', 'release-manifest.json');
-  const sourceRelease = path.join(SOURCE_AGENT_DIR, 'neura', 'release-manifest.json');
-  const liveIdentity = path.resolve(SOURCE_AGENT_DIR).toLowerCase() === path.resolve(AGENT_DIR).toLowerCase();
-  const releaseValid = liveIdentity
-    ? spawnSync(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check'], { timeout: 5_000, windowsHide: true, stdio: 'ignore' }).status === 0
-    : fs.existsSync(sourceRelease) && (() => { try {
-      const release = JSON.parse(fs.readFileSync(sourceRelease, 'utf8')) as { piVersion?: string; neuraVersion?: string };
-      return release.piVersion === requiredPiVersion() && release.neuraVersion === identity.version;
-    } catch { return false; } })();
+  // Source identity is not evidence that the live Pi files match the release.
+  const releaseValid = fs.existsSync(releasePath) &&
+    spawnSync(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check'],
+      { timeout: 5_000, windowsHide: true, stdio: 'ignore' }).status === 0;
 
   const checkpoint = fs.existsSync(path.join(AGENT_DIR, "extensions", "checkpoint.ts"));
   const gate = fs.existsSync(path.join(AGENT_DIR, "extensions", "check-gate.ts"));

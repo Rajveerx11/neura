@@ -57,17 +57,26 @@ try {
   assert.equal(fs.readFileSync(live('agent/extensions/two.ts'), 'utf8'), 'two.ts', 'failed activation did not roll back');
   assert.equal(fs.readFileSync(live('agent/settings.json'), 'utf8'), '{"credential":"synthetic-only"}');
   run('check');
-  // Simulate abrupt process death after journaling and replacing an owned file.
+  // A forged previous receipt cannot claim a private file as a stale managed file.
+  const receiptPath = live('agent/neura/.install-state.json');
+  const originalReceipt = fs.readFileSync(receiptPath, 'utf8');
+  const forgedReceipt = JSON.parse(originalReceipt);
+  forgedReceipt.files['agent/neura/MEMORY.md'] = sha(live('agent/extensions/two.ts'));
+  write(receiptPath, JSON.stringify(forgedReceipt));
+  run('prepare', false);
+  write(receiptPath, originalReceipt);
+  // Abrupt process death leaves an actual stage, backups and journal to recover.
   const pending = path.join(home, '.pi/neura-install-pending');
-  write(path.join(pending, 'backup/0'), 'two.ts');
-  write(path.join(pending, 'journal.json'), JSON.stringify(['agent/extensions/two.ts']));
-  write(live('agent/extensions/two.ts'), 'partial');
-  run('check', false); run('recover');
+  seal(); run('activate', false, {NEURA_INSTALL_TEST_CRASH_AFTER:'2'});
+  run('check', false); run('prepare', false); run('recover');
   assert.equal(fs.readFileSync(live('agent/extensions/two.ts'), 'utf8'), 'two.ts');
   run('check');
-  // A malicious journal cannot escape the managed namespace.
-  write(path.join(pending, 'journal.json'), JSON.stringify(['agent/neura/../../auth.json']));
+  // Recovery must refuse an allowed-namespace private path, not only traversal.
+  write(live('agent/neura/MEMORY.md'), 'private');
+  seal();
+  write(path.join(pending, 'journal.json'), JSON.stringify(['agent/neura/MEMORY.md']));
   run('recover', false);
+  assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
   fs.rmSync(pending, {recursive:true, force:true});
   console.log('PASS synthetic managed release install, upgrade, ownership, drift, rollback, interruption');
 } finally { fs.rmSync(tmp, {recursive:true, force:true}); }
