@@ -186,9 +186,11 @@ function recover() {
         (exists(target) && (!stagedHash || digest(target) !== stagedHash)))) {
       throw Error(`unowned file at previously absent target: ${name}`);
     }
+    safe(`${target}.neura-install-${index}.tmp`);
   }
   for (const [index, name] of entries.entries()) {
     const target = asTarget(name), backup = path.join(transaction, 'backup', String(index));
+    fs.rmSync(`${target}.neura-install-${index}.tmp`, { force: true });
     if (exists(backup)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(backup, target); }
     else fs.rmSync(target, { force: true });
   }
@@ -239,7 +241,11 @@ function activate() {
   }
   const stale = Object.keys(oldFiles).filter(name => !Object.hasOwn(receipt.files, name));
   const names = [...new Set([...Object.keys(receipt.files), stateName, ...stale, ...retired])];
-  for (const name of names) safe(asTarget(name));
+  for (const [index, name] of names.entries()) {
+    const target = asTarget(name), temporary = `${target}.neura-install-${index}.tmp`;
+    safe(target); safe(temporary);
+    if (exists(temporary)) throw Error(`temporary install file already exists: ${name}`);
+  }
   fs.mkdirSync(path.join(transaction, 'backup'), { recursive: true });
   names.forEach((name, i) => {
     const file = asTarget(name);
@@ -251,14 +257,26 @@ function activate() {
     names.forEach((name, i) => {
       const dest = asTarget(name), staged = path.join(root, name);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      if (exists(staged)) fs.copyFileSync(staged, dest); else fs.rmSync(dest, { force: true });
+      if (exists(staged)) {
+        // A copy may be partial on interruption. Publish only complete files.
+        const temporary = `${dest}.neura-install-${i}.tmp`;
+        if (process.env.NEURA_INSTALL_TEST_CRASH_DURING_COPY === String(i + 1)) {
+          fs.writeFileSync(temporary, 'partial'); process.exit(77);
+        }
+        fs.copyFileSync(staged, temporary, fs.constants.COPYFILE_EXCL);
+        fs.renameSync(temporary, dest);
+      } else fs.rmSync(dest, { force: true });
       if (process.env.NEURA_INSTALL_TEST_FAIL_AFTER === String(i + 1)) throw Error('injected interruption');
       if (process.env.NEURA_INSTALL_TEST_CRASH_AFTER === String(i + 1)) process.exit(77);
     });
     verify(agent, receipt);
     fs.renameSync(path.join(transaction, 'journal.json'), path.join(transaction, 'complete.json'));
     fs.rmSync(transaction, { recursive: true, force: true });
-  } catch (error) { recover(); throw error; }
+  } catch (error) {
+    try { recover(); }
+    catch (recoveryError) { throw Error(`activation failed: ${error.message}; recovery failed: ${recoveryError.message}`); }
+    throw error;
+  }
 }
 const mode = process.argv[2];
 try {

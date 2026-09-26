@@ -42,6 +42,13 @@ try {
   fs.rmSync(path.dirname(legacyModule), {recursive:true, force:true});
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
   seal();
+  run('activate', false, {NEURA_INSTALL_TEST_CRASH_DURING_COPY:'1'});
+  const partial = `${live('agent/extensions/one.ts')}.neura-install-0.tmp`;
+  assert.equal(fs.readFileSync(partial, 'utf8'), 'partial');
+  run('recover');
+  assert.equal(fs.existsSync(partial), false, 'interrupted copy left a partial executable file');
+  assert.equal(fs.existsSync(live('agent/extensions/one.ts')), false, 'partial copy reached live target');
+  seal();
   const freshReceipt = JSON.parse(fs.readFileSync(path.join(stage, 'agent/neura/.install-state.json'), 'utf8'));
   run('activate', false, {NEURA_INSTALL_TEST_CRASH_AFTER: String(Object.keys(freshReceipt.files).length + 1)});
   const receiptIndex = Object.keys(freshReceipt.files).length;
