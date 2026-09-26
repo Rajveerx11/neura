@@ -11,6 +11,8 @@ export const repoRoot = path.resolve(import.meta.dirname, '../..');
 export const scratchRoot = isolate();
 process.env.NEURA = '1';
 process.env.NEURA_HEADMASTER = 'off';
+delete process.env.HERDR_ENV;
+delete process.env.HERDR_PANE_ID;
 process.env.MY_PI_MCP_EAGER_CONNECT = '1';
 fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'mcp.json'), JSON.stringify({
   mcpServers: { fixture: { url: 'https://mcp.fixture.test' } },
@@ -47,7 +49,7 @@ const loaded = await loadExtensions(files, repoRoot);
 assert.deepEqual(loaded.errors, [], `extension load errors: ${JSON.stringify(loaded.errors)}`);
 assert.equal(process.env.MY_PI_MCP_EAGER_CONNECT, '1', "MCP wrapper did not restore eager-connect environment");
 assert.equal(loaded.extensions.length, files.length, "not every extension loaded");
-assert.equal(loaded.extensions.length, 18, "expected Neura's 18 extensions including MCP gating");
+assert.equal(loaded.extensions.length, 19, "expected Neura's 19 extensions including Herdr usage reporting");
 
 // loadExtensions deliberately leaves action methods unbound. Bind the small runtime
 // surface exercised by this deterministic harness without constructing an AgentSession.

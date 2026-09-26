@@ -41,6 +41,8 @@ security guarantee. Read
   memory, model presets, and optional MCP integrations.
 - Exact dependency pins, Windows CI, accessibility checks, complete-history
   secret scanning, and documentation validation.
+- Optional global [Herdr usage plugin](integrations/herdr-usage/README.md) for
+  read-only Claude Code, Codex, and Cursor CLI quota tokens in every session.
 
 Presence of a control does not establish a complete security boundary. See
 [Security](#security-and-limitations) for limits that matter.
@@ -162,9 +164,12 @@ endpoints only. Add a local MCP command only after pinning and manifesting its
 absolute executable and dependency closure; project configuration is not a
 trusted source of automatic executables.
 
-Gmail requires `COMPOSIO_API_KEY`. Other optional servers remain disabled until
-configured. Review [dependency policy](docs/DEPENDENCIES.md) before enabling any
-server or extension.
+The default MCP configuration has no enabled local command or personal provider
+endpoint. Gmail is a disabled template: replace `YOUR_COMPOSIO_TOOL_ROUTER` with
+your own Composio MCP route, set `COMPOSIO_API_KEY`, and add that variable to
+`MY_PI_MCP_ENV_ALLOWLIST` before enabling it. Other optional servers remain
+disabled until configured. Review [dependency policy](docs/DEPENDENCIES.md)
+before enabling any server or extension.
 
 ## Verify
 
@@ -186,7 +191,7 @@ git diff --check
 powershell -File .\install.ps1 -Check
 ```
 
-`verify-harness.mjs` runs 18 isolated suites and loads all 18 extensions through
+`verify-harness.mjs` runs 18 isolated suites and loads all 19 extensions through
 the checkout's Pi loader, including Learn's six nonbrowser suites. Browser
 checks need Edge; sandbox replay needs WSL2/bubblewrap. `install.ps1 -Check`
 checks live drift and Learn runtime provisioning without installing anything.

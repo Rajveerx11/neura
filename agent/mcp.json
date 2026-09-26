@@ -9,7 +9,8 @@
     },
     "gmail": {
       "type": "streamable-http",
-      "url": "https://backend.composio.dev/tool_router/trs_4ktSzoCNvPJ3/mcp",
+      "disabled": true,
+      "url": "https://backend.composio.dev/tool_router/YOUR_COMPOSIO_TOOL_ROUTER/mcp",
       "headers": {
         "x-api-key": "${COMPOSIO_API_KEY}"
       }

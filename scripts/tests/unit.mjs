@@ -23,6 +23,7 @@ const {
   runtimeIdentity,
 } = await import('../../agent/extensions/harness-health.ts');
 const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
+const { default: herdrUsageBridge, herdrMetadata, usageProvider } = await import('../../agent/extensions/herdr-usage-provider.ts');
 const { automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } = await import('../../agent/neura/process-security.ts');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
@@ -38,6 +39,25 @@ const { selectSuites, suites } = await import('../test-suites.mjs');
 process.env.NEURA_PROCESS_TEST_SECRET = "must-not-leak";
 assert.equal(scopedProcessEnvironment().NEURA_PROCESS_TEST_SECRET, undefined, "automatic process inherited an unrelated secret");
 assert.equal(automaticGitEnvironment().GIT_TERMINAL_PROMPT, "0", "automatic Git can prompt for credentials");
+assert.equal(usageProvider("openai-codex"), "codex", "Pi's ChatGPT subscription provider was not mapped to Codex usage");
+assert.equal(usageProvider("anthropic"), "claude", "Pi's Anthropic provider was not mapped to Claude usage");
+assert.equal(usageProvider("openai"), undefined, "API-key OpenAI must not be claimed as a subscription usage provider");
+assert.deepEqual(herdrMetadata("openai-codex"), { provider: "codex", mode: "WORK", phase: "READY" }, "Herdr sidebar metadata omitted Neura state");
+const savedHerdr = process.env.HERDR_ENV;
+const savedNeura = process.env.NEURA;
+const bridgeEvents = [];
+try {
+  process.env.HERDR_ENV = "1";
+  delete process.env.NEURA;
+  herdrUsageBridge({ on: (name) => bridgeEvents.push(name) });
+  assert.deepEqual(bridgeEvents, [], "plain Pi inside Herdr registered Neura usage callbacks");
+  process.env.NEURA = "1";
+  herdrUsageBridge({ on: (name) => bridgeEvents.push(name) });
+  assert.deepEqual(bridgeEvents, ["session_start", "model_select", "session_shutdown"], "Neura in Herdr omitted usage callbacks");
+} finally {
+  if (savedHerdr === undefined) delete process.env.HERDR_ENV; else process.env.HERDR_ENV = savedHerdr;
+  if (savedNeura === undefined) delete process.env.NEURA; else process.env.NEURA = savedNeura;
+}
 delete process.env.NEURA_PROCESS_TEST_SECRET;
 assert.deepEqual(selectSuites(['agent/neura/verification.ts']),['integration','learn','proof']);
 assert.deepEqual(selectSuites(['agent/extensions/check-gate.ts']),['integration','learn','proof']);
@@ -325,6 +345,7 @@ const installedMcpPath = path.join(syntheticAgentDir, "npm", "node_modules", "@s
 assert.equal(mcpModuleSpecifier(syntheticAgentDir, () => false), "@spences10/pi-mcp", "development MCP fallback changed");
 assert.equal(mcpModuleSpecifier(syntheticAgentDir, () => true), pathToFileURL(installedMcpPath).href, "installed MCP path changed");
 assert.ok(settings.skills.includes("!skills/**"), "auto-discovered duplicate skill exclusion missing");
+assert.equal(settings.skills.some((entry) => String(entry).startsWith("~")), false, "public defaults must not load personal skill directories");
 const packageSources = settings.packages.map((entry) => typeof entry === "string" ? entry : entry.source);
 const mcpPackage = settings.packages.find((entry) => typeof entry === "object" && entry.source === "npm:@spences10/pi-mcp@0.0.58");
 assert.deepEqual(mcpPackage?.extensions, [], "pi-mcp upstream extension autoload was not disabled");

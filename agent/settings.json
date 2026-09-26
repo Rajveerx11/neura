@@ -13,7 +13,6 @@
     "npm:@spences10/pi-context@0.1.15"
   ],
   "skills": [
-    "~/.claude/skills",
     "!skills/**"
   ],
   "lastChangelogVersion": "0.81.1",

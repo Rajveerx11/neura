@@ -11,7 +11,7 @@ proof receipts. The original modular refactor closed
 Run `npm ci --ignore-scripts` and `npm ci --prefix agent/neura --ignore-scripts`, then `npm test` or
 `node scripts/verify-harness.mjs`. No globally installed Pi is needed. Integration
 suites validate installed package versions against `package.json` and the runtime
-contract, then load all 18 extensions with that checkout's real Pi loader.
+contract, then load all 19 extensions with that checkout's real Pi loader.
 
 Each suite starts in a separate process with a temporary home, synthetic approval
 storage, no provider credentials, and isolated Git configuration. Tests neither

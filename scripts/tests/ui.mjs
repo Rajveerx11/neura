@@ -225,10 +225,12 @@ for (const width of [24, 40, 56, 72, 92, 120]) {
 let footerFactory;
 let costReads = 0;
 const cockpitContext = {
+  cwd: "C:\\Neura",
   model: { id: "gpt-5.5-engineering-preview", contextWindow: 200000 },
+  thinkingLevel: "high",
   getContextUsage: () => ({ tokens: 142000, contextWindow: 200000, percent: 71 }),
   sessionManager: { getEntries: () => { costReads++; return [
-    { type: "message", message: { role: "assistant", usage: { cost: { input: 1, output: 2, total: 3.14 } } } },
+    { type: "message", message: { role: "assistant", usage: { cost: { input: 1.00, output: 2.00, cacheRead: 0.10, cacheWrite: 0.04, total: 3.14 } } } },
     { type: "message", message: { role: "toolResult", usage: { cost: { total: 0.25 } } } },
   ]; } },
   ui: { ...ui, setFooter: (value) => { footerFactory = value; } },
@@ -268,8 +270,8 @@ await firstHandler(cockpit, "agent_start")({}, cockpitContext);
 assert.match(state.workingMessage, /Esc stops safely/, "working state lacks an interrupt hint");
 modeState.setMode("yolo");
 const activeRail = widgets.get("neura-cockpit")(null, null).render(92).map(stripAnsi).join("\n");
-assert.match(activeRail, /RESPONDING/, "response activity still looks like Work Mode");
-assert.doesNotMatch(activeRail, /WORK/, "response activity duplicates the Work Mode label");
+assert.match(activeRail, /RESPONDING/, "active response still looks like Work Mode");
+assert.doesNotMatch(activeRail, /WORK/, "active response duplicates the Work Mode label");
 modeState.setMode("work");
 await firstHandler(cockpit, "tool_execution_start")({ toolName: "read", input: { path: "agent/extensions/cockpit.ts" } }, cockpitContext);
 assert.match(widgets.get("neura-cockpit")(null, null).render(92).map(stripAnsi).join("\n"), /read · agent\/extensions\/cockpit\.ts/, "current operation receipt missing");
@@ -306,29 +308,29 @@ const footer = footerFactory(
 );
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = footer.render(width);
-  assert.ok(lines.length <= 2, `footer exceeds two lines at ${width} columns`);
+  assert.ok(lines.length <= 1, `footer has more than one status line at ${width} columns`);
   assert.ok(lines.every((line) => widthOf(line) <= width), `footer overflows at ${width} columns`);
 }
 const launchFooterText = footer.render(120).map(stripAnsi).join("\n");
 assert.equal(launchFooterText, "", "launch footer competes with the centred editor");
 await identityExtension.commands.get("dash").handler("", context);
-const idleFooterText = footer.render(120).map(stripAnsi).join("\n");
+const idleFooterText = footer.render(160).map(stripAnsi).join("\n");
 assert.match(idleFooterText, /WORK/, "idle footer lost the safe default WORK state");
 assert.doesNotMatch(idleFooterText, /YOLO · DANGER/, "idle footer incorrectly reports YOLO in the safe default mode");
 assert.doesNotMatch(idleFooterText, /typescript ready|MCP 0\/3|proof full/, "idle footer still renders detached extension status rows");
-assert.match(idleFooterText, /ctx 142,000\/200,000 \(71%\)/, "footer lost used tokens, full context window, or percent");
-assert.match(idleFooterText, /\$3\.390/, "footer double-counted usage.cost subfields");
+assert.match(idleFooterText, /\$3\.390/, "footer did not use usage.cost.total across the session");
+assert.match(idleFooterText, /ctx 142,000\/200,000 \(71%\)/, "footer lost used tokens, full window, or percentage");
+assert.match(idleFooterText, /agentic-console-with-long-name/, "footer lost the current branch");
+assert.match(idleFooterText, /gpt-5\.5-engineering-preview/, "footer lost the model name");
+assert.match(idleFooterText, /Neura.*think high/, "footer lost directory or thinking effort");
+assert.doesNotMatch(idleFooterText, /typescript ready|MCP 0\/3|proof full/, "footer retained extension-status noise");
 modeState.setMode("yolo");
 await firstHandler(cockpit, "agent_start")({}, cockpitContext);
 await firstHandler(cockpit, "message_end")({ message: { role: "assistant", usage: { cost: { total: 0.12 } } } });
-assert.match(footer.render(120).map(stripAnsi).join("\n"), /YOLO · DANGER.*\$3\.510/, "running YOLO footer did not update cost");
+assert.match(footer.render(120).map(stripAnsi).join("\n"), /YOLO · DANGER.*\$3\.510/, "active YOLO footer did not update cost mid-response");
 await firstHandler(cockpit, "agent_end")({}, cockpitContext);
-assert.match(footer.render(120).map(stripAnsi).join("\n"), /\$3\.390/, "final cost did not reconcile with stored session usage");
+assert.match(footer.render(120).map(stripAnsi).join("\n"), /\$3\.390/, "final cost did not reconcile with saved session entries");
 modeState.setMode("work");
-cockpitState.patchCockpit({ launchVisible: false, phase: "WORK", operation: { verb: "working", startedAt: Date.now() } });
-const workingFooterText = footer.render(120).map(stripAnsi).join("\n");
-assert.match(workingFooterText, /typescript ready/, "live third-party status disappeared during work");
-assert.doesNotMatch(workingFooterText, /MCP 0\/3|proof full/, "footer retained persistent MCP noise or duplicate proof state");
 const unknownContext = { ...cockpitContext, getContextUsage: () => ({ tokens: null, contextWindow: 200000, percent: null }) };
 await firstHandler(cockpit, "session_start")({}, unknownContext);
 const unknownFooter = footerFactory({ requestRender() {} }, null, { getGitBranch: () => "main" });
@@ -354,10 +356,17 @@ assert.ok(copySelector.options.some((option) => /Code 1 · ts/.test(option)), "c
 assert.ok(copySelector.options.every((option) => !/Answer ·/.test(option)), "Ctrl+Shift+X includes whole-answer copy instead of code blocks only");
 
 
+modeState.setMode("work");
+cockpitState.patchCockpit({ phase: "DEGRADED", proof: { scope: "quick", status: "unavailable" }, degraded: "Worktree change detection unavailable." });
+await modes.commands.get("mode").handler("learn", context);
+assert.equal(cockpitState.getCockpitState().phase, "READY", "worktree degradation leaked into Learn Mode");
+assert.equal(cockpitState.getCockpitState().degraded, undefined, "mode transition retained a stale degraded message");
 modeState.setMode("human-away");
 const keybindings = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "keybindings.json"), "utf-8"));
 assert.notEqual(keybindings["app.thinking.cycle"], "shift+tab", "Pi thinking binding still owns Shift+Tab");
 assert.equal(keybindings["app.thinking.cycle"], "ctrl+shift+t", "thinking cycle did not move to Ctrl+Shift+T");
+assert.equal(keybindings["tui.input.submit"], "ctrl+enter", "submit must avoid Raycast snippet newlines becoming steering messages");
+assert.ok(keybindings["tui.input.newLine"].includes("enter"), "plain Enter must remain in-editor for complete Raycast snippet capture");
 
 const humanAwayFooter = footer.render(120).map(stripAnsi).join("\n");
 assert.match(humanAwayFooter, /HUMAN AWAY/, "cockpit footer did not update its mode badge");
