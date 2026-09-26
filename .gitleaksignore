@@ -1,3 +1,4 @@
 # False positives from historical release-manifest SHA-256 file digests.
 904ea00d58ccb76821f4d123db66706dbd5f5801:agent/neura/release-manifest.json:generic-api-key:50
 904ea00d58ccb76821f4d123db66706dbd5f5801:agent/neura/release-manifest.json:generic-api-key:94
+3e6c71c29f3d09b8a89407c654b04c17b8fd0212:agent/neura/release-manifest.json:generic-api-key:107
