@@ -44,6 +44,12 @@ try {
   seal();
   const freshReceipt = JSON.parse(fs.readFileSync(path.join(stage, 'agent/neura/.install-state.json'), 'utf8'));
   run('activate', false, {NEURA_INSTALL_TEST_CRASH_AFTER: String(Object.keys(freshReceipt.files).length + 1)});
+  const receiptIndex = Object.keys(freshReceipt.files).length;
+  const absentMarker = path.join(home, '.pi/neura-install-pending/backup', `absent-${receiptIndex}`);
+  fs.rmSync(absentMarker);
+  run('recover', false);
+  assert.equal(fs.existsSync(live('agent/neura/.install-state.json')), true, 'missing inventory marker changed live state');
+  write(absentMarker, '');
   run('recover');
   assert.equal(fs.existsSync(live('agent/neura/.install-state.json')), false, 'interrupted first install left a release receipt');
   assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'interrupted first install left a journal');
@@ -54,6 +60,11 @@ try {
   write(path.join(alternateAgent, 'extensions/one.ts'), 'tampered');
   run('check', false, {PI_CODING_AGENT_DIR: alternateAgent});
   assert.equal(fs.readFileSync(live('agent/settings.json'), 'utf8'), '{"credential":"synthetic-only"}');
+  const liveModule = live('agent/neura/node_modules/example.js');
+  write(liveModule, 'user-edited');
+  seal(); run('activate', false);
+  run('recover');
+  write(liveModule, 'pinned');
   // Upgrade removes only a previously owned stale extension.
   fs.rmSync(path.join(source, 'agent/extensions/one.ts'));
   build('two.ts'); seal(); run('activate'); run('check');

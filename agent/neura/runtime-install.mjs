@@ -170,11 +170,13 @@ function recover() {
   // remove bytes matching a newly staged owned file, never an existing private file.
   for (const [index, name] of entries.entries()) {
     const target = asTarget(name), backup = path.join(transaction, 'backup', String(index));
-    safe(target); safe(backup);
+    const absent = path.join(transaction, 'backup', `absent-${index}`);
+    safe(target); safe(backup); safe(absent);
+    if (exists(backup) === exists(absent)) throw Error(`incomplete backup inventory: ${name}`);
     const stagedHash = name === stateName ? digest(path.join(root, stateName)) : next.files[name];
-    if (!exists(backup) && (Object.hasOwn(oldFiles, name) || (name === stateName && exists(oldStateBackup)) ||
+    if (exists(absent) && (fs.readFileSync(absent).length !== 0 ||
         (exists(target) && (!stagedHash || digest(target) !== stagedHash)))) {
-      throw Error(`missing backup for existing file: ${name}`);
+      throw Error(`unowned file at previously absent target: ${name}`);
     }
   }
   for (const [index, name] of entries.entries()) {
@@ -219,11 +221,23 @@ function activate() {
   ownership(valid(read(path.join(root, manifestName))));
   const old = exists(asTarget(stateName)) ? read(asTarget(stateName)) : null;
   const oldFiles = old ? previousFiles(old, valid(read(asTarget(manifestName)))) : {};
+  for (const [name, expected] of Object.entries(receipt.files)) {
+    if (!name.startsWith('agent/neura/node_modules/')) continue;
+    const target = asTarget(name);
+    safe(target);
+    if (exists(target) && digest(target) !== expected && digest(target) !== oldFiles[name]) {
+      throw Error(`unowned or modified Learn runtime file: ${name}`);
+    }
+  }
   const stale = Object.keys(oldFiles).filter(name => !Object.hasOwn(receipt.files, name));
   const names = [...new Set([...Object.keys(receipt.files), stateName, ...stale, ...retired])];
   for (const name of names) safe(asTarget(name));
   fs.mkdirSync(path.join(transaction, 'backup'), { recursive: true });
-  names.forEach((name, i) => { const file = asTarget(name); if (exists(file)) fs.copyFileSync(file, path.join(transaction, 'backup', String(i))); });
+  names.forEach((name, i) => {
+    const file = asTarget(name);
+    if (exists(file)) fs.copyFileSync(file, path.join(transaction, 'backup', String(i)));
+    else fs.writeFileSync(path.join(transaction, 'backup', `absent-${i}`), '');
+  });
   fs.writeFileSync(path.join(transaction, 'journal.json'), JSON.stringify(names));
   try {
     names.forEach((name, i) => {
