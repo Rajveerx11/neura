@@ -1,6 +1,6 @@
 // harness-health — on-demand readiness console for the agentic engineering stack.
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -610,9 +610,14 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const identity = currentRuntimeIdentity();
   const releasePath = path.join(AGENT_DIR, 'neura', 'release-manifest.json');
   // Source identity is not evidence that the live Pi files match the release.
-  const releaseValid = fs.existsSync(releasePath) &&
-    spawnSync(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check'],
-      { timeout: 5_000, windowsHide: true, stdio: 'ignore' }).status === 0;
+  const releaseValid = fs.existsSync(releasePath) && await new Promise<boolean>((resolve) => {
+    const child = spawn(process.execPath, [path.join(AGENT_DIR, 'neura', 'runtime-install.mjs'), 'check'], {
+      env: { ...process.env, PI_CODING_AGENT_DIR: AGENT_DIR },
+      timeout: 5_000, windowsHide: true, stdio: 'ignore', signal,
+    });
+    child.on('error', () => resolve(false));
+    child.on('close', (code) => resolve(code === 0));
+  });
 
   const checkpoint = fs.existsSync(path.join(AGENT_DIR, "extensions", "checkpoint.ts"));
   const gate = fs.existsSync(path.join(AGENT_DIR, "extensions", "check-gate.ts"));

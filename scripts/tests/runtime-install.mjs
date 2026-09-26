@@ -35,6 +35,11 @@ try {
   write(path.join(source, 'agent/extensions/one.ts'), 'one.ts');
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
   seal(); run('activate'); run('check');
+  const alternateAgent = path.join(tmp, 'alternate-agent');
+  fs.cpSync(path.join(home, '.pi/agent'), alternateAgent, {recursive: true});
+  run('check', true, {PI_CODING_AGENT_DIR: alternateAgent});
+  write(path.join(alternateAgent, 'extensions/one.ts'), 'tampered');
+  run('check', false, {PI_CODING_AGENT_DIR: alternateAgent});
   assert.equal(fs.readFileSync(live('agent/settings.json'), 'utf8'), '{"credential":"synthetic-only"}');
   // Upgrade removes only a previously owned stale extension.
   fs.rmSync(path.join(source, 'agent/extensions/one.ts'));
