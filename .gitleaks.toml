@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Reviewed public SHA-256 digest for the bundled UI tokens file"
+  condition = "AND"
+  regexTarget = "secret"
+  regexes = ['''^acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a$''']
+  paths = ['''(^|/)agent/neura/release-manifest\.json$''']

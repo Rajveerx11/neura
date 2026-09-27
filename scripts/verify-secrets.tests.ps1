@@ -44,7 +44,41 @@ try {
     }
     Remove-Item -LiteralPath $archivePath -Force
 
+    # The exact public release digest is ignored, but a different value at the
+    # same path must still trip the generic API-key rule after a squash merge.
+    $config = Get-Content (Join-Path (Split-Path -Parent $PSScriptRoot) '.gitleaks.toml') -Raw
+    $manifestSource = Get-Content (Join-Path (Split-Path -Parent $PSScriptRoot) 'agent\neura\release-manifest.json') -Raw
+    $manifest = $manifestSource | ConvertFrom-Json
+    $publicDigest = $manifest.files.PSObject.Properties['agent/neura/ui-tokens.ts'].Value
+    $manifestRepository = New-TestRepository "manifest"
+    Commit-TestFile $manifestRepository '.gitleaks.toml' $config
+    New-Item -ItemType Directory -Path (Join-Path $manifestRepository 'agent\neura') -Force | Out-Null
+    $manifestFile = 'agent/neura/release-manifest.json'
+    Commit-TestFile $manifestRepository $manifestFile $manifestSource
+    & $scanScript -RepositoryRoot $manifestRepository -ToolCache $toolCache | Out-Null
+    $otherDigest = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+    Commit-TestFile $manifestRepository $manifestFile ($manifestSource.Replace($publicDigest, $otherDigest))
+    $otherDigestRejected = $false
+    try { & $scanScript -RepositoryRoot $manifestRepository -ToolCache $toolCache *>$null }
+    catch {
+        if ($_.FullyQualifiedErrorId -like 'Neura.SecretLeak*') { $otherDigestRejected = $true }
+        else { throw }
+    }
+    if (-not $otherDigestRejected) { throw 'A different manifest digest bypassed the narrow allowlist.' }
+
+    $offPathRepository = New-TestRepository "off-path"
+    Commit-TestFile $offPathRepository '.gitleaks.toml' $config
+    Commit-TestFile $offPathRepository 'fixture.txt' ('api_key="' + $publicDigest + '"')
+    $offPathRejected = $false
+    try { & $scanScript -RepositoryRoot $offPathRepository -ToolCache $toolCache *>$null }
+    catch {
+        if ($_.FullyQualifiedErrorId -like 'Neura.SecretLeak*') { $offPathRejected = $true }
+        else { throw }
+    }
+    if (-not $offPathRejected) { throw 'The reviewed digest was ignored outside the manifest path.' }
+
     $leakRepository = New-TestRepository "leak"
+    Commit-TestFile $leakRepository '.gitleaks.toml' $config
     $syntheticToken = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
     Commit-TestFile $leakRepository "fixture.txt" ("api_key=" + $syntheticToken)
 
@@ -58,7 +92,7 @@ try {
         throw "Secret fixture did not produce the expected Gitleaks rejection."
     }
 
-    Write-Output "Neura secret tests: clean history passed; tampered archive and synthetic committed token rejected."
+    Write-Output "Neura secret tests: clean history and reviewed manifest digest passed; tampered archive, other digest, off-path key, and synthetic token rejected."
 } finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
     if ($resolvedTestRoot.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -and

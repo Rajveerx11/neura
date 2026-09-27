@@ -102,7 +102,9 @@ The tag workflow reruns repository, browser, audit, signature, secret-history,
 and ephemeral installer checks using the same hash-verified Windows Git runtime
 as PR CI. It builds a deterministic source tarball, SPDX SBOM snapshots for
 both lockfiles, and `SHA256SUMS`, then retains an attempt-scoped workflow artifact
-for three days. Only the final job receives `contents: write`, and it uses GitHub
+for three days. The secret scanner's only value-based release-manifest exception is an
+exact reviewed public SHA-256 value in `.gitleaks.toml`; a different digest at
+the same path must still fail. Only the final job receives `contents: write`, and it uses GitHub
 CLI to create a **draft prerelease**. It never publishes npm packages and never
 promotes or publishes the GitHub draft. A maintainer must inspect any draft and
 all remaining gates manually.
