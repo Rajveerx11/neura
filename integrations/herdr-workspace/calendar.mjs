@@ -22,6 +22,7 @@ export const calendarCommands = Object.freeze({
   a: ["init"],
 });
 export function calendarEditArgs(query) { return ["edit", query]; }
+export function calendarMenuArgs(answer) { return Object.hasOwn(calendarCommands, answer) ? calendarCommands[answer] : undefined; }
 
 function clear() { process.stdout.write("\x1b[2J\x1b[H"); }
 export function calendarRun(args, executable = calendarExecutable()) {
@@ -50,7 +51,8 @@ try {
     console.log(" q  Close pane\n");
     const answer = (await rl.question("> ")).trim().toLowerCase();
     if (answer === "q" || answer === "quit") break;
-    if (calendarCommands[answer]) { calendarRun(calendarCommands[answer]); await pause(); }
+    const command = calendarMenuArgs(answer);
+    if (command) { calendarRun(command); await pause(); }
     else if (answer === "5") {
       const query = (await rl.question("Event title/search text: ")).trim();
       if (query) { calendarRun(calendarEditArgs(query)); await pause(); }

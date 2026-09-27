@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clearStalePanes, credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
+import { clearStalePanes, credentialFingerprint, credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
+
+test("usage cache identity changes with account or access token without storing either", () => {
+  const first = credentialFingerprint({ token: "synthetic-token-a", accountId: "account-a" });
+  assert.match(first, /^[a-f0-9]{64}$/);
+  assert.notEqual(first, credentialFingerprint({ token: "synthetic-token-b", accountId: "account-a" }));
+  assert.notEqual(first, credentialFingerprint({ token: "synthetic-token-a", accountId: "account-b" }));
+  assert.ok(!first.includes("synthetic-token"));
+});
 
 test("usage retries failed stale-pane clears without touching active panes", () => {
   const cleared = [];
@@ -51,4 +59,5 @@ test("Cursor supports current API spelling and treats absent quota as unavailabl
   assert.equal(renderUsage(usage), "Plan 61%");
   assert.ok(Number.isInteger(usage.windows[0].reset));
   assert.equal(renderUsage(normalizeCursor({})), "usage unavailable");
+  assert.equal(renderUsage(normalizeCursor({ individualUsage: { plan: { totalPercentUsed: null } } })), "usage unavailable");
 });

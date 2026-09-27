@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Herdr usage reporter. It reads only the current access token written by each
- * supported CLI, never refreshes credentials, and caches only rendered usage.
+ * supported CLI, never refreshes credentials, and caches rendered usage with a one-way token fingerprint.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -124,8 +125,8 @@ export function normalizeCodex(raw, plan) {
 
 export function normalizeCursor(raw) {
   const plan = raw?.individualUsage?.plan || raw?.individual_usage?.plan || raw?.planUsage || raw?.plan_usage;
-  const used = Number(plan?.totalPercentUsed ?? plan?.total_percent_used);
-  return { windows: [{ label: "Plan", remaining: percentRemaining(used), reset: isoToSeconds(raw?.billingCycleEnd || raw?.billing_cycle_end) }] };
+  const used = plan?.totalPercentUsed ?? plan?.total_percent_used;
+  return { windows: [{ label: "Plan", remaining: percentRemaining(used == null ? NaN : Number(used)), reset: isoToSeconds(raw?.billingCycleEnd || raw?.billing_cycle_end) }] };
 }
 
 async function fetchUsage(provider, credentials) {
@@ -146,6 +147,9 @@ export function renderUsage(usage) {
 }
 
 function loadCache() { return readJson(CACHE_PATH) || { providers: {}, panes: [] }; }
+export function credentialFingerprint(credentials) {
+  return createHash("sha256").update(credentials.token).update("\0").update(credentials.accountId || "").digest("hex");
+}
 export function clearStalePanes(previous, current, clear) {
   const active = new Set(current);
   return previous.filter((paneId) => !active.has(paneId) && !clear(paneId));
@@ -203,9 +207,10 @@ async function main() {
   for (const provider of providers) {
     const credentials = credentialsFor(provider);
     if (!credentials) { delete cache.providers[provider]; continue; }
+    const fingerprint = credentialFingerprint(credentials);
     const cached = cache.providers[provider];
-    if (!force && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
-    try { cache.providers[provider] = { fetchedAt: now, token: renderUsage(await fetchUsage(provider, credentials)) }; }
+    if (!force && cached?.fingerprint === fingerprint && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
+    try { cache.providers[provider] = { fetchedAt: now, fingerprint, token: renderUsage(await fetchUsage(provider, credentials)) }; }
     catch {
       // Failed or expired credentials must remove stale quota instead of republishing it.
       delete cache.providers[provider];

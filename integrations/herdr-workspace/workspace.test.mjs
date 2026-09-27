@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { loadVault, checkedNote, collectNotes, createNote } from "./notes.mjs";
 import { paneArgs, launchPane } from "./open-pane.mjs";
-import { calendarCommands, calendarEditArgs, calendarExecutable, calendarRun } from "./calendar.mjs";
+import { calendarCommands, calendarEditArgs, calendarExecutable, calendarMenuArgs, calendarRun } from "./calendar.mjs";
 
 test("Workspace manifest declares the pane actions without requiring a live plugin link", (t) => {
   const manifest = path.join(import.meta.dirname, "herdr-plugin.toml");
@@ -66,6 +66,9 @@ test("calendar command arguments remain fixed except the edit search text", () =
   assert.deepEqual(calendarCommands["6"], ["list"]);
   assert.deepEqual(calendarCommands.a, ["init"]);
   assert.deepEqual(calendarEditArgs('hello & whoami'), ["edit", 'hello & whoami']);
+  assert.deepEqual(calendarMenuArgs("1"), calendarCommands["1"]);
+  assert.equal(calendarMenuArgs("constructor"), undefined);
+  assert.equal(calendarMenuArgs("toString"), undefined);
 });
 
 test("vault refuses UNC and junctions; picker and creation stay inside the canonical vault", async (t) => {
@@ -90,9 +93,16 @@ test("vault refuses UNC and junctions; picker and creation stay inside the canon
   assert.ok(!collectNotes(vault).some((note) => note.full === path.join(link, "foreign.md")));
   await assert.rejects(checkedNote(vault, path.join(link, "foreign.md")), /link|junction|escaped/i);
   const directLink = path.join(vault, "linked.md");
-  fs.symlinkSync(foreign, directLink, "file");
-  await assert.rejects(checkedNote(vault, directLink), /unlinked/);
-  assert.ok(!collectNotes(vault).some((note) => note.full === directLink));
+  let linkedFile = false;
+  try { fs.symlinkSync(foreign, directLink, "file"); linkedFile = true; }
+  catch (error) {
+    if (process.platform !== "win32" || !["EPERM", "EACCES", "ENOTSUP"].includes(error?.code)) throw error;
+    t.diagnostic("File symlinks unavailable; junction containment still verified");
+  }
+  if (linkedFile) {
+    await assert.rejects(checkedNote(vault, directLink), /unlinked/);
+    assert.ok(!collectNotes(vault).some((note) => note.full === directLink));
+  }
   await assert.rejects(checkedNote(vault, foreign), /escaped/);
   const folder = path.join(vault, "Herdr Notes");
   fs.symlinkSync(outside, folder, "junction");
