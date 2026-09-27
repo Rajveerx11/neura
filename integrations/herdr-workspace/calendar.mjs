@@ -24,9 +24,10 @@ export const calendarCommands = Object.freeze({
 export function calendarEditArgs(query) { return ["edit", query]; }
 
 function clear() { process.stdout.write("\x1b[2J\x1b[H"); }
-function run(args) {
+export function calendarRun(args, executable = calendarExecutable()) {
+  if (!executable) throw new Error("Calendar executable changed or is unavailable.");
   clear();
-  const result = spawnSync(gcalcli, args, { stdio: "inherit", windowsHide: true });
+  const result = spawnSync(executable, args, { stdio: "inherit", windowsHide: true });
   if (result.error) console.error(result.error.message);
   return result.status ?? 1;
 }
@@ -34,8 +35,7 @@ async function main() {
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 async function pause() { await rl.question("\nPress Enter to return to Calendar."); }
 try {
-  const gcalcli = calendarExecutable();
-  if (!gcalcli) throw new Error("Calendar unavailable: set NEURA_GCALCLI_EXECUTABLE and its matching NEURA_GCALCLI_SHA256 before launching Herdr.");
+  if (!calendarExecutable()) throw new Error("Calendar unavailable: set NEURA_GCALCLI_EXECUTABLE and its matching NEURA_GCALCLI_SHA256 before launching Herdr.");
   while (true) {
     clear();
     console.log(" NEURA / GOOGLE CALENDAR");
@@ -50,10 +50,10 @@ try {
     console.log(" q  Close pane\n");
     const answer = (await rl.question("> ")).trim().toLowerCase();
     if (answer === "q" || answer === "quit") break;
-    if (calendarCommands[answer]) { run(calendarCommands[answer]); await pause(); }
+    if (calendarCommands[answer]) { calendarRun(calendarCommands[answer]); await pause(); }
     else if (answer === "5") {
       const query = (await rl.question("Event title/search text: ")).trim();
-      if (query) { run(calendarEditArgs(query)); await pause(); }
+      if (query) { calendarRun(calendarEditArgs(query)); await pause(); }
     }
   }
 } catch (error) {

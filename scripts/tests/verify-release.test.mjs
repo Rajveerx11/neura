@@ -82,7 +82,20 @@ run("rejects an RC missing required safety text", (make) => {
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const releaseWorkflow = fs.readFileSync(path.join(repositoryRoot, ".github/workflows/release.yml"), "utf8");
+const verifyWorkflow = fs.readFileSync(path.join(repositoryRoot, ".github/workflows/verify.yml"), "utf8");
+const pinnedGitStep = (workflow) => workflow.match(/^      - name: Provision pinned Git runtime\r?\n        shell: pwsh\r?\n        run: \|\r?\n((?:          .+\r?\n)+)/m)?.[1]?.trim();
+const gitProvision = pinnedGitStep(verifyWorkflow);
+assert.ok(gitProvision, "CI omits pinned Git provisioning");
+assert.equal(pinnedGitStep(releaseWorkflow), gitProvision, "release and CI Git provisioning diverged");
+assert.match(gitProvision, /windowsArchiveSha256/, "Git archive is not hash-verified");
+assert.ok(gitProvision.indexOf("Get-FileHash") < gitProvision.indexOf("Start-Process"), "Git archive executes before hash verification");
+assert.match(verifyWorkflow, /if \[ "\$EVENT_NAME" = pull_request \]; then\s+test "\$DEPENDENCY_RESULT" = success\s+else\s+test "\$DEPENDENCY_RESULT" = skipped\s+fi/, "dependency review can be skipped on pull requests");
+assert.match(verifyWorkflow, /\$requiredPi\s*=.*runtime-contract\.json.*\.piVersion/, "CI Pi version is not read from the pinned contract");
+assert.ok(releaseWorkflow.includes('name: release-assets-${{ github.run_attempt }}'), "artifact name is not scoped to the attempt");
+assert.ok(releaseWorkflow.includes('actions/runs/${{ github.run_id }}/artifacts?per_page=100'), "release can select an artifact from another workflow run");
+assert.ok(releaseWorkflow.includes('select(.expired == false and (.name | test("^release-assets-[0-9]+$")))'), "release can select unrelated or expired artifacts");
+assert.ok(releaseWorkflow.includes('sort_by(.created_at) | last | .id // empty'), "release-only retries cannot reuse the last successful package artifact");
 assert.match(releaseWorkflow, /permissions:\s*\n\s+actions: read\s*\n\s+contents: write/, "release job lacks isolated write permission");
 assert.match(releaseWorkflow, /gh release create[\s\S]*?--draft[\s\S]*?--prerelease/, "release workflow can create a non-draft or stable release");
 assert.doesNotMatch(releaseWorkflow, /npm\s+(?:publish|access|dist-tag)/, "release workflow can mutate npm packages");
-console.log("ok - workflow keeps write permission isolated and creates draft prereleases only");
+console.log("ok - workflows fail closed on skipped PR reviews, share pinned Git provenance, and isolate release attempts");

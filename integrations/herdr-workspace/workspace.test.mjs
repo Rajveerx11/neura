@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { loadVault, checkedNote, collectNotes, createNote } from "./notes.mjs";
 import { paneArgs, launchPane } from "./open-pane.mjs";
-import { calendarCommands, calendarEditArgs, calendarExecutable } from "./calendar.mjs";
+import { calendarCommands, calendarEditArgs, calendarExecutable, calendarRun } from "./calendar.mjs";
 
 test("Workspace manifest declares the pane actions without requiring a live plugin link", (t) => {
   const manifest = path.join(import.meta.dirname, "herdr-plugin.toml");
@@ -51,6 +51,11 @@ test("Calendar requires an explicit absolute executable with matching SHA-256", 
   assert.equal(calendarExecutable({ NEURA_GCALCLI_EXECUTABLE: "gcalcli", NEURA_GCALCLI_SHA256: digest }), undefined);
   assert.equal(calendarExecutable({ NEURA_GCALCLI_EXECUTABLE: file, NEURA_GCALCLI_SHA256: "0".repeat(64) }), undefined);
   assert.equal(calendarExecutable({ NEURA_GCALCLI_EXECUTABLE: file, NEURA_GCALCLI_SHA256: digest }), file);
+});
+
+test("Calendar invokes only the selected executable and refuses unavailable commands", () => {
+  assert.throws(() => calendarRun(["list"], null), /Calendar executable changed or is unavailable/);
+  assert.equal(calendarRun(["--version"], process.execPath), 0);
 });
 
 test("calendar command arguments remain fixed except the edit search text", () => {

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
+import { clearStalePanes, credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
+
+test("usage retries failed stale-pane clears without touching active panes", () => {
+  const cleared = [];
+  const failed = clearStalePanes(["active", "former"], ["active"], (id) => { cleared.push(id); return false; });
+  assert.deepEqual(cleared, ["former"]);
+  assert.deepEqual(failed, ["former"]);
+  assert.deepEqual(clearStalePanes(failed, [], () => true), []);
+});
 
 test("automatic Herdr commands refuse ambient or missing executables", () => {
   assert.equal(trustedHerdrBinary({}, () => true), undefined);

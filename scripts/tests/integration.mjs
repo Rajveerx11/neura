@@ -15,8 +15,15 @@ assert.doesNotMatch(JSON.stringify(mcpConfig) + "\n" + launcher, /\b(?:ak|sk)_[A
 if (process.platform === "win32") {
   const bin = fs.mkdtempSync(path.join(process.env.TEMP || process.cwd(), "neura-launcher-"));
   const resultFile = path.join(bin, "result.txt");
-  const env = { ...process.env, PATH: bin + ";" + process.env.SystemRoot + "\\System32", LAUNCHER_RESULT: resultFile };
+  const preflightCalls = path.join(bin, "preflight-calls.txt");
+  const env = { ...process.env, PATH: bin + ";" + process.env.SystemRoot + "\\System32", LAUNCHER_RESULT: resultFile, NEURA_TEST_PREFLIGHT: preflightCalls };
   delete env.Path;
+  fs.writeFileSync(path.join(bin, "node.cmd"), [
+    "@echo off",
+    ">>\"%NEURA_TEST_PREFLIGHT%\" echo check",
+    "if defined NEURA_TEST_PREFLIGHT_FAIL exit /b 1",
+    "exit /b 0",
+  ].join("\r\n"));
   fs.writeFileSync(path.join(bin, "pi.cmd"), [
     "@echo off",
     ">\"%LAUNCHER_RESULT%\" echo %NEURA%",
@@ -27,10 +34,18 @@ if (process.platform === "win32") {
       env, encoding: "utf8", windowsHide: true,
     });
     assert.equal(run.status, 7, "launcher did not preserve Pi's exit code");
+    assert.equal(fs.readFileSync(preflightCalls, "utf8").trim(), "check", "launcher skipped release preflight");
     assert.equal(fs.readFileSync(resultFile, "utf8").trim(), "1", "launcher did not set NEURA");
 
+    fs.rmSync(resultFile);
     run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
-      env: { ...env, PATH: process.env.SystemRoot + "\\System32" }, encoding: "utf8", windowsHide: true,
+      env: { ...env, NEURA_TEST_PREFLIGHT_FAIL: "1" }, encoding: "utf8", windowsHide: true,
+    });
+    assert.equal(run.status, 1, "launcher ignored failed release preflight");
+    assert.equal(fs.existsSync(resultFile), false, "launcher started Pi after failed preflight");
+    fs.rmSync(path.join(bin, "pi.cmd"));
+    run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
+      env, encoding: "utf8", windowsHide: true,
     });
     assert.equal(run.status, 1, "launcher did not fail when Pi was unavailable");
     assert.match(run.stderr, /Neura requires Pi\./, "launcher did not explain that Pi was unavailable");

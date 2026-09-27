@@ -146,6 +146,10 @@ export function renderUsage(usage) {
 }
 
 function loadCache() { return readJson(CACHE_PATH) || { providers: {}, panes: [] }; }
+export function clearStalePanes(previous, current, clear) {
+  const active = new Set(current);
+  return previous.filter((paneId) => !active.has(paneId) && !clear(paneId));
+}
 function saveCache(cache) {
   mkdirSync(dirname(CACHE_PATH), { recursive: true });
   writeFileSync(CACHE_PATH, JSON.stringify(cache), { encoding: "utf8", mode: 0o600 });
@@ -207,9 +211,10 @@ async function main() {
       delete cache.providers[provider];
     }
   }
-  for (const paneId of cache.panes) reportToken(paneId, undefined);
+  const activePanes = providerPanes.map((pane) => pane.pane_id);
+  const pendingClears = clearStalePanes(cache.panes, activePanes, (paneId) => reportToken(paneId, undefined));
   for (const pane of providerPanes) reportToken(pane.pane_id, cache.providers[pane.provider]?.token);
-  cache.panes = panes.map((pane) => pane.pane_id);
+  cache.panes = [...new Set([...activePanes, ...pendingClears])];
   saveCache(cache);
 }
 
