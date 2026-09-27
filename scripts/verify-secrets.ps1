@@ -42,14 +42,14 @@ if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
     throw "Verified Gitleaks archive did not contain gitleaks.exe."
 }
 
-& $executablePath git $resolvedRepository `
-    --log-opts "--all" `
-    --no-banner `
-    --no-color `
-    --redact=100 `
-    --timeout 180
-
-$scanExitCode = $LASTEXITCODE
+$scanArgs = @('git', $resolvedRepository, '--log-opts', '--all', '--no-banner', '--no-color', '--redact=100', '--timeout', '180')
+$configPath = Join-Path $resolvedRepository '.gitleaks.toml'
+if (Test-Path -LiteralPath $configPath -PathType Leaf) { $scanArgs += @('--config', $configPath) }
+# Windows PowerShell can turn native stderr into a terminating error before
+# we inspect the scanner's exit code. Keep redacted findings visible instead.
+$ErrorActionPreference = 'Continue'
+try { & $executablePath @scanArgs; $scanExitCode = $LASTEXITCODE }
+finally { $ErrorActionPreference = 'Stop' }
 if ($scanExitCode -eq 1) {
     Write-Error `
         -Message "Gitleaks rejected repository history. Review redacted findings locally; never publish secret values." `

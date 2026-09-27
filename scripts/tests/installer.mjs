@@ -15,6 +15,13 @@ const installerSource = fs.readFileSync(path.join(repoRoot, "install.ps1"), "utf
 const artworkPath = path.join(repoRoot, "agent", "neura", "launch-artwork.png");
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+const releaseManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent/neura/release-manifest.json"), "utf-8"));
+for (const [name, expected] of Object.entries(releaseManifest.files)) {
+  assert.equal(createHash("sha256").update(fs.readFileSync(path.join(repoRoot, name))).digest("hex"), expected, `release manifest drift: ${name}`);
+}
+for (const file of files.filter((name) => name.endsWith(".ts"))) {
+  assert.ok(Object.hasOwn(releaseManifest.files, `agent/extensions/${file}`), `unowned Neura extension: ${file}`);
+}
 assert.match(installerSource, /\$retiredExtensions\s*=\s*@\("autogit\.ts"\)/, "installer does not retire the old autogit hook");
 assert.match(fs.readFileSync(path.join(repoRoot, 'agent/neura/runtime-install.mjs'), 'utf8'), /agent\/extensions\/autogit\.ts/, 'installer does not retire autogit');
 assert.match(installerSource, /runtime-install\.mjs'\) check --source/, 'drift check does not verify installed release');

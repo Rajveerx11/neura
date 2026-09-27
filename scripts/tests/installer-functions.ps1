@@ -13,7 +13,7 @@ $errors = $null
 $tree = [System.Management.Automation.Language.Parser]::ParseFile($Source, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Installer parsing failed' }
 # Evaluate only comparison functions, never installation.
-foreach ($name in @('Normalize-Text', 'Get-PackageIdentity', 'Test-PackageSpecEqual', 'Test-SameFile', 'Get-NeuraTerminalFragment')) {
+foreach ($name in @('Normalize-Text', 'Get-PackageIdentity', 'Test-PackageSpecEqual', 'Test-KeybindingEqual', 'Test-SameFile', 'Get-NeuraTerminalFragment')) {
     $definition = $tree.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (-not $definition) { throw "Missing installer function $name" }
     . ([scriptblock]::Create($definition.Extent.Text))
@@ -25,6 +25,8 @@ $filtered = [PSCustomObject]@{ source = 'npm:@scope/pkg@1.2.3'; extensions = @()
 if ((Get-PackageIdentity $filtered) -ne 'npm:@scope/pkg') { throw 'Filtered package identity failed' }
 if (-not (Test-PackageSpecEqual $filtered ([PSCustomObject]@{ source = 'npm:@scope/pkg@1.2.3'; extensions = @() }))) { throw 'Equal package filters differ' }
 if (Test-PackageSpecEqual $filtered ([PSCustomObject]@{ source = 'npm:@scope/pkg@1.2.3' })) { throw 'Missing package filter accepted' }
+if (-not (Test-KeybindingEqual @('enter', 'shift+enter') @('enter', 'shift+enter'))) { throw 'Equal new-line bindings differ' }
+if (Test-KeybindingEqual @('enter', 'shift+enter') @('enter')) { throw 'Missing new-line binding accepted' }
 [Console]::WriteLine('Installer functions: text comparisons')
 $left = Join-Path $Scratch 'left.ts'
 $right = Join-Path $Scratch 'right.ts'

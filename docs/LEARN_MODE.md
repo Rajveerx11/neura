@@ -222,7 +222,7 @@ Independent review findings were fixed and rechecked. Final head `c66c88c` passe
 and Greptile review (5/5, no actionable findings), then merged as `d3e77c6`.
 This evidence does not claim a live installation or release.
 
-- `verify-harness.mjs`: 18 isolated suites, real Pi loader, all 18 extensions, mode/provider boundaries,
+- `verify-harness.mjs`: 18 isolated suites, real Pi loader, all 19 extensions, mode/provider boundaries,
   private reads/ADS/hardlinks, background hooks, restore, and existing-mode regressions.
 - `verify-learn-materials.mjs`: real synthetic PDF/PPTX/OCR and malformed-input tests.
 - `verify-learn-workshop.mjs`: diagram validation, escaping, exercise grading, SQL

@@ -7,9 +7,10 @@ Neura can be open source while remaining experimental and unsuitable for
 production or unattended high-impact work.
 
 The GitHub repository is public. It includes Apache-2.0, community files, CI,
-security automation, and package metadata. Both npm manifests remain private and
-no workflow publishes to a package registry. Public source visibility, release
-approval, live installation, and production readiness are separate decisions.
+security automation, package metadata, and public-safe default configuration
+templates. Both npm manifests remain private and no workflow publishes to a
+package registry. Public source visibility, release approval, live installation,
+and production readiness are separate decisions.
 
 ## Included in this revision
 
@@ -43,8 +44,9 @@ unreleased additions to `2.5.1`, not evidence that a new public release exists.
 - [ ] Review Git author metadata, issue content, pull-request content, release
       text, Actions artifacts, screenshots, and historical plans for personal or
       confidential information.
-- [ ] Replace or disable machine-specific MCP paths and provider-specific
-      endpoints in public defaults; verify installer behavior after change.
+- [x] Replace or disable machine-specific MCP paths, personal skill paths,
+      provider-specific endpoints, and launcher credential imports in public
+      defaults; verify installer behavior after change.
 - [x] Replaced the undocumented launch image with the owner-supplied Neura logo;
       [provenance and Apache-2.0 distribution terms](../agent/neura/launch-artwork.md)
       are recorded. README screenshots are generated from synthetic fixtures by
@@ -79,7 +81,7 @@ unreleased additions to `2.5.1`, not evidence that a new public release exists.
 
 ## Current blockers
 
-A promoted release should not occur while public defaults expose machine-specific
-integration configuration or the remaining checklist is incomplete. Public
+A promoted release should not occur while the final clean-checkout
+history/content audit or another checklist item remains incomplete. Public
 visibility does not waive those blockers. Production use has additional blockers in
 [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
