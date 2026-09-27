@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
  * Herdr usage reporter. It reads only the current access token written by each
- * supported CLI, never refreshes credentials, and caches rendered usage with a one-way token fingerprint.
+ * supported CLI, never refreshes credentials, and caches rendered usage with credential-file revision metadata.
  */
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -147,8 +146,11 @@ export function renderUsage(usage) {
 }
 
 function loadCache() { return readJson(CACHE_PATH) || { providers: {}, panes: [] }; }
-export function credentialFingerprint(credentials) {
-  return createHash("sha256").update(credentials.token).update("\0").update(credentials.accountId || "").digest("hex");
+export function credentialRevision(file, stat = statSync) {
+  try {
+    const { mtimeMs, ctimeMs, size, ino } = stat(file);
+    return `${mtimeMs}:${ctimeMs}:${size}:${ino}`;
+  } catch { return undefined; }
 }
 export function clearStalePanes(previous, current, clear) {
   const active = new Set(current);
@@ -207,10 +209,11 @@ async function main() {
   for (const provider of providers) {
     const credentials = credentialsFor(provider);
     if (!credentials) { delete cache.providers[provider]; continue; }
-    const fingerprint = credentialFingerprint(credentials);
+    const file = credentialCandidates(provider).find(existsSync);
+    const revision = file && credentialRevision(file);
     const cached = cache.providers[provider];
-    if (!force && cached?.fingerprint === fingerprint && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
-    try { cache.providers[provider] = { fetchedAt: now, fingerprint, token: renderUsage(await fetchUsage(provider, credentials)) }; }
+    if (!force && revision && cached?.revision === revision && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
+    try { cache.providers[provider] = { fetchedAt: now, revision, token: renderUsage(await fetchUsage(provider, credentials)) }; }
     catch {
       // Failed or expired credentials must remove stale quota instead of republishing it.
       delete cache.providers[provider];

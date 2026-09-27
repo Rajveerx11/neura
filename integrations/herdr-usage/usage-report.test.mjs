@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clearStalePanes, credentialFingerprint, credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
+import { clearStalePanes, credentialRevision, credentialsFor, normalizeClaude, normalizeCodex, normalizeCursor, renderUsage, trustedHerdrBinary } from "./usage-report.mjs";
 
-test("usage cache identity changes with account or access token without storing either", () => {
-  const first = credentialFingerprint({ token: "synthetic-token-a", accountId: "account-a" });
-  assert.match(first, /^[a-f0-9]{64}$/);
-  assert.notEqual(first, credentialFingerprint({ token: "synthetic-token-b", accountId: "account-a" }));
-  assert.notEqual(first, credentialFingerprint({ token: "synthetic-token-a", accountId: "account-b" }));
-  assert.ok(!first.includes("synthetic-token"));
+test("usage cache invalidates on credential-file changes without storing token data", () => {
+  const first = credentialRevision("synthetic.json", () => ({ mtimeMs: 1, ctimeMs: 2, size: 3, ino: 4 }));
+  assert.equal(first, "1:2:3:4");
+  assert.notEqual(first, credentialRevision("synthetic.json", () => ({ mtimeMs: 2, ctimeMs: 3, size: 3, ino: 4 })));
+  assert.equal(credentialRevision("missing.json", () => { throw new Error("missing"); }), undefined);
 });
 
 test("usage retries failed stale-pane clears without touching active panes", () => {
