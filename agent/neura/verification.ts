@@ -143,6 +143,11 @@ export async function runProof(cwd: string, quick: boolean, options: {
         !value.reasons.every((reason: unknown) => typeof reason === "string")) throw new Error("invalid verdict");
     // A failed process must never confer PASS, even if it printed valid JSON first.
     if (value.passed && !result.ok) throw new Error("incomplete process");
+    // The pinned legacy verdict has no trusted required-suite/candidate-bound
+    // evidence contract. Aggregate test flags cannot authorize full verification.
+    if (value.passed && !quick) return { status: "unavailable", reasons: [
+      "Full verification unavailable: proof-of-work-agent 0.2.0 lacks trusted required-suite and candidate-bound evidence. A legacy PASS, including test flags, is insufficient.",
+    ] };
     return { status: value.passed ? "passed" : "failed",
       reasons: value.reasons.slice(0, 20).map((reason: string) => redactSensitiveText(reason, 500)) };
   } catch { return { status: "unavailable", reasons: ["Proof runner did not return a complete bounded verdict."] }; }

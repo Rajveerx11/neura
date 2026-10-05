@@ -42,6 +42,7 @@
     "verify:sandbox": "node scripts/verify-sandbox.mjs",
     "audit:dependencies": "npm audit --audit-level=high && npm audit --prefix agent/neura --audit-level=high",
     "audit:signatures": "npm audit signatures && npm audit signatures --prefix agent/neura",
+    "audit:all": "npm run audit:dependencies && npm run audit:signatures",
     "test": "node scripts/verify-harness.mjs",
     "test:changed": "node scripts/verify-harness.mjs --changed",
     "test:unit": "node scripts/verify-harness.mjs --suite unit",

@@ -244,7 +244,7 @@ maintainers must inspect and approve any draft manually. See
 | `/approvals` | Review Human Away requests |
 | `/approvals audit` | Show recent approval decisions |
 | `/health` | Inspect required readiness, optional integrations, runtime identity, and Pi drift in YOLO |
-| `/ship` | Full proof in Work or YOLO; does not commit, push, or merge |
+| `/ship` | Request full proof in Work or YOLO; legacy PASS is unavailable pending trusted suite/candidate evidence; never commits, pushes, or merges |
 | `/undo` | Restore previous in-session checkpoint in YOLO |
 | `/undo list` | List YOLO checkpoints |
 | `/clip [answer|code]` | Copy latest answer or a code block |
