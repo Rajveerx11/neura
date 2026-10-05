@@ -59,7 +59,7 @@
     "test:fuzz": "node scripts/verify-harness.mjs --suite fuzz"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.87.1",
+    "@earendil-works/pi-ai": "1.0.0",
     "@earendil-works/pi-coding-agent": "0.87.1",
     "@earendil-works/pi-tui": "0.87.1",
     "@spences10/pi-mcp": "0.0.58",
