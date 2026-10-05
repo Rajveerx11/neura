@@ -226,7 +226,7 @@ for (const { order, restored } of [
     captureWorktree,
     runProof: async (_cwd, _quick, { signal }) => {
       proofSignal = signal;
-      return new Promise(resolve => { finishProof = () => resolve({ status: 'passed', reasons: [] }); });
+      return new Promise(resolve => { finishProof = () => resolve({ status: 'unavailable', reasons: ['Legacy full PASS is insufficient.'] }); });
     },
   });
   await modes.commands.get('mode').handler('yolo', context);

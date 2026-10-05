@@ -57,9 +57,9 @@
     "default": []
   },
   "files": {
-    "agent/extensions/check-gate.ts": "d1d3833f606753bc031437ef6db7967e0ede9a65820b08fd508847bfff5ff49c",
+    "agent/extensions/check-gate.ts": "dc9513ced9f341698b8c6b3fa073acd069d501921a83826da3b8e0144f69c30f",
     "agent/extensions/checkpoint.ts": "373b9019860664bf8d353b91887e5c7bd5dfb99d918c313d7716d64967ed910c",
-    "agent/extensions/cockpit.ts": "fd82759fa6ab2a3369117fb5f9d81cdd49c47b876f1d4091bca5cdccb7da3315",
+    "agent/extensions/cockpit.ts": "ecba0c59ba4616eaa8e10838daef67ab0e886305facf69b3c09efbbbb47a8b23",
     "agent/extensions/gmail-guardrail.ts": "a073ec161675ce81fee00fcdabb437c217cf26f6c2d6fea04867e096d07cb2dc",
     "agent/extensions/guardrail.ts": "b934f358099d09ccf0302826a8c92f99e68da51038a4961440815658f70999b7",
     "agent/extensions/harness-health.ts": "90f5a06d6c84273de031513cced328bdc2658d16d3ba3988c14e5ce7e79a7cd7",
@@ -106,7 +106,7 @@
     "agent/neura/runtime-contract.json": "ea7c41d2272ca035b7da57f1db45d61d12ebf715ca8bea5e44a3894c2653ca52",
     "agent/neura/runtime-install.mjs": "f62fbf59757bbf02b064afda9d702d86a37d41bd516af6c8281a8c4f0066c6be",
     "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
-    "agent/neura/verification.ts": "e07a29fd7b8ecc37d05a8c832cb171dc8123b1c08aca761ddd0cefa0291b1491",
+    "agent/neura/verification.ts": "c9088e22737dea3acd07823e8d901cfbf759b3ef9f9d68ba51866173a9161a52",
     "agent/mcp.json": "7e10d172a4a372b759284d5d9cb8937c2317a47ff32768fc673eb591a21b0cee",
     "launcher/neura.cmd": "20a5206731857681cd76cf1854b77937ad4d3685d5fb9da3a69a27d04130df5c"
   }

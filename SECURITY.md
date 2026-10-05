@@ -90,7 +90,11 @@ response-time or embargo guarantee is offered.
 - Work and YOLO proof run only in the network-disabled WSL sandbox with the
   exact hash-verified uv bundle, CPython interpreter, and wheelhouse mounted
   read-only; the fresh cache is sandbox-local. Unavailable execution never falls back to the host.
-  `/ship` verifies and does not publish Git changes.
+  `/ship` requests verification and does not publish Git changes. Legacy full PASS
+  from the pinned proof runner is unavailable, including aggregate successful test
+  flags: it lacks trusted required-suite/candidate-bound evidence. Quick PASS is
+  detector-only feedback, never complete engineering verification. See
+  [verification limits](docs/VERIFICATION.md).
 - Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
 - `/health` executes only existing absolute stdio MCP binaries and sends
   bounded initialize requests only to HTTPS or loopback HTTP endpoints.

@@ -11,6 +11,7 @@ const { registerCheckGate, runModeProof } = await import('../../agent/extensions
 const { captureCheckpoint, restoreCheckpoint } = await import('../../agent/extensions/checkpoint.ts');
 const { getGitHealth } = await import('../../agent/neura/core.ts');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
+const { getCockpitState } = await import('../../agent/neura/cockpit-state.ts');
 const root = repository(scratch);
 const runtimeContract = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../agent/neura/runtime-contract.json'), 'utf8'));
 assert.equal(PROOF_UV_VERSION, runtimeContract.automaticExecutables.proof.uvVersion, 'proof uv version drifted from runtime contract');
@@ -28,7 +29,7 @@ for (const quick of [true, false]) {
     assert.ok(timeout > 0);
     return { code: 0, completed: true, stdout: '{"passed":true,"reasons":[]}', stderr: '' };
   });
-  assert.equal(modeProof.status, 'passed');
+  assert.equal(modeProof.status, quick ? 'passed' : 'unavailable');
 }
 assert.equal(sandboxProofCalls, 2);
 assert.equal(hostProofCalls, 0, 'Work proof executed an ambient host runner');
@@ -171,14 +172,34 @@ for (const directory of transactional.recoveryDirectories) fs.rmSync(directory, 
 fs.rmSync(transactional.directory, { recursive: true, force: true });
 setMode('work');
 
-const verdict = (value, ok = true) => async () => ({ ok, stdout: JSON.stringify(value) });
-assert.equal((await runProof(root, true, { execute: verdict({ passed: true, reasons: [] }) })).status, 'passed');
-assert.equal((await runProof(root, false, { execute: verdict({ passed: false, reasons: ['test failed'] }, false) })).status, 'failed');
-for (const value of [{ passed: 'yes', reasons: [] }, { passed: true, reasons: 'bad' }, {}, null]) {
-  assert.equal((await runProof(root, true, { execute: verdict(value) })).status, 'unavailable');
+const verdict = (value, ok = true) => async () => ({ ok, completed: true, stdout: JSON.stringify(value) });
+for (const tests of [undefined, { ran: false, passed: false }, { ran: true, passed: false }, { ran: true, passed: true }]) {
+  const value = { passed: true, reasons: [], ...(tests ? { tests } : {}) };
+  assert.equal((await runProof(root, true, { execute: verdict(value) })).status, 'passed', 'quick detector success lost');
+  const full = await runProof(root, false, { execute: verdict(value) });
+  assert.equal(full.status, 'unavailable', 'legacy full PASS authorized verification');
+  assert.match(full.reasons[0], /required-suite and candidate-bound evidence/);
 }
-assert.equal((await runProof(root, true, { execute: verdict({ passed: true, reasons: [] }, false) })).status, 'unavailable');
-assert.equal((await runProof(root, true, { execute: async () => ({ok:false, stdout:'{"passed":'}) })).status, 'unavailable');
+for (const quick of [true, false]) {
+  for (const ok of [true, false]) {
+    const failed = await runProof(root, quick, { execute: verdict({ passed: false, reasons: ['test failed'] }, ok) });
+    assert.equal(failed.status, 'failed', 'definitive failure lost');
+    assert.deepEqual(failed.reasons, ['test failed']);
+  }
+  for (const value of [{ passed: 'yes', reasons: [] }, { passed: true, reasons: 'bad' }, { passed: false, reasons: [1] }, {}, null]) {
+    assert.equal((await runProof(root, quick, { execute: verdict(value) })).status, 'unavailable');
+  }
+  assert.equal((await runProof(root, quick, { execute: verdict({ passed: true, reasons: [] }, false) })).status, 'unavailable');
+  for (const stdout of ['{"passed":', '{"passed":true,"reasons":[]} trailing']) {
+    assert.equal((await runProof(root, quick, { execute: async () => ({ok:false, stdout}) })).status, 'unavailable');
+  }
+  for (const passed of [true, false]) {
+    assert.equal((await runProof(root, quick, { execute: async () => ({ok:false, completed:false,
+      stdout:JSON.stringify({passed,reasons:[]})}) })).status, 'unavailable', 'interrupted verdict accepted');
+    assert.equal((await runProof(root, quick, { signal:AbortSignal.abort(), execute:verdict({passed,reasons:[]}) })).status,
+      'unavailable', 'cancelled verdict accepted');
+  }
+}
 const redacted = await runProof(root, true, { execute: verdict({ passed: false, reasons: ['Authorization: Bearer synthetic-proof-secret'] }) });
 assert.doesNotMatch(redacted.reasons.join(''), /synthetic-proof-secret/);
 const started = Date.now();
@@ -193,16 +214,16 @@ const excess = await execute(process.execPath, ['-e', 'process.stdout.write("x".
 assert.equal(excess.ok, false, 'output bound ignored');
 
 // Exercise the actual extension event handlers, with only the external runner substituted.
-const handlers = new Map(), commands = new Map(), entries = [], messages = [];
-let calls = 0, result = {status:'passed',reasons:[]}, mutate = false;
+const handlers = new Map(), commands = new Map(), entries = [], messages = [], notifications = [];
+let calls = 0, result = {passed:true,reasons:[]}, mutate = false;
 const pi = { on:(name, fn)=>handlers.set(name, fn), registerCommand:(name, def)=>commands.set(name,def),
   appendEntry:(type,data)=>entries.push({type,data}), sendUserMessage:message=>messages.push(message) };
 registerCheckGate(pi, {captureWorktree, runProof:async (_cwd, quick) => {
   calls++;
   if (mutate) fs.appendFileSync(file, 'changed-during-proof');
-  return result;
+  return runProof(_cwd, quick, { execute: verdict(result) });
 }});
-const ctx = {cwd:root,hasUI:true,ui:{setStatus(){},notify(){}}};
+const ctx = {cwd:root,hasUI:true,ui:{setStatus(){},notify(message){notifications.push(message);}}};
 await handlers.get('agent_start')({},ctx);
 await handlers.get('agent_settled')({},ctx);
 assert.equal(calls,0,'unchanged worktree ran proof');
@@ -212,17 +233,29 @@ await handlers.get('agent_settled')({},ctx);
 assert.equal(calls,1);
 assert.deepEqual(entries.at(-1).data.changedFiles,['new file.txt']);
 assert.equal(entries.at(-1).data.scope,'quick');
+assert.equal(entries.at(-1).data.status,'passed');
+assert.equal(getCockpitState().phase,'VERIFY','quick detector PASS marked engineering COMPLETE');
+assert.match(getCockpitState().proof.detail,/Detector-only PASS/);
+const quickSnapshot = await captureWorktree(root);
+assert.equal(makeReceipt('quick', quickSnapshot, quickSnapshot, {status:'passed',reasons:[]}, []).status,'passed');
+assert.equal(makeReceipt('quick', quickSnapshot, initial, {status:'passed',reasons:[]}, []).status,'unavailable',
+  'stale detector candidate received PASS');
 await commands.get('ship').handler('',ctx);
+assert.equal(entries.at(-1).data.status,'unavailable','legacy full receipt received PASS');
+assert.equal(getCockpitState().phase,'DEGRADED');
+assert.match(notifications.at(-1),/required-suite and candidate-bound evidence/);
+assert.ok(notifications.every(message=>!message.includes('verified PASS')));
 assert.equal(calls,2,'full ship reused quick verdict');
 assert.equal(entries.at(-1).data.quick.current,true);
 fs.writeFileSync(file,'another');
 await commands.get('ship').handler('',ctx);
 assert.equal(entries.at(-1).data.quick.current,false,'stale quick evidence marked current');
 mutate=true;
+result={passed:false,reasons:['fixture failure']};
 await commands.get('ship').handler('',ctx);
 assert.equal(entries.at(-1).data.status,'unavailable','changed-during-proof received PASS');
 mutate=false;
-result={status:'failed',reasons:['fixture failure']};
+result={passed:false,reasons:['fixture failure']};
 for(let turn=0;turn<2;turn++) {
   await handlers.get('agent_start')({},ctx);
   fs.appendFileSync(file,'next');
@@ -252,7 +285,7 @@ registerCheckGate({on:(name,fn)=>lateHandlers.set(name,fn),registerCommand:(name
   captureWorktree,
   runProof:async (_cwd,_quick,{signal})=>{
     capturedSignal=signal;
-    return new Promise(resolve=>{release=()=>resolve({status:'passed',reasons:[]});});
+    return new Promise(resolve=>{release=()=>resolve({status:'unavailable',reasons:['Legacy full PASS is insufficient.']});});
   },
 });
 const late=lateCommands.get('ship').handler('',ctx);
@@ -270,16 +303,22 @@ const evidenceSnapshot=await captureWorktree(root);
 const evidence={schemaVersion:1,fingerprint:evidenceSnapshot.fingerprint,completedAt:new Date().toISOString(),
   status:'failed',suites:[{name:'proof',status:'failed'}]};
 fs.writeFileSync(evidencePath,JSON.stringify(evidence));
-result={status:'passed',reasons:[]};
+result={passed:true,reasons:[],tests:{ran:true,passed:true}};
 await commands.get('ship').handler('',ctx);
+assert.equal(entries.at(-1).data.status,'unavailable','incremental report authorized legacy full PASS');
 assert.equal(entries.at(-1).data.incremental.current,true);
 assert.equal(entries.at(-1).data.incremental.source,'workspace-report');
 assert.equal(entries.at(-1).data.incremental.status,'failed');
 fs.appendFileSync(file,'stale');
 await commands.get('ship').handler('',ctx);
 assert.equal(entries.at(-1).data.incremental.current,false);
-result={status:'failed',reasons:['full failure']};
-fs.writeFileSync(evidencePath,JSON.stringify({...evidence,status:'passed'}));
+const currentEvidenceSnapshot=await captureWorktree(root);
+fs.writeFileSync(evidencePath,JSON.stringify({...evidence,fingerprint:currentEvidenceSnapshot.fingerprint,
+  status:'passed',suites:[{name:'proof',status:'passed'}]}));
+await commands.get('ship').handler('',ctx);
+assert.equal(entries.at(-1).data.incremental.current,true);
+assert.equal(entries.at(-1).data.status,'unavailable','successful workspace report authorized full PASS');
+result={passed:false,reasons:['full failure']};
 await commands.get('ship').handler('',ctx);
 assert.equal(entries.at(-1).data.status,'failed','workspace report overrode full proof');
 for(const invalid of ['{',JSON.stringify({...evidence,suites:[{name:'invalid\nname',status:'passed'}]}),'x'.repeat(65537)]) {

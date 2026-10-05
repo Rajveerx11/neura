@@ -143,6 +143,8 @@ export function cockpitLines(state: CockpitState, _mode: AgentMode, width: numbe
     lines.push(truncateToWidth(`${fg(ACC, GLYPHS.pending)} ${fg(MUT, `${state.operation.verb}${target}`)} ${fg(DIM, "· Esc stops safely")}`, width));
   } else if (state.degraded) {
     lines.push(truncateToWidth(`${fg(HUMAN, "DEGRADED")} ${fg(MUT, `· ${state.degraded}`)}`, width));
+  } else if (state.proof?.scope === "quick" && state.proof.status === "passed") {
+    lines.push(truncateToWidth(fg(MUT, "Detector-only PASS · not full verification"), width));
   } else if (state.copy.feedback) {
     lines.push(truncateToWidth(fg(PALETTE.success, `${GLYPHS.success} ${state.copy.feedback}`), width));
   } else if (state.copy.available && width >= 48) {
@@ -260,7 +262,7 @@ export default function (pi) {
     const state = getCockpitState();
     const phase = state.approval ? "REVIEW"
       : state.degraded ? "DEGRADED"
-        : state.proof?.status === "failed" ? "VERIFY"
+        : state.proof?.status === "failed" || (state.proof?.scope === "quick" && state.proof.status === "passed") ? "VERIFY"
           : "COMPLETE";
     patchCockpit({ phase, step: undefined, operation: undefined });
     try { ctx.ui.setWorkingMessage(); } catch {}
