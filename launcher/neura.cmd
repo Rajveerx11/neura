@@ -10,4 +10,5 @@ where pi >nul 2>&1 || (
   echo Neura requires Pi. Run: npm install -g @earendil-works/pi-coding-agent 1>&2
   exit /b 1
 )
-pi %*
+rem Preserve Neura's regular-terminal launch; plain Pi keeps its own default.
+pi --tui-mode regular %*

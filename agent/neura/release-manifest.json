@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "neuraVersion": "2.5.1",
-  "piVersion": "0.87.1",
+  "piVersion": "1.0.3",
   "nodeMinimum": "24.15.0",
   "automaticExecutables": {
     "git": {
@@ -66,7 +66,7 @@
     "agent/extensions/herdr-usage-provider.ts": "a34fc970682b977ef1767d834e61a54dcc4a260d1848fdd68253e2f8b539818a",
     "agent/extensions/human-away-sandbox.ts": "37567fc6b539538ae7fe3c4b88327e4d063d3f4be70b4433292d22643343ed70",
     "agent/extensions/learn.ts": "be459c4d709c87e219eef93965dad208f091de9f181dd0814e32ccd21c08f590",
-    "agent/extensions/mcp.ts": "ca0b56d4cd45df8275959837f3fafd6929a41b4754bbe65f7d05feb12b49df37",
+    "agent/extensions/mcp.ts": "1a8566111a01a8b268dc33eed858cd289037c45afc293648b744340035c517bd",
     "agent/extensions/modes.ts": "f6a73b4fc1db487e46a7c47ac1626371978e14bcd02064b04365287c6b15f46a",
     "agent/extensions/neura-memory.ts": "896b30dbe39c4b190993afd8b2405d4af255076676b342a073342155dbde1160",
     "agent/extensions/neura.ts": "33611b0b88dd1677301f73fb0081d72eb2d4372b86e88206491d58db0d48a9ee",
@@ -103,11 +103,11 @@
     "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e4ff353a81aad268dd9dde26f9c9ff910137b6eafc170b310761b852525b336e",
-    "agent/neura/runtime-contract.json": "ea7c41d2272ca035b7da57f1db45d61d12ebf715ca8bea5e44a3894c2653ca52",
+    "agent/neura/runtime-contract.json": "30e7a3a2c5620885c560836f76f04c9e225d211a9ddbca41857a1f327e345a9c",
     "agent/neura/runtime-install.mjs": "f62fbf59757bbf02b064afda9d702d86a37d41bd516af6c8281a8c4f0066c6be",
     "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
     "agent/neura/verification.ts": "e07a29fd7b8ecc37d05a8c832cb171dc8123b1c08aca761ddd0cefa0291b1491",
     "agent/mcp.json": "7e10d172a4a372b759284d5d9cb8937c2317a47ff32768fc673eb591a21b0cee",
-    "launcher/neura.cmd": "20a5206731857681cd76cf1854b77937ad4d3685d5fb9da3a69a27d04130df5c"
+    "launcher/neura.cmd": "f6ab90c3af0cf044842ac0f0a87857b1e60accee26eaa78bf1edeab573994ee5"
   }
 }

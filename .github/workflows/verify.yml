@@ -64,9 +64,7 @@ jobs:
         run: npm ci --prefix agent/neura --ignore-scripts
 
       - name: Audit dependency vulnerabilities and registry signatures
-        run: |
-          npm run audit:dependencies
-          npm run audit:signatures
+        run: npm run audit:all
 
       - name: Verify Pi version
         shell: pwsh

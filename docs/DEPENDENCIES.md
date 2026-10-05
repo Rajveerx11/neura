@@ -1,6 +1,6 @@
 # Dependency policy and review
 
-Pi/development source review: 2026-09-24 (Pi 0.87.1). Learn runtime review: 2026-09-07.
+Pi/development source review: 2026-10-05 (Pi 1.0.3). Learn runtime review: 2026-09-07.
 MCP lifecycle and automatic-execution review: 2026-09-13. Public-default
 configuration review: 2026-09-15.
 
@@ -27,7 +27,7 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 
 | Package | Pin | Source and lifecycle review | Privileged behavior |
 |---|---:|---|---|
-| `@earendil-works/pi-coding-agent` | `0.87.1` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v0.87.1); the 0.86–0.87 changelog and installed footer/context/session APIs were reviewed. Published pi-coding-agent, pi-ai, and pi-tui manifests have build and `prepublishOnly`, but no consumer install hook. Registry integrity and signatures were verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
+| `@earendil-works/pi-coding-agent` | `1.0.3` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.0.3), commit `d78dc83d633229d12f8b79631384c4c2717c399f`; published manifests, extension loader aliases, MCP replacement, and relevant TUI/session changes were reviewed. Published pi-coding-agent, pi-ai, and pi-tui have build and `prepublishOnly`, but no consumer install hook. This is a scoped integration review, not a complete upstream audit. Registry integrity and signatures were verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. |
 | `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
@@ -94,9 +94,9 @@ and workspace-contained overrides are rejected.
 
 ## Development graph
 
-`package.json` pins Pi `0.87.1`, Pi API/TUI types `0.87.1`, Playwright Core
+`package.json` pins Pi `1.0.3`, Pi API/TUI types `1.0.3`, Playwright Core
 `1.63.0`, axe-core `4.13.0`, Typebox `1.3.34`, TypeScript `7.0.2`, and Node types
-`26.6.2`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
+`26.6.4`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
@@ -108,10 +108,20 @@ credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
 Learn browser assertions also run in CI; the current artifact step is Plan-specific.
 
-The 2026-09-24 root-graph review found zero known high npm vulnerabilities; all
-246 audited packages had verified registry signatures and 86 had attestations.
-The Learn graph found zero known high npm vulnerabilities; all 21 audited
+The 2026-10-05 root-graph review found zero known npm vulnerabilities; all
+137 audited packages had verified registry signatures and 42 had attestations.
+The Learn graph found zero known npm vulnerabilities; all 21 audited
 packages had verified registry signatures and 3 had attestations.
+
+Pi 1.0.3 drops the consumer shrinkwrap and pins `brace-expansion` 5.0.12;
+Neura still records its complete exact graph in `package-lock.json`. The three
+Pi direct packages and the loader's resolved AI/TUI modules must agree with
+`runtime-contract.json`. The actual resource-loader regression checks that
+Neura's guarded `/mcp` replaces the built-in eager connector, while plain Pi
+retains the built-in extension. The Neura launcher uses `--tui-mode regular`
+to preserve the existing launch; it does not alter plain Pi defaults.
+The upstream Azure provider rename requires affected users to migrate their own
+provider configuration or sign in again; Neura does not rewrite credentials.
 
 Pi `0.83.0` was rejected for stable release because its locked `undici` and
 `brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`
@@ -120,10 +130,11 @@ dependency audit, signature audit, live drift check, and WSL2 sandbox replay.
 That is historical evidence. Pi `0.85.1` was source-reviewed from the installed
 release and verified through Neura's loader harness, typecheck, dependency audit,
 and full verification suite on 2026-09-15; a fresh live-drift result is recorded
-separately. Current source, development APIs, and CI pin `0.87.1`; verify live
-installations separately. The 0.87.0 canonical-session and context-edit changes
-were reviewed against Neura's session, footer, and extension APIs; the complete
-harness and configured typecheck passed on the exact 0.87.1 development graph.
+separately. The 0.87.0 canonical-session and context-edit changes were reviewed
+against Neura's session, footer, and extension APIs; the complete harness and
+configured typecheck passed on that historical 0.87.1 development graph.
+Current source, development APIs, and CI pin 1.0.3 together. This repair does not
+install into the live harness; verify live installations separately.
 The installer does not replace a user's global Pi. Rolling back requires
 restoring the prior manifest, lockfile, runtime contract, and live Neura files
 together; do not downgrade a newer global Pi silently.
@@ -148,7 +159,9 @@ linked by the user, not installed as a Neura default.
 
 ## Update policy
 
-1. Change one direct pin at a time.
+1. Change one independent direct pin at a time. Treat Pi runtime, AI, and TUI as
+   one coupled upgrade; Dependabot groups those proposals, but cannot update
+   Neura's contract, release hashes, migration documentation, or review evidence.
 2. Review repository ownership, published files, dependency changes, and every
    lifecycle script before installation.
 3. Install with scripts disabled when package operation does not require them.

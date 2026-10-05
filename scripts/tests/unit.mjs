@@ -123,9 +123,46 @@ const linkedWorkspaceMcp = await probeStdioMcp('linked-workspace-fixture', {
 }, undefined, 100, syntheticRoot);
 assert.match(linkedWorkspaceMcp.problem?.message ?? '', /existing absolute executable/, 'workspace symlink path escaped MCP containment');
 assert.throws(()=>pinnedPi(syntheticRoot),/ENOENT/,'missing local Pi fell back to ambient global');
-fs.mkdirSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent'),{recursive:true});
-fs.writeFileSync(path.join(syntheticRoot,'node_modules/@earendil-works/pi-coding-agent/package.json'),'{"version":"0.0.0"}');
-assert.throws(()=>pinnedPi(syntheticRoot),/run npm ci/,'wrong local Pi version accepted');
+const piPackages = ['pi-coding-agent', 'pi-tui', 'pi-ai'];
+for (const name of piPackages) {
+  const root = path.join(syntheticRoot, 'node_modules/@earendil-works', name);
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: runtimeContract.piVersion }));
+}
+const expectedPiPaths = {
+  loaderPath: path.join(syntheticRoot, 'node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js'),
+  tuiPath: path.join(syntheticRoot, 'node_modules/@earendil-works/pi-tui/dist/index.js'),
+};
+assert.deepEqual(pinnedPi(syntheticRoot), expectedPiPaths, 'matching local Pi packages rejected or return API changed');
+for (const name of piPackages) {
+  const root = path.join(syntheticRoot, 'node_modules/@earendil-works', name);
+  const manifestPath = path.join(root, 'package.json');
+  fs.rmSync(manifestPath);
+  assert.throws(() => pinnedPi(syntheticRoot), { code: 'ENOENT' }, `${name}: missing root package fell back to ambient Pi`);
+  fs.writeFileSync(manifestPath, '{"version":"0.0.0"}');
+  assert.throws(() => pinnedPi(syntheticRoot), {
+    code: 'ERR_ASSERTION', message: new RegExp(`^${name}: run npm ci --ignore-scripts`),
+  }, `${name}: wrong root package version accepted`);
+
+  const driftedManifest = structuredClone(packageManifest);
+  driftedManifest.devDependencies[`@earendil-works/${name}`] = '0.0.0';
+  fs.writeFileSync(path.join(syntheticRoot, 'package.json'), JSON.stringify(driftedManifest));
+  assert.throws(() => pinnedPi(syntheticRoot), {
+    code: 'ERR_ASSERTION', message: new RegExp(`^${name}: runtime contract mismatch`),
+  }, `${name}: package pin matching installed version bypassed runtime contract`);
+  fs.writeFileSync(path.join(syntheticRoot, 'package.json'), JSON.stringify(packageManifest));
+  fs.writeFileSync(manifestPath, JSON.stringify({ version: runtimeContract.piVersion }));
+
+  const linkedRoot = path.join(scratchRoot, `${name}-linked`);
+  fs.renameSync(root, linkedRoot);
+  fs.symlinkSync(linkedRoot, root, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => pinnedPi(syntheticRoot), {
+    code: 'ERR_ASSERTION', message: new RegExp(`^${name}: ambient package link refused`),
+  }, `${name}: linked package with matching version accepted`);
+  fs.rmSync(root);
+  fs.renameSync(linkedRoot, root);
+}
+assert.deepEqual(pinnedPi(syntheticRoot), expectedPiPaths, 'restored local Pi fixtures rejected');
 assert.deepEqual(piRuntimeStatus(runtimeContract.piVersion, runtimeContract.piVersion), {
   valid: true,
   installed: runtimeContract.piVersion,

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { isolate } from './isolation.mjs';
 import { pinnedPi } from './pinned-pi.mjs';
 export const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -18,6 +18,15 @@ fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'mcp.json'), JSON.st
   mcpServers: { fixture: { url: 'https://mcp.fixture.test' } },
 }));
 const { loaderPath, tuiPath } = pinnedPi(repoRoot);
+for (const name of ['pi-ai', 'pi-tui']) {
+  const rootEntry = path.join(repoRoot, 'node_modules/@earendil-works', name, 'dist/index.js');
+  const resolved = execFileSync(process.execPath, ['--experimental-import-meta-resolve', '--input-type=module', '-e',
+    'console.log(import.meta.resolve(process.argv[1], process.argv[2]))', `@earendil-works/${name}`, pathToFileURL(loaderPath).href],
+    { encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim();
+  assert.equal(fs.realpathSync(fileURLToPath(resolved)), fs.realpathSync(rootEntry), `${name}: loader resolved a different package copy`);
+}
+const rootAi = await import(pathToFileURL(path.join(repoRoot, 'node_modules/@earendil-works/pi-ai/dist/index.js')).href);
+assert.equal(typeof rootAi.StringEnum, 'function', 'root pi-ai lost the schema API used by Plan');
 const { loadExtensions } = await import(pathToFileURL(loaderPath).href);
 const { visibleWidth } = await import(pathToFileURL(tuiPath).href);
 const { isSafeExternalUrl, isPlanToolInputAllowed } = await import(

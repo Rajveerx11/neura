@@ -52,18 +52,18 @@ jobs:
           $extract = Start-Process -FilePath $archive -ArgumentList "-o$destination", "-y" -Wait -PassThru -WindowStyle Hidden
           if ($extract.ExitCode -ne 0) { throw "Pinned Git extraction failed with exit code $($extract.ExitCode)." }
           "NEURA_GIT_EXECUTABLE=$(Join-Path $destination 'cmd\git.exe')" >> $env:GITHUB_ENV
-      - name: Install locked dependency graphs
-        run: |
-          npm ci --ignore-scripts
-          npm ci --prefix agent/neura --ignore-scripts
-      - name: Verify release policy and repository
+      - name: Install locked development dependencies
+        run: npm ci --ignore-scripts
+      - name: Install locked learning document runtime
+        run: npm ci --prefix agent/neura --ignore-scripts
+      - name: Verify release policy
         env:
           TAG: ${{ github.ref_name }}
-        run: |
-          npm run verify:release -- --tag "$env:TAG"
-          npm run audit:dependencies
-          npm run audit:signatures
-          npm run verify
+        run: npm run verify:release -- --tag "$env:TAG"
+      - name: Audit dependency vulnerabilities and registry signatures
+        run: npm run audit:all
+      - name: Verify repository
+        run: npm run verify
       - name: Verify browser contracts
         shell: pwsh
         env:

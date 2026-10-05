@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { spawnSync } from "node:child_process";
 import { verifyRelease } from "../verify-release.mjs";
 
 const requiredSafety = `
@@ -91,6 +92,35 @@ assert.match(gitProvision, /windowsArchiveSha256/, "Git archive is not hash-veri
 assert.ok(gitProvision.indexOf("Get-FileHash") < gitProvision.indexOf("Start-Process"), "Git archive executes before hash verification");
 assert.match(verifyWorkflow, /if \[ "\$EVENT_NAME" = pull_request \]; then\s+test "\$DEPENDENCY_RESULT" = success\s+else\s+test "\$DEPENDENCY_RESULT" = skipped\s+fi/, "dependency review can be skipped on pull requests");
 assert.match(verifyWorkflow, /\$requiredPi\s*=.*runtime-contract\.json.*\.piVersion/, "CI Pi version is not read from the pinned contract");
+const packageManifest = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8"));
+assert.equal(packageManifest.scripts["audit:all"], "npm run audit:dependencies && npm run audit:signatures");
+for (const workflow of [verifyWorkflow, releaseWorkflow]) {
+  assert.match(workflow, /name: Audit dependency vulnerabilities and registry signatures\r?\n        run: npm run audit:all\r?\n/, "audit failure can be overwritten by a later native command");
+}
+run("audits stop on dependency and signature failures and accept success", (make) => {
+  const npmCli = process.env.npm_execpath ?? path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js");
+  assert.ok(fs.existsSync(npmCli), "run this test with npm run test:release");
+  for (const [dependencyExit, signatureExit] of [[0, 0], [17, 0], [0, 23]]) {
+    const root = make();
+    const marker = path.join(root, "signatures-ran");
+    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ scripts: {
+      "audit:all": packageManifest.scripts["audit:all"],
+      "audit:dependencies": `node -e "process.exit(${dependencyExit})"`,
+      "audit:signatures": `node -e "require('node:fs').writeFileSync('signatures-ran','ok');process.exit(${signatureExit})"`,
+    } }));
+    const userConfig = path.join(root, "user.npmrc");
+    const globalConfig = path.join(root, "global.npmrc");
+    fs.writeFileSync(userConfig, "");
+    fs.writeFileSync(globalConfig, "");
+    const result = spawnSync(process.execPath, [npmCli, "run", "audit:all", "--silent"], {
+      cwd: root, encoding: "utf8", timeout: 30000, windowsHide: true,
+      env: { ...process.env, npm_config_userconfig: userConfig, npm_config_globalconfig: globalConfig,
+        npm_config_cache: path.join(root, "cache"), npm_config_offline: "true", npm_config_update_notifier: "false" },
+    });
+    assert.equal(result.status, dependencyExit || signatureExit, `audit result was masked: ${result.stderr}`);
+    assert.equal(fs.existsSync(marker), dependencyExit === 0, "signature audit ran after dependency failure");
+  }
+});
 assert.ok(releaseWorkflow.includes('name: release-assets-${{ github.run_attempt }}'), "artifact name is not scoped to the attempt");
 assert.ok(releaseWorkflow.includes('actions/runs/${{ github.run_id }}/artifacts?per_page=100'), "release can select an artifact from another workflow run");
 assert.ok(releaseWorkflow.includes('select(.expired == false and (.name | test("^release-assets-[0-9]+$")))'), "release can select unrelated or expired artifacts");

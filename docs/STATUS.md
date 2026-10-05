@@ -1,10 +1,10 @@
 # Neura status
 
-Last documentation audit: 2026-09-24
+Last documentation audit: 2026-10-05
 
-Latest release: `2.5.1`. Current merged source: `0dc9ce6`, including Work,
-modular verification, and Learn Mode; these changes are unreleased. Required Pi:
-`0.87.1`; Node: `24.15+` (CI `24.16.0`).
+Latest release: `2.5.1`. Current source includes Work, modular verification,
+and Learn Mode; these changes are unreleased. Required Pi: `1.0.3`;
+Node: `24.15+` (CI `24.16.0`).
 
 Live installation: a local sync was performed on 2026-09-15, then rolled back
 for touched live files at the owner's request so repository changes remain
@@ -36,8 +36,8 @@ release gates and issue ownership live in
 | Area | State | Evidence or blocker |
 |---|---|---|
 | Public source | Available; release blocked | The repository is public, GitHub recognizes Apache-2.0, the owner-supplied logo has documented redistribution terms, and a complete-history secret scan passed on 2026-09-15. Final content/default review and clean-profile install evidence remain release blockers. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
-| Pi and live Neura | Pi 0.87.1 source verified; scoped footer installed, other live drift remains | Exact Pi `0.87.1` passed configured typecheck, 18 harness suites, dependency audit, and signatures on 2026-09-24. Only the cockpit and runtime contract were synced to the PC; other live files still differ from this dirty checkout. No complete live-match claim is made. |
-| Dependency graphs | Verified 2026-09-24 | Root and Learn lockfile graphs report zero known high vulnerabilities; root reports 246 registry signatures and 86 attestations, Learn reports 21 signatures and 3 attestations. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
+| Pi and live Neura | Pi 1.0.3 source upgrade; live installation unchanged | Exact runtime, AI, and TUI pins are coordinated at `1.0.3`. Current source checks cover loader resolution, the root AI API, and built-in MCP replacement; dependency and signature audits passed on 2026-10-05. The prior 2026-09-24 cockpit/runtime sync remains historical. This repair performs no live install and makes no live-match claim. |
+| Dependency graphs | Verified 2026-10-05 | Root and Learn lockfile graphs report zero known npm vulnerabilities; root reports 137 registry signatures and 42 attestations, Learn reports 21 signatures and 3 attestations. The root graph uses the upstream `brace-expansion` 5.0.12 fix. CI/release audits now stop on the first failure. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
 | Core harness | Ready for covered behavior | Local verification on 2026-09-15 passed typecheck, docs, sandbox replay, Learn/Plan browser checks, and 18 isolated suites loading 19 extensions. CI passed on the public-repository hardening commit. |
 | Default mode | Implemented, unreleased | Work is default; execution uses network-disabled WSL2 bubblewrap, with no host fallback. [#23](https://github.com/Rajveerx11/neura/issues/23) is closed. |
 | Learn Mode | Implemented, unreleased | Practical lessons, diagrams, PDF/PPTX/OCR, bounded SQL, citations, explicit save/resume, and machine-local opt-in automatic Obsidian knowledge capture. The vault writer is application-controlled preview behavior; no live install or real-vault write is claimed. First workspace-store creation requires native Windows. Parser process limits are not OS isolation. See [LEARN_MODE.md](LEARN_MODE.md). |
