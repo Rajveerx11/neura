@@ -64,9 +64,7 @@ jobs:
         run: npm ci --prefix agent/neura --ignore-scripts
 
       - name: Audit dependency vulnerabilities and registry signatures
-        run: |
-          npm run audit:dependencies
-          npm run audit:signatures
+        run: npm run audit:all
 
       - name: Verify Pi version
         shell: pwsh
@@ -122,6 +120,7 @@ jobs:
         run: |
           $env:PATH = "$PWD\node_modules\.bin;$env:PATH"
           powershell -File .\install.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell -File .\install.ps1 -Check
 
   portable-proof:

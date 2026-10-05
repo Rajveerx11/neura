@@ -113,6 +113,66 @@ The 2026-09-24 root-graph review found zero known high npm vulnerabilities; all
 The Learn graph found zero known high npm vulnerabilities; all 21 audited
 packages had verified registry signatures and 3 had attestations.
 
+### PR #94 scoped transitive refresh (2026-10-05)
+
+The September evidence above is historical, not an audit of the PR #94 graph.
+The fresh baseline reported three `brace-expansion` denial-of-service advisories:
+[GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p)
+(parser stack exhaustion, fixed in 5.0.10),
+[GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7)
+(nested-brace stack exhaustion, fixed in 5.0.11), and
+[GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr)
+(quadratic rewrite CPU consumption, fixed in 5.0.12). All three require at
+least 5.0.12 to clear together; no audit threshold was lowered.
+
+Only the root lock entry at
+`node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion`
+changes from 5.0.9 to 5.0.12. The parent `minimatch` 10.2.6 already allows
+`^5.0.8`; no override, direct pin, dependency, or other graph entry changes.
+Pi stays 0.87.1 and the proof closure stays unchanged. The separate PR #88 owns
+the Pi 1.0.3 upgrade, not this repair.
+
+Source/release review compared the official
+[v5.0.9...v5.0.12 diff](https://github.com/juliangruber/brace-expansion/compare/v5.0.9...v5.0.12)
+and both npm tarballs. The official v5.0.12 tag resolves to
+`f3410159d768f56c9d9f4511d3e1b46425fc1099`; no separate GitHub Release exists
+for that tag (the release API returned 404). Source changes make comma parsing
+iterative, replace array argument spreading with bounded-stack pushes, and add
+1,000-level nesting and 1,000-rewrite limits, returning remaining input literally
+when a limit is reached. The upstream regression additions cover deep nesting,
+long comma-group chains, large comma arrays, bounded rewrites, and ordinary
+expansion compatibility. Published ESM/CommonJS code and declarations carry
+those same changes; other artifact differences are generated maps and the
+manifest. Ownership remains `juliangruber/brace-expansion`, MIT; runtime
+`balanced-match ^4.0.2`, Node `20 || >=22`, and package exports are unchanged.
+Upstream also changes development-only lock entries and formatting CI; those
+are not Neura graph changes. Lifecycle scripts remain maintainer build/test/
+publish scripts (`prepare`, `pretest`, `presnap`, `preversion`, `postversion`,
+`prepublishOnly`); only `format:check` was added. There is no consumer `preinstall`,
+`install`, or `postinstall` hook. Neura installs with all scripts disabled.
+
+The downloaded official 5.0.12 tarball's computed SHA-512 matches registry
+metadata and the exact root lock integrity:
+`sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==`.
+Registry metadata supplies signatures with key ID
+`SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U`; fresh `npm audit signatures`
+verified the installed root graph, including this artifact. Fresh independent
+root/Learn `npm ci --ignore-scripts` and high-severity audits reported zero
+known vulnerabilities (including lower severities). Root signature evidence is
+221 verified registry signatures and 61 attestations; Learn has 21 signatures
+and 3 attestations. These counts describe this Windows-resolved PR graph, not
+the older September graph or every platform-optional package.
+
+CI now runs `audit:all`, chaining dependency and signature audits with `&&`.
+Release installs, policy, audit, and verification use separate fail-closed steps;
+remaining multi-native tag, secret-scan, and installer steps check earlier exit
+codes before proceeding. Runnable release regressions exercise successful and
+failing audits and Windows native commands, including policy and audit failures
+that cannot be overwritten by later success. This is source-only CI/dependency
+repair, not a release, live install, policy change, or full proof PASS claim.
+Rollback restores the prior lock entry and workflow/script changes together;
+5.0.9 remains vulnerable and is not an acceptable security rollback target.
+
 Pi `0.83.0` was rejected for stable release because its locked `undici` and
 `brace-expansion` versions had current moderate/high advisories. Pi `0.84.4`
 passed Neura's offline live-startup smoke test, loader harness, typecheck,
