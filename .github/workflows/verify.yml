@@ -66,6 +66,9 @@ jobs:
       - name: Audit dependency vulnerabilities and registry signatures
         run: npm run audit:all
 
+      - name: Check latest stable Pi target
+        run: npm run check:pi-latest
+
       - name: Verify Pi version
         shell: pwsh
         run: |

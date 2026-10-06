@@ -61,6 +61,8 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Install locked learning document runtime
         run: npm ci --prefix agent/neura --ignore-scripts
+      - name: Check latest stable Pi target
+        run: npm run check:pi-latest
       - name: Verify release policy
         env:
           TAG: ${{ github.ref_name }}
@@ -116,12 +118,13 @@ jobs:
           version="${TAG#v}"
           mkdir -p dist/release
           git archive --format=tar --prefix="neura-v${version}/" "$GITHUB_SHA" | gzip -n -9 > "dist/release/neura-v${version}.tar.gz"
+          git archive --format=zip --prefix="neura-v${version}/" --output="dist/release/neura-v${version}.zip" "$GITHUB_SHA"
           npm sbom --package-lock-only --sbom-format spdx > "dist/release/spdx-root.json"
           npm sbom --prefix agent/neura --package-lock-only --sbom-format spdx > "dist/release/spdx-learning-runtime.json"
           cp "docs/releases/v${version}.md" dist/release/RELEASE_NOTES.md
           (
             cd dist/release
-            sha256sum "neura-v${version}.tar.gz" spdx-root.json spdx-learning-runtime.json | LC_ALL=C sort > SHA256SUMS
+            sha256sum "neura-v${version}.tar.gz" "neura-v${version}.zip" spdx-root.json spdx-learning-runtime.json | LC_ALL=C sort > SHA256SUMS
           )
       - name: Upload gated release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -165,6 +168,7 @@ jobs:
           set -euo pipefail
           gh release create "$TAG" \
             release-assets/neura-*.tar.gz \
+            release-assets/neura-*.zip \
             release-assets/spdx-root.json \
             release-assets/spdx-learning-runtime.json \
             release-assets/SHA256SUMS \

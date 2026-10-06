@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { verifyRelease } from "../verify-release.mjs";
+import { validatePiRelease, fetchLatestPi } from "../check-pi-release.mjs";
 
 const requiredSafety = `
 Channel: prerelease
@@ -80,6 +81,26 @@ run("rejects an RC missing required safety text", (make) => {
   const root = make({ notes: "Channel: prerelease\n\nThis release is experimental and not production-ready.\n" });
   assert.throws(() => verifyRelease({ repoRoot: root, tag: "v3.0.0-rc.1" }), /missing required safety text/);
 });
+
+const piContract = { schemaVersion: 1, piVersion: '1.0.4' };
+const piManifest = { devDependencies: Object.fromEntries(['pi-ai', 'pi-coding-agent', 'pi-tui'].map(name => [`@earendil-works/${name}`, '1.0.4'])) };
+assert.equal(validatePiRelease(piContract, piManifest, { version: '1.0.4' }), '1.0.4');
+for (const version of ['1.0.5', '0.87.1', '1.0.4-beta.1', '', undefined]) {
+  assert.throws(() => validatePiRelease(piContract, piManifest, { version }));
+}
+assert.throws(() => validatePiRelease({ ...piContract, schemaVersion: '1' }, piManifest, { version: '1.0.4' }));
+assert.throws(() => validatePiRelease(piContract, { devDependencies: { ...piManifest.devDependencies, '@earendil-works/pi-tui': '1.0.3' } }, { version: '1.0.4' }));
+assert.deepEqual(await fetchLatestPi(async (url, options) => {
+  assert.equal(url, 'https://registry.npmjs.org/@earendil-works%2fpi-coding-agent/latest');
+  assert.equal(options.redirect, 'error');
+  assert.ok(options.signal instanceof AbortSignal);
+  return new Response('{"version":"1.0.4"}');
+}), { version: '1.0.4' });
+await assert.rejects(fetchLatestPi(async () => new Response('', { status: 503 })), /release remains blocked/);
+await assert.rejects(fetchLatestPi(async () => new Response('invalid JSON')), /JSON/);
+await assert.rejects(fetchLatestPi(async () => new Response('x'.repeat(128 * 1024 + 1))), /exceeds limit/);
+await assert.rejects(fetchLatestPi(async () => { throw Error('offline'); }), /offline/);
+console.log('ok - latest Pi discovery is bounded and fails closed on stale pins, malformed metadata and unavailable registry');
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const releaseWorkflow = fs.readFileSync(path.join(repositoryRoot, ".github/workflows/release.yml"), "utf8");
@@ -177,6 +198,12 @@ if (process.platform === "win32") {
 } else {
   console.log("skip - Windows native workflow execution (requires Windows PowerShell)");
 }
+for (const workflow of [verifyWorkflow, releaseWorkflow]) {
+  assert.match(workflow, /name: Check latest stable Pi target\r?\n        run: npm run check:pi-latest/, 'CI/release omitted latest stable Pi check');
+}
+assert.match(releaseWorkflow, /git archive --format=zip/, 'release omitted Windows-friendly source archive');
+assert.match(releaseWorkflow, /sha256sum .*"neura-v\$\{version\}\.zip"/, 'ZIP archive omitted from checksums');
+assert.ok(releaseWorkflow.includes('release-assets/neura-*.zip'), 'draft release omitted ZIP archive');
 assert.ok(releaseWorkflow.includes('name: release-assets-${{ github.run_attempt }}'), "artifact name is not scoped to the attempt");
 assert.ok(releaseWorkflow.includes('actions/runs/${{ github.run_id }}/artifacts?per_page=100'), "release can select an artifact from another workflow run");
 assert.ok(releaseWorkflow.includes('select(.expired == false and (.name | test("^release-assets-[0-9]+$")))'), "release can select unrelated or expired artifacts");

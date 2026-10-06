@@ -1,4 +1,5 @@
 import { repoRoot, assert, fs, path, spawnSync, loaded, extensionWithCommand, firstHandler, notices, ui, context, modeState, guardrail, guard } from './harness.mjs';
+import { createMcpExtension, DefaultResourceLoader, SettingsManager } from '@earendil-works/pi-coding-agent';
 const mcpConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "mcp.json"), "utf-8"));
 assert.equal(mcpConfig.mcpServers.gmail.disabled, true, "Gmail MCP must remain disabled in public defaults");
 assert.equal(mcpConfig.mcpServers.gmail.headers["x-api-key"], "${COMPOSIO_API_KEY}", "Gmail MCP header lost its environment placeholder");
@@ -9,7 +10,43 @@ assert.doesNotMatch(JSON.stringify(mcpConfig), /\b(?:npx|uvx|latest)\b|[A-Z]:\\U
 const launcher = fs.readFileSync(path.join(repoRoot, "launcher", "neura.cmd"), "utf-8");
 assert.doesNotMatch(launcher, /COMPOSIO_API_KEY|MY_PI_MCP_ENV_ALLOWLIST|powershell\s+-NoProfile/i, "public launcher should not import provider credentials by default");
 assert.doesNotMatch(launcher, /\bwt(?:\.exe)?\b/i, "terminal launcher still opens a second Windows Terminal window");
+assert.match(launcher, /pi --no-mcp --tui-mode regular %\*/, "Neura launcher allows unmediated native MCP startup or changed TUI mode");
 assert.match(launcher, /where pi >nul 2>&1[\s\S]+Neura requires Pi\./, "launcher does not clearly report missing Pi");
+
+// Exercise the real resource loader: Neura's guarded /mcp replaces Pi's eager
+// built-in integration; plain Pi still retains its stock built-in extension.
+const resourceCwd = fs.mkdtempSync(path.join(process.env.TEMP || process.cwd(), 'neura-resource-loader-'));
+const savedNeura = process.env.NEURA;
+try {
+  for (const neura of [true, false]) {
+    if (neura) process.env.NEURA = '1';
+    else delete process.env.NEURA;
+    const loader = new DefaultResourceLoader({
+      cwd: resourceCwd, agentDir: process.env.PI_CODING_AGENT_DIR,
+      settingsManager: SettingsManager.inMemory({ packages: [], extensions: [] }),
+      additionalExtensionPaths: [path.join(repoRoot, 'agent/extensions/mcp.ts')],
+      extensionFactories: [{ name: 'mcp', builtin: true, replaceable: true, factory: createMcpExtension() }],
+      noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
+    });
+    await loader.reload();
+    const extensions = loader.getExtensions();
+    assert.deepEqual(extensions.errors, [], 'resource loader reported extension errors');
+    const wrapper = extensions.extensions.find(extension => extension.resolvedPath === path.join(repoRoot, 'agent/extensions/mcp.ts'));
+    assert.ok(wrapper, 'the same installed MCP wrapper was not loaded in both modes');
+    if (!neura) {
+      assert.equal(wrapper.commands.size, 0, 'plain Pi registered a Neura MCP command');
+      assert.equal(wrapper.handlers.size, 0, 'plain Pi registered Neura MCP lifecycle hooks');
+    }
+    assert.equal(extensions.extensions.some(extension => extension.path === 'builtin:mcp'), !neura, 'built-in MCP replacement changed');
+    const owners = extensions.extensions.filter(extension => extension.commands.has('mcp'));
+    assert.equal(owners.length, 1, 'multiple MCP implementations survived resource loading');
+    if (neura) assert.equal(owners[0].resolvedPath, path.join(repoRoot, 'agent/extensions/mcp.ts'), 'guarded MCP wrapper was not selected');
+  }
+} finally {
+  if (savedNeura === undefined) delete process.env.NEURA;
+  else process.env.NEURA = savedNeura;
+  fs.rmSync(resourceCwd, { recursive: true, force: true });
+}
 assert.doesNotMatch(JSON.stringify(mcpConfig) + "\n" + launcher, /\b(?:ak|sk)_[A-Za-z0-9_-]{12,}\b/, "Gmail MCP configuration contains a literal credential");
 
 if (process.platform === "win32") {
@@ -27,6 +64,7 @@ if (process.platform === "win32") {
   fs.writeFileSync(path.join(bin, "pi.cmd"), [
     "@echo off",
     ">\"%LAUNCHER_RESULT%\" echo %NEURA%",
+    ">\"%LAUNCHER_RESULT%.args\" echo %*",
     "exit /b 7",
   ].join("\r\n"));
   try {
@@ -35,7 +73,13 @@ if (process.platform === "win32") {
     });
     assert.equal(run.status, 7, "launcher did not preserve Pi's exit code");
     assert.equal(fs.readFileSync(preflightCalls, "utf8").trim(), "check", "launcher skipped release preflight");
-    assert.equal(fs.readFileSync(resultFile, "utf8").trim(), "1", "launcher did not set NEURA");
+    assert.equal(fs.readFileSync(resultFile, "utf8").trim(), "1", "launcher did not enforce Neura's native MCP startup barrier");
+    assert.equal(fs.readFileSync(`${resultFile}.args`, "utf8").trim(), "--no-mcp --tui-mode regular");
+    run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd"), "-e", "builtin:mcp", "--approve"], {
+      env, encoding: "utf8", windowsHide: true,
+    });
+    assert.equal(run.status, 7);
+    assert.equal(fs.readFileSync(`${resultFile}.args`, "utf8").trim(), "--no-mcp --tui-mode regular -e builtin:mcp --approve", "user args displaced native MCP disable");
 
     fs.rmSync(resultFile);
     run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
@@ -119,4 +163,7 @@ assert.equal(await guard({ toolName: "bash", input: { command: "terraform destro
 assert.equal(yoloPrompts, 0, "YOLO requested approval for a sensitive action");
 
 
+const piRuntime = spawnSync(process.execPath, [path.join(import.meta.dirname, 'pi-runtime.mjs')], { encoding: 'utf8', windowsHide: true, timeout: 60_000 });
+assert.equal(piRuntime.status, 0, `Real Pi runtime regression failed: ${piRuntime.stdout}\n${piRuntime.stderr}`);
+console.log(piRuntime.stdout.trim());
 console.log('PASS integration');

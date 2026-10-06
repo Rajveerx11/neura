@@ -31,11 +31,8 @@ async function withYoloLease<T>(action: () => T | Promise<T>): Promise<T | undef
 }
 
 export default async function (pi: ExtensionAPI): Promise<void> {
+  if (!process.env.NEURA) return;
   const { default: mcp } = await import(mcpModuleSpecifier(getAgentDir()));
-  if (!process.env.NEURA) {
-    await mcp(pi);
-    return;
-  }
   await withoutEagerConnect(() => mcp(new Proxy(pi, {
     get(target, property, receiver) {
       if (property === "on") return ((event: string, handler: (request: any, ctx: any) => unknown) => (target.on as any)(event, event === "before_agent_start"

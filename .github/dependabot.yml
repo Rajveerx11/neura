@@ -9,6 +9,14 @@ updates:
       timezone: Etc/UTC
     target-branch: main
     open-pull-requests-limit: 5
+    groups:
+      pi-runtime:
+        patterns:
+          - "@earendil-works/pi-*"
+        update-types:
+          - major
+          - minor
+          - patch
     labels:
       - dependencies
 

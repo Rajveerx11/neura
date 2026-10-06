@@ -27,6 +27,7 @@ evidence. Historical plans and release notes retain their original context.
 | Apply terminal and learning-board design rules | [Design system](../DESIGN.md) |
 | Follow coding-agent constraints | [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md) |
 | Review production blockers | [Production readiness](PRODUCTION_READINESS.md) |
+| Prepare Neura's one-step installer | [Installer readiness](INSTALLER_READINESS.md) |
 | Prepare publication or a release | [Open-source checklist](OPEN_SOURCE.md), [Releasing](RELEASING.md) |
 | Review community responsibilities | [Governance](../GOVERNANCE.md), [Code of conduct](../CODE_OF_CONDUCT.md) |
 
