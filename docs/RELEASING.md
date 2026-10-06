@@ -38,11 +38,19 @@ All items must pass:
 - [ ] Plan accessibility and `node scripts\tests\learn-browser.mjs` pass in real
       Edge at narrow/desktop widths; the 18-suite harness includes nonbrowser Learn checks.
 - [ ] `node scripts\check-docs.mjs` passes.
+- [ ] `npm run check:pi-latest` passes against the public registry; stale targets
+      and unavailable discovery evidence block release rather than trigger a downgrade.
 - [ ] Windows and Linux portable CI pass on the release commit. Contract tests
       do not replace the Windows live WSL2/bubblewrap rehearsal.
 - [ ] `git diff --check` passes.
 - [ ] `powershell -File .\install.ps1 -Check` passes after an intentional live sync.
-- [ ] Pi and every runtime package are pinned and audited.
+- [ ] Neura works with the latest stable Pi checked at release time. Record the
+      upstream version/check date and compatibility evidence in `docs/STATUS.md`.
+      A stale Pi pin or unverified latest release blocks this gate; fix Neura,
+      never downgrade the user's Pi or bypass runtime checks. Follow the
+      [Pi compatibility policy](DEPENDENCIES.md#pi-compatibility-policy).
+- [ ] Pi and every runtime package are exactly pinned and audited; Pi package,
+      lockfile, runtime contract, manifest, installer, and CI versions agree.
 - [ ] Learn's manifest, lockfile, worker, installed runtime, and lock receipt are
       present; native-Windows first store creation and failure paths are exercised.
 - [ ] Approvals, redaction, and Gmail policy meet the gates in `STATUS.md`.
@@ -78,7 +86,10 @@ A production-ready claim additionally requires:
 - [ ] Status and release notes state the exact supported scope and remaining limitations.
 
 Production claims follow evidence, not dates. Exceptions require a named owner,
-expiry, compensating control, and tracked issue.
+expiry, compensating control, and tracked issue. A one-step installer additionally
+requires the bootstrap, artifact delivery, recovery, and clean-host gates in
+[INSTALLER_READINESS.md](INSTALLER_READINESS.md). A source ZIP is not a complete
+runtime bundle and does not satisfy those gates.
 
 ## Automated draft-prerelease path
 
@@ -100,8 +111,8 @@ Every prerelease note must declare `Channel: prerelease` and state all of:
 
 The tag workflow reruns repository, browser, audit, signature, secret-history,
 and ephemeral installer checks using the same hash-verified Windows Git runtime
-as PR CI. It builds a deterministic source tarball, SPDX SBOM snapshots for
-both lockfiles, and `SHA256SUMS`, then retains an attempt-scoped workflow artifact
+as PR CI. It builds deterministic source tarball/ZIP archives, SPDX SBOM snapshots
+for both lockfiles, and `SHA256SUMS` covering both archives, then retains an attempt-scoped workflow artifact
 for three days. The secret scanner's only value-based release-manifest exception is an
 exact reviewed public SHA-256 value in `.gitleaks.toml`; a different digest at
 the same path must still fail. Only the final job receives `contents: write`, and it uses GitHub

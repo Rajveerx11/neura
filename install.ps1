@@ -28,6 +28,53 @@ function Test-Command($Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Invoke-NeuraVersionProbe($Name, $Arguments) {
+    $command = Get-Command $Name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $command) { return [PSCustomObject]@{ Found = $false; ExitCode = $null; Output = '' } }
+    $previousErrorAction = $ErrorActionPreference
+    $previousExit = Get-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    $previousExitValue = if ($previousExit) { $previousExit.Value } else { $null }
+    try {
+        $ErrorActionPreference = 'SilentlyContinue'
+        $global:LASTEXITCODE = -1
+        $output = @(& $command.Source @Arguments 2>$null)
+        return [PSCustomObject]@{ Found = $true; ExitCode = $global:LASTEXITCODE; Output = ($output -join "`n").Trim() }
+    } catch {
+        return [PSCustomObject]@{ Found = $true; ExitCode = -1; Output = '' }
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+        if ($previousExit) { $global:LASTEXITCODE = $previousExitValue }
+        else { Remove-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue }
+    }
+}
+
+function Get-NeuraVersionProblem($Name, $Probe, $RequiredPi, $RequiredNode) {
+    if (-not $Probe.Found) { return "$Name is missing; install the reviewed prerequisites before retrying Neura." }
+    if ($Probe.ExitCode -ne 0) { return "$Name version probe failed; no installation was started." }
+    $text = [string]$Probe.Output
+    $value = if ($Name -eq 'node') { $text -replace '^v', '' } elseif ($Name -eq 'git') { $text -replace '^git version ', '' -replace '\.windows\.\d+$', '' } else { $text }
+    $version = $null
+    if ($value -notmatch '^\d+\.\d+\.\d+$' -or -not [version]::TryParse($value, [ref]$version)) {
+        return "$Name returned invalid version output; no installation was started."
+    }
+    if ($Name -eq 'node' -and $version -lt [version]$RequiredNode) { return "Node.js $RequiredNode or newer is required for Neura." }
+    if ($Name -eq 'pi' -and $value -cne $RequiredPi) {
+        if ($version -gt [version]$RequiredPi) { return "Pi $value is newer than Neura's reviewed $RequiredPi pin. Update Neura; do not downgrade Pi." }
+        return "Pi $value is installed; upgrade to reviewed Pi $RequiredPi before installing Neura."
+    }
+    return $null
+}
+
+function Get-NeuraPrerequisiteProblems($RequiredPi, $RequiredNode) {
+    # Validate Node first: npm and Pi must never execute through an unsupported runtime.
+    $problem = Get-NeuraVersionProblem 'node' (Invoke-NeuraVersionProbe 'node' @('--version')) $RequiredPi $RequiredNode
+    if ($problem) { return $problem }
+    foreach ($name in @('npm', 'pi', 'git')) {
+        $problem = Get-NeuraVersionProblem $name (Invoke-NeuraVersionProbe $name @('--version')) $RequiredPi $RequiredNode
+        if ($problem) { $problem }
+    }
+}
+
 function Test-ProofRuntime {
     if (-not (Test-Command "node")) { return $false }
     $previousErrorAction = $ErrorActionPreference
@@ -118,23 +165,17 @@ $launchArtworkTarget = Join-Path "$agent\neura" "launch-artwork.png"
 $launcherTarget = Join-Path $bin "neura.cmd"
 $terminalFragment = Get-NeuraTerminalFragment $terminalProfileId $launcherTarget $launchArtworkTarget
 
+$prerequisiteProblems = @(Get-NeuraPrerequisiteProblems $requiredPiVersion $requiredNodeVersion)
+if ($prerequisiteProblems.Count) {
+    if ($Check) { Write-Warning ($prerequisiteProblems -join '; '); exit 1 }
+    throw ($prerequisiteProblems -join '; ')
+}
+
 if ($Check) {
     $missing = @()
     $drift = @()
     $capabilityWarnings = @()
     $credentialWarnings = @()
-    if (-not (Test-Command "node")) {
-        $missing += "Node.js 24.15 or newer"
-    } elseif ([version]((& node --version).Trim().TrimStart('v')) -lt [version]$requiredNodeVersion) {
-        $drift += "Node.js 24.15 or newer is required for Neura"
-    }
-    foreach ($cmd in @("pi", "git")) {
-        if (-not (Test-Command $cmd)) { $missing += $cmd }
-    }
-    if (Test-Command "pi") {
-        $piVersion = (& pi --version).Trim()
-        if ($piVersion -ne $requiredPiVersion) { $drift += "Pi $piVersion installed; required $requiredPiVersion" }
-    }
     if (-not (Test-ProofRuntime)) {
         $capabilityWarnings += "WSL proof runtime unavailable or different from runtime-contract.json (optional proof capability unavailable)"
     }
@@ -260,18 +301,6 @@ if ($Check) {
     exit $(if ($missing.Count -or $drift.Count) { 1 } else { 0 })
 }
 
-if (-not (Test-Command "pi")) {
-    throw "pi is not installed. Run: npm install -g @earendil-works/pi-coding-agent@$requiredPiVersion"
-}
-$piVersion = (& pi --version).Trim()
-if ($piVersion -ne $requiredPiVersion) {
-    throw "Pi $piVersion is installed; Neura requires $requiredPiVersion. Run: npm install -g @earendil-works/pi-coding-agent@$requiredPiVersion"
-}
-
-if (-not (Test-Command "npm")) { throw "npm is required to install the Learn document runtime." }
-if (-not (Test-Command "node")) { throw "Node.js 24.15 or newer is required for Neura." }
-$learnNodeVersion = (& node --version).Trim().TrimStart('v')
-if ([version]$learnNodeVersion -lt [version]$requiredNodeVersion) { throw "Node.js 24.15 or newer is required for Neura." }
 # Validate private user configuration before activating managed code; never copy it to staging.
 foreach ($config in @("$agent\settings.json", "$agent\keybindings.json")) {
     if (Test-Path $config) { try { $null = Get-Content $config -Raw | ConvertFrom-Json } catch { throw "Existing configuration is invalid: $config" } }

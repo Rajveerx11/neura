@@ -23,9 +23,9 @@ existing Windows CI installation/drift rehearsal remains separate.
 |---|---|
 | `npm run test:unit` | Runtime identity, health states, bounded MCP/provider initialization, cancellation, redaction, suite selection, local Pi pin failures |
 | `npm run test:state-machine` | WORK default, transitions, persistence, provider payloads |
-| `npm run test:integration` | Real Pi extension registration, Gmail mediation, presets |
+| `npm run test:integration` | Real Pi extension registration/loader/session, enforced native MCP disable under config/CLI/reload/load failure, nested deferred policy, YOLO/stock-Pi positive controls, Gmail mediation, presets |
 | `npm run test:ui` | Logo, cockpit, widths, line caps, contrast, transcript affordances |
-| `npm run test:installer` | Installer contracts and real text/binary drift functions |
+| `npm run test:installer` | Installer contracts, text/binary drift, shared Node-first prerequisite checks, missing/failing/malformed version probes, newer-Pi no-downgrade behavior |
 | `npm run test:sandbox` | Namespace/environment argument contracts and linked-workspace denial |
 | `npm run test:policy` | Positive/negative Plan paths, junctions, shell and Git boundaries |
 | `npm run test:plan` | Plan publication, restart, collisions, failed turns, ownership |
@@ -34,6 +34,12 @@ existing Windows CI installation/drift rehearsal remains separate.
 | `npm run test:proof` | Content fingerprints, bounds, cancellation, lifecycle, full/quick/incremental receipts |
 | `npm run test:fuzz` | Fixed seed `0x27c0ffee`: 96 generated path cases and 96 shell mutations |
 | `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, workspace storage races, automatic Obsidian event/projection security, end-to-end progress, and browser behavior |
+
+`npm run test:release` also covers bounded latest-Pi discovery, pin agreement,
+registry failure/malformed/oversized responses, and the source ZIP/checksum
+workflow contract. `npm run check:pi-latest` queries the public registry and is
+separate from offline harness verification; matching versions never replace
+compatibility tests. Neither command installs into the live harness.
 
 `npm run test:accessibility` is the real Plan Edge/axe browser suite.
 `node scripts/tests/learn-browser.mjs` runs Learn's isolated browser checks.

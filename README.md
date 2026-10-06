@@ -16,9 +16,9 @@ Neura is a Windows-first engineering-agent harness built on
 interface, explicit operating modes, verification, recovery, local memory,
 model presets, and policy guardrails around stock Pi.
 
-Latest release: **2.5.1**. Current `main` targets Pi `0.87.1` and includes
-unreleased Work, Learn, and verification improvements. These docs describe that
-merged source; older checkouts and live installations may differ. Neura is
+Latest release: **2.5.1**. This checkout targets Pi `1.0.4` with source-only
+installer-readiness changes; those changes and merged Work, Learn, and verification
+improvements are unreleased. Older checkouts and live installations may differ. Neura is
 Apache-2.0-licensed experimental software in a public repository. It is **not
 production-ready**. Human Away remains preview-only and is not approved for
 unattended high-impact work. Public source availability is not a production or
@@ -107,8 +107,9 @@ resumed sources must be reimported before new verified citations. See the
 ## Requirements
 
 - Windows 11 or a current supported Windows release.
-- PowerShell, Git, Node.js **24.15+** with npm, and Pi `0.87.1`.
-  CI exercises Node `24.16.0`.
+- PowerShell, Git, Node.js **24.15+** with npm, and the latest stable Pi.
+  This checkout's exact reviewed Pi pin is `1.0.4`. CI exercises Node `24.16.0`.
+  Newer Pi releases require a coordinated Neura update, never a Pi downgrade.
 - uv/`uvx` `0.12.11`, hash-pinned WSL CPython `3.12.3`, and the five reviewed
   proof wheels in a dedicated wheelhouse configured by `NEURA_WSL_UV_DIR` and
   `NEURA_WSL_PROOF_WHEELHOUSE`.
@@ -125,12 +126,38 @@ Both npm package manifests remain `"private": true`; this repository does not
 publish packages to npm. Package privacy does not determine GitHub repository
 visibility or software license.
 
+## Pi update compatibility
+
+Neura must work with the latest stable Pi after every upstream update. Fix Neura
+when Pi changes; do not downgrade Pi to satisfy an outdated Neura requirement.
+Keep exact reviewed pins for reproducibility, advancing them together with API
+adaptations, regression tests, and CI. See the
+[Pi update policy](docs/DEPENDENCIES.md#pi-compatibility-policy) and
+[current evidence](docs/STATUS.md).
+
+As of 2026-10-06, npm's latest stable Pi is `1.0.4`; this checkout's runtime
+contract and development graph now pin that version. `npm run check:pi-latest`
+checks the public registry without installing anything and fails on target drift
+or unavailable evidence. CI/release gates and a proposed daily workflow use it;
+the daily workflow becomes active only after publication to the default branch.
+Version agreement is not a substitute for compatibility tests or live rehearsal.
+
+The Neura launcher combines `--no-mcp` with `--tui-mode regular` so Pi's native background connections
+cannot bypass Neura's YOLO-only MCP wrapper. Pi's `codemode` and `tool_search`
+are denied outside YOLO, including nested calls. Plain Pi invocation is unchanged.
+See [installer readiness](docs/INSTALLER_READINESS.md) for completed source work
+and the remaining one-step bootstrap, recovery, and clean-host gates.
+
 ## Install from source
 
 Review [security limits](SECURITY.md) and installer before running it.
+The following commands reproduce the currently pinned checkout on a clean profile;
+they are not instructions to downgrade an existing newer Pi installation. The
+installer checks Node, npm, Pi, and Git before staging, rejecting failed/malformed
+version probes. It does not yet provision missing prerequisites automatically.
 
 ```powershell
-npm install -g @earendil-works/pi-coding-agent@0.87.1
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.0.4
 git clone https://github.com/Rajveerx11/neura.git
 Set-Location .\neura
 npm ci --ignore-scripts

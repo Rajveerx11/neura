@@ -1,5 +1,5 @@
 import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, editorFactory, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
-const repairAction = `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`;
+const repairAction = "update Neura for installed Pi 9.9.9; do not downgrade Pi";
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
     state: "degraded",
