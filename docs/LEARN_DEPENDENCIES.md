@@ -14,14 +14,20 @@ This review inspected the published packages installed from the lockfile. It is
 a scoped review of the integration and entry points, not a complete audit of
 PDF.js, Skia, or Tesseract's native/WASM implementations.
 
-The 1.0.9 canvas refresh retains the reviewed JavaScript loaders and has no
-consumer install hook; it updates the native Skia payload and font-cache
-behavior. Rollback restores both nested manifest and lockfile before reinstall.
+The 1.0.10 canvas refresh was source-reviewed on 2026-10-05 at upstream commit
+`7d19abed029287e7c26b14eaa6e67d560a37d853`. The published `index.js`,
+`js-binding.js`, and `load-image.js` are unchanged from 1.0.9, and neither the
+wrapper nor the Windows x64 platform package has a consumer install hook.
+The native refresh updates Skia and fixes saved-pattern lifetime handling and
+deferred-recording memory retention. This is a scoped entry-point and upstream
+change review, not a complete native-code audit. Registry integrity/signatures
+and synthetic document tests must pass before merge. Rollback restores both
+nested manifest and lockfile plus their release-manifest hashes before reinstall.
 
 | Package | Version | License | Purpose and reviewed surface |
 |---|---|---|---|
 | `pdfjs-dist` | `6.3.289` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `isEvalSupported:false`, `useWorkerFetch:false`, and disabled system fonts. Never invoke document JavaScript, actions, attachments, or links. |
-| `@napi-rs/canvas` | `1.0.8` | MIT | Skia-backed raster canvas. Reviewed `index.js`, `js-binding.js`, `load-image.js`, and platform package selection. Pass PNG/JPEG bytes, never paths or URLs. Filter image dimensions before decoding; disable automatic system/user font discovery in parser processes. Native bindings are still trusted executable dependencies. |
+| `@napi-rs/canvas` | `1.0.10` | MIT | Skia-backed raster canvas. Reviewed `index.js`, `js-binding.js`, `load-image.js`, and platform package selection. Pass PNG/JPEG bytes, never paths or URLs. Filter image dimensions before decoding; disable automatic system/user font discovery in parser processes. Native bindings are still trusted executable dependencies. |
 | `yauzl` | `3.4.0` | MIT | ZIP directory and streaming inflate. Reviewed `index.js` `fromBuffer`, lazy entry dispatch, filename validation, local entry reads, and size validation. Add aggregate/per-entry limits, CRC checks, duplicate/link/encryption rejection. Never extract ZIP entries to disk. |
 | `saxes` | `6.0.0` | ISC | Namespace-aware XML. Reviewed `saxes.js` entry imports, SAX events, namespace handling, and entity errors. Its runtime dependency is `xmlchars`; no external entity resolver or network transport. Explicitly reject DTD/entity declarations before parsing; cap depth, nodes, XML bytes, and text. |
 | `tesseract.js` | `7.0.0` | Apache-2.0 | Offline OCR. Reviewed `src/createWorker.js`, Node worker spawning, worker language loading, image input, and `worker-script/node/getCore.js`. Node loads the locked local `tesseract.js-core` WASM. Always supply an absolute installed language directory, `cacheMethod:'none'`, and image bytes. Default CDN and filesystem cache branches are not used. |
