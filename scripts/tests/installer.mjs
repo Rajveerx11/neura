@@ -30,6 +30,9 @@ assert.match(installerSource, /is retired but remains installed/, "drift check d
 assert.match(installerSource, /function Get-PackageIdentity/, "installer cannot reconcile exact runtime package pins");
 assert.match(installerSource, /runtime package is not exactly pinned/, "drift check ignores runtime package pins");
 assert.match(installerSource, /runtime-contract\.json/, "installer does not consume the runtime contract");
+assert.match(installerSource, /Get-NeuraPrerequisiteProblems \$requiredPiVersion \$requiredNodeVersion/, 'check/install do not share prerequisite validation');
+assert.doesNotMatch(installerSource, /Run: npm install -g .*\$requiredPiVersion/, 'installer still advises downgrading newer Pi');
+assert.ok(installerSource.indexOf('$prerequisiteProblems =') < installerSource.indexOf('$staging ='), 'installer mutates managed state before prerequisite checks');
 assert.match(installerSource, /scripts\\check-proof-runtime\.mjs/, "installer does not validate the WSL proof runtime");
 assert.match(installerSource, /\$ErrorActionPreference = "SilentlyContinue"/, "optional proof probe stderr can still terminate the installer");
 assert.match(installerSource, /\$capabilityWarnings \+= "WSL proof runtime unavailable/, "missing optional proof runtime is not reported");

@@ -10,4 +10,5 @@ where pi >nul 2>&1 || (
   echo Neura requires Pi. Run: npm install -g @earendil-works/pi-coding-agent 1>&2
   exit /b 1
 )
-pi %*
+rem Preserve regular-terminal launch and disable eager native MCP for Neura only.
+pi --no-mcp --tui-mode regular %*

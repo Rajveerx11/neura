@@ -23,9 +23,9 @@ existing Windows CI installation/drift rehearsal remains separate.
 |---|---|
 | `npm run test:unit` | Runtime identity, health states, bounded MCP/provider initialization, cancellation, redaction, suite selection, local Pi pin failures |
 | `npm run test:state-machine` | WORK default, transitions, persistence, provider payloads |
-| `npm run test:integration` | Real Pi extension registration, Gmail mediation, presets |
+| `npm run test:integration` | Real Pi extension registration/loader/session, enforced native MCP disable under config/CLI/reload/load failure, nested deferred policy, YOLO/stock-Pi positive controls, Gmail mediation, presets |
 | `npm run test:ui` | Logo, cockpit, widths, line caps, contrast, transcript affordances |
-| `npm run test:installer` | Installer contracts and real text/binary drift functions |
+| `npm run test:installer` | Installer contracts, text/binary drift, shared Node-first prerequisite checks, missing/failing/malformed version probes, newer-Pi no-downgrade behavior |
 | `npm run test:sandbox` | Namespace/environment argument contracts and linked-workspace denial |
 | `npm run test:policy` | Positive/negative Plan paths, junctions, shell and Git boundaries |
 | `npm run test:plan` | Plan publication, restart, collisions, failed turns, ownership |
@@ -34,6 +34,12 @@ existing Windows CI installation/drift rehearsal remains separate.
 | `npm run test:proof` | Content fingerprints, bounds, cancellation, lifecycle, full/quick/incremental receipts |
 | `npm run test:fuzz` | Fixed seed `0x27c0ffee`: 96 generated path cases and 96 shell mutations |
 | `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, workspace storage races, automatic Obsidian event/projection security, end-to-end progress, and browser behavior |
+
+`npm run test:release` also covers bounded latest-Pi discovery, pin agreement,
+registry failure/malformed/oversized responses, and the source ZIP/checksum
+workflow contract. `npm run check:pi-latest` queries the public registry and is
+separate from offline harness verification; matching versions never replace
+compatibility tests. Neither command installs into the live harness.
 
 `npm run test:accessibility` is the real Plan Edge/axe browser suite.
 `node scripts/tests/learn-browser.mjs` runs Learn's isolated browser checks.
@@ -59,12 +65,23 @@ fail the command. It contains no file bodies or test output.
 During interactive work, `check-gate.ts` compares content fingerprints before and
 after a turn. Untracked content-only changes, nested new files, binary edits,
 index changes, and executable-mode changes trigger the quick proof scan.
-The quick scan retains `--no-tests`; full `/ship` always requests actual tests.
+The quick scan retains `--no-tests`: a quick PASS is detector-only feedback, not
+complete engineering verification, and never sets the proof UI to COMPLETE.
+Full `/ship` requests tests, but the pinned `proof-of-work-agent==0.2.0` legacy
+verdict has no trusted required-suite/candidate-bound evidence contract. Every
+legacy full `passed: true` is therefore unavailable, even with `tests.ran` and
+`tests.passed` both true. Definitive failures remain failures. No full verified
+PASS is currently available; retrying cannot repair this contract limitation.
+A reviewed release, trusted suite policy, and complete candidate binding remain
+required under [#91](https://github.com/Rajveerx11/neura/issues/91); this safety
+slice does not close that issue or change runtime pins.
 
 Quick/full results become versioned `neura-verification` session entries. Full
 receipts include current/stale quick evidence and, when valid, the incremental
 suite report. Workspace reports are explicitly untrusted metadata: they cannot
-skip full proof or turn a failed full verdict into PASS. Session replacement
+skip full proof or turn a failed/unavailable full verdict into PASS. Receipt scope
+`quick` denotes detector-only feedback; historical receipts are not revalidated
+and must not be treated as delivery authority. Session replacement
 cancels the active check and discards late completion. A workspace mutation during
 proof, malformed output, timeout, cancellation, or failed snapshot cannot earn PASS.
 

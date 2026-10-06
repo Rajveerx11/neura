@@ -13,6 +13,11 @@
 - Never store or print credentials, private memory, approval logs, or session data.
 - Do not install into the live harness, commit, tag, push, publish, or mutate remote
   systems unless the user explicitly authorizes that action.
+- Neura must track the latest stable Pi after every upstream update. Treat lag or
+  breakage as a Neura compatibility defect: review upstream changes, adapt Neura,
+  update exact pins/contracts/lockfiles/CI together, and validate before claiming
+  support. Never downgrade the user's Pi to satisfy a stale Neura pin, bypass
+  runtime checks, or use floating dependency ranges. See docs/DEPENDENCIES.md.
 - New runtime dependencies require an exact pin, source review, documentation, and tests.
 - Security-boundary changes require positive and negative regression tests.
 

@@ -190,7 +190,10 @@ export function piRuntimeStatus(installedVersion: string | null, requiredVersion
       installed,
       required: requiredVersion,
       label: `pi ${versionLabel(installed)} (requires ${requiredVersion})`,
-      action: `npm install -g @earendil-works/pi-coding-agent@${requiredVersion}`,
+      action: /^\d+\.\d+\.\d+$/.test(installed) && /^\d+\.\d+\.\d+$/.test(requiredVersion)
+        && installed.localeCompare(requiredVersion, undefined, { numeric: true }) < 0
+        ? `npm install -g @earendil-works/pi-coding-agent@${requiredVersion}`
+        : `update Neura for installed Pi ${versionLabel(installed)}; do not downgrade Pi`,
     };
   }
   return {

@@ -33,6 +33,11 @@ export default function (pi) {
   pi.on("tool_call", async (event, ctx) => {
     if (isModeRestorePending()) return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
     const mode = getMode();
+    // Pi's indirect tools reach registered capabilities beyond the active list.
+    // Keep them YOLO-only until Neura has reviewed their complete execution surface.
+    if (mode !== "yolo" && ["codemode", "tool_search"].includes(event.toolName)) {
+      return { block: true, reason: `${event.toolName} is available only in YOLO mode.` };
+    }
 
     if (mode === "learn") {
       if (isLearnActionAllowed(event, ctx.cwd)) return;

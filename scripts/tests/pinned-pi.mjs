@@ -6,7 +6,7 @@ export function pinnedPi(repoRoot) {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
   const contract = JSON.parse(fs.readFileSync(path.join(repoRoot, 'agent/neura/runtime-contract.json'), 'utf8'));
   const roots = {};
-  for (const name of ['pi-coding-agent', 'pi-tui']) {
+  for (const name of ['pi-coding-agent', 'pi-tui', 'pi-ai']) {
     const root = path.join(repoRoot, 'node_modules/@earendil-works', name);
     const installed = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     assert.equal(installed.version, manifest.devDependencies[`@earendil-works/${name}`], `${name}: run npm ci --ignore-scripts`);

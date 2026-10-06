@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Coordinated the Pi runtime, AI, and TUI upgrade to exact `1.0.4`, replacing
+  the incompatible independent 1.0.0 proposals. Removed the vulnerable
+  shrinkwrapped `brace-expansion` graph in favor of the upstream 5.0.12 fix.
+  Added all-three-package pin/contract, missing-package, junction, actual loader
+  resolution, root AI API, and built-in MCP replacement regressions. The MCP
+  wrapper returns before importing upstream code when `NEURA` is absent, so
+  identical installed resources no longer replace plain Pi's stock MCP.
+  Neura's launcher combines `--no-mcp` with regular TUI mode, preventing native
+  startup connections even after overrides, reload, or legacy wrapper failures.
+  `codemode` and `tool_search` are YOLO-only; real-session nested deferred calls
+  retain deterministic policy hooks. Shared Node-first prerequisite checks fail
+  closed and never advise a newer-Pi downgrade. Latest-Pi CI/release/daily
+  checks and source ZIP/checksum packaging are prepared; dependency bootstrap,
+  WSL provisioning, and cross-component recovery remain unfinished. Plain Pi retains its own
+  defaults and the logo-only launch implementation is unchanged. Grouped future
+  Pi dependency proposals and made CI/release audits stop on the first failure.
+  This is a source-only upgrade: no live harness, credentials, or user settings
+  were modified. Rollback restores the coordinated pins, lockfile, contract,
+  launcher, and release-manifest hashes together.
 - Updated exact Pi runtime, AI, and TUI pins, CI, and runtime contract to
   `0.87.1` without downgrading the installed Pi. Validated the changed
   session/context and footer APIs on the pinned graph. The cockpit now labels

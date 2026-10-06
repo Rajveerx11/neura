@@ -241,12 +241,13 @@ try {
   check(listed.length === 100 && listed[0] === path.basename(newest), "Saved listing retains newest entries beyond 100 snapshots");
   const installer = await fs.readFile(new URL("../install.ps1", import.meta.url), "utf-8");
   const firstMutation = installer.indexOf('New-Item -ItemType Directory -Force $lockDirectory');
-  const installNodeCheck = installer.indexOf('if ([version]$learnNodeVersion -lt [version]$requiredNodeVersion)');
-  check(firstMutation > 0 && installer.indexOf('if (-not (Test-Command "npm"))') < firstMutation &&
-    installNodeCheck > 0 && installNodeCheck < firstMutation &&
+  const prerequisiteCheck = installer.indexOf('$prerequisiteProblems = @(Get-NeuraPrerequisiteProblems $requiredPiVersion $requiredNodeVersion)');
+  const prerequisiteRejection = installer.indexOf('if ($prerequisiteProblems.Count)');
+  check(firstMutation > 0 && prerequisiteCheck > 0 && prerequisiteCheck < prerequisiteRejection &&
+    prerequisiteRejection < firstMutation &&
     firstMutation < installer.indexOf('& node $installer recover') && firstMutation < installer.indexOf('& node $installer prepare'),
     "Installer validates prerequisites before creating the transaction or staging files");
-  check(installer.includes("Learn document runtime dependencies missing") && installer.includes("Node.js 24.15 or newer is required"), "Drift check covers Learn runtime and Node compatibility");
+  check(installer.includes("Learn document runtime dependencies missing") && installer.includes('Node.js $RequiredNode or newer is required'), "Drift check covers Learn runtime and contract-derived Node compatibility");
   await app.fire("session_start");
   const restarted = JSON.parse((await app.call("learn_progress", { action: "status" })).content[0].text);
   check(restarted.sources.length === 0 && restarted.attempts.length === 0, "New session cannot leak previous learning data");

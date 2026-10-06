@@ -74,15 +74,16 @@ export function registerCheckGate(pi, dependencies = { captureWorktree, runProof
       const receipt = makeReceipt(scope, snapshot, after, result, changes, previous, incremental);
       pi.appendEntry("neura-verification", receipt);
       if (scope === "quick") quick = { root: snapshot.root, receipt };
-      const detail = receipt.status === "unavailable"
-        ? "Verification unavailable or workspace changed during the check. Run /ship again."
-        : result.reasons[0] || "Review /ship evidence.";
-      patchCockpit({ phase: receipt.status === "passed" ? "COMPLETE" : receipt.status === "unavailable" ? "DEGRADED" : "VERIFY",
-        proof: { scope, status: receipt.status, ...(receipt.status === "passed" ? {} : { detail }) },
+      const detail = receipt.status === "passed" && scope === "quick"
+        ? "Detector-only PASS · tests not run; not full verification."
+        : receipt.status === "unavailable" && result.status !== "unavailable"
+          ? "Verification unavailable or workspace changed during the check. Run /ship again."
+          : result.reasons[0] || "Review /ship evidence.";
+      patchCockpit({ phase: receipt.status === "unavailable" ? "DEGRADED" : "VERIFY",
+        proof: { scope, status: receipt.status, detail },
         degraded: receipt.status === "unavailable" ? detail : undefined });
       if (receipt.status === "passed") {
         removeCockpitNotice("proof");
-        if (scope === "full") ctx.ui.notify(`SHIP: verified PASS · full receipt recorded${previous ? ` · quick evidence ${receipt.quick!.current ? "current" : "stale (not reused)"}` : ""}${incremental ? ` · incremental report ${receipt.incremental!.current ? "current" : "stale"}` : ""}`);
         return;
       }
       addCockpitNotice({ id: "proof", message: `Proof ${receipt.status}`, detail,
@@ -125,7 +126,7 @@ export function registerCheckGate(pi, dependencies = { captureWorktree, runProof
   });
 
   pi.registerCommand("ship", {
-    description: "Full proof-of-work check with a worktree-bound receipt and prior quick-check evidence",
+    description: "Request full proof evidence (legacy PASS is unavailable); never publishes Git changes",
     handler: async (_args, ctx) => {
       const release = acquireHostOperation(["work", "yolo"]);
       if (!release) return void ctx.ui.notify("/ship requires Work or YOLO; current mode does not permit verification execution.", "warning");

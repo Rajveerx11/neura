@@ -1,5 +1,5 @@
 import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, editorFactory, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
-const repairAction = `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`;
+const repairAction = "update Neura for installed Pi 9.9.9; do not downgrade Pi";
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
     state: "degraded",
@@ -249,6 +249,7 @@ const cockpitSamples = [
   { phase: "BRIEF", task: "Rebuild the terminal interface", step: "1/3" },
   { phase: "WORK", task: "Terminal cockpit", step: "2/3", operation: { verb: "read", target: "docs/界面-contract-with-a-very-long-name.md", startedAt: Date.now() } },
   { phase: "REVIEW", approval: { id: "a1b2c3d4", agent: "Neura", task: "remote-mutation", exactAction: "git push origin main", boundary: "Remote mutation needs Rajveer.", fallback: "Keep the commit local.", risk: "high", approvable: true } },
+  { phase: "VERIFY", proof: { scope: "quick", status: "passed", detail: "Detector-only PASS · tests not run; not full verification." } },
   { phase: "VERIFY", proof: { scope: "full", status: "running" } },
   { phase: "VERIFY", proof: { scope: "full", status: "failed", detail: "Harness snapshot mismatch." } },
   { phase: "RECOVERY", checkpoint: "restoring", operation: { verb: "restore", target: "snapshot 19:42", startedAt: Date.now() } },
@@ -289,6 +290,13 @@ assert.doesNotMatch(JSON.stringify(cockpitState.getCockpitState().notices), /not
   "cockpit notice bypassed central redaction");
 await firstHandler(cockpit, "agent_end")({}, cockpitContext);
 assert.equal(state.workingMessage, "", "working message was not restored after completion");
+cockpitState.resetCockpit();
+cockpitState.patchCockpit({ phase: "VERIFY", proof: { scope: "quick", status: "passed" } });
+await firstHandler(cockpit, "agent_end")({}, cockpitContext);
+assert.equal(cockpitState.getCockpitState().phase, "VERIFY", "agent completion promoted detector-only proof to COMPLETE");
+const detectorRail = widgets.get("neura-cockpit")(null, null).render(92).map(stripAnsi).join("\n");
+assert.match(detectorRail, /Detector-only PASS · not full verification/);
+assert.doesNotMatch(detectorRail, /COMPLETE/);
 cockpitState.resetCockpit();
 cockpitState.patchCockpit({
   phase: "REVIEW",
