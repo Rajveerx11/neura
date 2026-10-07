@@ -32,7 +32,7 @@ export function launcherActions(commands: PublicCommand[], idle: boolean): Launc
     const extension = entry.source === "extension";
     let disabled = blocked ?? (extension && entry.name === "launcher" ? "Launcher is already open." : undefined);
     if (!disabled && extension) {
-      if (["health", "undo", "mcp", "skill-doctor", "remember", "memory"].includes(entry.name) && current !== "yolo") disabled = "Requires YOLO; unavailable in this mode.";
+      if (["health", "undo", "mcp", "remember", "memory"].includes(entry.name) && current !== "yolo") disabled = "Requires YOLO; unavailable in this mode.";
       if (entry.name === "ship" && !["work", "yolo"].includes(current)) disabled = "Verification requires Work or YOLO.";
       if (entry.name === "learn" && current !== "learn") disabled = "Requires Learn mode.";
     }

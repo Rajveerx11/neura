@@ -38,9 +38,10 @@ assert.equal(searchLauncher(launcherActions(registry, true), 'ctrl+shift+x')[0].
 for (const mode of modes.MODES) {
   modes.setMode(mode);
   actions = launcherActions(registry, true);
-  for (const name of ['health', 'undo', 'mcp', 'skill-doctor', 'remember', 'memory']) {
+  for (const name of ['health', 'undo', 'mcp', 'remember', 'memory']) {
     assert.equal(Boolean(actions.find(item => item.name === name).disabled), mode !== 'yolo');
   }
+  assert.equal(actions.find(item => item.name === 'skill-doctor').disabled, undefined, `read-only skill-doctor unavailable in ${mode}`);
   assert.equal(Boolean(actions.find(item => item.name === 'ship').disabled), !['work', 'yolo'].includes(mode));
   assert.equal(Boolean(actions.find(item => item.name === 'learn').disabled), mode !== 'learn');
 }
@@ -123,6 +124,17 @@ component.handleInput('\r');
 assert.equal(component.focused, true, 'removed selected command invoked another action');
 component.handleInput('\x1b');
 await screenResult.result;
+// #38 makes skill-doctor read-only; registry descriptions are not authorization.
+source = [command('skill-doctor', 'extension', 'Legacy description: requires YOLO')];
+for (const mode of ['work', 'plan', 'yolo']) {
+  modes.setMode(mode);
+  screenResult = await screen(read);
+  type('skill-doctor');
+  assert.doesNotMatch(component.render(80).join(''), /\[disabled\]/);
+  component.handleInput('\r');
+  assert.equal((await screenResult.result).command, '/skill-doctor', `skill-doctor selection failed in ${mode}`);
+  assert.equal(editor.focused, true);
+}
 source = [command('health')];
 modes.setMode('yolo');
 screenResult = await screen(read);

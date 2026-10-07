@@ -80,7 +80,7 @@
     "agent/neura/action-policy.ts": "6d7f06723e39f00b97c12490c93ea6b897ca291efca3caaa9bff23ba8a5debf3",
     "agent/neura/approval-store.ts": "b6f68b44fe639014eb94636135688d0d13655d2518c1fadc42f764149b6e1bd3",
     "agent/neura/cockpit-state.ts": "c367ae8f3f84bbb69013013f4e673fe4448d42850b5c09356c704c2d2d19419b",
-    "agent/neura/command-launcher.ts": "d5df943ecd22ee4886f39434880fe7ca9b5dde047c0ea1dbc7e7b388d7a30615",
+    "agent/neura/command-launcher.ts": "3707c93364b0f981b0dbefecb0775c739a194f31aaaddb20598dac8a1787e860",
     "agent/neura/core.ts": "b021b6ba5465d47f773076156ba2ba445825891f8038f021e3690c813b666f8b",
     "agent/neura/headmaster-policy.md": "388fef2f4a2d13fb2b9edd2b0f105a403444942a8c2ca9979a8e76731815fe69",
     "agent/neura/headmaster.ts": "b29510da48baa5e0857006f110e0cd2be496d9342271d58a0c652d906b4fc34e",
