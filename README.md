@@ -279,8 +279,23 @@ maintainers must inspect and approve any draft manually. See
 | `/remember <fact>` | Save one local memory fact in YOLO |
 | `/memory` | Show local memory in YOLO |
 | `/skill-doctor` | Read-only supported skill registry and runtime identity validation in Work/Plan/YOLO |
+| `/launcher` or Ctrl+Shift+K | Search public commands, modes, descriptions, and relevant shortcuts |
 | `/dash` | Toggle Neura wordmark |
 | `/notices` | Show persistent degraded-state notices |
+
+The terminal-native launcher uses Pi's public command registry (extensions,
+prompt templates, and skills). Pi 1.0.4 does not expose built-in commands through
+that API, so built-ins are excluded; use Pi's slash completion and `/hotkeys` for
+those. Mode choices use the existing `/mode` path, including YOLO confirmation.
+Prompt/skill selections are explicitly staged in an empty editor for normal user
+submission; an unsent draft is never replaced.
+
+Availability is a conservative hint, not authorization: known mode restrictions,
+active turns, host operations, and session drain disable selections; existing
+handlers remain authoritative for all other prerequisites and policy checks.
+Shift+Tab is shown with mode choices; Ctrl+Shift+X appears with `/clip` only when
+code blocks are available. The launcher has no animation and restores editor
+focus on selection or cancellation. Plain Pi and the logo-only launch stay unchanged.
 
 ## Repository map
 
