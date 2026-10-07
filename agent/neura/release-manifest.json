@@ -99,7 +99,7 @@
     "agent/neura/NEURA.md": "27cb0dc632de1936d1b3b6b6254be12376cc484054b133d3c1288abad5af4cb1",
     "agent/neura/package-lock.json": "3a5cb2f6cd650551cddfc9edb52a6f04f3e5a561de3215e33a5ba78ce1dc8569",
     "agent/neura/package.json": "cf97aea6f5670b6091f2780bbf712b018a44f1a99550402c091917a6f1127fe5",
-    "agent/neura/plan-files.ts": "7b9c334a02eab109d4f16c8b1106a0f9e1d14c6b80cda6e635fab69ee9dc42fd",
+    "agent/neura/plan-files.ts": "97c2553b8ff699175970a28988c17f417b74c808a518353663eef16519da7e97",
     "agent/neura/plan-policy.ts": "6886cc9da512ab95ee36b6c8556538659e4ee620af88f1ddc074474911127a4d",
     "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",

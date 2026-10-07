@@ -21,10 +21,11 @@ function gitMetadata(cwd: string, args: string[], input?: string): string {
     arg !== "core.excludesFile=/dev/null" && !(arg === "-c" && all[index + 1] === "core.excludesFile=/dev/null")) : AUTOMATIC_GIT_ARGUMENTS;
   const environment = automaticGitEnvironment();
   if (ignoreQuery) {
-    // Respect an explicit global-config location as well as Git's default HOME.
-    // No inherited GIT_CONFIG_COUNT/command overrides or executable env reach Git.
+    // Preserve Git's exclusion lookup locations: explicit global config, HOME,
+    // and XDG config/default ignore. No command overrides or executable env.
     if (process.env.GIT_CONFIG_GLOBAL) environment.GIT_CONFIG_GLOBAL = process.env.GIT_CONFIG_GLOBAL;
     else delete environment.GIT_CONFIG_GLOBAL;
+    if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
   }
   const result = spawnSync(executable, [...prefix, ...args], {
     cwd, input, encoding: "utf8", env: environment, windowsHide: true,
@@ -61,7 +62,8 @@ export function authorizePlanPath(cwd: string, requested: string): { root: strin
   if (!isPathInside(root, canonical) || excluded(root, canonical)) throw new Error("Plan link resolves outside the workspace or to confidential data.");
   const stat = fs.statSync(canonical);
   if (!stat.isFile() && !stat.isDirectory()) throw new Error("Plan supports only regular files and directories.");
-  if (stat.isFile() && (stat.nlink !== 1 || stat.size > MAX_FILE_BYTES)) throw new Error("Plan rejects hard-linked or oversized files.");
+  if (stat.isFile() && stat.nlink !== 1) throw new Error("Plan rejects hard-linked files.");
+  if (stat.isFile() && stat.size > MAX_FILE_BYTES) throw new Error("Plan file size limit reached.");
   return { root, lexical, canonical, stat };
 }
 
@@ -175,19 +177,25 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
   const seen = new Set<string>();
   const pattern = String(input.pattern ?? "");
   if (tool !== "ls" && (!pattern || pattern.length > 500)) throw new Error("Plan inspection needs a bounded pattern.");
-  // A small regex subset avoids unbounded backtracking on private host CPU.
-  // Literal mode accepts arbitrary text; ordinary alternation/classes/anchors work.
-  if (tool === "grep" && !input.literal && /[(){}+*?\\]/.test(pattern.replace(/\.\*/g, ""))) throw new Error("Plan regex supports simple alternatives/classes/anchors and .*; use literal=true for arbitrary text.");
-  if (tool === "grep" && !input.literal && (pattern.match(/\.\*/g)?.length ?? 0) > 1) throw new Error("Plan regex permits at most one .*.");
+  // Without repetition, matching work is bounded by line and pattern length.
+  // Even one unanchored .* can cause quadratic failed matches; do not accept it.
+  if (tool === "grep" && !input.literal && /[(){}+*?\\]/.test(pattern)) throw new Error("Plan regex supports simple alternatives/classes/anchors and single-character . only (no repetition); use literal=true for arbitrary text.");
   const regex = tool === "grep" && !input.literal ? new RegExp(pattern, input.ignoreCase ? "i" : "") : null;
   const glob = String(tool === "find" ? input.pattern : input.glob ?? "**/*");
   if (glob.length > 500 || /[\\{}\[\]]/.test(glob)) throw new Error("Plan glob supports *, ** and ? only.");
+  function checkBudget(): void {
+    if (signal?.aborted) throw new Error("Plan inspection aborted.");
+    if (Date.now() > deadline) throw new Error("Plan inspection deadline reached; narrow the path or pattern.");
+  }
   async function visit(requested: string): Promise<void> {
     await setImmediate();
-    if (signal?.aborted) throw new Error("Plan inspection aborted.");
-    if (++visited > 10_000 || Date.now() > deadline || matches >= limit) { stopped = true; return; }
+    checkBudget();
+    if (++visited > 10_000 || matches >= limit) { stopped = true; return; }
     let target: ReturnType<typeof authorizePlanPath>;
-    try { target = authorizePlanPath(cwd, requested); } catch { return; }
+    try { target = authorizePlanPath(cwd, requested); } catch (error) {
+      if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
+      return;
+    }
     const display = path.relative(start.stat.isDirectory() ? start.lexical : path.dirname(start.lexical), target.lexical).replaceAll("\\", "/");
     if (target.stat.isDirectory()) {
       if (seen.has(target.canonical)) return;
@@ -205,10 +213,16 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
     if (!(matchesGlob(glob, display) || (!glob.includes("/") && matchesGlob(glob, path.basename(display))))) return;
     if (tool === "find") { output.push(display); matches++; return; }
     let text: string;
-    try { text = readPlanFile(cwd, target.lexical).toString("utf8"); } catch { return; }
+    try { text = readPlanFile(cwd, target.lexical).toString("utf8"); } catch (error) {
+      if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
+      return;
+    }
     const lines = text.split("\n");
     for (let index = 0; index < lines.length && matches < limit; index++) {
-      const line = lines[index].slice(0, 16_384);
+      if (index % 32 === 0) await setImmediate();
+      checkBudget();
+      const line = lines[index];
+      if (line.length > 16_384) throw new Error("Plan grep line length limit reached (16,384 characters); narrow the path.");
       const hit = regex ? regex.test(line) : (input.ignoreCase ? line.toLowerCase().includes(pattern.toLowerCase()) : line.includes(pattern));
       if (!hit) continue;
       matches++;
@@ -218,12 +232,15 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
   if (tool === "ls") {
     if (!start.stat.isDirectory()) throw new Error("Plan ls requires a directory.");
     for (const name of fs.readdirSync(start.canonical).sort()) {
-      if (signal?.aborted) throw new Error("Plan inspection aborted.");
-      if (matches >= limit || Date.now() > deadline) { stopped = true; break; }
+      checkBudget();
+      if (matches >= limit) { stopped = true; break; }
       try {
         const child = authorizePlanPath(cwd, path.join(start.lexical, name));
         output.push(`${name}${child.stat.isDirectory() ? "/" : ""}`); matches++;
-      } catch { /* Confidential/unreadable entries are not listed. */ }
+      } catch (error) {
+        if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
+        // Confidential/unreadable entries are not listed.
+      }
       await setImmediate();
     }
   } else await visit(start.lexical);

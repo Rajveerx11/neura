@@ -13,7 +13,7 @@ const repo = path.resolve(import.meta.dirname, '../..');
 pinnedPi(repo);
 const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createReadToolDefinition } = await import('@earendil-works/pi-coding-agent');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
-const { authorizePlanPath, readPlanFile } = await import('../../agent/neura/plan-files.ts');
+const { authorizePlanPath, readPlanFile, inspectPlanFiles } = await import('../../agent/neura/plan-files.ts');
 const cwd = repository(scratch, 'plan-files');
 const privateCanary = 'PRIVATE_FILE_CANARY_NOT_A_TOKEN';
 const globalCanary = 'GLOBAL_IGNORE_CANARY_NOT_A_TOKEN';
@@ -53,6 +53,40 @@ const globalConfig = process.env.GIT_CONFIG_GLOBAL;
 delete process.env.GIT_CONFIG_GLOBAL;
 assert.throws(() => authorizePlanPath(cwd, 'global-private.txt'), /confidential/);
 process.env.GIT_CONFIG_GLOBAL = globalConfig;
+// Native Git's XDG config/default excludes lookup must match Plan, without
+// carrying executable or command-injection environment variables into Git.
+const xdg = path.join(scratch, 'xdg');
+fs.mkdirSync(path.join(xdg, 'git'), { recursive: true });
+const xdgName = 'xdg-ignored.txt';
+const xdgCanary = 'XDG_IGNORE_CANARY_NOT_A_TOKEN';
+fs.writeFileSync(path.join(cwd, xdgName), xdgCanary);
+fs.writeFileSync(path.join(xdg, 'git', 'ignore'), `${xdgName}\n`);
+fs.writeFileSync(path.join(xdg, 'git', 'config'), `[core]\n excludesFile = "${path.join(xdg, 'git', 'ignore').replaceAll('\\', '/')}"\n fsmonitor = "${hostile.replaceAll('\\', '/')}"\n`);
+fs.unlinkSync(path.join(scratch, '.gitconfig'));
+delete process.env.GIT_CONFIG_GLOBAL;
+process.env.XDG_CONFIG_HOME = xdg;
+try {
+  assert.equal(git(cwd, 'check-ignore', '--no-index', xdgName).trim(), xdgName);
+  assert.throws(() => readPlanFile(cwd, xdgName), /confidential/);
+  assert.doesNotMatch(await inspectPlanFiles(cwd, 'grep', { pattern: xdgCanary, literal: true }), /XDG_IGNORE_CANARY/);
+  // With no core.excludesFile config, Git also defaults to XDG/git/ignore.
+  fs.writeFileSync(path.join(xdg, 'git', 'config'), '[core]\n autocrlf = false\n');
+  assert.equal(git(cwd, 'check-ignore', '--no-index', xdgName).trim(), xdgName);
+  assert.throws(() => readPlanFile(cwd, xdgName), /confidential/);
+  assert.doesNotMatch(await inspectPlanFiles(cwd, 'grep', { pattern: xdgCanary, literal: true }), /XDG_IGNORE_CANARY/);
+  Object.assign(process.env, {
+    GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.excludesFile', GIT_CONFIG_VALUE_0: '/dev/null',
+    GIT_CONFIG_PARAMETERS: "'core.excludesFile=/dev/null'",
+    GIT_EXTERNAL_DIFF: hostile, GIT_ASKPASS: hostile, GIT_PAGER: hostile,
+  });
+  assert.throws(() => readPlanFile(cwd, xdgName), /confidential/);
+  assert.doesNotMatch(await inspectPlanFiles(cwd, 'grep', { pattern: xdgCanary, literal: true }), /XDG_IGNORE_CANARY/);
+} finally {
+  for (const name of ['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_PARAMETERS', 'GIT_EXTERNAL_DIFF', 'GIT_ASKPASS', 'GIT_PAGER']) delete process.env[name];
+  delete process.env.XDG_CONFIG_HOME;
+  process.env.GIT_CONFIG_GLOBAL = globalConfig;
+  fs.unlinkSync(path.join(cwd, xdgName));
+}
 const linkType = process.platform === 'win32' ? 'junction' : 'dir';
 fs.symlinkSync(outside, path.join(cwd, 'outside-link'), linkType);
 fs.symlinkSync(path.join(cwd, 'ignored'), path.join(cwd, 'ignored-link'), linkType);
@@ -174,6 +208,45 @@ try {
   const boundedGrep = await call(session, 'grep', { pattern: 'ordinary', path: 'src', context: 1, limit: 1 });
   assert.match(JSON.stringify(boundedGrep), /REDACTED/);
   await assert.rejects(() => call(session, 'grep', { pattern: '(a+)+$', path: 'src' }), /regex/);
+  // Previously allowed failed matches were quadratic and blocked abort/deadline.
+  const hostileLines = path.join(cwd, 'hostile-lines.txt');
+  fs.writeFileSync(hostileLines, `${'a'.repeat(16_384)}\n`.repeat(144));
+  await assert.rejects(() => call(session, 'grep', { pattern: 'a.*b', path: 'hostile-lines.txt' }), /regex/);
+  assert.match(await inspectPlanFiles(cwd, 'grep', { pattern: 'a.*b', literal: true, path: hostileLines }), /No authorized matches/);
+  assert.match(await inspectPlanFiles(cwd, 'grep', { pattern: 'a[^a]$', path: hostileLines }), /No authorized matches/);
+  // Do not silently clip matching input into a false successful no-match.
+  fs.writeFileSync(path.join(cwd, 'oversize-line.txt'), `${'a'.repeat(16_385)}needle\n`);
+  await assert.rejects(() => call(session, 'grep', { pattern: 'needle', path: 'oversize-line.txt' }), /line.*limit/i);
+  fs.unlinkSync(path.join(cwd, 'oversize-line.txt'));
+  fs.writeFileSync(path.join(cwd, 'oversize-file.txt'), Buffer.alloc(8 * 1024 * 1024 + 1, 'a'));
+  await assert.rejects(() => call(session, 'grep', { pattern: 'needle', path: '.' }), /file size limit/i);
+  fs.unlinkSync(path.join(cwd, 'oversize-file.txt'));
+  // Instrument the actual per-line matcher, not traversal: the abort and clock
+  // advance happen only after 40 lines of this single file have been scanned.
+  const originalTest = RegExp.prototype.test;
+  const originalNow = Date.now;
+  const midFileAbort = new AbortController();
+  let scanned = 0;
+  RegExp.prototype.test = function(value) {
+    if (this.source === '^a$' && ++scanned === 40) setImmediate(() => midFileAbort.abort());
+    return originalTest.call(this, value);
+  };
+  try {
+    await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: '^a$', path: hostileLines }, midFileAbort.signal), /aborted/);
+    assert.ok(scanned >= 40 && scanned < 144, `abort did not interrupt mid-file: ${scanned}`);
+  } finally { RegExp.prototype.test = originalTest; }
+  scanned = 0;
+  const clockStart = originalNow();
+  RegExp.prototype.test = function(value) {
+    if (this.source === '^a$') scanned++;
+    return originalTest.call(this, value);
+  };
+  Date.now = () => clockStart + (scanned >= 40 ? 10_001 : 0);
+  try {
+    await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: '^a$', path: hostileLines }), /deadline/i);
+    assert.equal(scanned, 40, 'deadline did not interrupt mid-file');
+  } finally { RegExp.prototype.test = originalTest; Date.now = originalNow; }
+  fs.unlinkSync(hostileLines);
   await assert.rejects(() => call(session, 'find', { pattern: '*', limit: 100000 }), /limit/);
   // Real final-context emission includes restored system text and tool schemas.
   const toolDefinition = { name: 'synthetic', description: 'normal', parameters: { type: 'object', properties: { token: { type: 'string' } } } };
@@ -184,6 +257,10 @@ try {
   ]);
   assert.doesNotMatch(JSON.stringify(finalContext), /system-secret|section-secret|user-secret|metadata-secret/);
   assert.deepEqual(finalContext[0].toolsAdded, [toolDefinition]);
+  const opaque = { type: 'image', data: Buffer.from('OPAQUE_IMAGE_CANARY').toString('base64'), mimeType: 'image/png' };
+  const imageContext = await session.extensionRunner.emitContext([{ role: 'user', content: [opaque], timestamp: 1 }]);
+  assert.deepEqual(imageContext[0].content, [{ type: 'text', text: '[Opaque image withheld in Plan.]' }]);
+  assert.doesNotMatch(JSON.stringify(imageContext), new RegExp(opaque.data));
   const filtered = await session.extensionRunner.emitContext([{ role: 'toolResult', toolCallId: 'previous-mode-read', toolName: 'read', content: [{ type: 'text', text: privateCanary }], timestamp: 1 }]);
   assert.doesNotMatch(JSON.stringify(filtered), /PRIVATE_FILE_CANARY/);
   const finalResult = await session.extensionRunner.emitToolResult({ type: 'tool_result', toolCallId: 'synthetic', toolName: 'web_search', input: {}, content: [{ type: 'text', text: 'API_TOKEN=tool-secret' }], details: { password: 'detail-secret' }, structuredContent: { token: 'structured-secret' }, isError: false });
@@ -199,7 +276,7 @@ try {
   const plain = await makeSession(false);
   assert.equal(plain.loader.getExtensions().extensions.every(extension => extension.tools.size === 0 && extension.handlers.size === 0), true);
   assert.match(JSON.stringify(await call(plain.session, 'read', { path: '../outside/outside.txt' })), /PRIVATE_FILE_CANARY/);
-  console.log('PASS Plan confidentiality: real loader/session wrappers, ignored tracked/global/private/history, links/hardlinks/races, redaction, cancellation, native delegation and plain Pi');
+  console.log('PASS Plan confidentiality: real loader/session wrappers, ignored tracked/global/XDG/private/history, links/hardlinks/races, text/image redaction, bounded matching, mid-file cancellation/deadline, explicit size limits, native delegation and plain Pi');
 } finally {
   for (const session of sessions) {
     try { await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'exit' }); } finally { session.dispose(); }
