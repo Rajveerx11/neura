@@ -18,6 +18,7 @@ import { addCockpitNotice, patchCockpit, removeCockpitNotice } from "../neura/co
 import { humanAwaySandboxAvailable, inspectProofSandboxRuntime } from "../neura/human-away-sandbox.ts";
 import { acquireHostOperation, getMode } from "../neura/mode-state.ts";
 import { resolveExecutable, scopedProcessEnvironment } from "../neura/process-security.ts";
+import { inspectSkills, skillValidationLabel } from "../neura/skills-registry.mjs";
 import { redactSensitiveText } from "../neura/redaction.ts";
 import { fitLine } from "../neura/ui-tokens.ts";
 
@@ -540,13 +541,14 @@ export async function probeLocalProvider(
   }
 }
 
-function countSkills(): number {
-  const skillDir = path.join(os.homedir(), ".claude", "skills");
-  try {
-    return fs.readdirSync(skillDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
-  } catch {
-    return 0;
-  }
+export function skillsHealth(root = path.join(AGENT_DIR, 'neura'), availableTools = ['read']): CapabilityHealth {
+  const report = inspectSkills({ root, piVersion: PI_VERSION, availableTools });
+  const health = capability('skills', false, report.valid ? report.enabled.length ? 'ready' : 'disabled' : 'unhealthy',
+    '', report.valid ? null : 'restore the supported registry or fix the external opt-in selection',
+    report.valid ? undefined : cleanProblem('schema', report.errors.join('; ')));
+  // This label contains only a locally computed public manifest digest and validation
+  // counts, not package/selection text. Preserve the exact hash for identity checks.
+  return { ...health, detail: skillValidationLabel(report) };
 }
 
 async function mcpHealth(cwd: string, signal?: AbortSignal): Promise<CapabilityHealth> {
@@ -600,7 +602,7 @@ export function requiredHealthState(capabilities: CapabilityHealth[]): HealthRep
   return "ready";
 }
 
-export async function inspect(cwd: string, signal?: AbortSignal): Promise<HealthReport> {
+export async function inspect(cwd: string, signal?: AbortSignal, availableTools = ['read']): Promise<HealthReport> {
   const [gitVersion, git, qwen, sandbox, proof, mcp] = await Promise.all([
     commandVersion("git", ["--version"], cwd),
     getGitHealth(cwd),
@@ -634,7 +636,7 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
   const modeKeys = modeShortcutReady();
   const persona = fs.existsSync(path.join(AGENT_DIR, "neura", "NEURA.md"));
   const memory = fs.existsSync(path.join(AGENT_DIR, "neura", "MEMORY.md"));
-  const skills = countSkills();
+  const skills = skillsHealth(undefined, availableTools);
   const capabilities = [
     capability("Pi", true, pi.valid ? "ready" : pi.installed ? "unhealthy" : "missing", pi.label, pi.action),
     capability("identity", true, identity.version && releaseValid ? "ready" : "degraded", identity.label + (releaseValid ? ' · managed files checked' : releaseStatus === 'cancelled' ? ' · release check cancelled' : releaseStatus === 'timeout' ? ' · release check timed out' : ` · release manifest missing or drifted (${releasePath})`), identity.version && releaseValid ? null : releaseStatus === 'cancelled' ? "retry /health when ready" : releaseStatus === 'timeout' ? "retry release check; use install.ps1 -Check for full verification" : "restore or verify release manifest"),
@@ -647,7 +649,7 @@ export async function inspect(cwd: string, signal?: AbortSignal): Promise<Health
     capability("checkpoint", true, checkpoint ? "ready" : "missing", checkpoint ? "undo available" : "extension missing", checkpoint ? null : "sync checkpoint extension"),
     capability("persona", true, persona ? "ready" : "missing", persona ? "loaded" : "missing", persona ? null : "restore persona"),
     capability("memory", false, memory ? "ready" : "disabled", memory ? "configured" : "not configured", null),
-    capability("skills", false, skills ? "ready" : "missing", skills ? skills + " found" : "none found", skills ? null : "configure skills only if needed"),
+    skills,
     mcp,
     qwen,
   ];
@@ -770,7 +772,7 @@ export function registerHealth(pi, inspectHealth = inspect) {
       let report: Awaited<ReturnType<typeof inspect>>;
       try {
         ctx.abortSignal?.throwIfAborted();
-        report = await inspectHealth(ctx.cwd, ctx.abortSignal);
+        report = await inspectHealth(ctx.cwd, ctx.abortSignal, pi.getAllTools().map(tool => tool.name));
         ctx.abortSignal?.throwIfAborted();
       } catch (error) {
         if (ctx.abortSignal?.aborted) return;

@@ -53,6 +53,9 @@ assert.equal(runtimeContract.piVersion, packageManifest.devDependencies["@earend
 assert.equal(parseRuntimeContract(runtimeContract), runtimeContract.piVersion, "valid runtime contract was rejected");
 assert.equal(parseRuntimeContract({ schemaVersion: "1", piVersion: runtimeContract.piVersion }), null, "string runtime contract schema was coerced");
 
+const skillSmoke = spawnSync(process.execPath, [path.join(import.meta.dirname, 'skills.mjs')], {encoding:'utf8', windowsHide:true, timeout:60000});
+assert.equal(skillSmoke.status, 0, `Skill registry verification failed: ${skillSmoke.stdout}\n${skillSmoke.stderr}`);
+console.log(skillSmoke.stdout.trim());
 console.log('PASS installer contract');
 const managedRelease = spawnSync(process.execPath, [path.join(import.meta.dirname, 'runtime-install.mjs')], {encoding:'utf8', windowsHide:true, timeout:60000});
 assert.equal(managedRelease.status, 0, `Managed release verification failed: ${managedRelease.stdout}\n${managedRelease.stderr}`);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { inspectSkills, selectionPath } from './skills-registry.mjs';
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const digest = (file) => hash(fs.readFileSync(file));
@@ -48,7 +49,19 @@ function sourceManifest() {
     safe(current);
     if (!exists(current) || digest(current) !== expected) throw Error(`source hash mismatch: ${name}`);
   }
+  validateSkills(path.join(source, 'agent/neura'), manifest);
   return manifest;
+}
+function validateSkills(root, release, checkSelection = true) {
+  const report = inspectSkills({ root, piVersion: release.piVersion, selectionFile: checkSelection ? selectionPath() : null });
+  if (!report.valid) throw Error(report.errors.join('; '));
+  for (const skill of report.packages) {
+    const name = `agent/neura/skills/${skill.name}/${skill.version}/SKILL.md`;
+    if (release.files[name] !== skill.sha256) throw Error('skill package is not release-owned');
+  }
+  for (const name of ['agent/neura/skills-manifest.json', 'agent/neura/skills-registry.mjs']) {
+    if (!Object.hasOwn(release.files, name)) throw Error('skill registry is not release-owned');
+  }
 }
 function previousFiles(previous, previousManifest) {
   if (!previous || previous.schemaVersion !== 1 || !previous.files || Array.isArray(previous.files) ||
@@ -76,6 +89,7 @@ function ownership(manifest) {
   if (allowed.schemaVersion !== 1 || !allowed.extensions || Array.isArray(allowed.extensions)) throw Error('invalid user extension allowlist');
   // Never overwrite an edited managed file or an unrecognized legacy file.
   for (const [name, expected] of Object.entries(manifest.files)) {
+    if (name.startsWith('agent/neura/skills/') && Object.hasOwn(oldFiles, name) && oldFiles[name] !== expected) throw Error('immutable skill version cannot be reused');
     const file = asTarget(name);
     safe(file);
     if (exists(file) && digest(file) !== expected && digest(file) !== oldFiles[name]) throw Error(`unowned or modified managed file: ${name}`);
@@ -138,6 +152,7 @@ function verify(root, expectedState, checkOwnership = true, quick = false) {
     safe(file);
     if (!exists(file) || digest(file) !== expected) throw Error(`installed file drift: ${name}`);
   }
+  validateSkills(path.dirname(located('agent/neura/skills-manifest.json')), manifest, checkOwnership);
   if (checkOwnership) {
     if (process.versions.node.split('.').map(Number).some(Number.isNaN) ||
         process.versions.node.localeCompare(manifest.nodeMinimum, undefined, { numeric: true }) < 0) throw Error(`Node ${manifest.nodeMinimum}+ required`);

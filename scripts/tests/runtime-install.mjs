@@ -23,7 +23,9 @@ const build = (extension = 'one.ts') => {
   write(path.join(source, 'agent/neura/runtime-install.mjs'), fs.readFileSync(new URL('../..//agent/neura/runtime-install.mjs', import.meta.url)));
   write(path.join(source, 'agent/mcp.json'), '{}');
   write(path.join(source, 'launcher/neura.cmd'), '@echo off');
-  const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd'];
+  const skillFiles = ['skills-registry.mjs', 'skills-manifest.json', 'skills/neura-verification/1.0.0/SKILL.md'];
+  for (const name of skillFiles) write(path.join(source, 'agent/neura', name), fs.readFileSync(new URL(`../../agent/neura/${name}`, import.meta.url)));
+  const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd', ...skillFiles.map(name => `agent/neura/${name}`)];
   const files = Object.fromEntries(names.map(name => [name, sha(path.join(source, name))]));
   write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:'2.5.1', piVersion:'1.0.4',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
 };
@@ -33,6 +35,28 @@ try {
   write(path.join(source, 'agent/extensions/one.ts'), 'changed source');
   run('prepare', false); // source bytes must match the release manifest
   write(path.join(source, 'agent/extensions/one.ts'), 'one.ts');
+  const selection = path.join(home, '.pi/neura-skills.json');
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['neura-verification', 'neura-verification']}));
+  assert.match(run('prepare', false).stderr, /invalid opt-in selection/);
+  assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'invalid selection reached staging');
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['neura-verification']}));
+  const skillManifestFile = path.join(source, 'agent/neura/skills-manifest.json');
+  const releaseFile = path.join(source, 'agent/neura/release-manifest.json');
+  const skillManifestBytes = fs.readFileSync(skillManifestFile);
+  const releaseBytes = fs.readFileSync(releaseFile);
+  const badSkills = JSON.parse(skillManifestBytes);
+  badSkills.skills[0].permissions.execute = true;
+  write(skillManifestFile, JSON.stringify(badSkills));
+  const badRelease = JSON.parse(releaseBytes);
+  badRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(badRelease));
+  assert.match(run('prepare', false).stderr, /permissions are restrictions/);
+  write(skillManifestFile, skillManifestBytes);
+  delete badRelease.files['agent/neura/skills/neura-verification/1.0.0/SKILL.md'];
+  badRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(badRelease));
+  assert.match(run('prepare', false).stderr, /not release-owned/);
+  write(releaseFile, releaseBytes);
   assert.match(run('prepare', false, {NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER:'1'}).stderr, /injected staging failure/);
   assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'failed preparation left a shared transaction behind');
   const legacyModule = live('agent/neura/node_modules/user-package.js');
@@ -45,7 +69,9 @@ try {
   run('activate', false, {NEURA_INSTALL_TEST_CRASH_DURING_COPY:'1'});
   const partial = `${live('agent/extensions/one.ts')}.neura-install-0.tmp`;
   assert.equal(fs.readFileSync(partial, 'utf8'), 'partial');
-  run('recover');
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['unsupported']}));
+  run('recover'); // external opt-in corruption must not obstruct package rollback
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['neura-verification']}));
   assert.equal(fs.existsSync(partial), false, 'interrupted copy left a partial executable file');
   assert.equal(fs.existsSync(live('agent/extensions/one.ts')), false, 'partial copy reached live target');
   seal();
@@ -139,5 +165,32 @@ try {
   run('recover', false);
   assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
   fs.rmSync(pending, {recursive:true, force:true});
-  console.log('PASS synthetic managed release install, upgrade, ownership, drift, rollback, interruption');
+  // Reviewed updates must use a new immutable package version, not just a new hash.
+  const packageName = 'agent/neura/skills/neura-verification/1.0.0/SKILL.md';
+  const updateManifest = JSON.parse(fs.readFileSync(skillManifestFile));
+  const updateRelease = JSON.parse(fs.readFileSync(releaseFile));
+  fs.appendFileSync(path.join(source, packageName), '\nKeep evidence explicit.\n');
+  updateManifest.skills[0].sha256 = sha(path.join(source, packageName));
+  write(skillManifestFile, JSON.stringify(updateManifest));
+  updateRelease.files[packageName] = updateManifest.skills[0].sha256;
+  updateRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(updateRelease));
+  assert.match(run('prepare', false).stderr, /immutable skill version cannot be reused/);
+  const updatedName = packageName.replace('1.0.0', '1.0.1');
+  write(path.join(source, updatedName), fs.readFileSync(path.join(source, packageName)));
+  fs.rmSync(path.join(source, packageName));
+  updateManifest.skills[0].version = '1.0.1';
+  updateManifest.skills[0].path = updatedName.slice('agent/neura/'.length);
+  updateManifest.skills[0].source.path = updatedName;
+  updateManifest.skills[0].source.version = '1.0.1';
+  write(skillManifestFile, JSON.stringify(updateManifest));
+  delete updateRelease.files[packageName];
+  updateRelease.files[updatedName] = updateManifest.skills[0].sha256;
+  updateRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(updateRelease));
+  seal(); run('activate'); run('check');
+  assert.equal(fs.existsSync(live(packageName)), false, 'owned retired version was not removed');
+  assert.equal(fs.existsSync(live(updatedName)), true, 'new immutable version was not installed');
+  assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
+  console.log('PASS synthetic managed release install, upgrade, ownership, drift, rollback, interruption, immutable skill updates');
 } finally { fs.rmSync(tmp, {recursive:true, force:true}); }
