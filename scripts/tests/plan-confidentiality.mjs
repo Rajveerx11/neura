@@ -125,6 +125,10 @@ try {
   setMode('plan');
   const { session, loader } = await makeSession(true);
   setMode('plan');
+  const prompt = JSON.stringify((await session.extensionRunner.emitBeforeAgentStart('inspect source', undefined, { cwd })).systemPromptOptions);
+  assert.match(prompt, /single-character \. \(no repetition, groups, or escapes; use literal=true \/ rg -F\)/);
+  assert.match(prompt, /Git historical content, object\/index reads and comparisons are unavailable/);
+  assert.doesNotMatch(prompt, /at most one \.\*|git --no-pager/);
   const wrapper = loader.getExtensions().extensions.find(extension => extension.tools.has('read'));
   assert.equal(wrapper.resolvedPath, path.join(repo, 'agent/extensions/guardrail.ts'));
   assert.equal(wrapper.tools.size, 5);
