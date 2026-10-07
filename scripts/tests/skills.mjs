@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { syncBuiltinESMExports } from 'node:module';
 import { createHash } from 'node:crypto';
 import { isolate } from './isolation.mjs';
+// Put the isolated home beneath a synthetic ancestor, never the real profile.
+// The outer marker also bounds the deliberate missing-boundary control below.
+const ancestor = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-skills-ancestor-'));
+fs.mkdirSync(path.join(ancestor, '.git'));
+const ancestorSkills = path.join(ancestor, '.agents/skills');
+const ancestorFile = path.join(ancestorSkills, 'ancestor-sentinel/SKILL.md');
+fs.mkdirSync(path.dirname(ancestorFile), { recursive: true });
+fs.writeFileSync(ancestorFile, '---\nname: ancestor-sentinel\ndescription: Synthetic ancestor guidance\n---\nSynthetic sentinel.\n');
+Object.assign(process.env, { TEMP: ancestor, TMP: ancestor, TMPDIR: ancestor });
 const scratch = isolate();
+process.on('exit', () => fs.rmSync(ancestor, { recursive: true, force: true }));
 process.env.PI_OFFLINE = '1';
 const { inspectSkills, inspectSkillDiscovery, skillValidationLabel } = await import('../../agent/neura/skills-registry.mjs');
 const { skillsHealth } = await import('../../agent/extensions/harness-health.ts');
@@ -173,8 +185,21 @@ async function realSession({ collision = false, enabled = true, neura = true } =
   return { session, loader, notices, errors, commands: () => publicPi.getCommands() };
 }
 const sessions = [];
+// Count attempted enumeration/content reads, not just skills that survive loading.
+let ancestorAttempts = 0;
+const originals = { readdirSync: fs.readdirSync, readFileSync: fs.readFileSync };
+for (const name of Object.keys(originals)) {
+  fs[name] = function(file, ...args) {
+    const relative = path.relative(ancestorSkills, String(file));
+    if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) ancestorAttempts++;
+    return originals[name].call(this, file, ...args);
+  };
+}
+syncBuiltinESMExports();
 try {
   const clean = await realSession(); sessions.push(clean.session);
+  assert.equal(ancestorAttempts, 0, 'default discovery must not enumerate/read ancestor resources');
+  assert.equal(clean.loader.getSkills().skills.some(skill => skill.name === 'ancestor-sentinel'), false);
   assert.deepEqual(clean.errors, []);
   assert.equal(clean.loader.getSkills().skills.find(skill => skill.name === 'neura-verification').filePath, path.join(source, skillPath));
   assert.equal(skillsHealth(source, ['read'], clean.commands()).state, 'ready');
@@ -206,8 +231,31 @@ try {
   assert.equal(stock.loader.getSkills().skills.find(skill => skill.name === 'neura-verification').filePath, externalFile);
   assert.deepEqual(stock.notices, [], 'plain Pi remains stock');
   assert.equal(stock.commands().some(command => command.name === 'skill-doctor'), false);
+  await stock.session.reload();
+  assert.equal(stock.loader.getSkills().skills.some(skill => skill.name === 'unrelated-stock'), true);
+  assert.equal(stock.loader.getSkills().skills.some(skill => skill.name === 'ancestor-sentinel'), false);
+  assert.equal(ancestorAttempts, 0, 'startup and reload must not enumerate/read ancestor resources');
+
+  // Sensitivity control: removing only isolate()'s boundary must expose the
+  // synthetic sentinel. The outer .git still prevents real ancestor discovery.
+  const boundary = path.join(scratch, '.git');
+  fs.rmdirSync(boundary);
+  try {
+    await stock.session.reload();
+    assert.ok(ancestorAttempts > 0, 'counter must detect default ancestor enumeration/reads');
+    assert.equal(stock.loader.getSkills().skills.find(skill => skill.name === 'ancestor-sentinel')?.filePath, ancestorFile);
+  } finally {
+    fs.mkdirSync(boundary);
+  }
+  ancestorAttempts = 0;
+  await stock.session.reload();
+  assert.equal(stock.loader.getSkills().skills.some(skill => skill.name === 'ancestor-sentinel'), false);
+  assert.equal(stock.loader.getSkills().skills.some(skill => skill.name === 'unrelated-stock'), true);
+  assert.equal(ancestorAttempts, 0, 'restored boundary must stop ancestor reads on reload');
 } finally {
+  Object.assign(fs, originals);
+  syncBuiltinESMExports();
   for (const session of sessions) session.dispose();
   process.env.NEURA = '1';
 }
-console.log('PASS skills: exact catalog, default-Pi reserved-name collision/reload identity, read-only doctor, health, metadata/tools/content/state/junction denials');
+console.log('PASS skills: isolated default discovery/ancestor-read control, exact catalog, default-Pi reserved-name collision/reload identity, read-only doctor, health, metadata/tools/content/state/junction denials');
