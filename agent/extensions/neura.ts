@@ -11,6 +11,7 @@ import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { getCockpitState, onCockpitChange, patchCockpit, resetCockpit } from "../neura/cockpit-state.ts";
 import { padAnsi, PALETTE, fg } from "../neura/core.ts";
+import { registerCommandLauncher } from "../neura/command-launcher.ts";
 
 const NEURA_DIR = path.join(os.homedir(), ".pi", "agent", "neura");
 const { accent: ACC, human: HUMAN, muted: MUT, text: TXT } = PALETTE;
@@ -184,6 +185,8 @@ export default function (pi: ExtensionAPI) {
       showNotices(ctx);
     },
   });
+
+  registerCommandLauncher(pi);
 
   pi.on("before_agent_start", (event) => persona ? { systemPrompt: `${event.systemPrompt}\n\n${persona}` } : undefined);
 }

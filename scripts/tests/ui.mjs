@@ -380,4 +380,5 @@ const humanAwayFooter = footer.render(120).map(stripAnsi).join("\n");
 assert.match(humanAwayFooter, /HUMAN AWAY/, "cockpit footer did not update its mode badge");
 assert.match(humanAwayFooter, /PREVIEW/, "Human Away preview label missing from footer");
 
+await import('./command-launcher.mjs');
 console.log('PASS ui');
