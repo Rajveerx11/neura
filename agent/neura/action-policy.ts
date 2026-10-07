@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
+import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed, SECRET_PATH } from "./plan-policy.ts";
+import { authorizePlanPath, parsePlanInspection } from "./plan-files.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./human-away-sandbox.ts";
 import { redactSensitiveText } from "./redaction.ts";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "./process-security.ts";
@@ -63,7 +64,7 @@ type ToolEvent = { toolName?: unknown; input?: unknown };
 const READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
 
-export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|\.envrc|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?|\.aws|\.azure|\.config[\\/]gcloud|\.kube[\\/]config|\.docker[\\/]config\.json)(?=$|[\\/:\s"'`;|&])/i;
+export { SECRET_PATH } from "./plan-policy.ts";
 
 const PROTECTED_CONTROL = /(?:^|[\\/\s"'=])(?:\.git(?:[\\/\s"']|$)|\.github[\\/]workflows(?:[\\/\s"']|$)|agent[\\/]settings\.json(?:[\s"']|$)|agent[\\/]keybindings\.json(?:[\s"']|$)|agent[\\/]mcp\.json(?:[\s"']|$)|install\.ps1(?:[\s"']|$)|agent[\\/]extensions[\\/](?:gmail-guardrail|guardrail|human-away-sandbox|modes|plan-artifact|learn)\.ts(?:[\s"']|$)|agent[\\/]neura[\\/]package(?:-lock)?\.json(?:[\s"']|$)|agent[\\/]neura[\\/](?:action-policy|approval-store|headmaster|human-away-sandbox|mode-state|plan-policy|plan-renderer|redaction|learn(?:-[\w-]+)?)\.(?:ts|md|mjs)(?:[\s"']|$))/i;
 const GENERATED_PATH = /(?:^|[\\/])(?:dist|build|coverage|\.cache|cache|tmp|temp)(?:[\\/]|$)|\.(?:tmp|cache)$/i;
@@ -1027,9 +1028,19 @@ export function inspectAction(
 export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
   const toolName = String(event.toolName ?? "unknown");
   if (!PLAN_TOOLS.has(toolName)) return false;
-  if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""), cwd);
+  if (toolName === "bash") {
+    try {
+      const inspection = parsePlanInspection(String(inputRecord(event.input).command ?? ""));
+      if (inspection.tool !== "metadata") authorizePlanPath(cwd, String(inspection.input.path ?? "."));
+      return true;
+    } catch { return false; }
+  }
   if (READ_TOOLS.has(toolName)) {
-    return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
+    try {
+      const requested = inputRecord(event.input).path ?? (toolName === "read" ? "" : ".");
+      authorizePlanPath(cwd, String(requested));
+      return isPlanToolInputAllowed(toolName, event.input);
+    } catch { return false; }
   }
   return isPlanToolInputAllowed(toolName, event.input);
 }

@@ -30,8 +30,10 @@ function redactHighEntropy(value: string): string {
 export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFINITY): string {
   let text = String(value ?? "");
   text = text
+    .replace(/-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----[\s\S]*?-----END (?:[A-Z ]*PRIVATE KEY)-----/g, REDACTED)
+    .replace(/(["'](?:password|passwd|token|secret|api[_-]?key|credential|authorization|cookie)["']\s*:\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/ig, `$1"${REDACTED}"`)
     .replace(/\b((?:authorization|proxy-authorization|x-api-key|api-key|cookie|set-cookie)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\r\n;]+)/ig, `$1${REDACTED}`)
-    .replace(/\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`)
+    .replace(/\b((?:[A-Z][A-Z0-9_]*)?(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`)
     .replace(/(--?(?:password|passwd|token|api-key|secret|credential)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`)
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+(@)/ig, `$1${REDACTED}$2`)
     .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, REDACTED)
@@ -41,12 +43,28 @@ export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFI
   return text.slice(0, Math.max(0, limit));
 }
 
+// Preserve Pi's tool declarations/envelopes; redact only model-visible content.
+// Images from prior modes are opaque and cannot be safely text-redacted.
+export function redactPlanContextMessages(messages: any[]): any[] {
+  return messages.map(message => ({
+    ...message,
+    content: Array.isArray(message.content)
+      ? message.content.map(block => block.type === "image"
+        ? { type: "text", text: "[Opaque image withheld in Plan.]" } : redactSensitiveValue(block))
+      : redactSensitiveValue(message.content),
+    ...(message.sections ? { sections: redactSensitiveValue(message.sections) } : {}),
+    ...(message.details ? { details: redactSensitiveValue(message.details) } : {}),
+    ...(message.structuredContent ? { structuredContent: redactSensitiveValue(message.structuredContent) } : {}),
+  }));
+}
+
 export function redactSensitiveValue(value: unknown): unknown {
   if (typeof value === "string") return redactSensitiveText(value);
   if (Array.isArray(value)) return value.map(redactSensitiveValue);
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-      .map(([key, item]) => [key, redactSensitiveValue(item)]));
+      .map(([key, item]) => [key, /^(?:password|passwd|token|secret|api[_-]?key|credential|authorization|cookie)$/i.test(key)
+        ? REDACTED : redactSensitiveValue(item)]));
   }
   return value;
 }

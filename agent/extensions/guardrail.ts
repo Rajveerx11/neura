@@ -3,6 +3,9 @@
 // YOLO deliberately bypasses Neura application guardrails. Human Away sends eligible actions to the isolated Headmaster, then clamps every
 // verdict through deterministic policy and queues anything not approved.
 
+import { createReadToolDefinition, createGrepToolDefinition, createFindToolDefinition, createLsToolDefinition, createBashToolDefinition, truncateHead } from "@earendil-works/pi-coding-agent";
+import { authorizePlanPath, readPlanFile, inspectPlanFiles, parsePlanInspection, planMetadata } from "../neura/plan-files.ts";
+import { redactSensitiveValue } from "../neura/redaction.ts";
 import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
 import { isLearnActionAllowed } from "../neura/learn-policy.ts";
 import { patchCockpit } from "../neura/cockpit-state.ts";
@@ -12,6 +15,49 @@ import { reviewWithHeadmaster } from "../neura/headmaster.ts";
 
 export default function (pi) {
   if (!process.env.NEURA) return;
+
+  const safePlanCalls = new Set<string>();
+  const localTools = { read: createReadToolDefinition, grep: createGrepToolDefinition, find: createFindToolDefinition, ls: createLsToolDefinition, bash: createBashToolDefinition };
+  async function planExecute(name, input, signal, ctx, callId, onUpdate) {
+    if (signal?.aborted) throw new Error("Plan inspection aborted.");
+    if (name === "bash") {
+      const inspection = parsePlanInspection(String(input.command ?? ""));
+      if (inspection.tool === "metadata") return { content: [{ type: "text", text: planMetadata(ctx.cwd, inspection.command) }], details: {} };
+      return planExecute(inspection.tool, inspection.input, signal, ctx, callId, onUpdate);
+    }
+    if (name === "read") {
+      return createReadToolDefinition(ctx.cwd, { operations: {
+        access: async file => { authorizePlanPath(ctx.cwd, file); },
+        readFile: async file => readPlanFile(ctx.cwd, file),
+        detectImageMimeType: async () => null,
+      } }).execute(callId, input, signal, onUpdate, ctx);
+    }
+    const text = await inspectPlanFiles(ctx.cwd, name, input, signal);
+    const truncation = truncateHead(text);
+    return { content: [{ type: "text", text: truncation.content + (truncation.truncated ? "\n[Output truncated; narrow inspection.]" : "") }], details: { truncation } };
+  }
+  for (const [name, factory] of Object.entries(localTools)) {
+    const definition = factory(process.cwd());
+    pi.registerTool({ ...definition, async execute(callId, input, signal, onUpdate, ctx) {
+      if (isModeRestorePending()) throw new Error("Session restoration is pending.");
+      if (getMode() !== "plan") return factory(ctx.cwd).execute(callId, input, signal, onUpdate, ctx);
+      const result = await planExecute(name, input, signal, ctx, callId, onUpdate);
+      safePlanCalls.add(callId);
+      return redactSensitiveValue(result);
+    } });
+  }
+  pi.on("session_start", () => { safePlanCalls.clear(); });
+  pi.on("tool_result", event => {
+    if (getMode() === "plan") return { content: redactSensitiveValue(event.content), details: redactSensitiveValue(event.details), structuredContent: redactSensitiveValue(event.structuredContent) };
+  });
+  pi.on("context", event => {
+    if (getMode() !== "plan") return;
+    // A restored session or a previous mode's native tool result has not passed
+    // this service. Never recycle its bytes into Plan research context.
+    return { messages: event.messages.map(message => message.role === "toolResult" && !safePlanCalls.has(message.toolCallId)
+      ? { ...message, content: [{ type: "text", text: "[Earlier tool content withheld in Plan; inspect again through authorized tools.]" }], details: undefined, structuredContent: undefined }
+      : message) };
+  });
 
   let consecutiveStops = 0;
   const rollingStops: boolean[] = [];
@@ -45,7 +91,10 @@ export default function (pi) {
     }
 
     if (mode === "plan") {
-      if (isPlanActionAllowed(event, ctx.cwd)) return;
+      if (isPlanActionAllowed(event, ctx.cwd)) {
+        if (!Object.hasOwn(localTools, event.toolName)) safePlanCalls.add(event.toolCallId);
+        return;
+      }
       return {
         block: true,
         reason: `PLAN mode blocked ${event.toolName}. Use research tools or publish_plan for one plans/*.html artifact; switch with Shift+Tab or /mode before implementation.`,

@@ -29,7 +29,7 @@ assert.ok(state.activeTools.includes("plan_request"), "Plan mode did not activat
 assert.ok(state.activeTools.includes("web_search"), "Plan mode did not activate bounded web search");
 assert.equal(state.activeTools.includes("web_fetch"), false, "Plan mode activated web_fetch without enforceable DNS and redirect validation");
 assert.equal(state.activeTools.includes("edit") || state.activeTools.includes("write"), false, "Plan mode retained generic mutation tools");
-assert.equal(await guard({ toolName: "bash", input: { command: `${planGit} branch --show-current` } }, context), undefined);
+assert.equal(await guard({ toolName: "bash", input: { command: "git rev-parse --short HEAD" } }, context), undefined);
 assert.equal((await guard({ toolName: "bash", input: { command: "git status; Remove-Item file.txt" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "Get-Content env:OPENAI_API_KEY" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "rg --pre dangerous-helper pattern" } }, context))?.block, true);
@@ -78,25 +78,22 @@ for (const testCase of filesystemCases) {
 
 const planBoundaryOutsideRelative = path.join("..", path.basename(planBoundaryOutside), "outside.txt");
 const planShellAllowed = [
-  "pwd",
-  "Get-Location",
-  "Get-ChildItem .",
-  "Get-Content .\\inside.txt",
-  "Get-Content \"@inside.txt\"",
-  "Get-Content \".\\inside,name.txt\"",
-  "Get-Content \".\\@args\"",
-  "Get-Content -TotalCount 1 -LiteralPath .\\inside.txt",
+  "pwd", "Get-Location", "Get-ChildItem .", "ls .",
+  "Get-Content -LiteralPath inside.txt", "Get-Content inside.txt",
   `Get-Content "${planBoundaryFile}"`,
-  `Get-Content "${pathToFileURL(planBoundaryFile).href}"`,
-  "Get-Content .\\nested\\..\\inside.txt",
-  "Select-String -SimpleMatch -Pattern inside -Path .\\inside.txt",
-  "Resolve-Path .\\inside.txt",
-  "Test-Path -Path .\\missing.txt -PathType Leaf",
-  "Measure-Object",
-  "rg inside .",
-  "rg \"inside,outside\" .",
-  "rg \"@args\" .",
-  "rg --files ./",
+  "Select-String -LiteralPath inside.txt -Pattern inside",
+  "rg inside .", "rg -n -i -F inside .", "rg --files ./", "rg @args",
+  "git rev-parse --short HEAD",
+];
+for (const command of planShellAllowed) {
+  assert.equal(
+    await guard({ toolName: "bash", input: { command } }, planBoundaryContext),
+    undefined,
+    `Plan blocked ordinary read-only shell command: ${command}`,
+  );
+}
+
+const planShellDenied = [
   `${planGit} diff --no-ext-diff --no-textconv --cached -- inside.txt`,
   `${planGit} diff --no-ext-diff --no-textconv --cached --stat HEAD`,
   `${planGit} diff --no-ext-diff --no-textconv HEAD~1..HEAD --`,
@@ -109,16 +106,10 @@ const planShellAllowed = [
   `${planGit} ls-files -- inside.txt`,
   `${planGit} ls-files --stage -- inside.txt`,
   `${planGit} branch --show-current`,
-];
-for (const command of planShellAllowed) {
-  assert.equal(
-    await guard({ toolName: "bash", input: { command } }, planBoundaryContext),
-    undefined,
-    `Plan blocked ordinary read-only shell command: ${command}`,
-  );
-}
-
-const planShellDenied = [
+  "Get-Content -TotalCount 1 -LiteralPath inside.txt",
+  "Resolve-Path inside.txt",
+  "Test-Path missing.txt",
+  "Measure-Object",
   `Get-Content .\\${planBoundaryOutsideRelative}`,
   `Get-Content .\\nested\\..\\..\\${path.basename(planBoundaryOutside)}\\outside.txt`,
   `rg outside ${planBoundaryOutsideRelative.replaceAll("\\", "/")}`,
@@ -192,7 +183,6 @@ const planShellDenied = [
   "Get-Content '..'+'/outside.txt'",
   "Get-Content .\\inside.txt & whoami",
   "Measure-Object -InputObject (& whoami)",
-  "rg @args",
   "rg outside @paths",
   "git status @paths",
   `rg outside . ,${planBoundaryOutsideRelative}`,

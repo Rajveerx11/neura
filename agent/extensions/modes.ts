@@ -10,6 +10,7 @@ import { PALETTE, fg } from "../neura/core.ts";
 import { getMode, isAgentMode, isHostOperationActive, isModeRestorePending, modeLabel, modePosition, nextMode, restoreMode, setMode, type AgentMode } from "../neura/mode-state.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "../neura/human-away-sandbox.ts";
 import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
+import { redactPlanContextMessages } from "../neura/redaction.ts";
 import { LEARN_MODE_TOOL_NAMES, LEARN_ONLY_TOOL_NAMES } from "../neura/learn-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
 import {
@@ -73,7 +74,7 @@ Request lifecycle:
 - Before changing the published artifact at Rajveer's request, call plan_request with revise_published, then revise it with the same slug.
 - Before planning a separate objective while another request is active, call plan_request with start_new. A genuine new request retains the one-retry publication contract.
 
-Safety boundary: read-only exploration plus one controlled plan artifact under the project plans/ folder. Do not modify source files, external systems, git state, configuration, or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
+Safety boundary: authorized UTF-8 workspace inspection plus one controlled plan artifact under plans/. Ignored/tracked-ignored files, private state, credentials, Git internals, outside links, hard links and Git historical content are unavailable. Use read/grep/find/ls; bash is a closed inspection adapter, never a host shell. Supported forms: pwd, Get-Location, git rev-parse --short HEAD, rg [-n] [-i] [-F] pattern [path], rg --files [path], Get-Content [-LiteralPath] path, ls [path], Get-ChildItem [-LiteralPath] [path], Select-String -LiteralPath path -Pattern pattern. No scripts, pipelines or expansion. Grep supports literal text or simple regex alternatives/classes/anchors and at most one .*; glob supports *, **, ?. Binary/image reads are unavailable because opaque payloads cannot be redacted. Do not modify source, external systems, git state, configuration or secrets. Generic write/edit and mutating shell remain forbidden. Do not dump the full plan into chat.`,
   work: `[NEURA MODE: WORK]
 Supervised workspace-contained engineering is active. Use structured read, grep, find, and ls for workspace inspection; edit and write for canonical workspace-contained patches; native bash only for Neura's hardened read-only inspection commands; and work_exec for tests, builds, and other local shell work inside WSL2 bubblewrap. work_exec exposes only the active workspace as writable, clears the host environment, hides Windows drives and WSL home, and has no network namespace. Protected files, credential-shaped paths, destructive actions, remote mutation, and unclassified actions fail closed or require one explicit interactive approval. Unknown provider tools are hidden. Enter YOLO deliberately when the user authorizes unrestricted unsandboxed execution.`,
   yolo: `[NEURA MODE: YOLO]
@@ -174,6 +175,10 @@ export function approvalLines(records: ApprovalRecord[], width: number, audit = 
 
 export default function (pi) {
   if (!process.env.NEURA) return;
+
+  // Last-mile defense for user/assistant messages, web results, and any other
+  // extension-provided context. Local file authorization remains the primary gate.
+  pi.on("context_with_system", event => getMode() === "plan" ? { messages: redactPlanContextMessages(event.messages) } : undefined);
 
   let nonPlanTools: string[] | undefined;
   let enforcedRestrictedTools: string[] = [];

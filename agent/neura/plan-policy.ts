@@ -3,6 +3,8 @@ import * as fsp from "node:fs/promises";
 import { isIP } from "node:net";
 import * as path from "node:path";
 
+export const SECRET_PATH = /(?:^|[\\/\s"'=])(?:\.env(?:\.[\w.-]+)?|\.envrc|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_rsa|id_ed25519|[\w.-]+\.(?:pem|key)|auth\.json|credentials(?:\.[\w.-]+)?|\.aws|\.azure|\.config[\\/]gcloud|\.kube[\\/]config|\.docker[\\/]config\.json)(?=$|[\\/:\s"'`;|&])/i;
+
 export const PUBLISH_PLAN_TOOL = "publish_plan";
 export const PLAN_REQUEST_TOOL = "plan_request";
 export const PLAN_ARTIFACT_ENTRY = "neura-plan-artifact";
