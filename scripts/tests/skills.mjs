@@ -4,11 +4,12 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isolate } from './isolation.mjs';
 const scratch = isolate();
-const { inspectSkills, skillValidationLabel } = await import('../../agent/neura/skills-registry.mjs');
+process.env.PI_OFFLINE = '1';
+const { inspectSkills, inspectSkillDiscovery, skillValidationLabel } = await import('../../agent/neura/skills-registry.mjs');
 const { skillsHealth } = await import('../../agent/extensions/harness-health.ts');
 const { default: registerSkills } = await import('../../agent/extensions/skill-doctor.ts');
 const { getMode, setMode } = await import('../../agent/neura/mode-state.ts');
-const { loadSkills, formatSkillsForPrompt, VERSION } = await import('@earendil-works/pi-coding-agent');
+const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, loadSkills, formatSkillsForPrompt, VERSION } = await import('@earendil-works/pi-coding-agent');
 const source = path.resolve(import.meta.dirname, '../../agent/neura');
 const root = path.join(scratch, 'registry');
 const selectionFile = path.join(scratch, '.pi/neura-skills.json');
@@ -37,7 +38,13 @@ assert.equal(check({ piVersion: '1.0.5' }).valid, false, 'do not claim unchecked
 fs.writeFileSync(selectionFile, JSON.stringify({ schemaVersion: 1, enabled: ['neura-verification'] }));
 const supported = check();
 assert.deepEqual(supported.enabled, ['neura-verification']);
-assert.equal(skillsHealth(root).state, 'ready');
+assert.equal(skillsHealth(root).state, 'unhealthy', 'selection alone cannot attest runtime readiness');
+const supportedCommands = [{ name: 'skill:neura-verification', source: 'skill', sourceInfo: { path: supported.skillPaths[0] } }];
+assert.equal(skillsHealth(root, ['read'], supportedCommands).state, 'ready');
+assert.equal(inspectSkillDiscovery(supported, []).valid, false);
+assert.equal(inspectSkillDiscovery(supported, [], { allowMissing: true }).valid, true);
+assert.equal(inspectSkillDiscovery(supported, [...supportedCommands, ...supportedCommands]).valid, false);
+assert.equal(inspectSkillDiscovery(supported, [{ name: 'skill:neura-verification', source: 'skill' }]).valid, false);
 const loaded = loadSkills({ cwd: scratch, agentDir: process.env.PI_CODING_AGENT_DIR, skillPaths: supported.skillPaths, includeDefaults: false });
 assert.deepEqual(loaded.diagnostics, [], 'real Pi loader must accept the supported package');
 assert.equal(loaded.skills.length, 1);
@@ -106,7 +113,7 @@ fs.rmSync(selectionFile);
 
 // Real registration/discovery path and read-only command: no personal scanning or reports.
 let discovery, command;
-const pi = { on(name, handler) { assert.equal(name, 'resources_discover'); discovery = handler; }, registerCommand(name, options) { assert.equal(name, 'skill-doctor'); command = options.handler; }, getAllTools() { return [{ name: 'read' }]; } };
+const pi = { on(name, handler) { assert.equal(name, 'resources_discover'); discovery = handler; }, registerCommand(name, options) { assert.equal(name, 'skill-doctor'); command = options.handler; }, getAllTools() { return [{ name: 'read' }]; }, getCommands() { return this.commands || []; } };
 delete process.env.NEURA;
 registerSkills(pi);
 assert.equal(discovery, undefined, 'plain Pi stays stock');
@@ -120,6 +127,7 @@ const discovered = discovery({ reason: 'reload' }, ctx);
 const smoke = loadSkills({ cwd: scratch, agentDir: process.env.PI_CODING_AGENT_DIR, skillPaths: discovered.skillPaths, includeDefaults: false });
 assert.equal(smoke.skills.length, 1);
 assert.deepEqual(smoke.diagnostics, []);
+pi.commands = smoke.skills.map(skill => ({ name: `skill:${skill.name}`, source: 'skill', sourceInfo: { path: skill.filePath } }));
 for (const mode of ['work', 'plan', 'yolo']) {
   setMode(mode);
   await command('', ctx); // no host diagnostics, file writes, or mode escalation
@@ -135,4 +143,71 @@ assert.match(skillValidationLabel(supported), new RegExp(`sha256:${supported.man
 const healthText = fs.readFileSync(path.join(source, '../extensions/harness-health.ts'), 'utf8');
 const doctorText = fs.readFileSync(path.join(source, '../extensions/skill-doctor.ts'), 'utf8');
 assert.doesNotMatch(healthText + doctorText, /\.claude/);
-console.log('PASS skills: exact catalog, opt-in Pi smoke, read-only doctor, health identity, metadata/tools/content/state/junction denials');
+// Reproduce the review through default Pi discovery and a real bound session,
+// not includeDefaults:false. No credentials, provider calls, or personal scans.
+const cwd = path.join(scratch, 'workspace');
+const agentDir = process.env.PI_CODING_AGENT_DIR;
+fs.mkdirSync(cwd);
+const modelRuntime = await ModelRuntime.create({ authPath: path.join(agentDir, 'synthetic-auth.json'), modelsPath: null, refreshOnCreate: false });
+const externalFile = path.join(agentDir, 'skills/external/SKILL.md');
+const unrelatedFile = path.join(cwd, '.pi/skills/unrelated/SKILL.md');
+fs.mkdirSync(path.dirname(unrelatedFile), { recursive: true });
+fs.writeFileSync(unrelatedFile, '---\nname: unrelated-stock\ndescription: Synthetic unrelated external guidance\n---\nUse the bash tool.\n');
+fs.mkdirSync(path.dirname(externalFile), { recursive: true });
+const externalText = '---\nname: neura-verification\ndescription: Synthetic external winner\n---\nExternal guidance.\n';
+async function realSession({ collision = false, enabled = true, neura = true } = {}) {
+  if (neura) process.env.NEURA = '1'; else delete process.env.NEURA;
+  if (collision) fs.writeFileSync(externalFile, externalText); else fs.rmSync(externalFile, { force: true });
+  fs.writeFileSync(selectionFile, JSON.stringify({ schemaVersion: 1, enabled: enabled ? ['neura-verification'] : [] }));
+  let publicPi;
+  const notices = [], errors = [];
+  const settingsManager = SettingsManager.inMemory({ packages: [] }, { projectTrusted: true });
+  const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager,
+    noContextFiles: true, noPromptTemplates: true, noThemes: true, disabledBuiltinExtensions: ['mcp'],
+    extensionFactories: [registerSkills, api => { publicPi = api; }],
+  });
+  await loader.reload();
+  const { session } = await createAgentSession({ cwd, agentDir, settingsManager, modelRuntime,
+    resourceLoader: loader, sessionManager: SessionManager.inMemory(cwd), model: modelRuntime.getModels()[0] });
+  await session.bindExtensions({ mode: 'print', uiContext: { notify: (...args) => notices.push(args) }, onError: error => errors.push(error) });
+  return { session, loader, notices, errors, commands: () => publicPi.getCommands() };
+}
+const sessions = [];
+try {
+  const clean = await realSession(); sessions.push(clean.session);
+  assert.deepEqual(clean.errors, []);
+  assert.equal(clean.loader.getSkills().skills.find(skill => skill.name === 'neura-verification').filePath, path.join(source, skillPath));
+  assert.equal(skillsHealth(source, ['read'], clean.commands()).state, 'ready');
+  assert.equal(clean.loader.getSkills().skills.some(skill => skill.name === 'unrelated-stock'), true, 'unrelated stock skills remain untouched, not catalog-validated');
+  await clean.session.prompt('/skill-doctor');
+  assert.match(clean.notices.at(-1)[0], /validation PASS.*neura-verification/);
+
+  const collision = await realSession({ collision: true }); sessions.push(collision.session);
+  assert.deepEqual(collision.errors, []);
+  assert.equal(inspectSkills().valid, true, 'registry itself remains valid in the reproduced collision');
+  assert.equal(collision.loader.getSkills().skills.find(skill => skill.name === 'neura-verification').filePath, externalFile, 'stock Pi still owns external loading; no public removal API');
+  assert.equal(skillsHealth(source, ['read'], collision.commands()).state, 'unhealthy', 'never attest the external winner');
+  assert.match(collision.notices[0][0], /validation FAIL.*supported skills disabled.*reserved name collision/);
+  await collision.session.prompt('/skill-doctor');
+  assert.match(collision.notices.at(-1)[0], /validation FAIL.*reserved name collision/);
+  assert.doesNotMatch(JSON.stringify(collision.notices), /Synthetic external winner|External guidance/);
+
+  // Reload both directions: identity is read from current resources, never cached.
+  fs.rmSync(externalFile);
+  await collision.session.reload();
+  assert.equal(skillsHealth(source, ['read'], collision.commands()).state, 'ready');
+  fs.writeFileSync(externalFile, externalText);
+  await clean.session.reload();
+  assert.equal(skillsHealth(source, ['read'], clean.commands()).state, 'unhealthy');
+
+  const disabled = await realSession({ collision: true, enabled: false }); sessions.push(disabled.session);
+  assert.equal(skillsHealth(source, ['read'], disabled.commands()).state, 'unhealthy', 'disabled catalog names cannot be impersonated');
+  const stock = await realSession({ collision: true, neura: false }); sessions.push(stock.session);
+  assert.equal(stock.loader.getSkills().skills.find(skill => skill.name === 'neura-verification').filePath, externalFile);
+  assert.deepEqual(stock.notices, [], 'plain Pi remains stock');
+  assert.equal(stock.commands().some(command => command.name === 'skill-doctor'), false);
+} finally {
+  for (const session of sessions) session.dispose();
+  process.env.NEURA = '1';
+}
+console.log('PASS skills: exact catalog, default-Pi reserved-name collision/reload identity, read-only doctor, health, metadata/tools/content/state/junction denials');

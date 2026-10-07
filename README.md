@@ -278,7 +278,7 @@ maintainers must inspect and approve any draft manually. See
 | `/preset gpt|opus|qwen` | Switch model preset |
 | `/remember <fact>` | Save one local memory fact in YOLO |
 | `/memory` | Show local memory in YOLO |
-| `/skill-doctor` | Find skills using unsupported tools in YOLO |
+| `/skill-doctor` | Read-only supported skill registry and runtime identity validation in Work/Plan/YOLO |
 | `/dash` | Toggle Neura wordmark |
 | `/notices` | Show persistent degraded-state notices |
 

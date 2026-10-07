@@ -40,9 +40,17 @@ unchanged by the Neura extension.
 ## Validation and health
 
 `/skill-doctor` is now read-only and available without switching to YOLO. It
-validates the supported registry only, not personal Claude/Pi directories, and
-writes no report. `/health` retains its existing YOLO diagnostic requirement but
-reports optional skill state, exact catalog SHA-256, and validation PASS/FAIL.
+validates the supported registry and the current Pi command registry's reserved
+skill identities, without scanning personal directories or validating unrelated
+stock skills, and writes no report. `/health` retains its existing YOLO diagnostic
+requirement but reports optional skill state, exact catalog SHA-256, and validation
+PASS/FAIL. Selection alone cannot establish runtime readiness: enabled skills must
+be discovered at the exact selected package path with matching content. A default
+Pi skill winning a reserved name makes the supported capability unhealthy and
+prevents Neura from appending supported paths. Remove the collision and reload.
+Pi's public extension API does not remove an already loaded external winner; that
+external remains stock Pi guidance, never an attested Neura capability. Missing
+runtime identity also fails closed.
 Missing/invalid catalogs report unhealthy rather than a misleading directory
 count. A valid disabled catalog reports disabled, not missing or production-ready.
 

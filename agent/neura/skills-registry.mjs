@@ -100,6 +100,32 @@ export function inspectSkills({ root = skillRoot, selectionFile = selectionPath(
   }
 }
 
+// Pi's public command registry exposes the actual discovered winner, not our
+// requested paths. Inspect only reserved catalog names; unrelated skills stay stock.
+export function inspectSkillDiscovery(report, commands, { allowMissing = false } = {}) {
+  if (!report.valid) return report;
+  const errors = [];
+  if (!Array.isArray(commands)) {
+    if (report.enabled.length) errors.push('skill validation: runtime discovery identity unavailable');
+  } else {
+    for (const skill of report.packages) {
+      const discovered = commands.filter(command => command.source === 'skill' && command.name === `skill:${skill.name}`);
+      const enabled = report.enabled.includes(skill.name);
+      if (!discovered.length && (!enabled || allowMissing)) continue;
+      try {
+        if (!enabled || discovered.length !== 1 || typeof discovered[0].sourceInfo?.path !== 'string') fail('reserved name collision or missing runtime skill');
+        const file = discovered[0].sourceInfo.path;
+        unlinked(file);
+        if (path.resolve(file) !== path.resolve(skill.path) || fs.realpathSync(file) !== fs.realpathSync(skill.path) || sha256(fs.readFileSync(file)) !== skill.sha256) fail('reserved name discovery identity mismatch');
+      } catch {
+        // Do not expose external paths, metadata, or contents in diagnostics.
+        errors.push(`skill validation: ${skill.name} runtime identity unavailable or reserved name collision`);
+      }
+    }
+  }
+  return errors.length ? { ...report, valid: false, enabled: [], skillPaths: [], errors } : report;
+}
+
 export function skillValidationLabel(report) {
   return `manifest sha256:${report.manifestHash} · validation ${report.valid ? 'PASS' : 'FAIL'} · ${report.enabled.length} enabled`;
 }
