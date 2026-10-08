@@ -1,6 +1,6 @@
 # Shared capability and process contracts
 
-These source contracts support the first #25 extraction milestone. They are not
+These source contracts support #25's scoped extraction and consumption milestones. They are not
 an autonomous task authority engine (#92), durable recovery state (#28), a new
 approval ledger, or a claim that all of #25's original runtime overview is done.
 
@@ -21,12 +21,28 @@ action describes an exception boundary; that description cannot lift its route.
 Action inspection adds this description to `InspectedAction` in
 `action-contracts.ts`. Existing imports from `action-policy.ts` remain supported.
 Fingerprints and version-2 approval bindings are unchanged and do not derive
-authority from metadata. Gmail uses the same exact known-read classification;
-unknown Gmail operations still require confirmation outside YOLO. MCP shares the
-name classifier and retains its YOLO-only lease. Mode tool selection shares read
-and sandbox names, but its exact allowlists and provider filtering remain in
-`mode-tools.ts`. Work/Human Away tool schemas and execution share declared sandbox
-timeout bounds. Plain Pi's `NEURA` gate is unchanged. Learn lesson creation,
+authority from metadata. The actual consumers are:
+
+| Boundary | Descriptive value consumed | Existing authority retained |
+| --- | --- | --- |
+| Restricted mode selection | `restrictCapabilityToolNames` removes names whose descriptions meet `hasRemoteCapabilityBoundary`, after exact Plan/Learn/Work/Human Away selection. | Exact allowlists, available/user-selected tools, order and YOLO restoration. |
+| Restricted provider schemas | The same remote ceiling follows canonical aliases and exact selected-name membership in top-level `tools`, `config.tools`, `toolConfig.tools` and nested `functionDeclarations`. | Metadata cannot expose an unselected tool; arguments still face deterministic policy. |
+| Gmail guardrail | Exactly known read-only `effects` exempt confirmation in Work/Human Away; unknown apparent reads and mutations still confirm or block headless. | This exemption does not expose Gmail in restricted mode/provider selections; Plan/Learn deny it and YOLO bypasses application mediation. |
+| MCP automatic initialization | Exact `mcp__` prefix plus the same remote-boundary description are prerequisites. | Ready YOLO lease, no eager connection or pending-restoration fallback; `/mcp` discovery requires the lease, not a pre-discovery descriptor. |
+| Human Away reviewer clamp | `exception-boundary` approval class is additionally required for automatic bounded-delete approval. | Review route and every generated/untracked/file/workspace fact remain mandatory; human/deny routes and exact retries are unchanged. |
+
+The remote projection recognizes remote-mutation effects, mailbox scope, and
+external scope without task-scoped approval class. Task-scoped `web_search` is
+exempt from this particular ceiling, not from its own argument policy. Unknown
+metadata is not a blanket denial: Bash and Learn retain their exact selections.
+False means only “this projection found no remote boundary,” never “safe” or
+“allowed.” Explicit arbitrary supplied names are still subject to exact caller
+selection. A descriptor mismatch narrowly fails closed: inconsistent MCP
+metadata suppresses automatic initialization; an inconsistent inspected approval
+class defers automatic reviewer approval. No new approval authority is granted.
+
+Work/Human Away tool schemas and execution share declared sandbox timeout bounds.
+Plain Pi's `NEURA` gate is unchanged. Learn lesson creation,
 material import and exercise evaluation declare `execute` for their SQL/parser
 workers; progress remains read/write. This description does not change permission.
 
@@ -48,9 +64,15 @@ completed execution. Zero timeout disables the deadline, as in Node's `execFile`
 Deadline initiation is recorded independently of the final callback error/signal.
 A cooperative POSIX SIGTERM handler may exit 0 or nonzero with no final signal;
 after deadline expiry it still yields `timedOut: true`, `ok: false` and
-`completed: false`. Both adapters intentionally inherit this narrow correction
-of the former success/completed misclassification; their shapes, stream handling,
-defaults and ordinary nonzero-completed semantics remain unchanged.
+`completed: false`. `timedOut` records actual deadline initiation, while
+`cancelled` records Node's native `ABORT_ERR` callback classification. A later
+abort cannot erase the deadline fact: both flags can be true and primary
+`termination` remains `cancelled`. An abort/buffer failure that already initiated
+termination before the deadline does not invent expiry. These facts do not
+attest physical child exit. Both adapters intentionally inherit the narrow
+deadline-failure correction of the former success/completed misclassification;
+their shapes, stream handling, defaults and ordinary nonzero-completed semantics
+remain unchanged.
 
 Compatibility adapters intentionally differ:
 

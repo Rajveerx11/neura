@@ -132,7 +132,37 @@ try {
       assert.deepEqual(await cooperative(script => runProcess(process.execPath, ['-e', script], { ...options, timeoutMs: 1500 }), exitCode), { ok: false, stdout: 'ready', stderr: '' });
       assert.deepEqual(await cooperative(script => execute(process.execPath, ['-e', script], { ...options, timeoutMs: 1500 }), exitCode), { ok: false, completed: false, stdout: '  ready\n' });
     }
-    console.log('Process contract: POSIX ready-confirmed cooperative exit 0/7 and both adapters passed.');
+    // The deadline and native abort are independent facts. Observe a real
+    // SIGTERM handler before aborting, rather than guessing from elapsed time.
+    for (const deadlineFirst of [true, false]) {
+      const ready = path.join(cwd, `race-ready-${serial++}`);
+      const terminated = `${ready}-terminated`;
+      const controller = new AbortController();
+      const script = `let stopping = false; process.on("SIGTERM", () => { if (stopping) return; stopping = true; require("node:fs").writeFileSync(${JSON.stringify(terminated)}, "ready"); setTimeout(() => process.exit(0), 1000); }); require("node:fs").writeFileSync(${JSON.stringify(ready)}, "ready"); setTimeout(() => process.exit(0), 5000)`;
+      const pending = run(script, { timeoutMs: 1500, signal: controller.signal });
+      let finished = false;
+      pending.finally(() => { finished = true; });
+      try {
+        for (const marker of deadlineFirst ? [ready, terminated] : [ready]) {
+          let observed = false;
+          while (!finished) {
+            try { observed = await fs.readFile(marker, 'utf8') === 'ready'; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+            if (observed) break;
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+          assert.equal(observed, true, `race marker not observed before callback: ${marker}`);
+        }
+        controller.abort();
+        const result = await pending;
+        assert.equal(result.ok, false);
+        assert.equal(result.completed, false);
+        assert.equal(result.termination, 'cancelled');
+        assert.equal(result.cancelled, true);
+        assert.equal(result.errorCode, 'ABORT_ERR');
+        assert.equal(result.timedOut, deadlineFirst, 'abort erased a deadline fact or invented expiry');
+      } finally { controller.abort(); await pending; }
+    }
+    console.log('Process contract: POSIX ready-confirmed cooperative exit 0/7, both adapters and deadline/abort fact ordering passed.');
   } else console.log('Process contract: POSIX cooperative probes skipped on Windows.');
   console.log('Process contract: success/nonzero, validation, zero timeout, expiry, cancellation, output limits and duration passed.');
 } finally { await fs.rm(cwd, { recursive: true, force: true }); }

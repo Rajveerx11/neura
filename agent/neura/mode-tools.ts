@@ -1,5 +1,5 @@
 // Exact mode tool selection remains policy, not an authority inferred from metadata.
-import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, WORKSPACE_READ_TOOL_NAMES } from "./capabilities.ts";
+import { describeCapability, hasRemoteCapabilityBoundary, HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, WORKSPACE_READ_TOOL_NAMES } from "./capabilities.ts";
 import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "./plan-policy.ts";
 import { LEARN_MODE_TOOL_NAMES, LEARN_ONLY_TOOL_NAMES } from "./learn-policy.ts";
 
@@ -19,6 +19,10 @@ export const PROVIDER_TOOL_ALIASES = new Map([
   ["Ls", "ls"],
 ]);
 
+export function restrictCapabilityToolNames(names: readonly string[]): string[] {
+  return names.filter((name) => !hasRemoteCapabilityBoundary(describeCapability(name)));
+}
+
 function providerToolName(value: unknown): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const tool = value as { name?: unknown; function?: { name?: unknown }; toolSpec?: { name?: unknown } };
@@ -29,7 +33,9 @@ function providerToolName(value: unknown): string | undefined {
 
 function providerToolAllowed(value: unknown, enforcedRestrictedTools: readonly string[]): boolean {
   const name = providerToolName(value);
-  return name !== undefined && enforcedRestrictedTools.includes(PROVIDER_TOOL_ALIASES.get(name) ?? name);
+  if (name === undefined) return false;
+  const canonicalName = PROVIDER_TOOL_ALIASES.get(name) ?? name;
+  return enforcedRestrictedTools.includes(canonicalName) && !hasRemoteCapabilityBoundary(describeCapability(canonicalName));
 }
 
 function filterProviderTools(value: unknown, enforcedRestrictedTools: readonly string[]): unknown[] {

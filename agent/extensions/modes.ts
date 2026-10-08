@@ -2,7 +2,7 @@
 // Motion visualizes enforced capability changes; deterministic policy remains authoritative.
 
 import { LEARN_ONLY_TOOL_NAMES } from "../neura/learn-policy.ts";
-import { PLAN_TOOLS, PLAN_ONLY_TOOLS, WORK_TOOLS, LEARN_TOOLS, MODE_ONLY_TOOLS, filterRestrictedProviderPayload } from "../neura/mode-tools.ts";
+import { PLAN_TOOLS, PLAN_ONLY_TOOLS, WORK_TOOLS, LEARN_TOOLS, MODE_ONLY_TOOLS, filterRestrictedProviderPayload, restrictCapabilityToolNames } from "../neura/mode-tools.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -321,7 +321,7 @@ export default function (pi) {
     if (mode === "plan" || mode === "learn") {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else if (restrictedMode === null) rememberNonPlanSelection();
-      enforcedRestrictedTools = researchToolNames(mode);
+      enforcedRestrictedTools = restrictCapabilityToolNames(researchToolNames(mode));
       restrictedMode = mode;
       setActiveTools(enforcedRestrictedTools);
       return;
@@ -330,7 +330,7 @@ export default function (pi) {
     if (mode === "work") {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else rememberNonPlanSelection();
-      enforcedRestrictedTools = workToolNames();
+      enforcedRestrictedTools = restrictCapabilityToolNames(workToolNames());
       restrictedMode = "work";
       setActiveTools(enforcedRestrictedTools);
       return;
@@ -340,7 +340,7 @@ export default function (pi) {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else if (restrictedMode === null) rememberNonPlanSelection();
       const available = availableToolNames();
-      enforcedRestrictedTools = available.has(HUMAN_AWAY_SANDBOX_TOOL) ? [HUMAN_AWAY_SANDBOX_TOOL] : [];
+      enforcedRestrictedTools = restrictCapabilityToolNames(available.has(HUMAN_AWAY_SANDBOX_TOOL) ? [HUMAN_AWAY_SANDBOX_TOOL] : []);
       restrictedMode = "human-away";
       setActiveTools(enforcedRestrictedTools);
       return;

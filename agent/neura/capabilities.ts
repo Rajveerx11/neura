@@ -12,6 +12,12 @@ export type CapabilityMetadata = Readonly<{
   approvalClass: "task-scoped" | "exception-boundary" | "unclassified";
 }>;
 
+// A restrictive remote-integration ceiling, not a general safety/permission predicate.
+export function hasRemoteCapabilityBoundary(capability: CapabilityMetadata): boolean {
+  return capability.effects.includes("remote-mutation") || capability.scope === "mailbox" ||
+    (capability.scope === "external" && capability.approvalClass !== "task-scoped");
+}
+
 export const HUMAN_AWAY_SANDBOX_TOOL = "human_away_exec";
 export const WORK_SANDBOX_TOOL = "work_exec";
 export const SANDBOX_TIMEOUT = Object.freeze({ defaultMs: 120_000, maxMs: 600_000 });

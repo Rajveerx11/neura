@@ -42,7 +42,7 @@ export function executeProcess(file: string, args: string[], options: ProcessOpt
       settled = true;
       clearTimeout(deadline);
       const cancelled = error?.code === "ABORT_ERR";
-      const timedOut = expired && !cancelled;
+      const timedOut = expired;
       const errorCode = typeof error?.code === "string" ? error.code : null;
       resolve({
         ok: !error && !timedOut,

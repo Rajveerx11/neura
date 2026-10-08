@@ -1,4 +1,4 @@
-import { isMcpToolName } from "../neura/capabilities.ts";
+import { describeCapability, hasRemoteCapabilityBoundary, isMcpToolName } from "../neura/capabilities.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -6,7 +6,8 @@ import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { acquireHostOperation } from "../neura/mode-state.ts";
 
 function hasSelectedMcpTool(event: { systemPromptOptions?: { selectedTools?: string[] } }): boolean {
-  return event.systemPromptOptions?.selectedTools?.some(isMcpToolName) ?? false;
+  return event.systemPromptOptions?.selectedTools?.some((name) =>
+    isMcpToolName(name) && hasRemoteCapabilityBoundary(describeCapability(name))) ?? false;
 }
 
 export function mcpModuleSpecifier(agentDir: string, exists = fs.existsSync): string {

@@ -85,7 +85,7 @@ assert.equal(outputOutcome.termination, 'output-limit');
 assert.equal(outputOutcome.completed, false);
 assert.equal(outputOutcome.stdout.length, 32);
 assert.equal(await runProcess(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { signal: AbortSignal.abort() }).then(result => result.ok), false);
-const { describeCapability, SANDBOX_TIMEOUT, WORKSPACE_READ_TOOL_NAMES } = await import('../../agent/neura/capabilities.ts');
+const { describeCapability, hasRemoteCapabilityBoundary, SANDBOX_TIMEOUT, WORKSPACE_READ_TOOL_NAMES } = await import('../../agent/neura/capabilities.ts');
 for (const toolName of [...WORKSPACE_READ_TOOL_NAMES, 'edit', 'write', 'bash', 'work_exec', 'human_away_exec', 'publish_plan', 'plan_request', 'web_search', 'mcp__fixture__unknown', 'unknown']) {
   const capability = describeCapability(toolName);
   assert.deepEqual(Object.keys(capability).sort(), ['approvalClass', 'effects', 'network', 'reversibility', 'scope', 'secrets', 'timeout'].sort());
@@ -105,7 +105,39 @@ for (const toolName of ['learn_lesson', 'learn_material', 'learn_exercise']) {
 }
 assert.deepEqual(describeCapability('learn_progress').effects, ['read', 'write']);
 assert.deepEqual(describeCapability('unknown').effects, ['unknown']);
-const { filterRestrictedProviderPayload } = await import('../../agent/neura/mode-tools.ts');
+for (const name of ['mcp__gmail__GMAIL_GET_PROFILE', 'mcp__gmail__GMAIL_SEND_EMAIL', 'mcp__fixture__unknown']) {
+  assert.equal(hasRemoteCapabilityBoundary(describeCapability(name)), true);
+}
+for (const name of ['read', 'write', 'bash', 'learn_lesson', 'learn_progress', 'publish_plan', 'questionnaire', 'web_search', 'unknown']) {
+  assert.equal(hasRemoteCapabilityBoundary(describeCapability(name)), false, `${name} hit an unrelated remote ceiling`);
+}
+const workspaceCapability = describeCapability('read');
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, effects: ['remote-mutation'] }), true);
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, scope: 'mailbox' }), true);
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, scope: 'external', approvalClass: 'unclassified' }), true);
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, scope: 'external' }), false);
+const { filterRestrictedProviderPayload, restrictCapabilityToolNames, PROVIDER_TOOL_ALIASES } = await import('../../agent/neura/mode-tools.ts');
+const selectedNames = ['unknown', 'read', 'mcp__gmail__GMAIL_GET_PROFILE', 'bash', 'web_search', 'mcp__fixture__unknown', 'learn_progress', 'read'];
+assert.deepEqual(restrictCapabilityToolNames(selectedNames), ['unknown', 'read', 'bash', 'web_search', 'learn_progress', 'read']);
+assert.equal(selectedNames.length, 8, 'selection ceiling mutated input');
+// An explicitly supplied unknown name passes this particular ceiling, not exact mode policy.
+assert.deepEqual(filterRestrictedProviderPayload({ tools: [{ name: 'unknown' }] }, ['unknown']), { tools: [{ name: 'unknown' }] });
+assert.deepEqual(filterRestrictedProviderPayload({ tools: [{ name: 'unknown' }, { name: 'web_search' }] }, ['read']), { tools: [] });
+for (const [alias, canonicalName] of PROVIDER_TOOL_ALIASES) {
+  assert.deepEqual(filterRestrictedProviderPayload({ tools: [{ name: alias }] }, [canonicalName]), { tools: [{ name: alias }] });
+}
+const remoteNames = ['mcp__gmail__GMAIL_GET_PROFILE', 'mcp__gmail__GMAIL_SEND_EMAIL', 'mcp__fixture__unknown'];
+const remoteSnapshot = {
+  tools: [{ name: 'Read' }, ...remoteNames.map(name => ({ function: { name } }))],
+  config: { tools: [{ functionDeclarations: [{ name: 'web_search' }, ...remoteNames.map(name => ({ name }))] }] },
+  toolConfig: { tools: [{ toolSpec: { name: 'bash' } }, ...remoteNames.map(name => ({ toolSpec: { name } }))] },
+};
+const snapshotBefore = structuredClone(remoteSnapshot);
+assert.deepEqual(filterRestrictedProviderPayload(remoteSnapshot, ['read', 'web_search', 'bash', ...remoteNames]), {
+  tools: [{ name: 'Read' }], config: { tools: [{ functionDeclarations: [{ name: 'web_search' }] }] },
+  toolConfig: { tools: [{ toolSpec: { name: 'bash' } }] },
+});
+assert.deepEqual(remoteSnapshot, snapshotBefore, 'remote ceiling mutated provider input');
 const mixedProviderPayload = {
   tools: [{ name: 'Read' }, { function: { name: 'Bash' } }, { toolSpec: { name: 'mcp__fixture__unknown' } }],
   config: { tools: [{ functionDeclarations: [{ name: 'write' }, { name: 'read' }] }] },

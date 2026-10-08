@@ -66,8 +66,8 @@
     "agent/extensions/herdr-usage-provider.ts": "a34fc970682b977ef1767d834e61a54dcc4a260d1848fdd68253e2f8b539818a",
     "agent/extensions/human-away-sandbox.ts": "b0cda769e38fc2b1329ae7d2471e3fa22d0df287b4d61c7c370b5a7c2cc52fd6",
     "agent/extensions/learn.ts": "be459c4d709c87e219eef93965dad208f091de9f181dd0814e32ccd21c08f590",
-    "agent/extensions/mcp.ts": "a4d8bb2186a0f293c6c603faecba7502718f9e4b820076b8f2b5d5d6f838a811",
-    "agent/extensions/modes.ts": "339282f8ae7cfbc514a2d001db84429437d2ac517d9b5d9c7f1a94eefa89b04c",
+    "agent/extensions/mcp.ts": "74b06da5ae9422f0864e779bd7408a9e9f54abfbbbc7c86474687a1f097a2ffb",
+    "agent/extensions/modes.ts": "659c63555427d90ff7265ad26b19f5156203d64ca79a30e45313e2d5b6e99887",
     "agent/extensions/neura-memory.ts": "896b30dbe39c4b190993afd8b2405d4af255076676b342a073342155dbde1160",
     "agent/extensions/neura.ts": "1da15609a8410a12a957cd18fa2c499548b28ede142da648b1c159307014bdf0",
     "agent/extensions/october-bus.ts": "702da7afaeefc5670fd265a97c5893d8d7df581869a5d27b67e0efcf43c98866",
@@ -83,7 +83,7 @@
     "agent/neura/command-launcher.ts": "3707c93364b0f981b0dbefecb0775c739a194f31aaaddb20598dac8a1787e860",
     "agent/neura/core.ts": "d5f999bbd3ff63986fc9de550712d434732b596da7c1db9b45268ec2241e0e90",
     "agent/neura/headmaster-policy.md": "388fef2f4a2d13fb2b9edd2b0f105a403444942a8c2ca9979a8e76731815fe69",
-    "agent/neura/headmaster.ts": "b29510da48baa5e0857006f110e0cd2be496d9342271d58a0c652d906b4fc34e",
+    "agent/neura/headmaster.ts": "bda9bd9db67394f7875f659c8c7a4aad3b6cfbaa329a80e02a671d942811d3a0",
     "agent/neura/human-away-sandbox.ts": "5b83eaf8e46b8a967bf470dd9dae67259529ed442084f003c41c20db4af41a5a",
     "agent/neura/launch-artwork.md": "540d304cc1193e7c7745c927503c39884863a104d0c08b92e253d1554d0824b5",
     "agent/neura/launch-artwork.png": "5389d9f43e09d27d714d4ecfb2e9d638fa24c271384b388780ab3f5075589d76",
@@ -112,9 +112,9 @@
     "launcher/neura.cmd": "51081b5694f6bf0a98269477c32420c553def9c0d4cba82400886d9ccb6f189a",
     "agent/neura/action-contracts.ts": "fbfbf5facdb858673d1893ca90cfcb03c55650ece611f3a7c5da0069fcc6a12a",
     "agent/neura/action-paths.ts": "597d49b7a329f93bc2df7bff24c5f531f8bbfb57fe10279f258f87445db350f7",
-    "agent/neura/capabilities.ts": "3db88bfdc5e045f09eaf1a4cbf671ce394d71eeb23554b80bc2e76c8ed32d56a",
-    "agent/neura/mode-tools.ts": "9140325e4fb91d0733a34f328852f3eec37ad4fc029b7b2887b374ea75f3d0c7",
+    "agent/neura/capabilities.ts": "1f10deb296c32836a10d89b01b2b46b1c9425a779387ebaf2f8ded3d106b9727",
+    "agent/neura/mode-tools.ts": "e2f04b8cbdf8807b09a8d4bcd44d0229193d54fff610e5f93172a99f4597dab8",
     "agent/neura/plan-shell-parser.ts": "e4e8b9d209d15ccd246968149c552196524ad39f6cd3ca6b57a0153d0c1c9a45",
-    "agent/neura/process.ts": "2864bc4ad50a7c30081c516eb5b504a150b48ca449e3258e1def33671b58301d"
+    "agent/neura/process.ts": "b363b6b54d15c0df1699d669d7bd44b62bbeb0f227fdf78e6a76465d27a04aba"
   }
 }
