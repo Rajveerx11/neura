@@ -8,6 +8,7 @@ import { runProcess } from '../../agent/neura/core.ts';
 import { execute } from '../../agent/neura/verification.ts';
 
 const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-process-contract-'));
+let fixtureWritesFenced = true;
 const options = { cwd, timeoutMs: 5000, maxBuffer: 1024 };
 const run = (script, overrides = {}) => executeProcess(process.execPath, ['-e', script], { ...options, ...overrides });
 try {
@@ -137,8 +138,11 @@ try {
     for (const deadlineFirst of [true, false]) {
       const ready = path.join(cwd, `race-ready-${serial++}`);
       const terminated = `${ready}-terminated`;
+      const writesDone = `${ready}-writes-done`;
       const controller = new AbortController();
-      const script = `let stopping = false; process.on("SIGTERM", () => { if (stopping) return; stopping = true; require("node:fs").writeFileSync(${JSON.stringify(terminated)}, "ready"); setTimeout(() => process.exit(0), 1000); }); require("node:fs").writeFileSync(${JSON.stringify(ready)}, "ready"); setTimeout(() => process.exit(0), 5000)`;
+      // finish publishes the last fixture write, not proof of physical exit.
+      const script = `const fs = require("node:fs"); const finish = () => { fs.writeFileSync(${JSON.stringify(writesDone)}, "done"); process.exit(0); }; let stopping = false; process.on("SIGTERM", () => { if (stopping) return; stopping = true; fs.writeFileSync(${JSON.stringify(terminated)}, "ready"); setTimeout(finish, 1000); }); fs.writeFileSync(${JSON.stringify(ready)}, "ready"); setTimeout(finish, 5000)`;
+      fixtureWritesFenced = false;
       const pending = run(script, { timeoutMs: 1500, signal: controller.signal });
       let finished = false;
       pending.finally(() => { finished = true; });
@@ -160,9 +164,28 @@ try {
         assert.equal(result.cancelled, true);
         assert.equal(result.errorCode, 'ABORT_ERR');
         assert.equal(result.timedOut, deadlineFirst, 'abort erased a deadline fact or invented expiry');
-      } finally { controller.abort(); await pending; }
+      } finally {
+        controller.abort();
+        await pending;
+        // Abort callback can precede the signal handler's fixture writes. Keep
+        // cwd until their final marker, bounded beyond the child's 5s fallback.
+        const fenceDeadline = performance.now() + 6500;
+        let observed = false;
+        while (performance.now() < fenceDeadline) {
+          try { observed = await fs.readFile(writesDone, 'utf8') === 'done'; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+          if (observed) break;
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        assert.equal(observed, true, 'race fixture writes did not finish before cleanup bound');
+        fixtureWritesFenced = true;
+        assert.equal(await fs.readFile(ready, 'utf8'), 'ready');
+        assert.equal(await fs.readFile(terminated, 'utf8'), 'ready', 'signal fixture must survive until all writes are fenced');
+      }
     }
-    console.log('Process contract: POSIX ready-confirmed cooperative exit 0/7, both adapters and deadline/abort fact ordering passed.');
+    console.log('Process contract: POSIX ready-confirmed cooperative exit 0/7, both adapters, deadline/abort fact ordering and fixture-write fences passed.');
   } else console.log('Process contract: POSIX cooperative probes skipped on Windows.');
   console.log('Process contract: success/nonzero, validation, zero timeout, expiry, cancellation, output limits and duration passed.');
-} finally { await fs.rm(cwd, { recursive: true, force: true }); }
+} finally {
+  assert.equal(fixtureWritesFenced, true, `unsafe fixture cleanup refused; retained ${cwd}`);
+  await fs.rm(cwd, { recursive: true, force: true });
+}
