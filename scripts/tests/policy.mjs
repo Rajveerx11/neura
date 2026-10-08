@@ -1,5 +1,20 @@
 import { repoRoot, scratchRoot, assert, execFileSync, spawnSync, fs, path, pathToFileURL, isSafeExternalUrl, isPlanToolInputAllowed, files, state, widgets, context, guard, modes } from './harness.mjs';
 await modes.commands.get("mode").handler("plan", context);
+const { inspectAction } = await import('../../agent/neura/action-policy.ts');
+for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-tools', 'plan-shell-parser', 'process']) {
+  const target = path.join(repoRoot, 'agent', 'neura', `${file}.ts`);
+  assert.equal(await guard({ toolName: 'read', input: { path: target } }, context), undefined, `Plan blocked read-only inspection of extracted ${file}`);
+  const edit = inspectAction({ toolName: 'edit', input: { path: target } }, repoRoot);
+  assert.equal(edit.route, 'human', `extraction removed protected-control boundary from ${file}`);
+  assert.equal(edit.category, 'protected-control');
+  assert.equal(edit.capability.approvalClass, 'exception-boundary');
+  assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
+  assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ agent/neura/${file}.ts` } }, repoRoot).route, 'human');
+}
+const ordinaryPatch = inspectAction({ toolName: 'write', input: { path: path.join(repoRoot, 'ordinary-task-file.txt'), content: 'task' } }, repoRoot);
+assert.equal(ordinaryPatch.route, 'allow', 'metadata mandated blanket approval for ordinary workspace effects');
+assert.equal(ordinaryPatch.capability.approvalClass, 'task-scoped');
+assert.equal(inspectAction({ toolName: 'bash', input: { command: 'rm -rf .' } }, repoRoot).route, 'deny', 'metadata relaxed deterministic denial');
 const workGit = "git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false -c log.mailmap=false -c format.pretty=medium";
 const planGit = workGit;
 const hookProbeRoot = path.join(scratchRoot, "git-hook-probe");

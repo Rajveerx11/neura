@@ -1,3 +1,4 @@
+import { SANDBOX_TIMEOUT } from "../neura/capabilities.ts";
 import { Type } from "typebox";
 import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, runInHumanAwaySandbox } from "../neura/human-away-sandbox.ts";
@@ -19,7 +20,7 @@ export default function (pi): void {
     ],
     parameters: Type.Object({
       command: Type.String({ minLength: 1, maxLength: 16_000, description: "shell command executed from /workspace" }),
-      timeoutSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 600 })),
+      timeoutSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: SANDBOX_TIMEOUT.maxMs / 1_000 })),
     }, { additionalProperties: false }),
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -27,7 +28,7 @@ export default function (pi): void {
       const result = await runInHumanAwaySandbox(
         ctx.cwd,
         params.command,
-        (params.timeoutSeconds ?? 120) * 1_000,
+        (params.timeoutSeconds ?? SANDBOX_TIMEOUT.defaultMs / 1_000) * 1_000,
         signal,
       );
       const output = [
@@ -53,7 +54,7 @@ export default function (pi): void {
     ],
     parameters: Type.Object({
       command: Type.String({ minLength: 1, maxLength: 16_000, description: "shell command executed from /workspace" }),
-      timeoutSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 600 })),
+      timeoutSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: SANDBOX_TIMEOUT.maxMs / 1_000 })),
     }, { additionalProperties: false }),
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -61,7 +62,7 @@ export default function (pi): void {
       const result = await runInHumanAwaySandbox(
         ctx.cwd,
         params.command,
-        (params.timeoutSeconds ?? 120) * 1_000,
+        (params.timeoutSeconds ?? SANDBOX_TIMEOUT.defaultMs / 1_000) * 1_000,
         signal,
       );
       const output = [

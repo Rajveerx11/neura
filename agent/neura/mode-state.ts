@@ -1,5 +1,8 @@
 export const MODES = ["plan", "work", "yolo", "human-away", "learn"] as const;
 
+// A lease is idempotently released; it is a lifecycle fence, never task authority.
+export type HostOperationLease = () => void;
+
 export type AgentMode = (typeof MODES)[number];
 export type ModeChangeSource = "restore" | "command" | "shortcut" | "internal";
 
@@ -73,7 +76,7 @@ export function isHostOperationActive(): boolean {
 
 // Prevent a background proof/checkpoint launched in YOLO from crossing into a
 // restricted mode after the foreground agent becomes idle.
-export function acquireHostOperation(allowed: readonly AgentMode[] = ["yolo"]): (() => void) | null {
+export function acquireHostOperation(allowed: readonly AgentMode[] = ["yolo"]): HostOperationLease | null {
   if (isModeRestorePending() || !allowed.includes(shared.current)) return null;
   shared.hostOperations = (shared.hostOperations ?? 0) + 1;
   let released = false;
