@@ -29,16 +29,24 @@ export type ProcessOutcome = {
 export function executeProcess(file: string, args: string[], options: ProcessOptions): Promise<ProcessOutcome> {
   const start = performance.now();
   return new Promise(resolve => {
-    execFile(file, args, {
-      cwd: options.cwd, timeout: options.timeoutMs, signal: options.signal,
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    let expired = false;
+    let settled = false;
+    const timeout = options.timeoutMs;
+    const child = execFile(file, args, {
+      // Keep invalid-timeout validation in Node; valid deadlines are owned here
+      // because a cooperative SIGTERM exit can erase the callback's error/signal.
+      cwd: options.cwd, timeout: timeout == null || (Number.isInteger(timeout) && timeout >= 0) ? 0 : timeout, signal: options.signal,
       maxBuffer: options.maxBuffer, env: options.env, windowsHide: true,
     }, (error, stdout, stderr) => {
+      settled = true;
+      clearTimeout(deadline);
       const cancelled = error?.code === "ABORT_ERR";
-      const timedOut = Boolean(error?.killed && error.signal === "SIGTERM" && !cancelled);
+      const timedOut = expired && !cancelled;
       const errorCode = typeof error?.code === "string" ? error.code : null;
       resolve({
-        ok: !error,
-        completed: !error || (typeof error.code === "number" && !error.killed),
+        ok: !error && !timedOut,
+        completed: !timedOut && (!error || (typeof error.code === "number" && !error.killed)),
         termination: cancelled ? "cancelled" : timedOut ? "timed-out"
           : errorCode === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "output-limit"
           : errorCode !== null && /^E[A-Z0-9]+$/.test(errorCode) ? "spawn-failed"
@@ -51,5 +59,17 @@ export function executeProcess(file: string, args: string[], options: ProcessOpt
         durationMs: performance.now() - start,
       });
     });
+    if (timeout > 0 && !settled) deadline = setTimeout(() => {
+      // Abort/buffer failure may already have initiated termination. Do not
+      // relabel those races as deadline expiry while their callback is pending.
+      if (settled || child.killed) return;
+      expired = true;
+      // Match execFile's timeout stream cleanup; this is not tree termination
+      // or a hard completion deadline for a child that ignores SIGTERM.
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      try { child.kill("SIGTERM"); }
+      catch (error) { child.emit("error", error); }
+    }, timeout);
   });
 }

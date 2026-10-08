@@ -61,7 +61,7 @@ export function describeCapability(toolName: string): CapabilityMetadata {
     reversibility: "not-applicable", network: "required", secrets: "possible", approvalClass: "task-scoped" };
   if (toolName === "bash") return { ...UNKNOWN, effects: ["execute", "unknown"], secrets: "possible" };
   if (["learn_material", "learn_lesson", "learn_exercise", "learn_progress"].includes(toolName)) return {
-    ...UNKNOWN, effects: toolName === "learn_exercise" ? ["read", "write", "execute"] : ["read", "write"],
+    ...UNKNOWN, effects: toolName === "learn_progress" ? ["read", "write"] : ["read", "write", "execute"],
     // Dedicated Learn state and optional machine-local vault writes are not workspace-only.
     network: "none", secrets: "possible", approvalClass: "task-scoped",
   };

@@ -26,7 +26,9 @@ unknown Gmail operations still require confirmation outside YOLO. MCP shares the
 name classifier and retains its YOLO-only lease. Mode tool selection shares read
 and sandbox names, but its exact allowlists and provider filtering remain in
 `mode-tools.ts`. Work/Human Away tool schemas and execution share declared sandbox
-timeout bounds. Plain Pi's `NEURA` gate is unchanged.
+timeout bounds. Plain Pi's `NEURA` gate is unchanged. Learn lesson creation,
+material import and exercise evaluation declare `execute` for their SQL/parser
+workers; progress remains read/write. This description does not change permission.
 
 Syntax-only Plan shell parsing lives in `plan-shell-parser.ts`; filesystem and
 junction-aware containment remain in action policy. Extracted policy files remain
@@ -41,7 +43,14 @@ termination reason, cancellation/timeout flags, completion and monotonic elapsed
 milliseconds. Numeric nonzero exits are completed failures. Spawn failure,
 timeout, cancellation and buffer exhaustion are not completed verdicts. Invalid
 Node API arguments still reject the promise; callers must not interpret them as
-completed execution.
+completed execution. Zero timeout disables the deadline, as in Node's `execFile`.
+
+Deadline initiation is recorded independently of the final callback error/signal.
+A cooperative POSIX SIGTERM handler may exit 0 or nonzero with no final signal;
+after deadline expiry it still yields `timedOut: true`, `ok: false` and
+`completed: false`. Both adapters intentionally inherit this narrow correction
+of the former success/completed misclassification; their shapes, stream handling,
+defaults and ordinary nonzero-completed semantics remain unchanged.
 
 Compatibility adapters intentionally differ:
 
@@ -54,8 +63,10 @@ Compatibility adapters intentionally differ:
 Executable resolution, hash/version trust, environment selection, authorization,
 redaction and leases remain caller-owned. The new service does not sanitize or
 replace a caller's environment, select an executable, kill process trees, or
-claim an OS isolation guarantee. Cancellation duration ends at the Node callback,
-not an attested descendant-drain time.
+claim an OS isolation guarantee. Timeout initiates SIGTERM and closes captured
+streams, matching execFile's cleanup; it is not a hard completion deadline for a
+child that ignores termination. Timeout/cancellation duration ends at the Node
+callback, not an attested process-tree or descendant-drain time.
 
 ## Seams for #92 and #28
 

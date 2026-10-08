@@ -112,9 +112,9 @@
     "launcher/neura.cmd": "51081b5694f6bf0a98269477c32420c553def9c0d4cba82400886d9ccb6f189a",
     "agent/neura/action-contracts.ts": "fbfbf5facdb858673d1893ca90cfcb03c55650ece611f3a7c5da0069fcc6a12a",
     "agent/neura/action-paths.ts": "597d49b7a329f93bc2df7bff24c5f531f8bbfb57fe10279f258f87445db350f7",
-    "agent/neura/capabilities.ts": "68613afa63bfef0dd1930503338179ad6e5d7eee84b8aca0ce08c351a6a102a3",
+    "agent/neura/capabilities.ts": "3db88bfdc5e045f09eaf1a4cbf671ce394d71eeb23554b80bc2e76c8ed32d56a",
     "agent/neura/mode-tools.ts": "9140325e4fb91d0733a34f328852f3eec37ad4fc029b7b2887b374ea75f3d0c7",
     "agent/neura/plan-shell-parser.ts": "e4e8b9d209d15ccd246968149c552196524ad39f6cd3ca6b57a0153d0c1c9a45",
-    "agent/neura/process.ts": "97d7116ceb9bee876f7767b1238be6d876e127f0bd19dee8b218d4f73871cd20"
+    "agent/neura/process.ts": "2864bc4ad50a7c30081c516eb5b504a150b48ca449e3258e1def33671b58301d"
   }
 }

@@ -27,6 +27,7 @@ const { default: herdrUsageBridge, herdrMetadata, usageProvider } = await import
 const { automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } = await import('../../agent/neura/process-security.ts');
 const { runProcess } = await import('../../agent/neura/core.ts');
 const { execute } = await import('../../agent/neura/verification.ts');
+await import('./process-contract.mjs');
 // Characterize the two public adapters before extracting shared process mechanics.
 const outputScript = 'process.stdout.write("  out\\n"); process.stderr.write("  err\\n")';
 const trimmedProcess = await runProcess(process.execPath, ['-e', outputScript]);
@@ -99,6 +100,11 @@ assert.deepEqual(describeCapability('mcp__gmail__gmail_get_profile').effects, ['
 assert.equal(describeCapability('mcp__gmail__GMAIL_NEW_UNCLASSIFIED_ACTION').approvalClass, 'exception-boundary');
 assert.equal(describeCapability('mcp__fixture__unknown').scope, 'external');
 assert.equal(describeCapability('unknown').approvalClass, 'unclassified');
+for (const toolName of ['learn_lesson', 'learn_material', 'learn_exercise']) {
+  assert.deepEqual(describeCapability(toolName).effects, ['read', 'write', 'execute']);
+}
+assert.deepEqual(describeCapability('learn_progress').effects, ['read', 'write']);
+assert.deepEqual(describeCapability('unknown').effects, ['unknown']);
 const { filterRestrictedProviderPayload } = await import('../../agent/neura/mode-tools.ts');
 const mixedProviderPayload = {
   tools: [{ name: 'Read' }, { function: { name: 'Bash' } }, { toolSpec: { name: 'mcp__fixture__unknown' } }],
