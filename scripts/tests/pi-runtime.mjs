@@ -13,7 +13,8 @@ process.env.NEURA_HEADMASTER = 'off';
 process.env.PI_OFFLINE = '1';
 const repo = path.resolve(import.meta.dirname, '../..');
 pinnedPi(repo);
-const { createAgentSession, createMcpExtension, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } = await import('@earendil-works/pi-coding-agent');
+const { createAgentSession, createCodemodeExtension, createToolSearchExtension, createMcpExtension, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } = await import('@earendil-works/pi-coding-agent');
+const { createAssistantMessageEventStream } = await import('@earendil-works/pi-ai/compat');
 const { parseArgs } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js');
 const { Type } = await import('typebox');
 const { default: guardrail } = await import('../../agent/extensions/guardrail.ts');
@@ -51,7 +52,7 @@ fs.writeFileSync(path.join(cwd, '.pi/settings.json'), JSON.stringify({ extension
 const modelRuntime = await ModelRuntime.create({ authPath: path.join(agentDir, 'synthetic-auth.json'), modelsPath: null, refreshOnCreate: false });
 const settingsManager = SettingsManager.inMemory({ extensions: ['+builtin:mcp'], packages: [] }, { projectTrusted: true });
 const sessions = [];
-async function makeSession(disabled, extraFactories = []) {
+async function makeSession(disabled, extraFactories = [], tools) {
   const loader = new DefaultResourceLoader({
     cwd, agentDir, settingsManager, noContextFiles: true, noSkills: true, noPromptTemplates: true, noThemes: true,
     additionalExtensionPaths: ['builtin:mcp'],
@@ -61,7 +62,7 @@ async function makeSession(disabled, extraFactories = []) {
   await loader.reload();
   const { session } = await createAgentSession({
     cwd, agentDir, modelRuntime, settingsManager, resourceLoader: loader, sessionManager: SessionManager.inMemory(cwd),
-    model: modelRuntime.getModels()[0],
+    model: modelRuntime.getModels()[0], tools,
   });
   sessions.push(session);
   await session.bindExtensions({ mode: 'print', onError() {} });
@@ -122,6 +123,102 @@ try {
   assert.equal(executions, 1);
   assert.equal(requests, 0);
 
+  // Real 1.1 CLI/SDK modifiers are selections, not authority. Exercise the
+  // registered built-ins through the actual agent pipeline with a local stream.
+  const modifiers = parseArgs(['--tools', '+codemode,+tool_search,-write']);
+  assert.deepEqual(modifiers.tools, ['+codemode', '+tool_search', '-write']);
+  assert.deepEqual(modifiers.diagnostics, []);
+  const mixed = parseArgs(['--tools', 'read,+codemode']);
+  assert.equal(mixed.tools, undefined);
+  assert.ok(mixed.diagnostics.some(item => item.type === 'error'));
+  await assert.rejects(makeSession(true, [], ['read', '+codemode']), /Invalid tools option/);
+  await modelRuntime.setRuntimeApiKey(modelRuntime.getModels()[0].provider, 'synthetic-local-stream-only');
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+  function response(stream, model, content, stopReason = 'stop') {
+    const message = { role: 'assistant', api: model.api, provider: model.provider, model: model.id,
+      content, usage, timestamp: Date.now(), stopReason };
+    stream.push(stopReason === 'aborted' ? { type: 'error', reason: 'aborted', error: message }
+      : { type: 'done', reason: stopReason, message });
+  }
+  let toolSerial = 0, modifierExecutions = 0;
+  async function callTool(session, name, args) {
+    const id = `modifier-${toolSerial++}`;
+    let first = true;
+    session.agent.streamFunction = model => {
+      const stream = createAssistantMessageEventStream();
+      response(stream, model, first ? [{ type: 'toolCall', id, name, arguments: args }] : [{ type: 'text', text: 'synthetic done' }], first ? 'toolUse' : 'stop');
+      first = false;
+      return stream;
+    };
+    await session.prompt('synthetic local tool call');
+    const result = session.messages.find(message => message.role === 'toolResult' && message.toolCallId === id);
+    assert.ok(result, 'actual agent pipeline did not return the tool result');
+    return result;
+  }
+  const { session: modified } = await makeSession(true, [guardrail, createCodemodeExtension(), createToolSearchExtension(), pi => {
+    pi.registerTool({ name: 'modifier_deferred', label: 'Modifier deferred', description: 'Synthetic modifier deferred capability', exposure: 'deferred', parameters: Type.Object({}),
+      execute: async () => { modifierExecutions++; return { content: [{ type: 'text', text: 'modifier success' }], details: {} }; },
+    });
+  }], modifiers.tools);
+  const runtimeEvents = [];
+  modified.subscribe(event => runtimeEvents.push(event));
+  for (const reloaded of [false, true]) {
+    if (reloaded) await modified.reload();
+    assert.equal(modified.getActiveToolNames().includes('codemode'), true);
+    assert.equal(modified.getActiveToolNames().includes('tool_search'), true);
+    assert.equal(modified.getActiveToolNames().includes('read'), true, 'additive modifiers replaced defaults');
+    assert.equal(modified.getActiveToolNames().includes('write'), false, 'reload erased subtractive modifier');
+    for (const mode of ['plan', 'work', 'learn', 'human-away']) {
+      setMode(mode);
+      for (const [name, args] of [['codemode', { code: 'return await tools.modifier_deferred({});' }], ['tool_search', { query: 'modifier deferred' }]]) {
+        const result = await callTool(modified, name, args);
+        assert.equal(result.isError, true, `${name} modifier/reload escaped ${mode}`);
+        assert.equal(modifierExecutions, 0, 'restricted indirect tool performed work');
+      }
+    }
+  }
+  setMode('yolo');
+  assert.equal((await callTool(modified, 'codemode', { code: 'return await tools.modifier_deferred({});' })).isError, false);
+  assert.equal(modifierExecutions, 1, 'YOLO real codemode did not execute the inactive deferred tool');
+  assert.equal((await callTool(modified, 'tool_search', { query: 'modifier deferred' })).isError, false);
+  assert.equal(modified.getActiveToolNames().includes('modifier_deferred'), true, 'real tool_search did not activate its match');
+  const nestedEnd = runtimeEvents.find(event => event.type === 'tool_execution_end' && event.toolName === 'modifier_deferred');
+  assert.ok(nestedEnd?.parentToolCallId?.startsWith('modifier-'), 'nested duration lost parent linkage');
+  assert.ok(Number.isFinite(nestedEnd.durationMs) && nestedEnd.durationMs >= 0);
+  assert.ok(runtimeEvents.some(event => event.type === 'agent_settled' && event.aborted === false), 'normal settlement flag missing');
+  assert.ok(modified.messages.some(message => message.role === 'assistant' && Number.isFinite(message.durationMs)), 'assistant duration missing');
+
+  // Observe a genuine aborted settlement; no provider or timing guess is used.
+  let started;
+  const streamStarted = new Promise(resolve => { started = resolve; });
+  modified.agent.streamFunction = (model, _context, options) => {
+    const stream = createAssistantMessageEventStream();
+    options.signal.addEventListener('abort', () => response(stream, model, [], 'aborted'), { once: true });
+    started();
+    return stream;
+  };
+  const interrupted = modified.prompt('synthetic cancellation');
+  await streamStarted;
+  await modified.abort();
+  await interrupted;
+  assert.equal(runtimeEvents.filter(event => event.type === 'agent_settled').at(-1).aborted, true);
+  assert.equal(modified.isIdle, true);
+  const oldRunner = modified.extensionRunner;
+  await modified.reload();
+  assert.notEqual(modified.extensionRunner, oldRunner, 'reload retained the old extension runtime');
+  assert.equal(modified.getActiveToolNames().includes('write'), false);
+  assert.equal(requests, 0, 'modifier/reload enabled native MCP');
+  assert.equal(fs.existsSync(marker), false);
+
+  // Plain Pi modifiers also execute the real built-ins without Neura policy.
+  delete process.env.NEURA;
+  const { session: stockTools } = await makeSession(true, [guardrail, createCodemodeExtension()], ['+codemode', '-write']);
+  assert.equal((await callTool(stockTools, 'codemode', { code: 'return "stock modifier success";' })).isError, false);
+  await stockTools.reload();
+  assert.equal(stockTools.getActiveToolNames().includes('codemode'), true);
+  assert.equal(stockTools.getActiveToolNames().includes('write'), false);
+
   // Without Neura's per-run disable, stock Pi still loads and connects its native MCP.
   delete process.env.NEURA;
   fs.writeFileSync(path.join(agentDir, 'mcp.json'), JSON.stringify(mcp));
@@ -132,7 +229,7 @@ try {
   try { await Promise.race([firstRequest, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('stock Pi MCP positive control timed out')), 5_000); })]); }
   finally { clearTimeout(timer); }
   assert.ok(requests > 0, 'stock Pi native MCP never connected');
-  console.log('PASS Pi 1.x real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, YOLO and stock Pi controls');
+  console.log('PASS Pi 1.1 real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/reload execution, duration/aborted settlement, YOLO and stock Pi controls');
 } finally {
   for (const session of sessions) {
     try { await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'exit' }); } finally { session.dispose(); }

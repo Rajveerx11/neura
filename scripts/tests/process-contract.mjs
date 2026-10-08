@@ -10,7 +10,7 @@ import { execute } from '../../agent/neura/verification.ts';
 const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-process-contract-'));
 let fixtureWritesFenced = true;
 const options = { cwd, timeoutMs: 5000, maxBuffer: 1024 };
-const run = (script, overrides = {}) => executeProcess(process.execPath, ['-e', script], { ...options, ...overrides });
+const run = (script, overrides = {}, args = []) => executeProcess(process.execPath, ['-e', script, '--', ...args], { ...options, ...overrides });
 try {
   const success = await run('process.stdout.write("  out\\n"); process.stderr.write("  err\\n")');
   assert.equal(success.ok, true);
@@ -29,6 +29,12 @@ try {
   assert.equal(nul.stdout, 'a\0b');
   assert.equal(nul.stderr, 'c\0d');
   assert.deepEqual(await execute(process.execPath, ['-e', nulScript], options), { ok: true, completed: true, stdout: 'a\0b' });
+  // Script-looking arguments remain data, including leading Node option text.
+  const argvData = ['"; process.exit(73); //\n', '--eval=process.exit(74)', '7'];
+  const echoed = await run('process.stdout.write(JSON.stringify(process.argv.slice(1)))', {}, argvData);
+  assert.equal(echoed.ok, true);
+  assert.equal(echoed.exitCode, 0);
+  assert.deepEqual(JSON.parse(echoed.stdout), argvData);
   const nonzero = await run('process.exit(7)');
   assert.equal(nonzero.ok, false);
   assert.equal(nonzero.completed, true);
@@ -104,8 +110,8 @@ try {
     let serial = 0;
     async function cooperative(invoke, exitCode) {
       const ready = path.join(cwd, `ready-${serial++}`);
-      const script = `process.on("SIGTERM", () => process.exit(${exitCode})); require("node:fs").writeFileSync(${JSON.stringify(ready)}, "ready"); process.stdout.write("  ready\\n"); setInterval(() => {}, 1000)`;
-      const promise = invoke(script);
+      const script = 'process.on("SIGTERM", () => process.exit(Number(process.argv[2]))); require("node:fs").writeFileSync(process.argv[1], "ready"); process.stdout.write("  ready\\n"); setInterval(() => {}, 1000)';
+      const promise = invoke(script, [ready, String(exitCode)]);
       let finished = false;
       promise.then(() => { finished = true; }, () => { finished = true; });
       let observed = false;
@@ -119,7 +125,7 @@ try {
       return result;
     }
     for (const exitCode of [0, 7]) {
-      const result = await cooperative(script => run(script, { timeoutMs: 1500 }), exitCode);
+      const result = await cooperative((script, args) => run(script, { timeoutMs: 1500 }, args), exitCode);
       assert.equal(result.ok, false);
       assert.equal(result.completed, false);
       assert.equal(result.termination, 'timed-out');
@@ -130,8 +136,8 @@ try {
       assert.equal(result.errorCode, null);
       assert.equal(result.stdout, '  ready\n');
       assert.ok(result.durationMs >= 1400 && result.durationMs < 5000);
-      assert.deepEqual(await cooperative(script => runProcess(process.execPath, ['-e', script], { ...options, timeoutMs: 1500 }), exitCode), { ok: false, stdout: 'ready', stderr: '' });
-      assert.deepEqual(await cooperative(script => execute(process.execPath, ['-e', script], { ...options, timeoutMs: 1500 }), exitCode), { ok: false, completed: false, stdout: '  ready\n' });
+      assert.deepEqual(await cooperative((script, args) => runProcess(process.execPath, ['-e', script, '--', ...args], { ...options, timeoutMs: 1500 }), exitCode), { ok: false, stdout: 'ready', stderr: '' });
+      assert.deepEqual(await cooperative((script, args) => execute(process.execPath, ['-e', script, '--', ...args], { ...options, timeoutMs: 1500 }), exitCode), { ok: false, completed: false, stdout: '  ready\n' });
     }
     // The deadline and native abort are independent facts. Observe a real
     // SIGTERM handler before aborting, rather than guessing from elapsed time.
@@ -141,9 +147,9 @@ try {
       const writesDone = `${ready}-writes-done`;
       const controller = new AbortController();
       // finish publishes the last fixture write, not proof of physical exit.
-      const script = `const fs = require("node:fs"); const finish = () => { fs.writeFileSync(${JSON.stringify(writesDone)}, "done"); process.exit(0); }; let stopping = false; process.on("SIGTERM", () => { if (stopping) return; stopping = true; fs.writeFileSync(${JSON.stringify(terminated)}, "ready"); setTimeout(finish, 1000); }); fs.writeFileSync(${JSON.stringify(ready)}, "ready"); setTimeout(finish, 5000)`;
+      const script = 'const fs = require("node:fs"); const finish = () => { fs.writeFileSync(process.argv[3], "done"); process.exit(0); }; let stopping = false; process.on("SIGTERM", () => { if (stopping) return; stopping = true; fs.writeFileSync(process.argv[2], "ready"); setTimeout(finish, 1000); }); fs.writeFileSync(process.argv[1], "ready"); setTimeout(finish, 5000)';
       fixtureWritesFenced = false;
-      const pending = run(script, { timeoutMs: 1500, signal: controller.signal });
+      const pending = run(script, { timeoutMs: 1500, signal: controller.signal }, [ready, terminated, writesDone]);
       let finished = false;
       pending.finally(() => { finished = true; });
       try {

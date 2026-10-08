@@ -1,6 +1,6 @@
 # Neura installer readiness
 
-Updated: 2026-10-06. Scope: **Neura only**, inspired by Pi/Hermes installation
+Updated: 2026-10-08. Scope: **Neura only**, inspired by Pi/Hermes installation
 patterns. This is source-only preparation, not a published installer, live
 installation, or production-readiness claim. Extend `install.ps1` and
 `agent/neura/runtime-install.mjs`; do not build a second activation engine.
@@ -8,8 +8,8 @@ installation, or production-readiness claim. Extend `install.ps1` and
 ## First implemented slice
 
 - Exact Pi coding-agent/API/TUI pins, root lockfile, runtime contract, and managed
-  manifest now target stable `1.0.4`. Dependency review is in
-  [DEPENDENCIES.md](DEPENDENCIES.md#pi-104-readiness-slice-2026-10-06).
+  manifest now target stable `1.1.0`. Dependency review is in
+  [DEPENDENCIES.md](DEPENDENCIES.md#pi-110-compatibility-slice-2026-10-08).
 - Neura's launcher combines `--no-mcp` with `--tui-mode regular` to stop native startup connections even
   when configuration or explicit builtin selection would otherwise enable them.
   The existing explicit YOLO-only MCP wrapper remains in place. `codemode` and
@@ -41,7 +41,25 @@ installation, or production-readiness claim. Extend `install.ps1` and
 | Clean-host rehearsal | Exercise fresh install, repeat install, upgrade, interruption, recovery, rollback, junction rejection, missing network/artifacts, and newer Pi on disposable Windows machines. Do not rehearse against the owner's live profile without explicit authorization. |
 | Release evidence | Run typecheck, all suites, browser/WSL checks, audits/signatures, docs, independent review, and required CI on a clean candidate. Record failures and remaining limitations; retain experimental/Human Away preview labels. |
 
-## Repository validation (2026-10-06)
+## Current candidate validation (2026-10-08)
+
+- Exact Pi `1.1.0` configured typecheck, all 18 isolated harness suites,
+  11 release checks and 35-file docs validation passed, including focused unit,
+  integration, proof, UI and synthetic installer checks. Real agent-pipeline calls remain denied
+  in all four restricted modes after modifier selection/reload; real codemode,
+  tool search, nested calls and native MCP retain YOLO/stock-Pi positive controls.
+  Duration/parent linkage and normal/aborted settlement were exercised with a
+  local synthetic stream, not provider calls. Aborted settlement starts no quick proof.
+- Latest-Pi discovery, both dependency/signature audits, and synthetic Plan/Learn
+  Edge browser assertions passed. Plan's first two wrapper commands failed on
+  temporary-profile cleanup after passing viewport assertions; the environment-only
+  parent-owned cleanup invocation then passed after observing direct child exit.
+  This is not physical Edge descendant-drain or live-profile evidence.
+- Fresh review and new-head required CI remain pending; old PR98 `1.0.4` review
+  and portable CI do not certify this candidate. No live installation/drift,
+  clean-host bootstrap, TypeScript LSP or full proof PASS is claimed.
+
+## Historical repository validation (2026-10-06)
 
 - Configured typecheck and all 18 `verify-harness` suites passed, including the
   real Pi loader/session fixture, managed-file installer recovery, and Learn

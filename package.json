@@ -60,9 +60,9 @@
     "test:fuzz": "node scripts/verify-harness.mjs --suite fuzz"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "1.0.4",
-    "@earendil-works/pi-coding-agent": "1.0.4",
-    "@earendil-works/pi-tui": "1.0.4",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0",
     "@spences10/pi-mcp": "0.0.58",
     "@types/node": "26.6.4",
     "axe-core": "4.13.0",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "neuraVersion": "2.5.1",
-  "piVersion": "1.0.4",
+  "piVersion": "1.1.0",
   "nodeMinimum": "24.15.0",
   "automaticExecutables": {
     "git": {
@@ -57,7 +57,7 @@
     "default": []
   },
   "files": {
-    "agent/extensions/check-gate.ts": "dc9513ced9f341698b8c6b3fa073acd069d501921a83826da3b8e0144f69c30f",
+    "agent/extensions/check-gate.ts": "0f228c9c43deeac54fcfdae996262ac3f83725853773e632a02bf22ba10a0d64",
     "agent/extensions/checkpoint.ts": "373b9019860664bf8d353b91887e5c7bd5dfb99d918c313d7716d64967ed910c",
     "agent/extensions/cockpit.ts": "ecba0c59ba4616eaa8e10838daef67ab0e886305facf69b3c09efbbbb47a8b23",
     "agent/extensions/gmail-guardrail.ts": "66d9a1f327f01928c1e06076a74c853e4aa1f326b012ca7506a6a5e1942ea308",
@@ -104,7 +104,7 @@
     "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e4ff353a81aad268dd9dde26f9c9ff910137b6eafc170b310761b852525b336e",
-    "agent/neura/runtime-contract.json": "dd40a186e5b5f98bc4bd70f87e8ab6a54b1be0b3f0b623ac480bec693aaaff21",
+    "agent/neura/runtime-contract.json": "5fbb9272cdadf53cde88e4f91bf6d8a25943bd10e152327a5d1cafea6acfe18e",
     "agent/neura/runtime-install.mjs": "f62fbf59757bbf02b064afda9d702d86a37d41bd516af6c8281a8c4f0066c6be",
     "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
     "agent/neura/verification.ts": "60a71a0572b0527486654ae37ece6bac8a92eadbb7ab25ab45a424508e572708",

@@ -55,7 +55,8 @@ if ($profile.backgroundImageAlignment -ne 'center' -or $profile.backgroundImageS
 if ($profile.backgroundImageOpacity -ne 0.42) { throw 'Terminal artwork opacity changed' }
 if ($profile.environment.PI_SKIP_VERSION_CHECK -ne '1') { throw 'Terminal startup update notice is not suppressed' }
 [Console]::WriteLine('Installer functions: prerequisite version checks')
-$pin = '1.0.4'
+$contractPath = Join-Path ([IO.Path]::GetDirectoryName($Source)) 'agent/neura/runtime-contract.json'
+$pin = ([IO.File]::ReadAllText($contractPath) | ConvertFrom-Json).piVersion
 $minimum = '24.15.0'
 foreach ($case in @(@('node', 'v24.19.0'), @('npm', '11.6.0'), @('pi', $pin), @('git', 'git version 2.50.1.windows.1'))) {
     $probe = [PSCustomObject]@{ Found = $true; ExitCode = 0; Output = $case[1] }
@@ -65,26 +66,28 @@ foreach ($case in @(@('node', 'v24.19.0'), @('npm', '11.6.0'), @('pi', $pin), @(
     $probe.Found = $false
     if ((Get-NeuraVersionProblem $case[0] $probe $pin $minimum) -notlike '*is missing*') { throw 'Missing prerequisite accepted' }
     $probe.Found = $true; $probe.ExitCode = 0
-    foreach ($bad in @('', 'garbage', "1.0.4`n1.0.4", '999999999999999999999.0.0', '1.0.4-beta.1')) {
+    foreach ($bad in @('', 'garbage', "$pin`n$pin", '999999999999999999999.0.0', "$pin-beta.1")) {
         $probe.Output = $bad
         if ((Get-NeuraVersionProblem $case[0] $probe $pin $minimum) -notlike '*invalid version*') { throw 'Malformed prerequisite accepted' }
     }
 }
 $probe = [PSCustomObject]@{ Found = $true; ExitCode = 0; Output = 'v22.19.0' }
 if ((Get-NeuraVersionProblem 'node' $probe $pin $minimum) -notlike '*24.15.0 or newer*') { throw 'Old Node accepted' }
-$probe.Output = '1.0.5'
+$probe.Output = '1.1.1'
 $newer = Get-NeuraVersionProblem 'pi' $probe $pin $minimum
 if ($newer -notlike '*Update Neura; do not downgrade Pi.*' -or $newer -like '*npm install*') { throw 'Newer Pi was downgraded' }
-$probe.Output = '0.99.2'
-if ((Get-NeuraVersionProblem 'pi' $probe $pin $minimum) -notlike '*upgrade to reviewed Pi 1.0.4*') { throw 'Old Pi mismatch missed' }
+foreach ($older in @('0.99.2', '1.0.4', '1.0.5')) {
+    $probe.Output = $older
+    if ((Get-NeuraVersionProblem 'pi' $probe $pin $minimum) -notlike "*upgrade to reviewed Pi $pin*") { throw 'Old Pi mismatch missed' }
+}
 if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
     $native = Join-Path $Scratch 'version-probe.cmd'
-    [IO.File]::WriteAllText($native, "@echo off`r`necho 1.0.4`r`nexit /b 37`r`n")
+    [IO.File]::WriteAllText($native, "@echo off`r`necho $pin`r`nexit /b 37`r`n")
     $global:LASTEXITCODE = 19
     $nativeProbe = Invoke-NeuraVersionProbe $native @('--version')
-    if ($nativeProbe.ExitCode -ne 37 -or $nativeProbe.Output -ne '1.0.4') { throw 'Native version probe swallowed its exit code or output' }
+    if ($nativeProbe.ExitCode -ne 37 -or $nativeProbe.Output -ne $pin) { throw 'Native version probe swallowed its exit code or output' }
     if ($global:LASTEXITCODE -ne 19) { throw 'Version probe changed caller exit status' }
-    [IO.File]::WriteAllText($native, "@echo off`r`necho 1.0.4`r`nexit /b 0`r`n")
+    [IO.File]::WriteAllText($native, "@echo off`r`necho $pin`r`nexit /b 0`r`n")
     if ((Invoke-NeuraVersionProbe $native @('--version')).ExitCode -ne 0) { throw 'Successful native version probe rejected' }
     $wrapper = Join-Path $Scratch 'version-probe.ps1'
     [IO.File]::WriteAllText($wrapper, "& '$native'`nexit `$LASTEXITCODE`n")
