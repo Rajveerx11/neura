@@ -474,4 +474,3 @@ export function planShellFilesystemArguments(tokens: string[]): string[] | null 
   if (command === "git") return gitFilesystemArguments(args);
   return null;
 }
-

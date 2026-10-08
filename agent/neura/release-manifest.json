@@ -113,8 +113,8 @@
     "agent/neura/action-contracts.ts": "fbfbf5facdb858673d1893ca90cfcb03c55650ece611f3a7c5da0069fcc6a12a",
     "agent/neura/action-paths.ts": "597d49b7a329f93bc2df7bff24c5f531f8bbfb57fe10279f258f87445db350f7",
     "agent/neura/capabilities.ts": "68613afa63bfef0dd1930503338179ad6e5d7eee84b8aca0ce08c351a6a102a3",
-    "agent/neura/mode-tools.ts": "d9f69fc0e91dcbe8c4a6f639313d138fb34f9a9b03ecee5de37738d6cd52cfdf",
-    "agent/neura/plan-shell-parser.ts": "778fcee1d1d4c1e5dc268296d20787dfdf6b691c23f3b7c60cfd8255fcc56326",
+    "agent/neura/mode-tools.ts": "9140325e4fb91d0733a34f328852f3eec37ad4fc029b7b2887b374ea75f3d0c7",
+    "agent/neura/plan-shell-parser.ts": "e4e8b9d209d15ccd246968149c552196524ad39f6cd3ca6b57a0153d0c1c9a45",
     "agent/neura/process.ts": "97d7116ceb9bee876f7767b1238be6d876e127f0bd19dee8b218d4f73871cd20"
   }
 }

@@ -62,4 +62,3 @@ export function filterRestrictedProviderPayload(payload: unknown, enforcedRestri
   }
   return filtered;
 }
-
