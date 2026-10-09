@@ -1,4 +1,6 @@
 import { repoRoot, scratchRoot, assert, fs, path, HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL, bubblewrapArguments, loaded, registeredToolNames, state, appendedEntries, firstHandler, widgets, ui, context, modeState, guard, modes, mcp, stripAnsi } from './harness.mjs';
+import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
 // Mode spine: safe WORK startup, persisted transitions, exact tool boundaries, and Shift+Tab.
 
 assert.ok(modes.commands.has("approvals"), "/approvals command missing");
@@ -17,6 +19,108 @@ assert.ok(state.activeTools.includes("read") && state.activeTools.includes("edit
   "WORK startup omitted structured workspace or sandbox tools");
 assert.equal(state.activeTools.includes("publish_plan"), false, "WORK startup exposed the Plan publisher");
 assert.equal(state.activeTools.includes("web_fetch"), false, "WORK startup exposed unrestricted network fetch");
+assert.deepEqual(state.activeTools, ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', WORK_SANDBOX_TOOL], 'default WORK order changed');
+const { PLAN_TOOLS, PLAN_ONLY_TOOLS, WORK_TOOLS, LEARN_TOOLS } = await import('../../agent/neura/mode-tools.ts');
+const { LEARN_ONLY_TOOL_NAMES } = await import('../../agent/neura/learn-policy.ts');
+// Simulate allowlist drift at the real mode boundary, not just a standalone filter.
+const remoteFixtures = ['mcp__gmail__GMAIL_GET_PROFILE', 'mcp__gmail__GMAIL_SEND_EMAIL', 'mcp__mode_fixture__unknown'];
+registeredToolNames.push(...remoteFixtures);
+try {
+  await modes.commands.get('mode').handler('yolo', context);
+  const ordinarySelection = [...state.activeTools];
+  for (const [mode, allowed, appended] of [
+    ['plan', PLAN_TOOLS, [...PLAN_ONLY_TOOLS]],
+    ['learn', LEARN_TOOLS, LEARN_ONLY_TOOL_NAMES],
+    ['work', WORK_TOOLS, [WORK_SANDBOX_TOOL]],
+  ]) {
+    for (const name of remoteFixtures) allowed.add(name);
+    try {
+      state.activeTools = [...ordinarySelection, ...remoteFixtures];
+      await modes.commands.get('mode').handler(mode, context);
+      const expected = [...new Set([...ordinarySelection.filter(name => allowed.has(name)), ...appended])];
+      assert.deepEqual(state.activeTools, expected, `${mode} selection order changed or selected remote descriptions escaped ceiling`);
+      const payload = await firstHandler(modes, 'before_provider_request')({ payload: {
+        tools: [...remoteFixtures.map(name => ({ name })), { name: 'read' }],
+      } }, context);
+      assert.deepEqual(payload.tools, [{ name: 'read' }], `${mode} provider ceiling leaked selected remote fixture`);
+      await modes.commands.get('mode').handler('yolo', context);
+      for (const name of remoteFixtures) assert.ok(state.activeTools.includes(name), 'ceiling destroyed YOLO restoration intent');
+    } finally { for (const name of remoteFixtures) allowed.delete(name); }
+  }
+} finally {
+  for (const name of remoteFixtures) {
+    registeredToolNames.splice(registeredToolNames.indexOf(name), 1);
+    state.activeTools = state.activeTools.filter(selected => selected !== name);
+  }
+  await modes.commands.get('mode').handler('work', context);
+}
+
+
+// An isolated instance of the actual MCP wrapper with one inconsistent
+// description. Substitution is test-local; production gains no injection API.
+const dataModule = source => `data:text/javascript,${encodeURIComponent(source)}`;
+const fixtureUrl = `${pathToFileURL(path.join(repoRoot, 'agent/extensions/mcp.ts')).href}?descriptor-fixture`;
+const capabilityUrl = pathToFileURL(path.join(repoRoot, 'agent/neura/capabilities.ts')).href;
+const inconsistentCapabilities = dataModule(`
+  export * from ${JSON.stringify(capabilityUrl)};
+  import { describeCapability as actual } from ${JSON.stringify(capabilityUrl)};
+  export const describeCapability = name => actual(name === 'mcp__inconsistent__read' ? 'read' : name);
+`);
+const mcpFixtureUrl = dataModule(`
+  export const calls = { automatic: 0, command: 0, registrationEager: null, sessionEager: null };
+  export default function (pi) {
+    calls.registrationEager = process.env.MY_PI_MCP_EAGER_CONNECT;
+    pi.on('before_agent_start', request => { calls.automatic++; if (request.fail) throw new Error('synthetic MCP failure'); });
+    pi.on('session_start', () => { calls.sessionEager = process.env.MY_PI_MCP_EAGER_CONNECT; });
+    pi.registerCommand('mcp', { handler: () => { calls.command++; } });
+  }
+`);
+const hook = registerHooks({ resolve(specifier, resolveContext, nextResolve) {
+  if (resolveContext.parentURL === fixtureUrl) {
+    if (specifier === '../neura/capabilities.ts') return { url: inconsistentCapabilities, shortCircuit: true };
+    if (specifier === '@spences10/pi-mcp') return { url: mcpFixtureUrl, shortCircuit: true };
+  }
+  return nextResolve(specifier, resolveContext);
+} });
+try {
+  const handlers = new Map();
+  const commands = new Map();
+  const { default: wrapper } = await import(fixtureUrl);
+  const { calls } = await import(mcpFixtureUrl);
+  await wrapper({ on: (name, handler) => handlers.set(name, handler), registerCommand: (name, options) => commands.set(name, options) });
+  assert.equal(calls.registrationEager, undefined);
+  assert.equal(process.env.MY_PI_MCP_EAGER_CONNECT, '1');
+  await handlers.get('session_start')({}, context);
+  assert.equal(calls.sessionEager, undefined);
+  assert.equal(process.env.MY_PI_MCP_EAGER_CONNECT, '1');
+  const start = (selectedTools, extra = {}) => handlers.get('before_agent_start')({ systemPromptOptions: { selectedTools }, ...extra }, context);
+  for (const mode of ['plan', 'learn', 'work', 'human-away']) {
+    modeState.setMode(mode);
+    await start(['mcp__fixture__unknown', 'mcp__gmail__GMAIL_GET_PROFILE']);
+  }
+  assert.equal(calls.automatic, 0, 'description bypassed restricted-mode lease');
+  modeState.setMode('yolo');
+  await start(['web_search', 'MCP__fixture__unknown', 'mcp__inconsistent__read']);
+  assert.equal(calls.automatic, 0, 'non-MCP or inconsistent description initialized MCP');
+  assert.equal(modeState.isHostOperationActive(), false, 'suppressed automatic init acquired a lease');
+  await start(['mcp__fixture__unknown']);
+  await start(['mcp__gmail__GMAIL_GET_PROFILE']);
+  assert.equal(calls.automatic, 2, 'valid generic/Gmail descriptors failed automatic init');
+  assert.equal(modeState.isHostOperationActive(), false);
+  await assert.rejects(Promise.resolve().then(() => start(['mcp__fixture__unknown'], { fail: true })), /synthetic MCP failure/);
+  assert.equal(modeState.isHostOperationActive(), false, 'failed MCP init leaked lease');
+  await commands.get('mcp').handler('', context);
+  assert.equal(calls.command, 1, 'discovery command incorrectly required a descriptor');
+  const release = modeState.acquireHostOperation();
+  const restoration = modeState.restoreMode('plan');
+  try {
+    const before = calls.automatic;
+    await start(['mcp__fixture__unknown']);
+    await commands.get('mcp').handler('', context);
+    assert.equal(calls.automatic, before, 'pending restoration initialized MCP');
+    assert.equal(calls.command, 1, 'pending restoration permitted discovery');
+  } finally { release(); await restoration; }
+} finally { hook.deregister(); modeState.setMode('work'); }
 
 assert.equal(loaded.extensions.filter((extension) => extension.commands.has("mcp")).length, 1, "MCP command registered more than once");
 await firstHandler(mcp, "session_start")({}, context);

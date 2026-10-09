@@ -1,6 +1,6 @@
 # Dependency policy and review
 
-Pi/development source review: 2026-10-06 (Pi 1.0.4). Learn runtime review: 2026-09-07.
+Pi/development source review: 2026-10-08 (Pi 1.1.0). Learn runtime review: 2026-09-07.
 MCP lifecycle and automatic-execution review: 2026-09-13. Public-default
 configuration review: 2026-09-15.
 
@@ -27,7 +27,7 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 
 | Package | Pin | Source and lifecycle review | Privileged behavior |
 |---|---:|---|---|
-| `@earendil-works/pi-coding-agent` | `1.0.4` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.0.4); the 0.99–1.0.4 changelog, loader/session APIs, native MCP startup, and nested/deferred tool pipeline were reviewed. Published pi-coding-agent, pi-ai, and pi-tui manifests have build and `prepublishOnly`, but no consumer install hook. Locked registry integrity and signatures were verified. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. Neura's launcher disables native MCP; indirect tools are YOLO-only. |
+| `@earendil-works/pi-coding-agent` | `1.1.0` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.1.0); current SDK/CLI modifier selection, settlement/duration, loader/session, native MCP and nested/deferred APIs were reviewed and exercised. Eight coupled Earendil manifests have maintainer build/publish scripts, not consumer install hooks. Locked registry integrity and signatures were verified; native/WASM and full source equivalence remain bounded review limits. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. Neura's launcher disables native MCP; indirect tools are YOLO-only. |
 | `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
@@ -94,7 +94,7 @@ and workspace-contained overrides are rejected.
 
 ## Development graph
 
-`package.json` pins Pi `1.0.4`, Pi API/TUI types `1.0.4`, Playwright Core
+`package.json` pins Pi `1.1.0`, Pi API/TUI types `1.1.0`, Playwright Core
 `1.63.0`, axe-core `4.13.0`, Typebox `1.3.34`, TypeScript `7.0.2`, and Node types
 `26.6.4`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
@@ -194,16 +194,59 @@ That is historical evidence. Pi `0.85.1` was source-reviewed from the installed
 release and verified through Neura's loader harness, typecheck, dependency audit,
 and full verification suite on 2026-09-15; a fresh live-drift result is recorded
 separately. The September source, development APIs, and CI pinned `0.87.1`;
-that is historical evidence, not the current `1.0.4` graph. The 0.87.0 canonical-session and context-edit changes
+that is historical evidence, not the current `1.1.0` graph. The 0.87.0 canonical-session and context-edit changes
 were reviewed against Neura's session, footer, and extension APIs; the complete
 harness and configured typecheck passed on the exact 0.87.1 development graph.
 The installer does not replace a user's global Pi. Rolling back requires
 restoring the prior manifest, lockfile, runtime contract, and live Neura files
 together; do not downgrade a newer global Pi silently.
 
+### Pi 1.1.0 compatibility slice (2026-10-08)
+
+Latest-stable discovery rejected the older `1.0.4` target, a Neura maintenance
+compatibility defect rather than a flaky process test. The official lightweight
+`v1.1.0` tag resolves to `abe508e1b89912adde45528136c3221eb69acdd7`.
+The coding-agent artifact integrity is
+`sha512-SeEi/4hdcHNgA9UWlefZl7ZZpm3dzi2OoxNjDHsBJ9o298LNOtbL4DGKgitlEj6uCTccvtw6f2hlCkTPVJ2RXg==`.
+
+The three direct exact pins, runtime contract and managed manifest select `1.1.0`.
+The complete root lock advances eight Earendil MIT packages: `chord`,
+`pi-agent-core`, `pi-ai`, `pi-codemode`, `pi-coding-agent`, `pi-mcp`,
+`pi-telemetry`, and `pi-tui`. Their published dependency declarations change
+only intra-Earendil versions. Neura's actual resolved external versions and
+integrities stay unchanged; npm removes only redundant identical
+`balanced-match 4.0.4` and `brace-expansion 5.0.12` entries under coding-agent.
+No upstream development lock was transplanted. Platform optionals, managed
+extension pins, and the Learn manifest/lock remain unchanged.
+
+All eight published manifests have no consumer install/prepare hooks; existing
+esbuild `postinstall` stays disabled. Both private task graphs were provisioned
+with locked `npm ci --ignore-scripts`. Root/Learn audits report zero known
+vulnerabilities, with 137/21 verified registry signatures and 42/3 attestations.
+Counts describe this Windows-resolved graph, not every platform optional.
+These checks do not establish exhaustive native/WASM provenance or built-source
+and Sigstore equivalence.
+
+Current upstream SDK/extension/CLI/settings/security and relevant session/UI/MCP
+references and examples were inspected. Real session tests execute registered
+codemode/tool-search tools through Pi's agent pipeline with a local synthetic
+stream: modifiers and reload cannot authorize restricted execution, while YOLO
+and stock Pi still work. Native `--no-mcp`, override/load-failure denial and nested
+deferred mediation remain enforced. Duration preserves parent linkage; normal
+and aborted settlement are observed. Neura ignores aborted settlement before
+starting automatic quick proof. Existing session leases, late-result rejection,
+detector-only quick PASS and unavailable legacy full PASS remain unchanged.
+
+Latest-Pi discovery, configured typecheck, all 18 isolated harness suites,
+11 release checks, 35-file docs validation, focused process/unit/proof/integration,
+UI/synthetic installer checks, audits and synthetic Edge browser assertions passed.
+Fresh candidate review and remote CI are separate pending gates. No global/live
+installation, clean-host upgrade or LSP result is claimed. Rollback restores
+coordinated pins, lock, contract and managed hashes; never downgrade a newer Pi.
+
 ### Pi 1.0.4 readiness slice (2026-10-06)
 
-The coordinated Pi coding-agent/API/TUI pins and root lock now select `1.0.4`.
+The coordinated Pi coding-agent/API/TUI pins and root lock selected `1.0.4`.
 Source tag `v1.0.4` resolves to `7c10bd4337495ee613f2224843ecdf349b80d1df`.
 The coding-agent artifact integrity is
 `sha512-+956nfMFHr5lDUVY/2Q4k+YzojzBuCaBXFgj0eSlXVGr7QVliVddKdc1Pz6yVg1dOlJQmb67doOVrlMsIcIdaw==`.
@@ -288,8 +331,8 @@ selected for testing.
 
 Exact pins make the validated graph reproducible; they must advance with stable
 Pi releases rather than become a permanent ceiling. `latest` may be queried for
-release discovery, never used as a runtime dependency specifier. On 2026-10-06,
-npm latest and this checkout's exact pins agree at `1.0.4`. The bounded
+release discovery, never used as a runtime dependency specifier. On 2026-10-08,
+npm latest and this checkout's exact pins agree at `1.1.0`. The bounded
 `npm run check:pi-latest` command checks that agreement in CI and release gates;
 the daily target-check workflow takes effect only after it reaches the default
 branch. A successful target check alone does not establish runtime compatibility.

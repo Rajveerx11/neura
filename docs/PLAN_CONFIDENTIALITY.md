@@ -21,7 +21,8 @@ Each concrete entry is authorized before listing, traversal, or content delivery
 - an opened descriptor is checked against authorized file identity before and
   after reading, with path/ignore authorization repeated before returning bytes;
 - only UTF-8 text is delivered. Binary/images are denied because opaque payloads
-  cannot be text-redacted. Secret patterns are redacted before search/read output.
+  cannot be text-redacted. Secret patterns are redacted before search/read output;
+  private-key block boundaries are scanned once rather than retried per header.
 
 Git exclusion checks are bounded metadata-only subprocesses using trusted Git,
 not a shell. Only this query consults global configuration; fixed overrides disable
@@ -34,8 +35,10 @@ Enumeration reauthorizes every entry; it never sends broad host-tool search outp
 to the model and then tries to filter it. Traversal deduplicates canonical
 directories (including link cycles), observes cancellation between entries and
 within file scans, and is bounded to 10 seconds/10,000 entries. Grep checks the
-clock/abort signal on every line and yields every 32 lines. Deadline expiry and
-cancellation are explicit errors, not successful no-match results. Narrow the
+clock/abort signal on every line and yields every 32 lines. The same budget is
+checked during chunked descriptor reads and redaction preprocessing; private-key
+and URL-credential failed matches no longer retry every suffix. Deadline expiry
+and cancellation are explicit errors, not successful no-match results. Narrow the
 path when an entry/match limit notice appears. SDK read offset/limit and
 2,000-line/50-KiB output truncation remain; other inspection output uses SDK head
 truncation. Search has bounded match/context limits. Files above 8 MiB and grep

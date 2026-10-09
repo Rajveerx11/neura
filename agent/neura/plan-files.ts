@@ -71,8 +71,10 @@ function sameFile(a: fs.Stats, b: fs.Stats): boolean {
   return a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
 }
 
-export function readPlanFile(cwd: string, requested: string): Buffer {
+export function readPlanFile(cwd: string, requested: string, checkBudget?: () => void): Buffer {
+  checkBudget?.();
   const before = authorizePlanPath(cwd, requested);
+  checkBudget?.();
   if (!before.stat.isFile()) throw new Error("Plan read requires a regular file.");
   const fd = fs.openSync(before.canonical, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
@@ -81,17 +83,21 @@ export function readPlanFile(cwd: string, requested: string): Buffer {
     const buffer = Buffer.alloc(opened.size);
     let offset = 0;
     while (offset < buffer.length) {
-      const count = fs.readSync(fd, buffer, offset, buffer.length - offset, offset);
+      checkBudget?.();
+      const count = fs.readSync(fd, buffer, offset, Math.min(64 * 1024, buffer.length - offset), offset);
       if (!count) throw new Error("Plan file changed during reading.");
       offset += count;
+      checkBudget?.();
     }
     const after = authorizePlanPath(cwd, requested);
+    checkBudget?.();
     if (before.canonical !== after.canonical || !sameFile(opened, fs.fstatSync(fd)) || !sameFile(opened, after.stat)) {
       throw new Error("Plan file changed during reading.");
     }
     // Opaque/binary payloads cannot be text-redacted before model delivery.
-    if (buffer.includes(0) || buffer.toString("utf8").includes("\uFFFD")) throw new Error("Plan inspection supports UTF-8 text only.");
-    return Buffer.from(redactSensitiveText(buffer.toString("utf8")));
+    const text = buffer.toString("utf8");
+    if (buffer.includes(0) || text.includes("\uFFFD")) throw new Error("Plan inspection supports UTF-8 text only.");
+    return Buffer.from(redactSensitiveText(text, Number.POSITIVE_INFINITY, checkBudget));
   } finally { fs.closeSync(fd); }
 }
 
@@ -213,7 +219,9 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
     if (!(matchesGlob(glob, display) || (!glob.includes("/") && matchesGlob(glob, path.basename(display))))) return;
     if (tool === "find") { output.push(display); matches++; return; }
     let text: string;
-    try { text = readPlanFile(cwd, target.lexical).toString("utf8"); } catch (error) {
+    try { text = readPlanFile(cwd, target.lexical, checkBudget).toString("utf8"); } catch (error) {
+      // Abort/expiry during preprocessing is not an unreadable no-match result.
+      checkBudget();
       if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
       return;
     }
@@ -244,7 +252,7 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
       await setImmediate();
     }
   } else await visit(start.lexical);
-  return redactSensitiveText(output.join("\n") || "No authorized matches.") + (stopped || matches >= limit ? "\n[Plan inspection limit reached; narrow the path or pattern.]" : "");
+  return redactSensitiveText(output.join("\n") || "No authorized matches.", Number.POSITIVE_INFINITY, checkBudget) + (stopped || matches >= limit ? "\n[Plan inspection limit reached; narrow the path or pattern.]" : "");
 }
 
 export function planMetadata(cwd: string, command: "pwd" | "head"): string {

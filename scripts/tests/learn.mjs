@@ -84,6 +84,24 @@ fs.mkdirSync(path.join(learnWorkspace, "public"));
 assert.equal(await guard({ toolName: "read", input: { path: "safe.txt" } }, { ...context, cwd: learnWorkspace }), undefined);
 assert.equal(await guard({ toolName: "read", input: { path: path.join(learnWorkspace, "safe.txt") } }, { ...context, cwd: learnWorkspace }), undefined);
 assert.equal(await guard({ toolName: "ls", input: { path: "public" } }, { ...context, cwd: learnWorkspace }), undefined);
+// A hidden ancestor is a worktree location, not a confidential descendant.
+const hiddenAncestorWorkspace = path.join(scratchRoot, ".worktrees", "public-workspace");
+fs.mkdirSync(path.join(hiddenAncestorWorkspace, "docs"), { recursive: true });
+fs.writeFileSync(path.join(hiddenAncestorWorkspace, "docs", "public.txt"), "ordinary source");
+const hiddenAncestorContext = { ...context, cwd: hiddenAncestorWorkspace };
+for (const requested of ["docs/public.txt", path.join(hiddenAncestorWorkspace, "docs", "public.txt")]) {
+  assert.equal(await guard({ toolName: "read", input: { path: requested } }, hiddenAncestorContext), undefined);
+}
+assert.equal(await guard({ toolName: "ls", input: { path: "docs" } }, hiddenAncestorContext), undefined);
+for (const directory of [".hidden", "sessions", "approvals", "node_modules"]) {
+  fs.mkdirSync(path.join(hiddenAncestorWorkspace, directory));
+  fs.writeFileSync(path.join(hiddenAncestorWorkspace, directory, "private.txt"), "synthetic private reference");
+  for (const requested of [path.join(directory, "private.txt"), path.join(hiddenAncestorWorkspace, directory, "private.txt")]) {
+    assert.equal((await guard({ toolName: "read", input: { path: requested } }, hiddenAncestorContext))?.block, true);
+  }
+  assert.equal((await guard({ toolName: "ls", input: { path: directory } }, hiddenAncestorContext))?.block, true);
+}
+assert.equal((await guard({ toolName: "read", input: { path: "../outside.txt" } }, hiddenAncestorContext))?.block, true);
 assert.equal(await guard({ toolName: "ls", input: {} }, { ...context, cwd: path.join(learnWorkspace, "public") }), undefined);
 assert.equal((await guard({ toolName: "read", input: { path: "safe.txt" } }, { ...context, cwd: "\\\\server\\share" }))?.block, true,
   "Learn attempted to resolve a network workspace");

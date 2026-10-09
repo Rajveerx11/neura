@@ -78,7 +78,8 @@ export function clampHeadmasterVerdict(action: InspectedAction, raw: RawVerdict 
     };
   }
   if (action.route === "review" && raw.decision === "approve_once") {
-    const bounded = action.category === "bounded-delete" && action.facts.insideWorkspace === true &&
+    const bounded = action.capability.approvalClass === "exception-boundary" &&
+      action.category === "bounded-delete" && action.facts.insideWorkspace === true &&
       action.facts.file === true && action.facts.tracked === false && action.facts.generated === true;
     if (bounded) {
       return {

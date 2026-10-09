@@ -106,7 +106,9 @@ export function registerCheckGate(pi, dependencies = { captureWorktree, runProof
     }
   }
 
-  pi.on("agent_settled", async (_event, ctx) => {
+  pi.on("agent_settled", async (event, ctx) => {
+    // Pi 1.1 reports cancellation here; do not start new proof after a stopped run.
+    if (event.aborted) { before = null; return; }
     if (getMode() !== "work" && getMode() !== "yolo") { before = null; return; }
     if (!ctx.hasUI || running) return;
     const release = acquireHostOperation(["work", "yolo"]);

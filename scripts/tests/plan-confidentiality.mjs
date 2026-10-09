@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { isolate } from './isolation.mjs';
 import { pinnedPi } from './pinned-pi.mjs';
 import { repository, git } from './git-fixture.mjs';
@@ -14,6 +15,39 @@ pinnedPi(repo);
 const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createReadToolDefinition } = await import('@earendil-works/pi-coding-agent');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
 const { authorizePlanPath, readPlanFile, inspectPlanFiles } = await import('../../agent/neura/plan-files.ts');
+// Isolate hostile failed matches behind a process deadline so a redaction
+// regression cannot hang this suite before the inspection budget is observed.
+const keyRedaction = spawnSync(process.execPath, ['--input-type=module', '-e', `
+  import assert from 'node:assert/strict';
+  import { redactSensitiveText } from './agent/neura/redaction.ts';
+  for (const label of ['PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY', 'OPENSSH PRIVATE KEY', 'ENCRYPTED PRIVATE KEY']) {
+    const block = '-----BEGIN ' + label + '-----\\nsynthetic key body\\n-----END ' + label + '-----';
+    assert.equal(redactSensitiveText('ordinary before\\n' + block + '\\nordinary after'), 'ordinary before\\n[REDACTED]\\nordinary after');
+    assert.equal(redactSensitiveText(block + ' ordinary ' + block), '[REDACTED] ordinary [REDACTED]');
+  }
+  const failedMatches = '-----BEGIN PRIVATE KEY-----\\n'.repeat(40_000);
+  assert.equal(redactSensitiveText(failedMatches), failedMatches);
+  assert.equal(redactSensitiveText(failedMatches + '-----END PRIVATE KEY-----'), '[REDACTED]');
+  for (const failedScheme of ['a-'.repeat(160_000), 'a.'.repeat(160_000)]) {
+    assert.equal(redactSensitiveText(failedScheme), failedScheme);
+  }
+  // Retain the legacy URL credential recognition, including punctuation,
+  // underscore word boundaries and valid suffixes after malformed prefixes.
+  const legacy = text => text.replace(/\\b([a-z][a-z0-9+.-]*:\\/\\/[^:\\s/@]+:)[^@\\s/]+(@)/ig, '$1[REDACTED]$2');
+  for (const prefix of ['', ' ', '.', '-', '_', 'a_', '1', '1.', '1-', '1+', 'a_1.']) {
+    for (const scheme of ['http', 'custom.scheme-1', '1http', 'x', 'x.x', 'x-x', '1.x']) {
+      const text = prefix + scheme + '://user:synthetic-pass@example.test/ ordinary';
+      assert.equal(redactSensitiveText(text), legacy(text), text);
+    }
+  }
+  let checks = 0;
+  assert.throws(() => redactSensitiveText(failedMatches, Infinity, () => {
+    if (++checks === 40) throw new Error('synthetic preprocessing budget');
+  }), /preprocessing budget/);
+  assert.equal(checks, 40);
+  console.log('PASS preprocessing redaction: PEM and URL positives/recognition controls, bounded failed matches and budget propagation');
+`], { cwd: repo, stdio: 'inherit', windowsHide: true, timeout: 5000 });
+assert.equal(keyRedaction.status, 0, 'Private-key redaction failed or exceeded the hostile-input process deadline');
 const cwd = repository(scratch, 'plan-files');
 const privateCanary = 'PRIVATE_FILE_CANARY_NOT_A_TOKEN';
 const globalCanary = 'GLOBAL_IGNORE_CANARY_NOT_A_TOKEN';
@@ -229,27 +263,68 @@ try {
   // advance happen only after 40 lines of this single file have been scanned.
   const originalTest = RegExp.prototype.test;
   const originalNow = Date.now;
-  const midFileAbort = new AbortController();
-  let scanned = 0;
-  RegExp.prototype.test = function(value) {
-    if (this.source === '^a$' && ++scanned === 40) setImmediate(() => midFileAbort.abort());
-    return originalTest.call(this, value);
-  };
-  try {
-    await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: '^a$', path: hostileLines }, midFileAbort.signal), /aborted/);
-    assert.ok(scanned >= 40 && scanned < 144, `abort did not interrupt mid-file: ${scanned}`);
-  } finally { RegExp.prototype.test = originalTest; }
-  scanned = 0;
-  const clockStart = originalNow();
-  RegExp.prototype.test = function(value) {
-    if (this.source === '^a$') scanned++;
-    return originalTest.call(this, value);
-  };
-  Date.now = () => clockStart + (scanned >= 40 ? 10_001 : 0);
-  try {
-    await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: '^a$', path: hostileLines }), /deadline/i);
-    assert.equal(scanned, 40, 'deadline did not interrupt mid-file');
-  } finally { RegExp.prototype.test = originalTest; Date.now = originalNow; }
+  const pemLines = path.join(cwd, 'hostile-pem-lines.txt');
+  fs.writeFileSync(pemLines, '-----BEGIN PRIVATE KEY-----\n'.repeat(40_000));
+  for (const [file, pattern, lineCount] of [[hostileLines, '^a$', 144], [pemLines, '^synthetic-no-hit$', 40_000]]) {
+    const midFileAbort = new AbortController();
+    let scanned = 0;
+    RegExp.prototype.test = function(value) {
+      if (this.source === pattern && ++scanned === 40) setImmediate(() => midFileAbort.abort());
+      return originalTest.call(this, value);
+    };
+    try {
+      await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern, path: file }, midFileAbort.signal), /aborted/);
+      assert.ok(scanned >= 40 && scanned < lineCount, `abort did not interrupt mid-file: ${scanned}`);
+    } finally { RegExp.prototype.test = originalTest; }
+    scanned = 0;
+    const clockStart = originalNow();
+    RegExp.prototype.test = function(value) {
+      if (this.source === pattern) scanned++;
+      return originalTest.call(this, value);
+    };
+    Date.now = () => clockStart + (scanned >= 40 ? 10_001 : 0);
+    try {
+      await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern, path: file }), /deadline/i);
+      assert.equal(scanned, 40, 'deadline did not interrupt mid-file');
+    } finally { RegExp.prototype.test = originalTest; Date.now = originalNow; }
+  }
+  // Abort/expiry during a real descriptor read must stop before redaction,
+  // and must not be swallowed as an unreadable/no-authorized-match result.
+  const originalRead = fs.readSync;
+  const originalMatchAll = String.prototype.matchAll;
+  const pemSize = fs.statSync(pemLines).size;
+  for (const kind of ['abort', 'deadline']) {
+    const preprocessingAbort = new AbortController();
+    const clockStart = originalNow();
+    let elapsed = 0;
+    let interrupted = false;
+    let redactionStarted = false;
+    Date.now = () => clockStart + elapsed;
+    fs.readSync = function(fd, buffer, ...args) {
+      const bytes = originalRead.call(this, fd, buffer, ...args);
+      if (!interrupted && buffer.length === pemSize && bytes > 0) {
+        interrupted = true;
+        if (kind === 'abort') preprocessingAbort.abort(); else elapsed = 10_001;
+      }
+      return bytes;
+    };
+    String.prototype.matchAll = function(regex) {
+      if (regex.source.startsWith('-----BEGIN ')) redactionStarted = true;
+      return originalMatchAll.call(this, regex);
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: '^synthetic-no-hit$', path: pemLines }, preprocessingAbort.signal), kind === 'abort' ? /aborted/ : /deadline/);
+      assert.equal(interrupted, true, 'preprocessing probe never reached the concrete descriptor read');
+      assert.equal(redactionStarted, false, 'preprocessing continued after its budget was invalidated');
+    } finally {
+      fs.readSync = originalRead;
+      String.prototype.matchAll = originalMatchAll;
+      Date.now = originalNow;
+      syncBuiltinESMExports();
+    }
+  }
+  fs.unlinkSync(pemLines);
   fs.unlinkSync(hostileLines);
   await assert.rejects(() => call(session, 'find', { pattern: '*', limit: 100000 }), /limit/);
   // Real final-context emission includes restored system text and tool schemas.
