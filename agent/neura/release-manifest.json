@@ -111,10 +111,10 @@
     "agent/mcp.json": "7e10d172a4a372b759284d5d9cb8937c2317a47ff32768fc673eb591a21b0cee",
     "launcher/neura.cmd": "51081b5694f6bf0a98269477c32420c553def9c0d4cba82400886d9ccb6f189a",
     "agent/neura/action-contracts.ts": "fbfbf5facdb858673d1893ca90cfcb03c55650ece611f3a7c5da0069fcc6a12a",
-    "agent/neura/action-paths.ts": "597d49b7a329f93bc2df7bff24c5f531f8bbfb57fe10279f258f87445db350f7",
+    "agent/neura/action-paths.ts": "aad3920d0e372fa29dc85cd0f820c29e3c0016fd20dcee37e8bc2e43dfd46613",
     "agent/neura/capabilities.ts": "1f10deb296c32836a10d89b01b2b46b1c9425a779387ebaf2f8ded3d106b9727",
     "agent/neura/mode-tools.ts": "e2f04b8cbdf8807b09a8d4bcd44d0229193d54fff610e5f93172a99f4597dab8",
     "agent/neura/plan-shell-parser.ts": "e4e8b9d209d15ccd246968149c552196524ad39f6cd3ca6b57a0153d0c1c9a45",
-    "agent/neura/process.ts": "b363b6b54d15c0df1699d669d7bd44b62bbeb0f227fdf78e6a76465d27a04aba"
+    "agent/neura/process.ts": "c66be3ec674965521ccc3be1be6ae14f9550f145f6317455167c1c2181b91ecc"
   }
 }

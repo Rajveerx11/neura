@@ -11,6 +11,26 @@ for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-to
   assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
   assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ agent/neura/${file}.ts` } }, repoRoot).route, 'human');
 }
+for (const file of ['agent/extensions/mcp.ts', 'agent/neura/process-security.ts']) {
+  const target = path.join(repoRoot, file);
+  assert.equal(await guard({ toolName: 'read', input: { path: target } }, context), undefined, `Plan blocked read-only inspection of ${file}`);
+  for (const toolName of ['edit', 'write']) {
+    const action = inspectAction({ toolName, input: { path: target, content: 'task' } }, repoRoot);
+    assert.equal(action.route, 'human', `${toolName} bypassed protected-control boundary for ${file}`);
+    assert.equal(action.category, 'protected-control');
+    assert.equal(action.capability.approvalClass, 'exception-boundary');
+  }
+  assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot).route, 'allow');
+  assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
+  assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ ${file}` } }, repoRoot).route, 'human');
+}
+for (const file of ['ordinary-task-file.txt', 'agent/extensions/mcp-helper.ts', 'agent/neura/process-security-notes.ts']) {
+  for (const toolName of ['edit', 'write']) {
+    const action = inspectAction({ toolName, input: { path: path.join(repoRoot, file), content: 'task' } }, repoRoot);
+    assert.equal(action.route, 'allow', `control-path protection widened to ordinary ${toolName} ${file}`);
+    assert.equal(action.capability.approvalClass, 'task-scoped');
+  }
+}
 const ordinaryPatch = inspectAction({ toolName: 'write', input: { path: path.join(repoRoot, 'ordinary-task-file.txt'), content: 'task' } }, repoRoot);
 assert.equal(ordinaryPatch.route, 'allow', 'metadata mandated blanket approval for ordinary workspace effects');
 assert.equal(ordinaryPatch.capability.approvalClass, 'task-scoped');

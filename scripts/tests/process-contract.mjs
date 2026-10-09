@@ -9,6 +9,7 @@ import { execute } from '../../agent/neura/verification.ts';
 
 const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-process-contract-'));
 let fixtureWritesFenced = true;
+let contractFailure;
 const options = { cwd, timeoutMs: 5000, maxBuffer: 1024 };
 const run = (script, overrides = {}, args = []) => executeProcess(process.execPath, ['-e', script, '--', ...args], { ...options, ...overrides });
 try {
@@ -152,6 +153,7 @@ try {
       const pending = run(script, { timeoutMs: 1500, signal: controller.signal }, [ready, terminated, writesDone]);
       let finished = false;
       pending.finally(() => { finished = true; });
+      let raceFailure;
       try {
         for (const marker of deadlineFirst ? [ready, terminated] : [ready]) {
           let observed = false;
@@ -170,28 +172,44 @@ try {
         assert.equal(result.cancelled, true);
         assert.equal(result.errorCode, 'ABORT_ERR');
         assert.equal(result.timedOut, deadlineFirst, 'abort erased a deadline fact or invented expiry');
+      } catch (error) {
+        raceFailure = [error];
+        throw error;
       } finally {
-        controller.abort();
-        await pending;
-        // Abort callback can precede the signal handler's fixture writes. Keep
-        // cwd until their final marker, bounded beyond the child's 5s fallback.
-        const fenceDeadline = performance.now() + 6500;
-        let observed = false;
-        while (performance.now() < fenceDeadline) {
-          try { observed = await fs.readFile(writesDone, 'utf8') === 'done'; } catch (error) { if (error.code !== 'ENOENT') throw error; }
-          if (observed) break;
-          await new Promise(resolve => setTimeout(resolve, 10));
+        try {
+          controller.abort();
+          await pending;
+          // Abort callback can precede the signal handler's fixture writes. Keep
+          // cwd until their final marker, bounded beyond the child's 5s fallback.
+          const fenceDeadline = performance.now() + 6500;
+          let observed = false;
+          while (performance.now() < fenceDeadline) {
+            try { observed = await fs.readFile(writesDone, 'utf8') === 'done'; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+            if (observed) break;
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+          assert.equal(observed, true, 'race fixture writes did not finish before cleanup bound');
+          fixtureWritesFenced = true;
+          assert.equal(await fs.readFile(ready, 'utf8'), 'ready');
+          assert.equal(await fs.readFile(terminated, 'utf8'), 'ready', 'signal fixture must survive until all writes are fenced');
+        } catch (fenceError) {
+          if (raceFailure) throw new AggregateError([...raceFailure, fenceError], 'Process race failed and fixture fencing also failed.');
+          throw fenceError;
         }
-        assert.equal(observed, true, 'race fixture writes did not finish before cleanup bound');
-        fixtureWritesFenced = true;
-        assert.equal(await fs.readFile(ready, 'utf8'), 'ready');
-        assert.equal(await fs.readFile(terminated, 'utf8'), 'ready', 'signal fixture must survive until all writes are fenced');
       }
     }
     console.log('Process contract: POSIX ready-confirmed cooperative exit 0/7, both adapters, deadline/abort fact ordering and fixture-write fences passed.');
   } else console.log('Process contract: POSIX cooperative probes skipped on Windows.');
   console.log('Process contract: success/nonzero, validation, zero timeout, expiry, cancellation, output limits and duration passed.');
+} catch (error) {
+  contractFailure = [error];
+  throw error;
 } finally {
-  assert.equal(fixtureWritesFenced, true, `unsafe fixture cleanup refused; retained ${cwd}`);
-  await fs.rm(cwd, { recursive: true, force: true });
+  try {
+    assert.equal(fixtureWritesFenced, true, `unsafe fixture cleanup refused; retained ${cwd}`);
+    await fs.rm(cwd, { recursive: true, force: true });
+  } catch (cleanupError) {
+    if (contractFailure) throw new AggregateError([...contractFailure, cleanupError], 'Process contract failed and fixture cleanup also failed.');
+    throw cleanupError;
+  }
 }
