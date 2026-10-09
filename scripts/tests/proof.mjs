@@ -225,6 +225,14 @@ registerCheckGate(pi, {captureWorktree, runProof:async (_cwd, quick) => {
 }});
 const ctx = {cwd:root,hasUI:true,ui:{setStatus(){},notify(message){notifications.push(message);}}};
 await handlers.get('agent_start')({},ctx);
+fs.writeFileSync(file,'cancelled changes');
+await handlers.get('agent_settled')({aborted:true},ctx);
+assert.equal(calls,0,'aborted settlement started automatic proof');
+assert.equal(entries.length,0,'aborted settlement recorded proof evidence');
+assert.equal(messages.length,0,'aborted settlement requested follow-up');
+await handlers.get('agent_settled')({aborted:false},ctx);
+assert.equal(calls,0,'cancelled snapshot leaked into later settlement');
+await handlers.get('agent_start')({},ctx);
 await handlers.get('agent_settled')({},ctx);
 assert.equal(calls,0,'unchanged worktree ran proof');
 await handlers.get('agent_start')({},ctx);
@@ -277,23 +285,26 @@ const afterThrow=calls;
 await commands.get('ship').handler('',ctx);
 assert.equal(calls,afterThrow+1,'disposed UI wedged later verification');
 
-// Session replacement aborts in-flight work; late success cannot enter the new session.
-const lateHandlers=new Map(), lateCommands=new Map(), lateEntries=[];
-let release, capturedSignal;
-registerCheckGate({on:(name,fn)=>lateHandlers.set(name,fn),registerCommand:(name,def)=>lateCommands.set(name,def),
-  appendEntry:(_type,data)=>lateEntries.push(data),sendUserMessage(){}}, {
-  captureWorktree,
-  runProof:async (_cwd,_quick,{signal})=>{
-    capturedSignal=signal;
-    return new Promise(resolve=>{release=()=>resolve({status:'unavailable',reasons:['Legacy full PASS is insufficient.']});});
-  },
-});
-const late=lateCommands.get('ship').handler('',ctx);
-while(!release) await new Promise(resolve=>setTimeout(resolve,5));
-lateHandlers.get('session_start')();
-assert.equal(capturedSignal.aborted,true,'session replacement did not cancel proof');
-release(); await late;
-assert.equal(lateEntries.length,0,'old session recorded late PASS');
+// Session replacement/shutdown abort in-flight work; even late detector success
+// cannot enter a new session or publish after disposal.
+for (const boundary of ['session_start', 'session_shutdown']) {
+  const lateHandlers=new Map(), lateCommands=new Map(), lateEntries=[];
+  let release, capturedSignal;
+  registerCheckGate({on:(name,fn)=>lateHandlers.set(name,fn),registerCommand:(name,def)=>lateCommands.set(name,def),
+    appendEntry:(_type,data)=>lateEntries.push(data),sendUserMessage(){}}, {
+    captureWorktree,
+    runProof:async (_cwd,_quick,{signal})=>{
+      capturedSignal=signal;
+      return new Promise(resolve=>{release=()=>resolve({status:'passed',reasons:[]});});
+    },
+  });
+  const late=lateCommands.get('ship').handler('',ctx);
+  while(!release) await new Promise(resolve=>setTimeout(resolve,5));
+  lateHandlers.get(boundary)();
+  assert.equal(capturedSignal.aborted,true,`${boundary} did not cancel proof`);
+  release(); await late;
+  assert.equal(lateEntries.length,0,`${boundary} recorded late PASS`);
+}
 
 // Incremental suite results are attached as untrusted, current/stale evidence.
 fs.appendFileSync(path.join(root,'.gitignore'),'.proofofwork/\n');

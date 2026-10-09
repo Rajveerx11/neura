@@ -10,7 +10,7 @@ changes back later. Live harness is an installation target, not source.
 - Current supported Windows and PowerShell.
 - Node.js 24.15+ and npm; CI uses 24.16.0.
 - Git.
-- Exact Pi runtime, AI, and TUI `1.0.4` for this source-only PR88 integration;
+- Exact Pi runtime, AI, and TUI `1.1.0` for this source-only PR98 compatibility candidate;
   merged/live versions may differ. Do not downgrade a newer Pi to match Neura.
 - uv/`uvx` `0.12.11` and CPython `3.12.3` at the runtime-contract path; set
   `NEURA_WSL_UV_DIR` to the reviewed WSL binary directory and

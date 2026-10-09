@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { executeProcess } from "./process.ts";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -25,18 +25,11 @@ export type VerificationReceipt = {
 
 const outsideRoot = (relative: string) => relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
 
-export function execute(file: string, args: string[], options: {
+export async function execute(file: string, args: string[], options: {
   cwd: string; timeoutMs: number; signal?: AbortSignal; maxBuffer?: number; env?: NodeJS.ProcessEnv;
 }): Promise<{ ok: boolean; stdout: string; completed?: boolean }> {
-  return new Promise(resolve => {
-    execFile(file, args, {
-      cwd: options.cwd, timeout: options.timeoutMs, signal: options.signal,
-      windowsHide: true, maxBuffer: options.maxBuffer ?? 1024 * 1024,
-      env: options.env,
-    }, (error, stdout) => resolve({ ok: !error,
-      completed: !error || (typeof error.code === "number" && !error.killed),
-      stdout: String(stdout ?? "") }));
-  });
+  const result = await executeProcess(file, args, { ...options, maxBuffer: options.maxBuffer ?? 1024 * 1024 });
+  return { ok: result.ok, completed: result.completed, stdout: result.stdout };
 }
 
 // Hash bytes, never Git diff output: no filters, textconv, external diff, or

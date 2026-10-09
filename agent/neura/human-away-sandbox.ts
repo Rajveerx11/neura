@@ -5,8 +5,7 @@ import { fileURLToPath } from "node:url";
 import { redactSensitiveText } from "./redaction.ts";
 import { PROOF_PYTHON, proofRuntimeArguments } from "./verification.ts";
 
-export const HUMAN_AWAY_SANDBOX_TOOL = "human_away_exec";
-export const WORK_SANDBOX_TOOL = "work_exec";
+export { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./capabilities.ts";
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_WORKSPACE_ENTRIES = 200_000;
 

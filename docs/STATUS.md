@@ -1,17 +1,20 @@
 # Neura status
 
-Last documentation audit: 2026-10-06
+Last documentation audit: 2026-10-08
 
 Latest release: `2.5.1`. Current merged source: `a0205eb`, including Work,
 modular verification, and Learn Mode; these changes are unreleased. This checkout
-adds source-only installer readiness work targeting exact Pi `1.0.4`; that work
+adds source-only compatibility and installer readiness work targeting exact Pi `1.1.0`; that work
 is not merged, released, or installed. Node: `24.15+` (CI `24.16.0`).
 
 Standing requirement (2026-10-06): Neura must work with the latest stable Pi after
-every upstream update. npm's latest stable Pi was checked as `1.0.4` on that date;
-device-version evidence from the earlier handoff is not an isolated-worktree check. This checkout now targets `1.0.4` with real-loader
-security regressions; version agreement alone is not full compatibility or a
-live-install guarantee. Update Neura and its exact pins rather than downgrade Pi
+every upstream update. npm's latest stable Pi was checked as `1.1.0` on 2026-10-08;
+PR98's older `1.0.4` target failed the real latest-Pi gate. This isolated source
+candidate advances the coupled pins and identity, with real-loader/session
+modifier, reload, duration and cancellation regressions. Historical `1.0.4`
+review/CI does not certify the new candidate; fresh review and new-head required
+CI remain pending. Version agreement alone is not full compatibility or a
+live-install guarantee; the owner's device/live state was not inspected. Update Neura and its exact pins rather than downgrade Pi
 or bypass runtime checks. Follow the
 [Pi compatibility policy](DEPENDENCIES.md#pi-compatibility-policy) and
 [installer readiness](INSTALLER_READINESS.md).
@@ -46,8 +49,9 @@ release gates and issue ownership live in
 | Area | State | Evidence or blocker |
 |---|---|---|
 | Public source | Available; release blocked | The repository is public, GitHub recognizes Apache-2.0, the owner-supplied logo has documented redistribution terms, and a complete-history secret scan passed on 2026-09-15. Final content/default review and clean-profile install evidence remain release blockers. See [OPEN_SOURCE.md](OPEN_SOURCE.md). |
-| Pi and live Neura | Pi 1.0.4 isolated source target; live state not checked | On 2026-10-06 the managed PR88 integration worktree passed configured typecheck, all 18 harness suites, docs, release tests, audits/signatures, and latest-Pi discovery at `1.0.4`. Real-loader/session tests cover enforced native MCP disable, override/reload/load-failure denial, nested deferred policy, and YOLO/stock-Pi positive controls. Independent review found no actionable issues in the 36-file scoped candidate. CodeRabbit completed with two unverified suggestions, independently assessed as non-actionable under the supported Git format and latest-Pi policy; no clean-CodeRabbit claim is made. Required remote CI is tracked on PR #88; local review does not attest it. No live installation or drift check was performed; no live-match claim is made. |
-| Dependency graphs | Source graph audited 2026-10-06 | Root and Learn audits report zero known vulnerabilities; the Windows-resolved Pi 1.0.4 root graph reports 137 verified registry signatures and 42 attestations, Learn reports 21 signatures and 3 attestations. This is not a full dependency-trust or production-readiness attestation. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
+| Current Pi candidate | Pi 1.1.0 isolated source target; review/remote CI pending | On 2026-10-08 configured typecheck, all 18 isolated harness suites, 11 release checks and 35-file docs validation passed, including focused unit, proof, integration, UI and synthetic installer checks. Actual agent-pipeline tests deny activated codemode/tool-search tools in four restricted modes before/after reload, with YOLO/stock-Pi positives; nested duration linkage and normal/aborted settlement are exercised through a local synthetic stream. Native MCP HTTP/stdio/override/replacement-failure denial and stock native-connect controls remain. Aborted settlement starts no automatic quick proof. Synthetic Plan/Learn Edge checks passed; Plan needed environment-only cleanup ownership transfer after two failed temporary-profile cleanup commands. LSP is unavailable. No live installation/drift, supported POSIX rerun, exhaustive dependency provenance or full original-issue acceptance is claimed. |
+| Historical Pi evidence | Pi 1.0.4 reviewed 2026-10-06; not current-candidate evidence | On 2026-10-06 the managed PR88 integration worktree passed configured typecheck, all 18 harness suites, docs, release tests, audits/signatures, and latest-Pi discovery at `1.0.4`. Real-loader/session tests cover enforced native MCP disable, override/reload/load-failure denial, nested deferred policy, and YOLO/stock-Pi positive controls. Independent review found no actionable issues in the 36-file scoped candidate. CodeRabbit completed with two unverified suggestions, independently assessed as non-actionable under the supported Git format and latest-Pi policy; no clean-CodeRabbit claim is made. Required remote CI is tracked on PR #88; local review does not attest it. No live installation or drift check was performed; no live-match claim is made. |
+| Dependency graphs | Source graph audited 2026-10-08 | Current Windows-resolved Pi 1.1.0 root and unchanged Learn graphs report zero known vulnerabilities, 137/21 verified registry signatures and 42/3 attestations. Eight coupled Earendil packages advance; external versions/integrities stay unchanged, with two identical lock duplicates removed. Published lifecycle review and scripts-disabled private installation do not establish exhaustive native/WASM, built-source or dependency-trust attestation. See [dependency policy](DEPENDENCIES.md) and [Learn review](LEARN_DEPENDENCIES.md). |
 | Proof delivery gate | Blocked; fail-closed safety slice in source | Pinned PoW 0.2.0 legacy full PASS is unavailable even with successful test flags. Quick PASS is detector-only and never engineering COMPLETE. Trusted suite policy, reviewed release evidence, and complete candidate binding remain [#91](https://github.com/Rajveerx11/neura/issues/91); no full verified PASS is currently available. |
 | Core harness | Ready for covered behavior | Local verification on 2026-09-15 passed typecheck, docs, sandbox replay, Learn/Plan browser checks, and 18 isolated suites loading 19 extensions. CI passed on the public-repository hardening commit. |
 | Default mode | Implemented, unreleased | Work is default; execution uses network-disabled WSL2 bubblewrap, with no host fallback. [#23](https://github.com/Rajveerx11/neura/issues/23) is closed. |

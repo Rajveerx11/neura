@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { executeProcess } from "./process.ts";
 import * as path from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } from "./process-security.ts";
@@ -38,31 +38,15 @@ export type ProcessResult = {
   stderr: string;
 };
 
-export function runProcess(
+export async function runProcess(
   file: string,
   args: string[],
-  options: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
+  options: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv; signal?: AbortSignal; maxBuffer?: number } = {},
 ): Promise<ProcessResult> {
-  return new Promise((resolve) => {
-    execFile(
-      file,
-      args,
-      {
-        cwd: options.cwd,
-        timeout: options.timeoutMs ?? 3_000,
-        windowsHide: true,
-        maxBuffer: 4 * 1024 * 1024,
-        env: options.env,
-      },
-      (error, stdout, stderr) => {
-        resolve({
-          ok: !error,
-          stdout: String(stdout ?? "").trim(),
-          stderr: String(stderr ?? "").trim(),
-        });
-      },
-    );
+  const result = await executeProcess(file, args, {
+    ...options, timeoutMs: options.timeoutMs ?? 3_000, maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
   });
+  return { ok: result.ok, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
 }
 
 export async function commandVersion(command: string, args = ["--version"], cwd = process.cwd()): Promise<string | null> {

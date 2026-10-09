@@ -140,6 +140,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts
+      - run: node scripts/tests/process-contract.mjs
       - run: node scripts/verify-harness.mjs --suite proof
       - run: node scripts/verify-harness.mjs --suite approval-storage
       - run: node scripts/verify-harness.mjs --suite sandbox

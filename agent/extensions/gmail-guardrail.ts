@@ -1,33 +1,9 @@
 // Gmail guardrail — current human approval for outbound and irreversible actions.
 
+import { describeCapability } from "../neura/capabilities.ts";
 import { getMode } from "../neura/mode-state.ts";
 import { redactSensitiveText } from "../neura/redaction.ts";
 
-const READ_ONLY = new Set([
-  "GMAIL_GET_PROFILE",
-  "GMAIL_GET_MESSAGE",
-  "GMAIL_GET_THREAD",
-  "GMAIL_GET_DRAFT",
-  "GMAIL_GET_LABEL",
-  "GMAIL_GET_FILTER",
-  "GMAIL_GET_SEND_AS",
-  "GMAIL_GET_IMAP_SETTINGS",
-  "GMAIL_GET_POP_SETTINGS",
-  "GMAIL_GET_VACATION_SETTINGS",
-  "GMAIL_GET_AUTO_FORWARDING",
-  "GMAIL_GET_FORWARDING_ADDRESS",
-  "GMAIL_LIST_MESSAGES",
-  "GMAIL_LIST_THREADS",
-  "GMAIL_LIST_DRAFTS",
-  "GMAIL_LIST_LABELS",
-  "GMAIL_LIST_FILTERS",
-  "GMAIL_LIST_SEND_AS",
-  "GMAIL_LIST_FORWARDING_ADDRESSES",
-  "GMAIL_SEARCH_EMAILS",
-  "GMAIL_SEARCH_MESSAGES",
-  "GMAIL_FETCH_EMAILS",
-  "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
-]);
 
 const MUTATION_DESCRIPTIONS: Record<string, string> = {
   GMAIL_SEND_EMAIL: "send an email",
@@ -76,7 +52,7 @@ export default function (pi) {
     if (getMode() !== "human-away" && getMode() !== "work") return { block: true, reason: "Gmail tools are unavailable in this mode." };
 
     const action = event.toolName.slice(prefix.length).toUpperCase();
-    if (READ_ONLY.has(action)) return;
+    if (describeCapability(event.toolName).effects.every((effect) => effect === "read")) return;
     const description = MUTATION_DESCRIPTIONS[action] ?? `run unclassified Gmail action ${action}`;
 
     if (!ctx.hasUI) {

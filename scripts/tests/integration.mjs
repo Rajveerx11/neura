@@ -108,18 +108,61 @@ const deniedGmailContext = {
   ...context,
   ui: { ...ui, confirm: async () => { gmailPrompts++; return false; } },
 };
-modeState.setMode("human-away");
-assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_GET_PROFILE", input: { user_id: "me" } }, deniedGmailContext), undefined, "harmless Gmail profile read was blocked");
+const gmailReads = [
+  'GMAIL_GET_PROFILE', 'GMAIL_GET_MESSAGE', 'GMAIL_GET_THREAD', 'GMAIL_GET_DRAFT',
+  'GMAIL_GET_LABEL', 'GMAIL_GET_FILTER', 'GMAIL_GET_SEND_AS', 'GMAIL_GET_IMAP_SETTINGS',
+  'GMAIL_GET_POP_SETTINGS', 'GMAIL_GET_VACATION_SETTINGS', 'GMAIL_GET_AUTO_FORWARDING',
+  'GMAIL_GET_FORWARDING_ADDRESS', 'GMAIL_LIST_MESSAGES', 'GMAIL_LIST_THREADS', 'GMAIL_LIST_DRAFTS',
+  'GMAIL_LIST_LABELS', 'GMAIL_LIST_FILTERS', 'GMAIL_LIST_SEND_AS', 'GMAIL_LIST_FORWARDING_ADDRESSES',
+  'GMAIL_SEARCH_EMAILS', 'GMAIL_SEARCH_MESSAGES', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID',
+];
+assert.equal(gmailReads.length, 23);
+for (const mode of ['work', 'human-away']) {
+  modeState.setMode(mode);
+  for (const action of gmailReads.flatMap(name => [name, name.toLowerCase()])) {
+    assert.equal(await gmailGuard({ toolName: `mcp__gmail__${action}`, input: {} }, deniedGmailContext), undefined,
+      `${mode} prompted for known Gmail read ${action}`);
+    assert.equal(await gmailGuard({ toolName: `mcp__gmail__${action}`, input: {} }, { ...context, hasUI: false }), undefined,
+      `${mode} blocked headless known Gmail read ${action}`);
+  }
+}
+assert.equal(gmailPrompts, 0);
+for (const mode of ['plan', 'learn']) {
+  modeState.setMode(mode);
+  for (const action of [...gmailReads, 'GMAIL_SEND_EMAIL', 'GMAIL_GET_FUTURE_UNCLASSIFIED']) {
+    assert.equal((await gmailGuard({ toolName: `mcp__gmail__${action}`, input: {} }, deniedGmailContext))?.block, true,
+      `${mode} allowed Gmail ${action}`);
+  }
+}
+assert.equal(gmailPrompts, 0, 'unavailable modes requested Gmail approval');
+modeState.setMode('human-away');
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: { recipient_email: "test@example.com", subject: "Test" } }, deniedGmailContext))?.block, true, "denied Gmail send was not blocked");
 assert.equal(gmailPrompts, 1, "Gmail send did not request exactly one human confirmation");
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, { ...context, hasUI: false }))?.block, true, "headless Gmail send did not fail closed");
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_NEW_UNCLASSIFIED_ACTION", input: {} }, deniedGmailContext))?.block, true, "unknown Gmail action did not require confirmation");
 assert.equal(gmailPrompts, 2, "unknown Gmail action did not request exactly one confirmation");
 assert.equal((await gmailGuard({ toolName: "mcp__gmail__GMAIL_NEW_UNCLASSIFIED_ACTION", input: {} }, { ...context, hasUI: false }))?.block, true, "headless unknown Gmail action did not fail closed");
+for (const mode of ['work', 'human-away']) {
+  modeState.setMode(mode);
+  for (const action of ['GMAIL_GET_FUTURE_UNCLASSIFIED', 'GMAIL_LIST_FUTURE_UNCLASSIFIED', 'GMAIL_SEND_EMAIL', 'GMAIL_DELETE_MESSAGE']) {
+    const event = { toolName: `mcp__gmail__${action}`, input: {} };
+    const before = gmailPrompts;
+    assert.equal((await gmailGuard(event, deniedGmailContext))?.block, true);
+    assert.equal(gmailPrompts, before + 1, `${mode} unknown/mutation did not confirm exactly once`);
+    assert.equal((await gmailGuard(event, { ...context, hasUI: false }))?.block, true);
+    let approvedPrompts = 0;
+    assert.equal(await gmailGuard(event, { ...context, ui: { ...ui, confirm: async () => { approvedPrompts++; return true; } } }), undefined);
+    assert.equal(approvedPrompts, 1);
+  }
+}
+const promptsBeforeYolo = gmailPrompts;
 modeState.setMode("yolo");
+for (const action of [...gmailReads, 'GMAIL_GET_FUTURE_UNCLASSIFIED']) {
+  assert.equal(await gmailGuard({ toolName: `mcp__gmail__${action}`, input: {} }, deniedGmailContext), undefined);
+}
 assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_SEND_EMAIL", input: {} }, deniedGmailContext), undefined, "YOLO retained Gmail approval mediation");
 assert.equal(await gmailGuard({ toolName: "mcp__gmail__GMAIL_DELETE_MESSAGE", input: {} }, { ...context, hasUI: false }), undefined, "headless YOLO blocked a Gmail mutation");
-assert.equal(gmailPrompts, 2, "YOLO requested a Gmail confirmation");
+assert.equal(gmailPrompts, promptsBeforeYolo, "YOLO requested a Gmail confirmation");
 
 // /preset must resolve dated catalog ids (claude-opus-5-2026xxxx) by prefix, newest first,
 // and tell the user which provider to /login when the model is absent.
