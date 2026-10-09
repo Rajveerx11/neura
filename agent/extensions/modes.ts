@@ -1,6 +1,8 @@
 // Neura modes: Plan, supervised WORK, YOLO, Human Away Preview, and Learn. Shift+Tab cycles modes.
 // Motion visualizes enforced capability changes; deterministic policy remains authoritative.
 
+import { LEARN_ONLY_TOOL_NAMES } from "../neura/learn-policy.ts";
+import { PLAN_TOOLS, PLAN_ONLY_TOOLS, WORK_TOOLS, LEARN_TOOLS, MODE_ONLY_TOOLS, filterRestrictedProviderPayload, restrictCapabilityToolNames } from "../neura/mode-tools.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -9,8 +11,6 @@ import { getCockpitState, patchCockpit, type CockpitApproval } from "../neura/co
 import { PALETTE, fg } from "../neura/core.ts";
 import { getMode, isAgentMode, isHostOperationActive, isModeRestorePending, modeLabel, modePosition, nextMode, restoreMode, setMode, type AgentMode } from "../neura/mode-state.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "../neura/human-away-sandbox.ts";
-import { PLAN_MODE_TOOL_NAMES, PLAN_REQUEST_TOOL, PUBLISH_PLAN_TOOL } from "../neura/plan-policy.ts";
-import { LEARN_MODE_TOOL_NAMES, LEARN_ONLY_TOOL_NAMES } from "../neura/learn-policy.ts";
 import { GLYPHS, MOTION, quietRule } from "../neura/ui-tokens.ts";
 import {
   findPending,
@@ -22,21 +22,6 @@ import {
 } from "../neura/approval-store.ts";
 
 const MODE_ENTRY = "neura-mode-state";
-const PLAN_TOOLS = new Set(PLAN_MODE_TOOL_NAMES);
-const PLAN_ONLY_TOOLS = new Set([PUBLISH_PLAN_TOOL, PLAN_REQUEST_TOOL]);
-const WORK_TOOLS = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", WORK_SANDBOX_TOOL]);
-const LEARN_TOOLS = new Set(LEARN_MODE_TOOL_NAMES);
-const MODE_ONLY_TOOLS = new Set([PUBLISH_PLAN_TOOL, PLAN_REQUEST_TOOL, WORK_SANDBOX_TOOL, HUMAN_AWAY_SANDBOX_TOOL, ...LEARN_ONLY_TOOL_NAMES]);
-const PROVIDER_TOOL_ALIASES = new Map([
-  ["Read", "read"],
-  ["Bash", "bash"],
-  ["Grep", "grep"],
-  ["Edit", "edit"],
-  ["Write", "write"],
-  ["Find", "find"],
-  ["Glob", "find"],
-  ["Ls", "ls"],
-]);
 const { accent: ACC, dim: DIM, error: ERROR, human: HUMAN, muted: MUT, plan: PLAN, success: OK, text: TXT, warning: WARN } = PALETTE;
 
 type PersistedMode = { mode?: AgentMode; changedAt?: string };
@@ -318,50 +303,6 @@ export default function (pi) {
     return false;
   }
 
-  function providerToolName(value: unknown): string | undefined {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-    const tool = value as { name?: unknown; function?: { name?: unknown }; toolSpec?: { name?: unknown } };
-    if (typeof tool.name === "string") return tool.name;
-    if (typeof tool.function?.name === "string") return tool.function.name;
-    return typeof tool.toolSpec?.name === "string" ? tool.toolSpec.name : undefined;
-  }
-
-  function providerToolAllowed(value: unknown): boolean {
-    const name = providerToolName(value);
-    return name !== undefined && enforcedRestrictedTools.includes(PROVIDER_TOOL_ALIASES.get(name) ?? name);
-  }
-
-  function filterProviderTools(value: unknown): unknown[] {
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((tool) => {
-      if (!tool || typeof tool !== "object" || Array.isArray(tool)) return [];
-      const record = tool as Record<string, unknown>;
-      if ("functionDeclarations" in record) {
-        const functionDeclarations = Array.isArray(record.functionDeclarations)
-          ? record.functionDeclarations.filter(providerToolAllowed)
-          : [];
-        return functionDeclarations.length ? [{ ...record, functionDeclarations }] : [];
-      }
-      return providerToolAllowed(record) ? [record] : [];
-    });
-  }
-
-  function filterRestrictedProviderPayload(payload: unknown): unknown {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
-    const record = payload as Record<string, unknown>;
-    let filtered = { ...record };
-    if ("tools" in record) filtered = { ...filtered, tools: filterProviderTools(record.tools) };
-    if (record.config && typeof record.config === "object" && !Array.isArray(record.config)) {
-      const config = record.config as Record<string, unknown>;
-      if ("tools" in config) filtered = { ...filtered, config: { ...config, tools: filterProviderTools(config.tools) } };
-    }
-    if (record.toolConfig && typeof record.toolConfig === "object" && !Array.isArray(record.toolConfig)) {
-      const toolConfig = record.toolConfig as Record<string, unknown>;
-      if ("tools" in toolConfig) filtered = { ...filtered, toolConfig: { ...toolConfig, tools: filterProviderTools(toolConfig.tools) } };
-    }
-    return filtered;
-  }
-
   function applyToolBoundary(mode: AgentMode, cwd: string): void {
     if (isModeRestorePending()) {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
@@ -380,7 +321,7 @@ export default function (pi) {
     if (mode === "plan" || mode === "learn") {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else if (restrictedMode === null) rememberNonPlanSelection();
-      enforcedRestrictedTools = researchToolNames(mode);
+      enforcedRestrictedTools = restrictCapabilityToolNames(researchToolNames(mode));
       restrictedMode = mode;
       setActiveTools(enforcedRestrictedTools);
       return;
@@ -389,7 +330,7 @@ export default function (pi) {
     if (mode === "work") {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else rememberNonPlanSelection();
-      enforcedRestrictedTools = workToolNames();
+      enforcedRestrictedTools = restrictCapabilityToolNames(workToolNames());
       restrictedMode = "work";
       setActiveTools(enforcedRestrictedTools);
       return;
@@ -399,7 +340,7 @@ export default function (pi) {
       if (restrictedMode !== null) observeRestrictedSelectionChanges();
       else if (restrictedMode === null) rememberNonPlanSelection();
       const available = availableToolNames();
-      enforcedRestrictedTools = available.has(HUMAN_AWAY_SANDBOX_TOOL) ? [HUMAN_AWAY_SANDBOX_TOOL] : [];
+      enforcedRestrictedTools = restrictCapabilityToolNames(available.has(HUMAN_AWAY_SANDBOX_TOOL) ? [HUMAN_AWAY_SANDBOX_TOOL] : []);
       restrictedMode = "human-away";
       setActiveTools(enforcedRestrictedTools);
       return;
@@ -628,6 +569,6 @@ export default function (pi) {
   // schemas; the deterministic tool-call guard remains defense in depth.
   pi.on("before_provider_request", (event, ctx) => {
     applyToolBoundary(getMode(), ctx.cwd);
-    return getMode() === "yolo" ? event.payload : filterRestrictedProviderPayload(event.payload);
+    return getMode() === "yolo" ? event.payload : filterRestrictedProviderPayload(event.payload, enforcedRestrictedTools);
   });
 }

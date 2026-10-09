@@ -134,7 +134,7 @@ function state(manifest, root) {
   return { schemaVersion: 1, sourceCommit: commit, manifestHash: digest(path.join(root, manifestName)),
     version: manifest.neuraVersion, installedAt: new Date().toISOString(), files };
 }
-function verify(root, expectedState, checkOwnership = true, quick = false) {
+function verify(root, expectedState, checkOwnership = true, quick = false, legacySkillsRecovery = false) {
   const located = (name) => root === agent ? asTarget(name) : path.join(root, name);
   const manifest = valid(read(located(manifestName)));
   if (expectedState.schemaVersion !== 1 || !expectedState.files || Array.isArray(expectedState.files) ||
@@ -152,7 +152,18 @@ function verify(root, expectedState, checkOwnership = true, quick = false) {
     safe(file);
     if (!exists(file) || digest(file) !== expected) throw Error(`installed file drift: ${name}`);
   }
-  validateSkills(path.dirname(located('agent/neura/skills-manifest.json')), manifest, checkOwnership);
+  const registryRoot = path.dirname(located('agent/neura/skills-manifest.json'));
+  // Only recovery may accept a wholly pre-catalog transaction. Never infer legacy
+  // from one missing file: declarations, receipt entries, or any physical registry
+  // component (including dangling links) require full supported-skills validation.
+  const skillEntry = name => name === 'agent/neura/skills-manifest.json' || name === 'agent/neura/skills-registry.mjs'
+    || name === 'agent/neura/skills' || name.startsWith('agent/neura/skills/');
+  const declaredSkills = Object.keys(manifest.files).some(skillEntry) || Object.keys(expectedState.files).some(skillEntry);
+  const registryPresent = ['skills-manifest.json', 'skills-registry.mjs', 'skills'].some(name => {
+    try { fs.lstatSync(path.join(registryRoot, name)); return true; }
+    catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  });
+  if (!legacySkillsRecovery || declaredSkills || registryPresent) validateSkills(registryRoot, manifest, checkOwnership);
   if (checkOwnership) {
     if (process.versions.node.split('.').map(Number).some(Number.isNaN) ||
         process.versions.node.localeCompare(manifest.nodeMinimum, undefined, { numeric: true }) < 0) throw Error(`Node ${manifest.nodeMinimum}+ required`);
@@ -175,7 +186,7 @@ function recover() {
   const root = path.join(transaction, 'stage');
   if (!Array.isArray(entries) || !exists(path.join(root, stateName))) throw Error('invalid install journal; manual recovery required');
   const next = read(path.join(root, stateName));
-  verify(root, next, false);
+  verify(root, next, false, false, true);
   const oldStateIndex = entries.indexOf(stateName);
   const oldStateBackup = path.join(transaction, 'backup', String(oldStateIndex));
   let oldFiles = {};

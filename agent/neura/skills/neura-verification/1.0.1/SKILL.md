@@ -12,7 +12,7 @@ Use only the read tool for repository-owned documentation already authorized by
 the harness. If that tool or the documents are unavailable, stop and say so.
 
 Read the current repository status and dependency documentation before making
-compatibility claims. Neura targets exact Pi 1.0.4. Read current verification
+compatibility claims. Neura targets exact Pi 1.1.0. Read current verification
 policy before interpreting proof. An existing health report is readiness evidence,
 not engineering completion or proof that the live installation matches source.
 Never invoke health or a verification suite from this skill; request evidence

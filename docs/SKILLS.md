@@ -1,7 +1,7 @@
 # Reproducible optional skills
 
 Neura supports one repository-owned, read-only guidance skill:
-`neura-verification` version `1.0.0`. It interprets existing harness/proof evidence;
+`neura-verification` version `1.0.1`. It interprets existing harness/proof evidence;
 it does not execute verification, health, installers, network calls, or writes.
 It is **disabled by default**. Unsupported optional/personal skills are outside
 this supported catalog; do not enable them as Neura capabilities.
@@ -11,7 +11,7 @@ this supported catalog; do not enable them as Neura capabilities.
 The machine-readable catalog is
 [`agent/neura/skills-manifest.json`](../agent/neura/skills-manifest.json).
 Each entry records the repository and source path, immutable package version,
-SHA-256 of its only file (`SKILL.md`), exact Pi compatibility (`1.0.4`), owner,
+SHA-256 of its only file (`SKILL.md`), exact Pi compatibility (`1.1.0`), owner,
 update policy, empty dependency list, and declarative permission restrictions.
 The managed release manifest also hashes the catalog, validator, and package.
 Versioned content plus digest avoids a circular hash of the commit containing
@@ -33,8 +33,17 @@ without new dependencies or network/install actions for the skill. It validates
 catalog and selection before staging, checks release ownership and exact hashes,
 and rejects duplicate names/paths and symlinks/junctions in path ancestors.
 Internal recovery validates package integrity independently of local selection,
-so a broken opt-in file does not prevent rollback. Launch checks and runtime
-resource discovery fail closed for invalid supported selections. Plain Pi is
+so a broken opt-in file does not prevent rollback. Only rollback of a wholly
+pre-catalog staged release may omit skill validation: its manifest and receipt
+must declare no skill files, and all physical registry components must be absent.
+Partial catalogs, dangling links, receipt/hash drift, and invalid journals remain
+rejected. New preparation, sealing, activation and launch checks still require
+the supported registry. Launch checks and runtime
+resource discovery fail closed for invalid supported selections. The catalog,
+validator, discovery gate and managed installer are protected-control paths;
+headless Work blocks direct edits and commands explicitly naming these paths.
+These application checks do not make arbitrary repository scripts a sandbox.
+Similarly named ordinary task files remain task-scoped. Plain Pi is
 unchanged by the Neura extension.
 
 ## Validation and health
@@ -42,9 +51,12 @@ unchanged by the Neura extension.
 `/skill-doctor` is now read-only and available without switching to YOLO. It
 validates the supported registry and the current Pi command registry's reserved
 skill identities, without scanning personal directories or validating unrelated
-stock skills, and writes no report. `/health` retains its existing YOLO diagnostic
-requirement but reports optional skill state, exact catalog SHA-256, and validation
-PASS/FAIL. Selection alone cannot establish runtime readiness: enabled skills must
+stock skills, and writes no report. Use `/skill-doctor` for the exact catalog
+SHA-256 and validation PASS/FAIL. `/health` retains its existing YOLO diagnostic
+requirement; its structured capability data carries optional skill state and the
+same identity/validation label, but its compact widget summarizes readiness
+without displaying the exact skill digest. Selection alone cannot establish
+runtime readiness: enabled skills must
 be discovered at the exact selected package path with matching content. A default
 Pi skill winning a reserved name makes the supported capability unhealthy and
 prevents Neura from appending supported paths. Remove the collision and reload.
@@ -75,6 +87,9 @@ Owner: `Rajveerx11`. Changes require review, a new package version and digest,
 updated exact compatibility and release hashes, and passing real-loader smoke
 and negative validation tests. Do not edit an installed immutable package or
 reuse a version for different content. No automatic updates or floating sources.
+Version `1.0.1` advances the guidance text from Pi `1.0.4` to `1.1.0` without
+reusing the former `1.0.0` content identity. Synthetic installer tests retain
+same-version mutation rejection and new-version upgrade/retired-file cleanup.
 Any latest-stable Pi update must update and validate this exact compatibility
 contract together with Neura's existing pins; never downgrade Pi to fit a skill.
 

@@ -1,4 +1,11 @@
-import { repoRoot, scratchRoot, assert, fs, path, pathToFileURL, inspectAction, loaded, registeredToolNames, state, extensionWithCommand, firstHandler, notices, ui, context, modeState, cockpitState, guard, modes, stripAnsi, widthOf, loadExtensions, extensionDir, WORK_SANDBOX_TOOL } from './harness.mjs';
+import { repoRoot, scratchRoot, assert, fs, path, pathToFileURL, inspectAction, loaded, registeredToolNames, state, extensionWithCommand, firstHandler, notices, ui, context as harnessContext, modeState, cockpitState, guard, modes, stripAnsi, widthOf, loadExtensions, extensionDir, WORK_SANDBOX_TOOL } from './harness.mjs';
+// The source checkout may have protected hidden ancestors (for example a
+// .pi-subagents worktree). Exercise authorized reads in synthetic public state,
+// without weakening the production ancestor-path restriction.
+const referenceWorkspace = path.join(scratchRoot, 'learn-reference-workspace');
+fs.mkdirSync(path.join(referenceWorkspace, 'docs'), { recursive: true });
+fs.writeFileSync(path.join(referenceWorkspace, 'README.md'), 'Synthetic public learning reference.\n');
+const context = { ...harnessContext, cwd: referenceWorkspace };
 // Migrated verbatim in behavior from the pre-#27 Learn regression block; each
 // assertion now runs with pinned local Pi and an isolated synthetic home.
 const gmailGuardrail = loaded.extensions.find(extension => extension.resolvedPath.endsWith(path.sep + 'gmail-guardrail.ts'));
@@ -40,6 +47,11 @@ for (const name of LEARN_ONLY_TOOL_NAMES) {
 assert.equal(await guard({ toolName: "questionnaire", input: {} }, context), undefined);
 assert.equal(await guard({ toolName: "read", input: { path: "README.md" } }, context), undefined);
 assert.equal(await guard({ toolName: "ls", input: { path: "docs" } }, context), undefined);
+const hiddenWorkspace = path.join(scratchRoot, '.private-learn', 'workspace');
+fs.mkdirSync(hiddenWorkspace, { recursive: true });
+fs.writeFileSync(path.join(hiddenWorkspace, 'README.md'), 'Synthetic hidden-ancestor reference.\n');
+assert.equal((await guard({ toolName: 'read', input: { path: 'README.md' } }, { ...context, cwd: hiddenWorkspace }))?.block, true,
+  'Learn must retain hidden-ancestor denial even for a public-looking filename');
 assert.equal(await guard({ toolName: "web_search", input: { query: "database relationships", max_results: 3 } }, context), undefined);
 for (const event of [
   { toolName: "write", input: { path: "example.txt", content: "blocked" } },

@@ -4,6 +4,28 @@ const generatedDir = path.join(scratchRoot, 'workspace', 'dist');
 fs.mkdirSync(generatedDir, {recursive:true});
 const generatedFile = path.join(generatedDir, 'cache.tmp');
 fs.writeFileSync(generatedFile, 'generated');
+const { clampHeadmasterVerdict } = await import('../../agent/neura/headmaster.ts');
+const approvingVerdict = { decision: 'approve_once', reason: 'synthetic bounded review', saferPath: 'regenerate' };
+const boundedDelete = inspectAction({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command: 'rm dist/cache.tmp' } }, path.dirname(generatedDir));
+assert.equal(boundedDelete.route, 'review');
+assert.equal(boundedDelete.category, 'bounded-delete');
+assert.equal(boundedDelete.capability.approvalClass, 'exception-boundary');
+assert.equal(clampHeadmasterVerdict(boundedDelete, approvingVerdict).decision, 'approve_once');
+for (const approvalClass of ['task-scoped', 'unclassified']) {
+  const inconsistent = { ...boundedDelete, capability: { ...boundedDelete.capability, approvalClass } };
+  assert.equal(clampHeadmasterVerdict(inconsistent, approvingVerdict).decision, 'defer', `inconsistent ${approvalClass} class approved deletion`);
+}
+for (const fact of ['insideWorkspace', 'file', 'tracked', 'generated']) {
+  const unbounded = { ...boundedDelete, facts: { ...boundedDelete.facts, [fact]: fact === 'tracked' } };
+  assert.equal(clampHeadmasterVerdict(unbounded, approvingVerdict).decision, 'defer', `exception class bypassed ${fact}`);
+}
+for (const command of ['rm ordinary.txt', 'rm -r .', 'custom-cli --opaque', 'git push origin main']) {
+  const action = inspectAction({ toolName: HUMAN_AWAY_SANDBOX_TOOL, input: { command } }, path.dirname(generatedDir));
+  assert.notEqual(clampHeadmasterVerdict(action, approvingVerdict).decision, 'approve_once', `metadata approved ${command}`);
+  assert.notEqual(clampHeadmasterVerdict({ ...action, capability: boundedDelete.capability }, approvingVerdict).decision, 'approve_once',
+    `favorable exception class lifted ${action.route} route for ${command}`);
+}
+
 const linkedWorkspace = path.join(scratchRoot, "linked-workspace");
 const linkedOutside = path.join(scratchRoot, "linked-outside");
 fs.mkdirSync(linkedWorkspace, { recursive: true });

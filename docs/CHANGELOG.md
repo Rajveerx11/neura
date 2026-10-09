@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Advanced coordinated Pi runtime, AI, TUI, lockfile and runtime/managed identity
+  to exact `1.1.0` after the latest-stable gate rejected `1.0.4`. Reviewed the
+  official source and published lifecycle/dependency delta; external resolutions
+  and Learn pins remain unchanged. Real session tests cover additive/subtractive
+  tool selection, mixed-list rejection, reload, restricted-mode denial, nested
+  duration linkage, aborted settlement, and YOLO/stock-Pi controls. Cancellation
+  no longer starts automatic quick proof. Process fixtures now pass marker paths
+  and exit values as argv data to static child code, retaining all timing/final-write
+  fences and adding a script-looking argv regression. No alert suppression,
+  physical/tree-exit guarantee, live update, release or production-readiness claim.
+  Restore the coupled pins, lock, contract and managed hashes together for rollback;
+  never downgrade a newer global Pi to satisfy stale Neura source.
 - Coordinated the Pi runtime, AI, and TUI upgrade to exact `1.0.4`, replacing
   the incompatible independent 1.0.0 proposals. Removed the vulnerable
   shrinkwrapped `brace-expansion` graph in favor of the upstream 5.0.12 fix.

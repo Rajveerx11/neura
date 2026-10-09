@@ -25,6 +25,148 @@ const {
 const { redactSensitiveText } = await import('../../agent/neura/redaction.ts');
 const { default: herdrUsageBridge, herdrMetadata, usageProvider } = await import('../../agent/extensions/herdr-usage-provider.ts');
 const { automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } = await import('../../agent/neura/process-security.ts');
+const { runProcess } = await import('../../agent/neura/core.ts');
+const { execute } = await import('../../agent/neura/verification.ts');
+await import('./process-contract.mjs');
+// Characterize the two public adapters before extracting shared process mechanics.
+const outputScript = 'process.stdout.write("  out\\n"); process.stderr.write("  err\\n")';
+const trimmedProcess = await runProcess(process.execPath, ['-e', outputScript]);
+assert.deepEqual(trimmedProcess, { ok: true, stdout: 'out', stderr: 'err' });
+const rawProcess = await execute(process.execPath, ['-e', outputScript], { cwd: repoRoot, timeoutMs: 5000 });
+assert.deepEqual(rawProcess, { ok: true, completed: true, stdout: '  out\n' });
+const failedProcess = await execute(process.execPath, ['-e', 'process.stdout.write("verdict\\n"); process.exit(7)'], { cwd: repoRoot, timeoutMs: 5000 });
+assert.deepEqual(failedProcess, { ok: false, completed: true, stdout: 'verdict\n' });
+const missingProcess = await execute(path.join(scratchRoot, 'missing-executable'), [], { cwd: repoRoot, timeoutMs: 5000 });
+assert.deepEqual(missingProcess, { ok: false, completed: false, stdout: '' });
+const { executeProcess } = await import('../../agent/neura/process.ts');
+const processOptions = { cwd: repoRoot, timeoutMs: 5000, maxBuffer: 1024 * 1024 };
+const rawOutcome = await executeProcess(process.execPath, ['-e', outputScript], processOptions);
+assert.equal(rawOutcome.termination, 'exited');
+assert.equal(rawOutcome.exitCode, 0);
+assert.equal(rawOutcome.completed, true);
+assert.equal(rawOutcome.stdout, '  out\n');
+assert.equal(rawOutcome.stderr, '  err\n');
+assert.equal(rawOutcome.cancelled || rawOutcome.timedOut, false);
+assert.ok(rawOutcome.durationMs >= 0 && rawOutcome.durationMs < 5000);
+const nonzeroOutcome = await executeProcess(process.execPath, ['-e', 'process.exit(7)'], processOptions);
+assert.equal(nonzeroOutcome.termination, 'exited');
+assert.equal(nonzeroOutcome.exitCode, 7);
+assert.equal(nonzeroOutcome.ok, false);
+assert.equal(nonzeroOutcome.completed, true);
+const spawnOutcome = await executeProcess(path.join(scratchRoot, 'missing-executable'), [], processOptions);
+assert.equal(spawnOutcome.termination, 'spawn-failed');
+assert.equal(spawnOutcome.exitCode, null);
+assert.equal(spawnOutcome.completed, false);
+assert.equal(spawnOutcome.errorCode, 'ENOENT');
+const directoryOutcome = await executeProcess(scratchRoot, [], processOptions);
+assert.equal(directoryOutcome.termination, 'spawn-failed');
+assert.equal(directoryOutcome.completed, false);
+await assert.rejects(executeProcess('', [], processOptions), /file/);
+const timeoutOutcome = await executeProcess(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { ...processOptions, timeoutMs: 100 });
+assert.equal(timeoutOutcome.termination, 'timed-out');
+assert.equal(timeoutOutcome.timedOut, true);
+assert.equal(timeoutOutcome.cancelled, false);
+assert.equal(timeoutOutcome.completed, false);
+assert.ok(timeoutOutcome.durationMs >= 75 && timeoutOutcome.durationMs < 5000);
+const abortController = new AbortController();
+const abortPromise = executeProcess(process.execPath, ['-e', 'process.stdout.write("ready"); setInterval(() => {}, 1000)'], { ...processOptions, signal: abortController.signal });
+setTimeout(() => abortController.abort(), 200);
+const abortOutcome = await abortPromise;
+assert.equal(abortOutcome.termination, 'cancelled');
+assert.equal(abortOutcome.cancelled, true);
+assert.equal(abortOutcome.timedOut, false);
+assert.equal(abortOutcome.completed, false);
+assert.ok(abortOutcome.durationMs < 5000);
+const preAbort = await executeProcess(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { ...processOptions, signal: AbortSignal.abort() });
+assert.equal(preAbort.termination, 'cancelled');
+assert.equal(preAbort.completed, false);
+const outputOutcome = await executeProcess(process.execPath, ['-e', 'process.stdout.write("x".repeat(8192))'], { ...processOptions, maxBuffer: 32 });
+assert.equal(outputOutcome.termination, 'output-limit');
+assert.equal(outputOutcome.completed, false);
+assert.equal(outputOutcome.stdout.length, 32);
+assert.equal(await runProcess(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { signal: AbortSignal.abort() }).then(result => result.ok), false);
+const { describeCapability, hasRemoteCapabilityBoundary, SANDBOX_TIMEOUT, WORKSPACE_READ_TOOL_NAMES } = await import('../../agent/neura/capabilities.ts');
+for (const toolName of [...WORKSPACE_READ_TOOL_NAMES, 'edit', 'write', 'bash', 'work_exec', 'human_away_exec', 'publish_plan', 'plan_request', 'web_search', 'mcp__fixture__unknown', 'unknown']) {
+  const capability = describeCapability(toolName);
+  assert.deepEqual(Object.keys(capability).sort(), ['approvalClass', 'effects', 'network', 'reversibility', 'scope', 'secrets', 'timeout'].sort());
+  assert.ok(capability.effects.length > 0);
+}
+assert.equal(describeCapability('work_exec').network, 'none');
+assert.equal(describeCapability('human_away_exec').secrets, 'possible', 'workspace script indirection was mislabeled secret isolation');
+assert.equal(describeCapability('human_away_exec').timeout, SANDBOX_TIMEOUT);
+assert.equal(describeCapability('publish_plan').scope, 'plans');
+assert.equal(describeCapability('write').approvalClass, 'task-scoped', 'ordinary effects became blanket per-tool approval');
+assert.deepEqual(describeCapability('mcp__gmail__gmail_get_profile').effects, ['read']);
+assert.equal(describeCapability('mcp__gmail__GMAIL_NEW_UNCLASSIFIED_ACTION').approvalClass, 'exception-boundary');
+assert.equal(describeCapability('mcp__fixture__unknown').scope, 'external');
+assert.equal(describeCapability('unknown').approvalClass, 'unclassified');
+for (const toolName of ['learn_lesson', 'learn_material', 'learn_exercise']) {
+  assert.deepEqual(describeCapability(toolName).effects, ['read', 'write', 'execute']);
+}
+assert.deepEqual(describeCapability('learn_progress').effects, ['read', 'write']);
+assert.deepEqual(describeCapability('unknown').effects, ['unknown']);
+for (const name of ['mcp__gmail__GMAIL_GET_PROFILE', 'mcp__gmail__GMAIL_SEND_EMAIL', 'mcp__fixture__unknown']) {
+  assert.equal(hasRemoteCapabilityBoundary(describeCapability(name)), true);
+}
+for (const name of ['read', 'write', 'bash', 'learn_lesson', 'learn_progress', 'publish_plan', 'questionnaire', 'web_search', 'unknown']) {
+  assert.equal(hasRemoteCapabilityBoundary(describeCapability(name)), false, `${name} hit an unrelated remote ceiling`);
+}
+const workspaceCapability = describeCapability('read');
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, effects: ['remote-mutation'] }), true);
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, scope: 'mailbox' }), true);
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, scope: 'external', approvalClass: 'unclassified' }), true);
+assert.equal(hasRemoteCapabilityBoundary({ ...workspaceCapability, scope: 'external' }), false);
+const { filterRestrictedProviderPayload, restrictCapabilityToolNames, PROVIDER_TOOL_ALIASES } = await import('../../agent/neura/mode-tools.ts');
+const selectedNames = ['unknown', 'read', 'mcp__gmail__GMAIL_GET_PROFILE', 'bash', 'web_search', 'mcp__fixture__unknown', 'learn_progress', 'read'];
+assert.deepEqual(restrictCapabilityToolNames(selectedNames), ['unknown', 'read', 'bash', 'web_search', 'learn_progress', 'read']);
+assert.equal(selectedNames.length, 8, 'selection ceiling mutated input');
+// An explicitly supplied unknown name passes this particular ceiling, not exact mode policy.
+assert.deepEqual(filterRestrictedProviderPayload({ tools: [{ name: 'unknown' }] }, ['unknown']), { tools: [{ name: 'unknown' }] });
+assert.deepEqual(filterRestrictedProviderPayload({ tools: [{ name: 'unknown' }, { name: 'web_search' }] }, ['read']), { tools: [] });
+for (const [alias, canonicalName] of PROVIDER_TOOL_ALIASES) {
+  assert.deepEqual(filterRestrictedProviderPayload({ tools: [{ name: alias }] }, [canonicalName]), { tools: [{ name: alias }] });
+}
+const remoteNames = ['mcp__gmail__GMAIL_GET_PROFILE', 'mcp__gmail__GMAIL_SEND_EMAIL', 'mcp__fixture__unknown'];
+const remoteSnapshot = {
+  tools: [{ name: 'Read' }, ...remoteNames.map(name => ({ function: { name } }))],
+  config: { tools: [{ functionDeclarations: [{ name: 'web_search' }, ...remoteNames.map(name => ({ name }))] }] },
+  toolConfig: { tools: [{ toolSpec: { name: 'bash' } }, ...remoteNames.map(name => ({ toolSpec: { name } }))] },
+};
+const snapshotBefore = structuredClone(remoteSnapshot);
+assert.deepEqual(filterRestrictedProviderPayload(remoteSnapshot, ['read', 'web_search', 'bash', ...remoteNames]), {
+  tools: [{ name: 'Read' }], config: { tools: [{ functionDeclarations: [{ name: 'web_search' }] }] },
+  toolConfig: { tools: [{ toolSpec: { name: 'bash' } }] },
+});
+assert.deepEqual(remoteSnapshot, snapshotBefore, 'remote ceiling mutated provider input');
+const mixedProviderPayload = {
+  tools: [{ name: 'Read' }, { function: { name: 'Bash' } }, { toolSpec: { name: 'mcp__fixture__unknown' } }],
+  config: { tools: [{ functionDeclarations: [{ name: 'write' }, { name: 'read' }] }] },
+  toolConfig: { tools: [{ name: 'human_away_exec' }] },
+};
+assert.deepEqual(filterRestrictedProviderPayload(mixedProviderPayload, ['read']), {
+  tools: [{ name: 'Read' }], config: { tools: [{ functionDeclarations: [{ name: 'read' }] }] }, toolConfig: { tools: [] },
+});
+assert.equal(mixedProviderPayload.tools.length, 3, 'provider filter mutated the snapshot');
+const { acquireHostOperation, getMode, setMode, restoreMode, isModeRestorePending, isHostOperationActive } = await import('../../agent/neura/mode-state.ts');
+assert.equal(acquireHostOperation(), null, 'Work acquired a YOLO-only lease');
+setMode('yolo');
+const firstLease = acquireHostOperation();
+const secondLease = acquireHostOperation();
+assert.ok(firstLease && secondLease);
+assert.throws(() => setMode('plan'), /host operation/);
+const restorePromise = restoreMode('plan');
+assert.equal(getMode(), 'work', 'restoration did not use restricted holding mode');
+assert.equal(isModeRestorePending(), true);
+assert.equal(acquireHostOperation(['work', 'yolo']), null, 'pending restoration acquired another lease');
+firstLease();
+firstLease();
+assert.equal(isHostOperationActive(), true, 'double release drained another operation');
+assert.equal(isModeRestorePending(), true);
+secondLease();
+assert.equal(await restorePromise, true);
+assert.equal(getMode(), 'plan');
+assert.equal(isModeRestorePending() || isHostOperationActive(), false);
+setMode('work');
 const runtimeContract = JSON.parse(fs.readFileSync(path.join(repoRoot, "agent", "neura", "runtime-contract.json"), "utf-8"));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 const verifyWorkflow = fs.readFileSync(path.join(repoRoot, ".github", "workflows", "verify.yml"), "utf-8");
@@ -177,8 +319,11 @@ assert.deepEqual(piRuntimeStatus("9.9.9", runtimeContract.piVersion), {
   label: `pi 9.9.9 (requires ${runtimeContract.piVersion})`,
   action: "update Neura for installed Pi 9.9.9; do not downgrade Pi",
 }, "Pi runtime drift was not actionable");
-assert.match(piRuntimeStatus("0.99.2", runtimeContract.piVersion).action, /npm install -g .*@1\.0\.4$/, "older Pi did not get an upgrade action");
-for (const version of ["1.0.5", "1.0.4-beta.1", "invalid"]) {
+for (const version of ["0.99.2", "1.0.4", "1.0.5"]) {
+  assert.equal(piRuntimeStatus(version, runtimeContract.piVersion).action,
+    `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`, "older Pi did not get an upgrade action");
+}
+for (const version of ["1.1.1", `${runtimeContract.piVersion}-beta.1`, "invalid"]) {
   assert.match(piRuntimeStatus(version, runtimeContract.piVersion).action, /update Neura.*do not downgrade Pi/, "mismatch recommended a Pi downgrade");
 }
 assert.deepEqual(piRuntimeStatus(null, runtimeContract.piVersion), {

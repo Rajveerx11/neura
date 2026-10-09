@@ -1,5 +1,66 @@
-import { repoRoot, scratchRoot, assert, execFileSync, spawnSync, fs, path, pathToFileURL, isSafeExternalUrl, isPlanToolInputAllowed, files, state, widgets, context, guard, modes } from './harness.mjs';
+import { repoRoot, scratchRoot, assert, execFileSync, spawnSync, fs, path, pathToFileURL, isSafeExternalUrl, isPlanToolInputAllowed, files, state, widgets, context, guard, modes, modeState, WORK_SANDBOX_TOOL } from './harness.mjs';
 await modes.commands.get("mode").handler("plan", context);
+const { inspectAction } = await import('../../agent/neura/action-policy.ts');
+for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-tools', 'plan-shell-parser', 'process']) {
+  const target = path.join(repoRoot, 'agent', 'neura', `${file}.ts`);
+  assert.equal(await guard({ toolName: 'read', input: { path: target } }, context), undefined, `Plan blocked read-only inspection of extracted ${file}`);
+  const edit = inspectAction({ toolName: 'edit', input: { path: target } }, repoRoot);
+  assert.equal(edit.route, 'human', `extraction removed protected-control boundary from ${file}`);
+  assert.equal(edit.category, 'protected-control');
+  assert.equal(edit.capability.approvalClass, 'exception-boundary');
+  assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
+  assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ agent/neura/${file}.ts` } }, repoRoot).route, 'human');
+}
+for (const file of ['agent/extensions/mcp.ts', 'agent/neura/process-security.ts', 'agent/extensions/skill-doctor.ts', 'agent/neura/runtime-install.mjs', 'agent/neura/skills-registry.mjs', 'agent/neura/skills-manifest.json']) {
+  const target = path.join(repoRoot, file);
+  assert.equal(await guard({ toolName: 'read', input: { path: target } }, context), undefined, `Plan blocked read-only inspection of ${file}`);
+  for (const toolName of ['edit', 'write']) {
+    const action = inspectAction({ toolName, input: { path: target, content: 'task' } }, repoRoot);
+    assert.equal(action.route, 'human', `${toolName} bypassed protected-control boundary for ${file}`);
+    assert.equal(action.category, 'protected-control');
+    assert.equal(action.capability.approvalClass, 'exception-boundary');
+  }
+  assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot).route, 'allow');
+  assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
+  assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ ${file}` } }, repoRoot).route, 'human');
+}
+for (const file of ['ordinary-task-file.txt', 'agent/extensions/mcp-helper.ts', 'agent/neura/process-security-notes.ts', 'agent/extensions/skill-doctor-notes.ts', 'agent/neura/runtime-install-notes.mjs', 'agent/neura/skills-registry-notes.mjs', 'agent/neura/skills-manifest-example.json']) {
+  for (const toolName of ['edit', 'write']) {
+    const action = inspectAction({ toolName, input: { path: path.join(repoRoot, file), content: 'task' } }, repoRoot);
+    assert.equal(action.route, 'allow', `control-path protection widened to ordinary ${toolName} ${file}`);
+    assert.equal(action.capability.approvalClass, 'task-scoped');
+  }
+}
+// Supported skill validation is control-plane code, not a routine task edit.
+// Exercise real headless Work mediation without executing or writing anything.
+await modes.commands.get('mode').handler('work', context);
+assert.equal(modeState.getMode(), 'work');
+const headlessWork = { ...context, hasUI: false, ui: undefined };
+for (const file of ['agent/extensions/skill-doctor.ts', 'agent/neura/runtime-install.mjs', 'agent/neura/skills-registry.mjs', 'agent/neura/skills-manifest.json']) {
+  for (const toolName of ['read', 'edit', 'write']) {
+    const event = { toolName, input: { path: file, content: 'synthetic' } };
+    assert.equal((await guard(event, headlessWork))?.block, true, `headless Work allowed ${toolName} of ${file}`);
+  }
+  const event = { toolName: WORK_SANDBOX_TOOL, input: { command: `sed -i s/a/b/ ${file}` } };
+  const action = inspectAction(event, repoRoot);
+  assert.equal(action.route, 'human', `sandbox command bypassed ${file} approval`);
+  assert.equal(action.category, 'protected-control');
+  assert.equal(action.capability.approvalClass, 'exception-boundary');
+  assert.equal((await guard(event, headlessWork))?.block, true, `headless sandbox command bypassed ${file}`);
+}
+for (const file of ['ordinary-task-file.txt', 'agent/extensions/skill-doctor-notes.ts', 'agent/neura/runtime-install-notes.mjs', 'agent/neura/skills-registry-notes.mjs', 'agent/neura/skills-manifest-example.json']) {
+  for (const toolName of ['edit', 'write']) {
+    assert.equal(await guard({ toolName, input: { path: file, content: 'synthetic' } }, headlessWork), undefined,
+      `headless Work unnecessarily blocked ordinary ${toolName} ${file}`);
+  }
+}
+assert.equal(await guard({ toolName: WORK_SANDBOX_TOOL, input: { command: 'npm test' } }, headlessWork), undefined,
+  'skill control protection widened to ordinary sandbox verification');
+await modes.commands.get('mode').handler('plan', context);
+const ordinaryPatch = inspectAction({ toolName: 'write', input: { path: path.join(repoRoot, 'ordinary-task-file.txt'), content: 'task' } }, repoRoot);
+assert.equal(ordinaryPatch.route, 'allow', 'metadata mandated blanket approval for ordinary workspace effects');
+assert.equal(ordinaryPatch.capability.approvalClass, 'task-scoped');
+assert.equal(inspectAction({ toolName: 'bash', input: { command: 'rm -rf .' } }, repoRoot).route, 'deny', 'metadata relaxed deterministic denial');
 const workGit = "git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false -c log.mailmap=false -c format.pretty=medium";
 const planGit = workGit;
 const hookProbeRoot = path.join(scratchRoot, "git-hook-probe");
