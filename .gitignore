@@ -13,6 +13,11 @@ node_modules/
 .pi-subagents/
 .agents/
 
+# local integration backups and unpublished legacy artwork
+/integrations/herdr-usage/.backups/
+/integrations/herdr-workspace/.backups/
+/integrations/herdr-branding/badges.json
+
 # local generated state and temporary checkouts
 .omo/
 .worktrees/
