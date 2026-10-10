@@ -257,14 +257,16 @@ export default function (pi) {
     requestRender();
   });
 
-  pi.on("agent_end", (_event, ctx) => {
+  // agent_end can precede retries, compaction, or queued continuation in Pi 1.1.0.
+  pi.on("agent_settled", (event, ctx) => {
+    if (ctx?.isIdle?.() !== true) return;
     cachedCost = sessionCost(ctx);
     const state = getCockpitState();
     const phase = state.approval ? "REVIEW"
       : state.degraded ? "DEGRADED"
         : state.proof?.status === "failed" || (state.proof?.scope === "quick" && state.proof.status === "passed") ? "VERIFY"
-          : "COMPLETE";
-    patchCockpit({ phase, step: undefined, operation: undefined });
+          : event.aborted === true ? "READY" : "COMPLETE";
+    patchCockpit({ phase, step: event.aborted === true ? "cancelled" : undefined, operation: undefined });
     try { ctx.ui.setWorkingMessage(); } catch {}
   });
 

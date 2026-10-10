@@ -226,6 +226,7 @@ let footerFactory;
 let costReads = 0;
 const cockpitContext = {
   cwd: "C:\\Neura",
+  isIdle: () => true,
   model: { id: "gpt-5.5-engineering-preview", contextWindow: 200000 },
   thinkingLevel: "high",
   getContextUsage: () => ({ tokens: 142000, contextWindow: 200000, percent: 71 }),
@@ -288,11 +289,35 @@ cockpitState.addCockpitNotice({
 });
 assert.doesNotMatch(JSON.stringify(cockpitState.getCockpitState().notices), /notice-secret-value/,
   "cockpit notice bypassed central redaction");
-await firstHandler(cockpit, "agent_end")({}, cockpitContext);
+// Pi's low-level agent_end is not a final run boundary: retries, compaction,
+// and queued continuations still have ctx.isIdle() === false.
+assert.equal(cockpit.handlers.has("agent_end"), false, "cockpit must not finish on an intermediate agent_end");
+const busyCockpitContext = { ...cockpitContext, isIdle: () => false };
+const activeCockpit = cockpitState.getCockpitState();
+const activeWorkingMessage = state.workingMessage;
+const activeCostReads = costReads;
+for (const handler of cockpit.handlers.get("agent_end") ?? []) await handler({}, busyCockpitContext);
+for (const staleContext of [busyCockpitContext, { ...cockpitContext, isIdle: undefined }]) {
+  await firstHandler(cockpit, "agent_settled")({}, staleContext);
+  assert.equal(cockpitState.getCockpitState(), activeCockpit, "non-idle or unknown settlement changed the active cockpit");
+  assert.equal(state.workingMessage, activeWorkingMessage, "non-idle or unknown settlement cleared the working message");
+  assert.equal(costReads, activeCostReads, "non-idle settlement reconciled final cost too early");
+}
+await firstHandler(cockpit, "agent_settled")({}, cockpitContext);
+assert.equal(cockpitState.getCockpitState().phase, "COMPLETE", "idle settlement did not complete the cockpit");
+assert.equal(cockpitState.getCockpitState().operation, undefined, "idle settlement retained an active operation");
 assert.equal(state.workingMessage, "", "working message was not restored after completion");
+await firstHandler(cockpit, "agent_start")({}, cockpitContext);
+const cancelledCostReads = costReads;
+await firstHandler(cockpit, "agent_settled")({ aborted: true }, cockpitContext);
+assert.equal(cockpitState.getCockpitState().phase, "READY", "cancelled settlement claimed completion");
+assert.equal(cockpitState.getCockpitState().step, "cancelled", "cancelled settlement lost its status");
+assert.equal(cockpitState.getCockpitState().operation, undefined, "cancelled settlement retained an operation");
+assert.equal(state.workingMessage, "", "cancelled settlement retained the working message");
+assert.equal(costReads, cancelledCostReads + 1, "cancelled settlement failed to reconcile saved cost");
 cockpitState.resetCockpit();
 cockpitState.patchCockpit({ phase: "VERIFY", proof: { scope: "quick", status: "passed" } });
-await firstHandler(cockpit, "agent_end")({}, cockpitContext);
+await firstHandler(cockpit, "agent_settled")({}, cockpitContext);
 assert.equal(cockpitState.getCockpitState().phase, "VERIFY", "agent completion promoted detector-only proof to COMPLETE");
 const detectorRail = widgets.get("neura-cockpit")(null, null).render(92).map(stripAnsi).join("\n");
 assert.match(detectorRail, /Detector-only PASS · not full verification/);
@@ -302,7 +327,7 @@ cockpitState.patchCockpit({
   phase: "REVIEW",
   approval: { id: "held", agent: "Neura", task: "remote-mutation", exactAction: "git push", boundary: "Remote locked.", fallback: "Keep local.", risk: "high", approvable: false },
 });
-await firstHandler(cockpit, "agent_end")({}, cockpitContext);
+await firstHandler(cockpit, "agent_settled")({}, cockpitContext);
 assert.match(widgets.get("neura-cockpit")(null, null).render(92).map(stripAnsi).join("\n"), /REVIEW[\s\S]*Neura paused/, "agent completion hid a pending action request");
 cockpitState.resetCockpit();
 const footer = footerFactory(
@@ -336,7 +361,7 @@ modeState.setMode("yolo");
 await firstHandler(cockpit, "agent_start")({}, cockpitContext);
 await firstHandler(cockpit, "message_end")({ message: { role: "assistant", usage: { cost: { total: 0.12 } } } });
 assert.match(footer.render(120).map(stripAnsi).join("\n"), /YOLO · DANGER.*\$3\.510/, "active YOLO footer did not update cost mid-response");
-await firstHandler(cockpit, "agent_end")({}, cockpitContext);
+await firstHandler(cockpit, "agent_settled")({}, cockpitContext);
 assert.match(footer.render(120).map(stripAnsi).join("\n"), /\$3\.390/, "final cost did not reconcile with saved session entries");
 modeState.setMode("work");
 const unknownContext = { ...cockpitContext, getContextUsage: () => ({ tokens: null, contextWindow: 200000, percent: null }) };
