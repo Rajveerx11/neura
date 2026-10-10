@@ -38,14 +38,15 @@ response-time or embargo guarantee is offered.
   policy and, where permitted, explicit interactive approval. Headless approval
   requests fail closed. Generic shell access is restricted to read-only inspection.
 - Plan uses a fixed tool set and canonical workspace containment.
-- Plan Git inspection accepts only command-specific read options. Every Git call
-  disables paging, optional locks, lazy fetching, configured filesystem monitors,
-  repository hooks, configured or custom signature display, and mailmaps; diff,
-  log, and show also disable external diff and text-conversion drivers. Git reads
-  are limited to objects, refs, and the index because worktree inspection can
-  invoke configured clean or process filters. Unstaged diff requires one explicit
-  revision range followed by `--` so filename-like tokens cannot select the
-  worktree form.
+- Plan Git inspection supports only `git rev-parse --short HEAD` for the current
+  HEAD hash. Git historical content, object/index reads, and comparisons are denied,
+  including show, patch/log/diff, cat-file, historical grep, and reflog. The fixed
+  metadata query disables paging, optional locks, lazy fetching, filesystem
+  monitors, hooks, signature display, and mailmaps. It does not consult global
+  config or invoke filters, external diff, or text-conversion drivers.
+  Plan file inspection separately checks Git
+  exclusions, including tracked files and global ignores, before delivering bytes.
+  See [Plan confidentiality](docs/PLAN_CONFIDENTIALITY.md).
 - Plan permits bounded `web_search` but denies direct `web_fetch`; its delegated
   backend does not expose DNS answers, connection IPs, or redirect hops needed
   for SSRF-safe enforcement.
@@ -95,7 +96,13 @@ response-time or embargo guarantee is offered.
   flags: it lacks trusted required-suite/candidate-bound evidence. Quick PASS is
   detector-only feedback, never complete engineering verification. See
   [verification limits](docs/VERIFICATION.md).
-- Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
+- Checkpoints/undo, host health, memory, and October are YOLO-only.
+  `/skill-doctor` is read-only registry/discovery-identity validation in any mode;
+  it does not scan personal skill directories or run host diagnostics. Supported
+  skill validator/catalog, discovery-gate, and managed installer changes remain
+  protected-control actions requiring
+  explicit Work approval; headless Work fails closed. Skill permissions restrict,
+  never grant authority. See [supported skills](docs/SKILLS.md).
 - `/health` executes only existing absolute stdio MCP binaries and sends
   bounded initialize requests only to HTTPS or loopback HTTP endpoints.
   All configured HTTP header values must use placeholders from the existing
@@ -134,8 +141,12 @@ control, and tracked issue.
   external tools, and trigger destructive or remote side effects without a
   confirmation prompt. Misuse can cause data loss or account impact.
 - Plan uses application-level canonical containment rather than an OS sandbox.
-- Plan and Work search paths still have confidentiality gaps; do not infer that
-  a workspace boundary prevents discovery of ignored or historical secrets.
+- Plan inspection excludes ignored/private files and denies historical Git content.
+  Startup resource loading and memory/network integrations have separate hardening
+  gates; concurrent hostile filesystem changes remain an application-level limit,
+  not an OS-isolated boundary. See [Plan confidentiality](docs/PLAN_CONFIDENTIALITY.md).
+- Work search paths still have confidentiality gaps; do not infer that a workspace
+  boundary prevents discovery of ignored or historical secrets.
 - Learn's first store initialization requires native Windows. Existing validated
   stores work on POSIX, but first creation there fails before writing. Path/handle
   revalidation does not isolate against a hostile same-user process moving paths;

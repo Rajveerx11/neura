@@ -23,16 +23,124 @@ const build = (extension = 'one.ts') => {
   write(path.join(source, 'agent/neura/runtime-install.mjs'), fs.readFileSync(new URL('../..//agent/neura/runtime-install.mjs', import.meta.url)));
   write(path.join(source, 'agent/mcp.json'), '{}');
   write(path.join(source, 'launcher/neura.cmd'), '@echo off');
-  const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd'];
+  const skillFiles = ['skills-registry.mjs', 'skills-manifest.json', 'skills/neura-verification/1.0.1/SKILL.md'];
+  for (const name of skillFiles) write(path.join(source, 'agent/neura', name), fs.readFileSync(new URL(`../../agent/neura/${name}`, import.meta.url)));
+  const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd', ...skillFiles.map(name => `agent/neura/${name}`)];
   const files = Object.fromEntries(names.map(name => [name, sha(path.join(source, name))]));
-  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:'2.5.1', piVersion:'1.0.4',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
+  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:'2.5.1', piVersion:'1.1.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
 };
 const seal = () => { run('prepare'); write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt'); write(path.join(stage, 'agent/neura/node_modules/example.js'), 'pinned'); run('seal'); };
 try {
   build();
+  // Pre-catalog interrupted first-install transaction, using main's receipt and
+  // journal contract. Recovery must roll back it, not activate an old release.
+  const legacyNames = ['agent/extensions/one.ts', 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd'];
+  for (const name of legacyNames) write(path.join(stage, name), `synthetic pre-catalog ${name}`);
+  const legacyRelease = {schemaVersion:1, neuraVersion:'2.5.1', piVersion:'1.1.0', nodeMinimum:'24.15.0',
+    automaticExecutables:{git:{}}, runtimePackages:[], capabilities:{work:'default'},
+    files:Object.fromEntries(legacyNames.map(name => [name, sha(path.join(stage, name))]))};
+  const legacyManifestPath = path.join(stage, 'agent/neura/release-manifest.json');
+  write(legacyManifestPath, JSON.stringify(legacyRelease));
+  write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'synthetic legacy receipt');
+  write(path.join(stage, 'agent/neura/node_modules/example.js'), 'synthetic legacy dependency');
+  const legacyReceipt = {schemaVersion:1, sourceCommit:'3eb6355bf4652a83f75704695918d0387ebab17f',
+    manifestHash:sha(legacyManifestPath), version:'2.5.1', installedAt:'2026-10-08T00:00:00Z',
+    files:{...legacyRelease.files, 'agent/neura/release-manifest.json':sha(legacyManifestPath),
+      'agent/neura/.learn-runtime-lock':sha(path.join(stage, 'agent/neura/.learn-runtime-lock')),
+      'agent/neura/node_modules/example.js':sha(path.join(stage, 'agent/neura/node_modules/example.js'))}};
+  const legacyReceiptPath = path.join(stage, 'agent/neura/.install-state.json');
+  write(legacyReceiptPath, JSON.stringify(legacyReceipt));
+  const legacyEntries = [...Object.keys(legacyReceipt.files), 'agent/neura/.install-state.json', 'agent/extensions/autogit.ts'];
+  const legacyPending = path.join(home, '.pi/neura-install-pending');
+  write(path.join(legacyPending, 'journal.json'), JSON.stringify(legacyEntries));
+  legacyEntries.forEach((_name, index) => write(path.join(legacyPending, 'backup', `absent-${index}`), ''));
+  write(live('agent/extensions/one.ts'), fs.readFileSync(path.join(stage, 'agent/extensions/one.ts')));
+  write(live('agent/neura/MEMORY.md'), 'synthetic private state');
+  assert.match(run('seal', false).stderr, /skill validation|staged file drift/, 'legacy exception leaked into sealing');
+  assert.match(run('activate', false).stderr, /skill validation/, 'legacy exception leaked into activation');
+  const legacyRegistry = path.join(stage, 'agent/neura');
+  for (const name of ['skills-manifest.json', 'skills-registry.mjs']) {
+    write(path.join(legacyRegistry, name), '{}');
+    assert.match(run('recover', false).stderr, /skill validation/, `partial ${name} was treated as legacy`);
+    assert.equal(fs.existsSync(live('agent/extensions/one.ts')), true, 'failed recovery changed installed bytes');
+    fs.rmSync(path.join(legacyRegistry, name));
+  }
+  fs.mkdirSync(path.join(legacyRegistry, 'skills'));
+  assert.match(run('recover', false).stderr, /skill validation/, 'partial empty package tree was treated as legacy');
+  fs.rmdirSync(path.join(legacyRegistry, 'skills'));
+  fs.symlinkSync(path.join(tmp, 'absent-legacy-skills'), path.join(legacyRegistry, 'skills'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.match(run('recover', false).stderr, /skill validation/, 'dangling package link was treated as legacy');
+  fs.rmSync(path.join(legacyRegistry, 'skills'));
+  const legacyExtension = path.join(stage, 'agent/extensions/one.ts');
+  const legacyBytes = fs.readFileSync(legacyExtension);
+  write(legacyExtension, 'tampered legacy stage');
+  assert.match(run('recover', false).stderr, /installed file drift/, 'legacy recovery bypassed byte verification');
+  write(legacyExtension, legacyBytes);
+  const receiptBytes = fs.readFileSync(legacyReceiptPath);
+  write(legacyReceiptPath, JSON.stringify({...legacyReceipt, manifestHash:'0'.repeat(64)}));
+  assert.match(run('recover', false).stderr, /manifest identity mismatch/, 'legacy recovery bypassed receipt identity');
+  write(legacyReceiptPath, receiptBytes);
+  // A byte-consistent receipt/journal/absent inventory cannot authorize an extra
+  // user-owned target. Compare all target and pending bytes before/after failure.
+  const inventory = root => fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
+    const file = path.join(root, entry.name);
+    return entry.isDirectory() ? [[path.relative(home, file), 'directory'], ...inventory(file)] : [[path.relative(home, file), sha(file)]];
+  });
+  for (const extra of ['agent/neura/user-owned.txt', 'agent/extensions/custom.ts', 'agent/neura/.install-state.json', 'agent/neura/node_modules']) {
+    // The receipt's own path is already present in the journal, but remains an
+    // unauthorized next.files entry even with a matching staged byte digest.
+    if (extra !== 'agent/neura/.install-state.json' && extra !== 'agent/neura/node_modules') {
+      write(path.join(stage, extra), 'synthetic user-owned marker');
+      write(live(extra), 'synthetic user-owned marker');
+    }
+    const extraFiles = { ...legacyReceipt.files, [extra]: 'a'.repeat(64) };
+    if (extra !== 'agent/neura/.install-state.json' && extra !== 'agent/neura/node_modules') extraFiles[extra] = sha(path.join(stage, extra));
+    write(legacyReceiptPath, JSON.stringify({ ...legacyReceipt, files: extraFiles }));
+    const extraEntries = [...new Set([...Object.keys(extraFiles), 'agent/neura/.install-state.json', 'agent/extensions/autogit.ts'])];
+    write(path.join(legacyPending, 'journal.json'), JSON.stringify(extraEntries));
+    fs.rmSync(path.join(legacyPending, 'backup'), { recursive: true, force: true });
+    extraEntries.forEach((_name, index) => write(path.join(legacyPending, 'backup', `absent-${index}`), ''));
+    const before = inventory(home);
+    assert.match(run('recover', false).stderr, /unowned or invalid install receipt entry/, extra);
+    assert.deepEqual(inventory(home), before, 'rejected extra receipt changed targets or transaction inventory');
+    if (extra !== 'agent/neura/.install-state.json' && extra !== 'agent/neura/node_modules') {
+      fs.rmSync(path.join(stage, extra)); fs.rmSync(live(extra));
+    }
+  }
+  write(legacyReceiptPath, receiptBytes);
+  write(path.join(legacyPending, 'journal.json'), JSON.stringify(legacyEntries));
+  fs.rmSync(path.join(legacyPending, 'backup'), { recursive: true, force: true });
+  legacyEntries.forEach((_name, index) => write(path.join(legacyPending, 'backup', `absent-${index}`), ''));
+  run('recover');
+  assert.equal(fs.existsSync(legacyPending), false, 'legacy journal was not cleared');
+  assert.equal(fs.existsSync(live('agent/extensions/one.ts')), false, 'legacy partial activation was not rolled back');
+  assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'synthetic private state');
+  fs.rmSync(live('agent/neura/MEMORY.md'));
   write(path.join(source, 'agent/extensions/one.ts'), 'changed source');
   run('prepare', false); // source bytes must match the release manifest
   write(path.join(source, 'agent/extensions/one.ts'), 'one.ts');
+  const selection = path.join(home, '.pi/neura-skills.json');
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['neura-verification', 'neura-verification']}));
+  assert.match(run('prepare', false).stderr, /invalid opt-in selection/);
+  assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'invalid selection reached staging');
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['neura-verification']}));
+  const skillManifestFile = path.join(source, 'agent/neura/skills-manifest.json');
+  const releaseFile = path.join(source, 'agent/neura/release-manifest.json');
+  const skillManifestBytes = fs.readFileSync(skillManifestFile);
+  const releaseBytes = fs.readFileSync(releaseFile);
+  const badSkills = JSON.parse(skillManifestBytes);
+  badSkills.skills[0].permissions.execute = true;
+  write(skillManifestFile, JSON.stringify(badSkills));
+  const badRelease = JSON.parse(releaseBytes);
+  badRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(badRelease));
+  assert.match(run('prepare', false).stderr, /permissions are restrictions/);
+  write(skillManifestFile, skillManifestBytes);
+  delete badRelease.files['agent/neura/skills/neura-verification/1.0.1/SKILL.md'];
+  badRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(badRelease));
+  assert.match(run('prepare', false).stderr, /not release-owned/);
+  write(releaseFile, releaseBytes);
   assert.match(run('prepare', false, {NEURA_INSTALL_TEST_FAIL_PREPARE_AFTER:'1'}).stderr, /injected staging failure/);
   assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'failed preparation left a shared transaction behind');
   const legacyModule = live('agent/neura/node_modules/user-package.js');
@@ -45,7 +153,9 @@ try {
   run('activate', false, {NEURA_INSTALL_TEST_CRASH_DURING_COPY:'1'});
   const partial = `${live('agent/extensions/one.ts')}.neura-install-0.tmp`;
   assert.equal(fs.readFileSync(partial, 'utf8'), 'partial');
-  run('recover');
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['unsupported']}));
+  run('recover'); // external opt-in corruption must not obstruct package rollback
+  write(selection, JSON.stringify({schemaVersion: 1, enabled: ['neura-verification']}));
   assert.equal(fs.existsSync(partial), false, 'interrupted copy left a partial executable file');
   assert.equal(fs.existsSync(live('agent/extensions/one.ts')), false, 'partial copy reached live target');
   seal();
@@ -139,5 +249,32 @@ try {
   run('recover', false);
   assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
   fs.rmSync(pending, {recursive:true, force:true});
-  console.log('PASS synthetic managed release install, upgrade, ownership, drift, rollback, interruption');
+  // Reviewed updates must use a new immutable package version, not just a new hash.
+  const packageName = 'agent/neura/skills/neura-verification/1.0.1/SKILL.md';
+  const updateManifest = JSON.parse(fs.readFileSync(skillManifestFile));
+  const updateRelease = JSON.parse(fs.readFileSync(releaseFile));
+  fs.appendFileSync(path.join(source, packageName), '\nKeep evidence explicit.\n');
+  updateManifest.skills[0].sha256 = sha(path.join(source, packageName));
+  write(skillManifestFile, JSON.stringify(updateManifest));
+  updateRelease.files[packageName] = updateManifest.skills[0].sha256;
+  updateRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(updateRelease));
+  assert.match(run('prepare', false).stderr, /immutable skill version cannot be reused/);
+  const updatedName = packageName.replace('1.0.1', '1.0.2');
+  write(path.join(source, updatedName), fs.readFileSync(path.join(source, packageName)));
+  fs.rmSync(path.join(source, packageName));
+  updateManifest.skills[0].version = '1.0.2';
+  updateManifest.skills[0].path = updatedName.slice('agent/neura/'.length);
+  updateManifest.skills[0].source.path = updatedName;
+  updateManifest.skills[0].source.version = '1.0.2';
+  write(skillManifestFile, JSON.stringify(updateManifest));
+  delete updateRelease.files[packageName];
+  updateRelease.files[updatedName] = updateManifest.skills[0].sha256;
+  updateRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
+  write(releaseFile, JSON.stringify(updateRelease));
+  seal(); run('activate'); run('check');
+  assert.equal(fs.existsSync(live(packageName)), false, 'owned retired version was not removed');
+  assert.equal(fs.existsSync(live(updatedName)), true, 'new immutable version was not installed');
+  assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
+  console.log('PASS synthetic managed release install, upgrade, ownership, drift, rollback, interruption, immutable skill updates');
 } finally { fs.rmSync(tmp, {recursive:true, force:true}); }

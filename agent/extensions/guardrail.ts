@@ -3,6 +3,9 @@
 // YOLO deliberately bypasses Neura application guardrails. Human Away sends eligible actions to the isolated Headmaster, then clamps every
 // verdict through deterministic policy and queues anything not approved.
 
+import { createReadToolDefinition, createGrepToolDefinition, createFindToolDefinition, createLsToolDefinition, createBashToolDefinition, SettingsManager, truncateHead } from "@earendil-works/pi-coding-agent";
+import { authorizePlanPath, readPlanFile, inspectPlanFiles, parsePlanInspection, planMetadata } from "../neura/plan-files.ts";
+import { redactSensitiveValue } from "../neura/redaction.ts";
 import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
 import { isLearnActionAllowed } from "../neura/learn-policy.ts";
 import { patchCockpit } from "../neura/cockpit-state.ts";
@@ -12,6 +15,71 @@ import { reviewWithHeadmaster } from "../neura/headmaster.ts";
 
 export default function (pi) {
   if (!process.env.NEURA) return;
+
+  const safePlanCalls = new Set<string>();
+  const localTools = { read: createReadToolDefinition, grep: createGrepToolDefinition, find: createFindToolDefinition, ls: createLsToolDefinition, bash: createBashToolDefinition };
+  let nativeSettings: SettingsManager;
+  pi.on("session_start", () => {
+    safePlanCalls.clear();
+    // Match Pi's runtime settings snapshot, including on /reload. Its public
+    // getters preserve shell-path normalization without private SDK access.
+    nativeSettings = SettingsManager.inMemory(pi.getSettings());
+  });
+  async function planExecute(name, input, signal, ctx, callId, onUpdate) {
+    if (signal?.aborted) throw new Error("Plan inspection aborted.");
+    if (name === "bash") {
+      const inspection = parsePlanInspection(String(input.command ?? ""));
+      if (inspection.tool === "metadata") return { content: [{ type: "text", text: planMetadata(ctx.cwd, inspection.command) }], details: {} };
+      return planExecute(inspection.tool, inspection.input, signal, ctx, callId, onUpdate);
+    }
+    if (name === "read") {
+      const deadline = Date.now() + 10_000;
+      const checkBudget = () => {
+        if (signal?.aborted) throw new Error("Plan inspection aborted.");
+        if (Date.now() > deadline) throw new Error("Plan inspection deadline reached; narrow the path or pattern.");
+      };
+      return createReadToolDefinition(ctx.cwd, { operations: {
+        access: async file => { checkBudget(); authorizePlanPath(ctx.cwd, file); checkBudget(); },
+        readFile: async file => readPlanFile(ctx.cwd, file, checkBudget),
+        detectImageMimeType: async () => null,
+      } }).execute(callId, input, signal, onUpdate, ctx);
+    }
+    const text = await inspectPlanFiles(ctx.cwd, name, input, signal);
+    const truncation = truncateHead(text);
+    return { content: [{ type: "text", text: truncation.content + (truncation.truncated ? "\n[Output truncated; narrow inspection.]" : "") }], details: { truncation } };
+  }
+  for (const [name, factory] of Object.entries(localTools)) {
+    const definition = factory(process.cwd());
+    pi.registerTool({ ...definition, async execute(callId, input, signal, onUpdate, ctx) {
+      if (isModeRestorePending()) throw new Error("Session restoration is pending.");
+      if (getMode() !== "plan") {
+        // Registered tools replace Pi's configured built-ins, not their defaults.
+        if (!nativeSettings) throw new Error("Native session settings are not initialized.");
+        const native = name === "read" ? createReadToolDefinition(ctx.cwd, { autoResizeImages: nativeSettings.getImageAutoResize() })
+          : name === "bash" ? createBashToolDefinition(ctx.cwd, { commandPrefix: nativeSettings.getShellCommandPrefix(), shellPath: nativeSettings.getShellPath() })
+          : factory(ctx.cwd);
+        return native.execute(callId, input, signal, onUpdate, ctx);
+      }
+      try {
+        return redactSensitiveValue(await planExecute(name, input, signal, ctx, callId, onUpdate));
+      } finally {
+        // Current service failures are useful diagnostics, not restored native
+        // content. tool_result and final-context hooks still redact their text.
+        safePlanCalls.add(callId);
+      }
+    } });
+  }
+  pi.on("tool_result", event => {
+    if (getMode() === "plan") return { content: redactSensitiveValue(event.content), details: redactSensitiveValue(event.details), structuredContent: redactSensitiveValue(event.structuredContent) };
+  });
+  pi.on("context", event => {
+    if (getMode() !== "plan") return;
+    // A restored session or a previous mode's native tool result has not passed
+    // this service. Never recycle its bytes into Plan research context.
+    return { messages: event.messages.map(message => message.role === "toolResult" && !safePlanCalls.has(message.toolCallId)
+      ? { ...message, content: [{ type: "text", text: "[Earlier tool content withheld in Plan; inspect again through authorized tools.]" }], details: undefined, structuredContent: undefined }
+      : message) };
+  });
 
   let consecutiveStops = 0;
   const rollingStops: boolean[] = [];
@@ -31,11 +99,15 @@ export default function (pi) {
   pi.on("agent_start", () => { consecutiveStops = 0; });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (isModeRestorePending()) return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
+    if (isModeRestorePending()) {
+      if (getMode() === "plan") safePlanCalls.add(event.toolCallId);
+      return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
+    }
     const mode = getMode();
     // Pi's indirect tools reach registered capabilities beyond the active list.
     // Keep them YOLO-only until Neura has reviewed their complete execution surface.
     if (mode !== "yolo" && ["codemode", "tool_search"].includes(event.toolName)) {
+      if (mode === "plan") safePlanCalls.add(event.toolCallId);
       return { block: true, reason: `${event.toolName} is available only in YOLO mode.` };
     }
 
@@ -45,7 +117,11 @@ export default function (pi) {
     }
 
     if (mode === "plan") {
-      if (isPlanActionAllowed(event, ctx.cwd)) return;
+      if (isPlanActionAllowed(event, ctx.cwd)) {
+        if (!Object.hasOwn(localTools, event.toolName)) safePlanCalls.add(event.toolCallId);
+        return;
+      }
+      safePlanCalls.add(event.toolCallId);
       return {
         block: true,
         reason: `PLAN mode blocked ${event.toolName}. Use research tools or publish_plan for one plans/*.html artifact; switch with Shift+Tab or /mode before implementation.`,

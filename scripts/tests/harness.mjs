@@ -67,6 +67,8 @@ const availableToolNames = [...new Set(["read", "bash", "edit", "write", "grep",
 const state = { activeTools: [...availableToolNames], aborted: 0, title: "", workingMessage: "" };
 const appendedEntries = [];
 const sentUserMessages = [];
+loaded.runtime.getSettings = () => ({});
+loaded.runtime.getCommands = () => []; // synthetic harness has no discovered skills
 loaded.runtime.getActiveTools = () => [...state.activeTools];
 loaded.runtime.setActiveTools = (names) => { state.activeTools = [...names]; };
 loaded.runtime.getAllTools = () => [...new Set([...state.activeTools, ...availableToolNames, ...registeredToolNames])]

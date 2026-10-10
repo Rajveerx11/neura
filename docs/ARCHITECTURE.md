@@ -69,7 +69,7 @@ agent_settled
 | `transcript-actions.ts` | Answer/code copy | Pi clipboard API |
 | `neura-memory.ts` | YOLO-only local cross-session facts | `~/.pi/agent/neura/MEMORY.md` |
 | `presets.ts` | GPT, Opus, local Qwen switching | Provider login or llama.cpp |
-| `skill-doctor.ts` | YOLO-only skill compatibility scan | Local skill directories |
+| `skill-doctor.ts` | Read-only supported registry and actual discovery-identity validation; no mode escalation or personal-directory scanning | Versioned `skills-manifest.json`, immutable guidance bytes, machine-local opt-in selection |
 | `ship-report.ts` | End-of-iteration response contract | None |
 | `october-bus.ts` | Optional YOLO-only local multi-agent context bus | Local October HTTP service and environment variables |
 
@@ -141,8 +141,13 @@ and cannot widen policy. See [Learn Mode](LEARN_MODE.md).
 - Learn parsers use bounded child processes and trusted native/WASM dependencies;
   document content never grants tool permissions. Citation validation establishes
   source identity and excerpt location, not semantic correctness.
-- Host checkpoints, health, memory, skill scans, and October are YOLO-only.
+- Host checkpoints, health, memory, and October are YOLO-only.
   Operation leases prevent their work crossing into a restricted mode.
+- `/skill-doctor` validates only the supported immutable registry and actual
+  discovery identity, read-only in any mode. The validator/catalog, discovery gate
+  and managed installer are protected controls, and declared skill permissions never grant execution authority.
+  Selection is machine-local and disabled by default; no personal directories are
+  scanned. See [supported skills](SKILLS.md).
 - Repository and live harness are separate states; drift checks matter.
 
 ## Verification architecture

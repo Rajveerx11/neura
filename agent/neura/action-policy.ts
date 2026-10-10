@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { shellTokens, hasUnquotedPowerShellOperator, hasUnquotedPowerShellExpansion, planShellFilesystemArguments } from "./plan-shell-parser.ts";
 import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
+import { authorizePlanPath, parsePlanInspection } from "./plan-files.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./human-away-sandbox.ts";
 import { redactSensitiveText } from "./redaction.ts";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "./process-security.ts";
@@ -163,17 +164,99 @@ function targetsSecretPath(requestedPath: string, facts: ActionFacts, workspace:
   return typeof facts.target === "string" && SECRET_PATH.test(path.relative(workspace, facts.target));
 }
 
-function resolveTarget(raw: string, cwd: string, stripToolAlias: boolean): string | null {
+function normalizedFilesystemPath(raw: string, stripToolAlias: boolean): string | null {
   let normalized = raw.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
   if (stripToolAlias && normalized.startsWith("@")) normalized = normalized.slice(1);
+  if (/^file:\/\//i.test(normalized)) {
+    try { normalized = fileURLToPath(normalized); } catch { return null; }
+  }
+  // NTFS streams (including the unnamed ::$DATA alias), drive-relative paths,
+  // UNC/device/extended namespaces have no supported ordinary-file identity.
+  // Reject before target I/O or approval, including decoded file-URL spellings.
+  if (!normalized || /[\x00-\x1f\x7f]/.test(normalized) || /^[\\/]{2}|^[\\/]\?\?[\\/]/.test(normalized)
+      || (process.platform === "win32" && /^[\\/]/.test(normalized))
+      || /:/.test(normalized.replace(/^[a-z]:[\\/]/i, ""))) return null;
+  return normalized;
+}
+
+function resolveTarget(raw: string, cwd: string, stripToolAlias: boolean): string | null {
+  let normalized = normalizedFilesystemPath(raw, stripToolAlias);
+  if (normalized === null) return null;
   if (normalized === "~") normalized = homedir();
   else if (normalized.startsWith("~/") || (process.platform === "win32" && normalized.startsWith("~\\"))) {
     normalized = path.join(homedir(), normalized.slice(2));
   }
-  if (/^file:\/\//i.test(normalized)) {
-    try { normalized = fileURLToPath(normalized); } catch { return null; }
-  }
   return path.isAbsolute(normalized) ? path.resolve(normalized) : path.resolve(cwd, normalized);
+}
+
+function shellFilesystemSpellings(command: string, cwd: string): { paths: string[]; uncertain: boolean } | null {
+  const tokens = shellTokens(command);
+  if (tokens === null) return null;
+  // Reuse the command-specific binder: rg patterns and Git objects are not paths.
+  const parsed = planShellFilesystemArguments(tokens);
+  if (parsed !== null) return { paths: parsed, uncertain: false };
+  const packageManager = /^(?:npm|pnpm|yarn|bun)$/i.test(tokens[0] ?? "");
+  const scriptIndex = tokens[1]?.toLowerCase() === "run" ? 2 : 1;
+  const msbuild = tokens[0]?.toLowerCase() === "dotnet" && /^(?:test|build)$/i.test(tokens[1] ?? "");
+  const fallbackPathContext = isKnownDevelopmentCommand(command) || deleteTarget(command) !== null;
+  const paths: string[] = [];
+  let uncertain = false;
+  let literalArguments = false;
+  let codeArgument = false;
+  for (const [index, token] of tokens.entries()) {
+    if (codeArgument) { codeArgument = false; uncertain = true; continue; }
+    if (token === "--") { literalArguments = true; continue; }
+    // Script names do not identify files and do not extend the development allowlist.
+    if (packageManager && index === scriptIndex && /^[\w.-]+(?::[\w.-]+)*$/.test(token)) continue;
+    if (tokens[0] === "node" && !literalArguments) {
+      if (/^(?:-e|-p|--eval|--print)$/.test(token)) { codeArgument = true; uncertain = true; continue; }
+      if (/^--(?:eval|print)=/.test(token)) { uncertain = true; continue; }
+    }
+    if (tokens[0] === "git" && !literalArguments) {
+      // Before --, show/log's colon operands name objects, not working-tree streams.
+      if (/^(?:show|log)$/.test(tokens[1] ?? "") && index > 1 && /^[^-]+:/.test(token)
+          && !/^[a-z]:|^file:|^[\\/]/i.test(token)) { uncertain = true; continue; }
+      if (tokens[1] === "clone" && index === 2 && /^[\w.-]+@[\w.-]+:[^\s]+$/.test(token)) continue;
+    }
+    let raw = token;
+    let propertyValue = false;
+    // Only dotnet test/build's recognized property options, before --. Values
+    // still undergo screening; properties can contain paths as well as text.
+    if (msbuild && index > 1 && !literalArguments && /^[-/](?:p|property):/i.test(token)) {
+      const property = /^[-/](?:p|property):[a-z_][\w]*=(.+)$/i.exec(token);
+      if (property) { raw = property[1]; propertyValue = true; }
+    }
+    const option = propertyValue ? null : /^--?([^=:]+)=(.*)$/.exec(raw);
+    if (option) raw = option[2];
+    if (/^[a-z][\w+.-]+:\/\//i.test(raw) && !/^file:/i.test(raw)) continue;
+    if (raw.includes(":")) {
+      // Unknown option values may be query text, not files. --output is the
+      // explicit output-path spelling screened by this fallback, not a binder.
+      if ((option && option[1] !== "output") || raw.startsWith("-")) {
+        uncertain = true;
+        continue;
+      }
+      if (!/^file:|^[a-z]:|[\\/]|:\$DATA$/i.test(raw)) {
+        // An existing basename alone cannot turn unknown command text into a
+        // path. In development/delete contexts it only escalates to denial;
+        // a missing/changed base never grants automatic execution.
+        if (!fallbackPathContext) { uncertain = true; continue; }
+        const base = resolvePlanShellTarget(raw.slice(0, raw.indexOf(":")), cwd);
+        if (base === null || !fs.existsSync(base)) { uncertain = true; continue; }
+      }
+      paths.push(raw);
+    } else if (/[\\/]|\.[\w-]+$/.test(raw)) paths.push(raw);
+  }
+  return { paths, uncertain };
+}
+
+function shellTouchesControl(command: string, spellings: string[], workspace: string, cwd: string): boolean {
+  if (PROTECTED_CONTROL.test(command)) return true;
+  return spellings.some(raw => {
+    const lexical = resolvePlanShellTarget(raw, cwd);
+    const canonical = lexical === null ? null : canonicalTarget(lexical);
+    return canonical !== null && PROTECTED_CONTROL.test(path.relative(workspace, canonical));
+  });
 }
 
 function resolveToolTarget(raw: string, cwd: string): string | null {
@@ -210,8 +293,9 @@ function insideWorkspace(target: string, cwd: string): boolean {
 function targetFacts(raw: string, workspace: string, executionCwd = workspace): ActionFacts {
   if (!raw) return {};
   const lexicalTarget = resolveToolTarget(raw, executionCwd);
-  const canonical = lexicalTarget === null ? null : canonicalTarget(lexicalTarget);
-  const target = canonical ?? lexicalTarget ?? path.resolve(executionCwd, raw);
+  if (lexicalTarget === null) return { insideWorkspace: false };
+  const canonical = canonicalTarget(lexicalTarget);
+  const target = canonical ?? lexicalTarget;
   const facts: ActionFacts = {
     target,
     insideWorkspace: canonical !== null && insideWorkspace(target, workspace),
@@ -330,9 +414,24 @@ export function inspectAction(
   options: { protectControlReads?: boolean } = {},
 ): InspectedAction {
   const executionCwd = typeof cwdInput === "string" && cwdInput.trim() ? path.resolve(cwdInput) : process.cwd();
-  const workspace = normalizedWorkspace(executionCwd);
   const toolName = String(event.toolName ?? "unknown");
   const input = inputRecord(event.input);
+  const filesystemTool = READ_TOOLS.has(toolName) || toolName === "edit" || toolName === "write";
+  if (filesystemTool && rawPath(input) && normalizedFilesystemPath(rawPath(input), true) === null) {
+    // A denial is never retry-approvable. Do not inspect any filesystem or Git
+    // state to construct an approval binding for an unsupported namespace.
+    const unavailable = sha256("unavailable: unsupported filesystem path");
+    return result({
+      toolName, workspace: executionCwd, input,
+      actionFingerprint: actionFingerprint(toolName, input, executionCwd), workspaceFingerprint: unavailable,
+      workspaceState: { head: "unavailable", indexFingerprint: unavailable, worktreeFingerprint: unavailable, fingerprint: unavailable },
+    }, {
+      summary: `${toolName} unsupported filesystem path`, category: "protected-control", risk: "high", route: "deny",
+      reason: "Streams and ambiguous filesystem namespaces have no supported ordinary-file identity.",
+      saferPath: "Use an ordinary local-drive or workspace-relative path.", facts: {},
+    });
+  }
+  const workspace = normalizedWorkspace(executionCwd);
   const workspaceState = captureWorkspaceState(workspace);
   const base = {
     toolName,
@@ -419,6 +518,23 @@ export function inspectAction(
         facts: {},
       });
     }
+    const hard = HARD_DENY.find(({ re }) => re.test(command));
+    if (hard) {
+      return result(base, {
+        summary: redactCommand(command), category: "broad-destruction", risk: "critical", route: "deny",
+        reason: hard.why, saferPath: "Narrow the action to one literal, recoverable workspace target.",
+        facts: {},
+      });
+    }
+    const screening = shellFilesystemSpellings(command, executionCwd) ?? { paths: [], uncertain: true };
+    const spellings = screening.paths;
+    if (spellings.some(raw => normalizedFilesystemPath(raw, false) === null)) {
+      return result(base, {
+        summary: "shell command with unsupported filesystem path", category: "protected-control", risk: "high", route: "deny",
+        reason: "Streams and ambiguous filesystem namespaces cannot be authorized through shell commands.",
+        saferPath: "Use ordinary local-drive or workspace-relative paths.", facts: {},
+      });
+    }
     if (SECRET_PATH.test(command)) {
       return result(base, {
         summary: "shell command touching a protected secret path", category: "protected-data", risk: "critical", route: "human",
@@ -427,19 +543,12 @@ export function inspectAction(
         facts: {},
       });
     }
-    if ((toolName === HUMAN_AWAY_SANDBOX_TOOL || toolName === WORK_SANDBOX_TOOL) && PROTECTED_CONTROL.test(command)) {
+    if ((toolName === HUMAN_AWAY_SANDBOX_TOOL || toolName === WORK_SANDBOX_TOOL)
+        && shellTouchesControl(command, spellings, workspace, executionCwd)) {
       return result(base, {
         summary: redactCommand(command), category: "protected-control", risk: "high", route: "human",
         reason: "The sandbox command touches Neura's safety, credential, Git, or deployment control plane.",
         saferPath: "Prepare a patch for Rajveer instead of changing protected control files unattended.",
-        facts: {},
-      });
-    }
-    const hard = HARD_DENY.find(({ re }) => re.test(command));
-    if (hard) {
-      return result(base, {
-        summary: redactCommand(command), category: "broad-destruction", risk: "critical", route: "deny",
-        reason: hard.why, saferPath: "Narrow the action to one literal, recoverable workspace target.",
         facts: {},
       });
     }
@@ -449,6 +558,14 @@ export function inspectAction(
         summary: redactCommand(command), category: /push|publish|merge|apply|deploy/i.test(command) ? "remote-mutation" : "protected-control",
         risk: "critical", route: "human", reason: humanOnly.why,
         saferPath: "Use a reversible local operation or wait for Rajveer to approve the exact command.",
+        facts: {},
+      });
+    }
+    if (screening.uncertain) {
+      return result(base, {
+        summary: redactCommand(command), category: "unclassified-shell", risk: "high", route: "human",
+        reason: "Colon-bearing arguments may be command syntax or text rather than filesystem operands.",
+        saferPath: "Use a recognized command form or wait for exact human review; ambiguous arguments cannot run unattended.",
         facts: {},
       });
     }
@@ -512,9 +629,19 @@ export function inspectAction(
 export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
   const toolName = String(event.toolName ?? "unknown");
   if (!PLAN_TOOLS.has(toolName)) return false;
-  if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""), cwd);
+  if (toolName === "bash") {
+    try {
+      const inspection = parsePlanInspection(String(inputRecord(event.input).command ?? ""));
+      if (inspection.tool !== "metadata") authorizePlanPath(cwd, String(inspection.input.path ?? "."));
+      return true;
+    } catch { return false; }
+  }
   if (READ_TOOLS.has(toolName)) {
-    return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
+    try {
+      const requested = inputRecord(event.input).path ?? (toolName === "read" ? "" : ".");
+      authorizePlanPath(cwd, String(requested));
+      return isPlanToolInputAllowed(toolName, event.input);
+    } catch { return false; }
   }
   return isPlanToolInputAllowed(toolName, event.input);
 }
@@ -535,7 +662,9 @@ export function isBoundedResearchReadAllowed(event: ToolEvent, cwd: string): boo
   const lexical = path.resolve(workspace, requested);
   const sensitive = (target: string): boolean => {
     if (SECRET_PATH.test(target)) return true;
-    const components = target.split(/[\\/]/);
+    // Confidential descendants remain blocked regardless of the workspace's
+    // installation/worktree location (which may itself have hidden ancestors).
+    const components = path.relative(workspace, target).split(/[\\/]/);
     if (components.some((part) => part.startsWith(".") || /^(?:node_modules|sessions|approvals)$/i.test(part))) return true;
     return /^(?:memory\.(?:md|json|txt)|(?:auth|models|settings|mcp|keybindings|tokens|credentials|secrets)\.json|credentials(?:\.[\w.-]+)?)$/i.test(path.basename(target));
   };
