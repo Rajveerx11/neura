@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { shellTokens, hasUnquotedPowerShellOperator, hasUnquotedPowerShellExpansion, planShellFilesystemArguments } from "./plan-shell-parser.ts";
 import { PLAN_MODE_TOOL_NAMES, isPlanToolInputAllowed } from "./plan-policy.ts";
+import { authorizePlanPath, parsePlanInspection } from "./plan-files.ts";
 import { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./human-away-sandbox.ts";
 import { redactSensitiveText } from "./redaction.ts";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "./process-security.ts";
@@ -628,9 +629,19 @@ export function inspectAction(
 export function isPlanActionAllowed(event: ToolEvent, cwd: string): boolean {
   const toolName = String(event.toolName ?? "unknown");
   if (!PLAN_TOOLS.has(toolName)) return false;
-  if (toolName === "bash") return isPlanSafeShellCommand(String(inputRecord(event.input).command ?? ""), cwd);
+  if (toolName === "bash") {
+    try {
+      const inspection = parsePlanInspection(String(inputRecord(event.input).command ?? ""));
+      if (inspection.tool !== "metadata") authorizePlanPath(cwd, String(inspection.input.path ?? "."));
+      return true;
+    } catch { return false; }
+  }
   if (READ_TOOLS.has(toolName)) {
-    return isPlanToolInputAllowed(toolName, event.input) && inspectAction(event, cwd).route === "allow";
+    try {
+      const requested = inputRecord(event.input).path ?? (toolName === "read" ? "" : ".");
+      authorizePlanPath(cwd, String(requested));
+      return isPlanToolInputAllowed(toolName, event.input);
+    } catch { return false; }
   }
   return isPlanToolInputAllowed(toolName, event.input);
 }
@@ -651,7 +662,9 @@ export function isBoundedResearchReadAllowed(event: ToolEvent, cwd: string): boo
   const lexical = path.resolve(workspace, requested);
   const sensitive = (target: string): boolean => {
     if (SECRET_PATH.test(target)) return true;
-    const components = target.split(/[\\/]/);
+    // Confidential descendants remain blocked regardless of the workspace's
+    // installation/worktree location (which may itself have hidden ancestors).
+    const components = path.relative(workspace, target).split(/[\\/]/);
     if (components.some((part) => part.startsWith(".") || /^(?:node_modules|sessions|approvals)$/i.test(part))) return true;
     return /^(?:memory\.(?:md|json|txt)|(?:auth|models|settings|mcp|keybindings|tokens|credentials|secrets)\.json|credentials(?:\.[\w.-]+)?)$/i.test(path.basename(target));
   };

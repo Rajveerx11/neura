@@ -1,13 +1,16 @@
 import { repoRoot, scratchRoot, assert, execFileSync, spawnSync, fs, path, pathToFileURL, isSafeExternalUrl, isPlanToolInputAllowed, files, state, widgets, context, guard, modes, modeState, WORK_SANDBOX_TOOL } from './harness.mjs';
 await modes.commands.get("mode").handler("plan", context);
 const { inspectAction } = await import('../../agent/neura/action-policy.ts');
-for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-tools', 'plan-shell-parser', 'process']) {
+for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-tools', 'plan-shell-parser', 'process', 'plan-files']) {
   const target = path.join(repoRoot, 'agent', 'neura', `${file}.ts`);
   assert.equal(await guard({ toolName: 'read', input: { path: target } }, context), undefined, `Plan blocked read-only inspection of extracted ${file}`);
-  const edit = inspectAction({ toolName: 'edit', input: { path: target } }, repoRoot);
-  assert.equal(edit.route, 'human', `extraction removed protected-control boundary from ${file}`);
-  assert.equal(edit.category, 'protected-control');
-  assert.equal(edit.capability.approvalClass, 'exception-boundary');
+  for (const toolName of ['edit', 'write']) {
+    const action = inspectAction({ toolName, input: { path: target } }, repoRoot);
+    assert.equal(action.route, 'human', `${toolName} removed protected-control boundary from ${file}`);
+    assert.equal(action.category, 'protected-control');
+    assert.equal(action.capability.approvalClass, 'exception-boundary');
+  }
+  assert.equal(inspectAction({ toolName: 'work_exec', input: { command: `sed -i s/a/b/ agent/neura/${file}.ts` } }, repoRoot).route, 'human');
   assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
   assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ agent/neura/${file}.ts` } }, repoRoot).route, 'human');
 }
@@ -24,7 +27,7 @@ for (const file of ['agent/extensions/mcp.ts', 'agent/neura/process-security.ts'
   assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
   assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ ${file}` } }, repoRoot).route, 'human');
 }
-for (const file of ['ordinary-task-file.txt', 'agent/extensions/mcp-helper.ts', 'agent/neura/process-security-notes.ts', 'agent/extensions/skill-doctor-notes.ts', 'agent/neura/runtime-install-notes.mjs', 'agent/neura/skills-registry-notes.mjs', 'agent/neura/skills-manifest-example.json']) {
+for (const file of ['ordinary-task-file.txt', 'agent/extensions/mcp-helper.ts', 'agent/neura/process-security-notes.ts', 'agent/neura/plan-files-notes.ts', 'agent/extensions/skill-doctor-notes.ts', 'agent/neura/runtime-install-notes.mjs', 'agent/neura/skills-registry-notes.mjs', 'agent/neura/skills-manifest-example.json']) {
   for (const toolName of ['edit', 'write']) {
     const action = inspectAction({ toolName, input: { path: path.join(repoRoot, file), content: 'task' } }, repoRoot);
     assert.equal(action.route, 'allow', `control-path protection widened to ordinary ${toolName} ${file}`);
@@ -296,7 +299,7 @@ assert.ok(state.activeTools.includes("plan_request"), "Plan mode did not activat
 assert.ok(state.activeTools.includes("web_search"), "Plan mode did not activate bounded web search");
 assert.equal(state.activeTools.includes("web_fetch"), false, "Plan mode activated web_fetch without enforceable DNS and redirect validation");
 assert.equal(state.activeTools.includes("edit") || state.activeTools.includes("write"), false, "Plan mode retained generic mutation tools");
-assert.equal(await guard({ toolName: "bash", input: { command: `${planGit} branch --show-current` } }, context), undefined);
+assert.equal(await guard({ toolName: "bash", input: { command: "git rev-parse --short HEAD" } }, context), undefined);
 assert.equal((await guard({ toolName: "bash", input: { command: "git status; Remove-Item file.txt" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "Get-Content env:OPENAI_API_KEY" } }, context))?.block, true);
 assert.equal((await guard({ toolName: "bash", input: { command: "rg --pre dangerous-helper pattern" } }, context))?.block, true);
@@ -345,25 +348,22 @@ for (const testCase of filesystemCases) {
 
 const planBoundaryOutsideRelative = path.join("..", path.basename(planBoundaryOutside), "outside.txt");
 const planShellAllowed = [
-  "pwd",
-  "Get-Location",
-  "Get-ChildItem .",
-  "Get-Content .\\inside.txt",
-  "Get-Content \"@inside.txt\"",
-  "Get-Content \".\\inside,name.txt\"",
-  "Get-Content \".\\@args\"",
-  "Get-Content -TotalCount 1 -LiteralPath .\\inside.txt",
+  "pwd", "Get-Location", "Get-ChildItem .", "ls .",
+  "Get-Content -LiteralPath inside.txt", "Get-Content inside.txt",
   `Get-Content "${planBoundaryFile}"`,
-  `Get-Content "${pathToFileURL(planBoundaryFile).href}"`,
-  "Get-Content .\\nested\\..\\inside.txt",
-  "Select-String -SimpleMatch -Pattern inside -Path .\\inside.txt",
-  "Resolve-Path .\\inside.txt",
-  "Test-Path -Path .\\missing.txt -PathType Leaf",
-  "Measure-Object",
-  "rg inside .",
-  "rg \"inside,outside\" .",
-  "rg \"@args\" .",
-  "rg --files ./",
+  "Select-String -LiteralPath inside.txt -Pattern inside",
+  "rg inside .", "rg -n -i -F inside .", "rg --files ./", "rg @args",
+  "git rev-parse --short HEAD",
+];
+for (const command of planShellAllowed) {
+  assert.equal(
+    await guard({ toolName: "bash", input: { command } }, planBoundaryContext),
+    undefined,
+    `Plan blocked ordinary read-only shell command: ${command}`,
+  );
+}
+
+const planShellDenied = [
   `${planGit} diff --no-ext-diff --no-textconv --cached -- inside.txt`,
   `${planGit} diff --no-ext-diff --no-textconv --cached --stat HEAD`,
   `${planGit} diff --no-ext-diff --no-textconv HEAD~1..HEAD --`,
@@ -376,16 +376,10 @@ const planShellAllowed = [
   `${planGit} ls-files -- inside.txt`,
   `${planGit} ls-files --stage -- inside.txt`,
   `${planGit} branch --show-current`,
-];
-for (const command of planShellAllowed) {
-  assert.equal(
-    await guard({ toolName: "bash", input: { command } }, planBoundaryContext),
-    undefined,
-    `Plan blocked ordinary read-only shell command: ${command}`,
-  );
-}
-
-const planShellDenied = [
+  "Get-Content -TotalCount 1 -LiteralPath inside.txt",
+  "Resolve-Path inside.txt",
+  "Test-Path missing.txt",
+  "Measure-Object",
   `Get-Content .\\${planBoundaryOutsideRelative}`,
   `Get-Content .\\nested\\..\\..\\${path.basename(planBoundaryOutside)}\\outside.txt`,
   `rg outside ${planBoundaryOutsideRelative.replaceAll("\\", "/")}`,
@@ -459,7 +453,6 @@ const planShellDenied = [
   "Get-Content '..'+'/outside.txt'",
   "Get-Content .\\inside.txt & whoami",
   "Measure-Object -InputObject (& whoami)",
-  "rg @args",
   "rg outside @paths",
   "git status @paths",
   `rg outside . ,${planBoundaryOutsideRelative}`,

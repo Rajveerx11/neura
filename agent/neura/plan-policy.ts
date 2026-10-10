@@ -3,6 +3,8 @@ import * as fsp from "node:fs/promises";
 import { isIP } from "node:net";
 import * as path from "node:path";
 
+export { SECRET_PATH } from "./action-paths.ts";
+
 export const PUBLISH_PLAN_TOOL = "publish_plan";
 export const PLAN_REQUEST_TOOL = "plan_request";
 export const PLAN_ARTIFACT_ENTRY = "neura-plan-artifact";

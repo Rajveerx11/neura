@@ -1,7 +1,7 @@
 import { repoRoot, scratchRoot, assert, fs, path, pathToFileURL, inspectAction, loaded, registeredToolNames, state, extensionWithCommand, firstHandler, notices, ui, context as harnessContext, modeState, cockpitState, guard, modes, stripAnsi, widthOf, loadExtensions, extensionDir, WORK_SANDBOX_TOOL } from './harness.mjs';
-// The source checkout may have protected hidden ancestors (for example a
-// .pi-subagents worktree). Exercise authorized reads in synthetic public state,
-// without weakening the production ancestor-path restriction.
+// Keep authorized-read fixtures in synthetic public state, independent of
+// checkout location. Hidden descendants remain confidential; hidden worktree
+// ancestors alone do not make ordinary workspace source confidential.
 const referenceWorkspace = path.join(scratchRoot, 'learn-reference-workspace');
 fs.mkdirSync(path.join(referenceWorkspace, 'docs'), { recursive: true });
 fs.writeFileSync(path.join(referenceWorkspace, 'README.md'), 'Synthetic public learning reference.\n');
@@ -47,11 +47,15 @@ for (const name of LEARN_ONLY_TOOL_NAMES) {
 assert.equal(await guard({ toolName: "questionnaire", input: {} }, context), undefined);
 assert.equal(await guard({ toolName: "read", input: { path: "README.md" } }, context), undefined);
 assert.equal(await guard({ toolName: "ls", input: { path: "docs" } }, context), undefined);
-const hiddenWorkspace = path.join(scratchRoot, '.private-learn', 'workspace');
-fs.mkdirSync(hiddenWorkspace, { recursive: true });
-fs.writeFileSync(path.join(hiddenWorkspace, 'README.md'), 'Synthetic hidden-ancestor reference.\n');
-assert.equal((await guard({ toolName: 'read', input: { path: 'README.md' } }, { ...context, cwd: hiddenWorkspace }))?.block, true,
-  'Learn must retain hidden-ancestor denial even for a public-looking filename');
+const hiddenReference = path.join(referenceWorkspace, '.private-learn', 'workspace', 'README.md');
+fs.mkdirSync(path.dirname(hiddenReference), { recursive: true });
+fs.writeFileSync(hiddenReference, 'Synthetic hidden-descendant reference.\n');
+for (const requested of [path.relative(referenceWorkspace, hiddenReference), hiddenReference]) {
+  assert.equal((await guard({ toolName: 'read', input: { path: requested } }, context))?.block, true,
+    'Learn must retain hidden-descendant denial even for a public-looking filename');
+}
+assert.equal((await guard({ toolName: 'ls', input: { path: '.private-learn/workspace' } }, context))?.block, true,
+  'Learn must retain hidden-descendant directory denial');
 assert.equal(await guard({ toolName: "web_search", input: { query: "database relationships", max_results: 3 } }, context), undefined);
 for (const event of [
   { toolName: "write", input: { path: "example.txt", content: "blocked" } },
@@ -96,6 +100,24 @@ fs.mkdirSync(path.join(learnWorkspace, "public"));
 assert.equal(await guard({ toolName: "read", input: { path: "safe.txt" } }, { ...context, cwd: learnWorkspace }), undefined);
 assert.equal(await guard({ toolName: "read", input: { path: path.join(learnWorkspace, "safe.txt") } }, { ...context, cwd: learnWorkspace }), undefined);
 assert.equal(await guard({ toolName: "ls", input: { path: "public" } }, { ...context, cwd: learnWorkspace }), undefined);
+// A hidden ancestor is a worktree location, not a confidential descendant.
+const hiddenAncestorWorkspace = path.join(scratchRoot, ".worktrees", "public-workspace");
+fs.mkdirSync(path.join(hiddenAncestorWorkspace, "docs"), { recursive: true });
+fs.writeFileSync(path.join(hiddenAncestorWorkspace, "docs", "public.txt"), "ordinary source");
+const hiddenAncestorContext = { ...context, cwd: hiddenAncestorWorkspace };
+for (const requested of ["docs/public.txt", path.join(hiddenAncestorWorkspace, "docs", "public.txt")]) {
+  assert.equal(await guard({ toolName: "read", input: { path: requested } }, hiddenAncestorContext), undefined);
+}
+assert.equal(await guard({ toolName: "ls", input: { path: "docs" } }, hiddenAncestorContext), undefined);
+for (const directory of [".hidden", "sessions", "approvals", "node_modules"]) {
+  fs.mkdirSync(path.join(hiddenAncestorWorkspace, directory));
+  fs.writeFileSync(path.join(hiddenAncestorWorkspace, directory, "private.txt"), "synthetic private reference");
+  for (const requested of [path.join(directory, "private.txt"), path.join(hiddenAncestorWorkspace, directory, "private.txt")]) {
+    assert.equal((await guard({ toolName: "read", input: { path: requested } }, hiddenAncestorContext))?.block, true);
+  }
+  assert.equal((await guard({ toolName: "ls", input: { path: directory } }, hiddenAncestorContext))?.block, true);
+}
+assert.equal((await guard({ toolName: "read", input: { path: "../outside.txt" } }, hiddenAncestorContext))?.block, true);
 assert.equal(await guard({ toolName: "ls", input: {} }, { ...context, cwd: path.join(learnWorkspace, "public") }), undefined);
 assert.equal((await guard({ toolName: "read", input: { path: "safe.txt" } }, { ...context, cwd: "\\\\server\\share" }))?.block, true,
   "Learn attempted to resolve a network workspace");

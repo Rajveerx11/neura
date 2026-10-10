@@ -1,4 +1,5 @@
 import { repoRoot, scratchRoot, assert, fs, path, files, state, appendedEntries, sentUserMessages, extensionWithTool, firstHandler, context, modes } from './harness.mjs';
+import { spawnSync } from 'node:child_process';
 const theme = JSON.parse(fs.readFileSync(path.join(repoRoot, 'agent/themes/neura-dark.json'), 'utf8'));
 await modes.commands.get("mode").handler("plan", context);
 // Plan publication: structured input, escaped browser output, collision-safe creation,
@@ -321,4 +322,16 @@ await assert.rejects(
   "Publisher followed a symlinked plans directory",
 );
 
+const confidentiality = spawnSync(process.execPath, [path.join(repoRoot, 'scripts/tests/plan-confidentiality.mjs')], {
+  cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
+});
+assert.equal(confidentiality.status, 0, 'Real-loader Plan confidentiality regressions failed');
+const nativeConfig = spawnSync(process.execPath, [path.join(repoRoot, 'scripts/tests/plan-native-config.mjs')], {
+  cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
+});
+assert.equal(nativeConfig.status, 0, 'Real-session configured native delegation regressions failed');
+const traversal = spawnSync(process.execPath, [path.join(repoRoot, 'scripts/tests/plan-traversal.mjs')], {
+  cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
+});
+assert.equal(traversal.status, 0, 'Plan traversal regressions failed');
 console.log('PASS plan');

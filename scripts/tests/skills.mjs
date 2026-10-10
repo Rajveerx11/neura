@@ -239,7 +239,7 @@ try {
   // Sensitivity control: removing only isolate()'s boundary must expose the
   // synthetic sentinel. The outer .git still prevents real ancestor discovery.
   const boundary = path.join(scratch, '.git');
-  fs.rmdirSync(boundary);
+  fs.rmSync(boundary, { recursive: true }); // isolate() now uses a valid synthetic Git repository
   try {
     await stock.session.reload();
     assert.ok(ancestorAttempts > 0, 'counter must detect default ancestor enumeration/reads');

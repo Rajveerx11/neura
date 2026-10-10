@@ -105,6 +105,17 @@ assert.match(readme, /not production-ready/i, "README does not state current pro
 assert.match(readme, /Apache License 2\.0/i, "README does not state Apache-2.0 license");
 assert.doesNotMatch(readme, /private engineering-agent harness/i, "README contains stale private-project positioning");
 assert.match(fs.readFileSync(path.join(repoRoot, "plans", "README.md"), "utf-8"), /polish-neura-launch-screen-plan\.html[^\n]*Superseded/i, "launch-polish plan is not marked superseded");
+const security = fs.readFileSync(path.join(repoRoot, 'SECURITY.md'), 'utf8');
+const planConfidentiality = fs.readFileSync(path.join(repoRoot, 'docs/PLAN_CONFIDENTIALITY.md'), 'utf8');
+assert.match(security, /Plan Git inspection supports only `git rev-parse --short HEAD`/, 'Canonical security policy lost the closed Plan Git metadata form');
+assert.match(security, /Git historical content, object\/index reads, and comparisons are denied/, 'Canonical security policy lost Plan Git content denial');
+assert.doesNotMatch(security, /Git reads\s+are limited to objects, refs, and the index|Unstaged diff requires|log, and show also disable/, 'Canonical security policy retains historical Plan Git allowances');
+assert.match(planConfidentiality, /Git historical content is denied/, 'Plan confidentiality contract lost historical-content denial');
+assert.match(planConfidentiality, /git rev-parse --short HEAD/, 'Plan confidentiality contract lost the fixed metadata command');
+assert.doesNotMatch(security, /Plan and Work search paths still have confidentiality gaps/i, 'Canonical security policy retains a stale combined Plan/Work confidentiality claim');
+assert.match(security, /Plan inspection excludes ignored\/private files and denies historical Git content/, 'Canonical security policy lost Plan inspection exclusions');
+assert.match(security, /Startup resource loading and memory\/network integrations have separate hardening\s+gates; concurrent hostile filesystem changes/, 'Canonical security policy lost scoped Plan confidentiality limits');
+assert.match(security, /Work search paths still have confidentiality gaps/, 'Canonical security policy lost the remaining Work search limitation');
 
 for (const relative of ["agent/settings.json", "agent/mcp.json", "agent/keybindings.json", "agent/neura/runtime-contract.json", "agent/neura/release-manifest.json", "agent/neura/package.json", "agent/neura/package-lock.json", "package.json", "package-lock.json", "tsconfig.json"]) {
   JSON.parse(fs.readFileSync(path.join(repoRoot, relative), "utf-8"));

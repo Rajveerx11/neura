@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { isolate } from './isolation.mjs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { isolate, nonGitFixture } from './isolation.mjs';
 import { repository, git } from './git-fixture.mjs';
 const scratch = isolate();
 process.env.NEURA = '1';
@@ -101,7 +101,20 @@ assert.ok(changedFiles(updated, await captureWorktree(root)).includes('new file.
 assert.equal(await captureWorktree(root, { maxBytes: 1 }), null, 'size limit ignored');
 assert.equal(await captureWorktree(root, { maxFiles: 1 }), null, 'entry limit ignored');
 assert.equal(await captureWorktree(root, { signal: AbortSignal.abort() }), null);
-assert.equal(await captureWorktree(scratch), null, 'non-repository granted a fingerprint');
+// isolate() is a real repository with an unborn HEAD, not a non-repository.
+// Native resolution expands Windows 8.3 TEMP aliases on both sides.
+assert.equal(fs.realpathSync.native(git(scratch, 'rev-parse', '--show-toplevel').trim()), fs.realpathSync.native(scratch));
+assert.equal(git(scratch, 'symbolic-ref', '--short', 'HEAD').trim(), 'main');
+const unbornHead = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: scratch, encoding: 'utf8', windowsHide: true });
+assert.equal(unbornHead.error, undefined);
+assert.equal(unbornHead.status, 128, 'synthetic isolation repository unexpectedly has a HEAD commit');
+assert.equal(await captureWorktree(scratch), null, 'unborn-HEAD repository granted a fingerprint');
+const nonRepository = nonGitFixture();
+const nonRepositoryTop = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: nonRepository, encoding: 'utf8', windowsHide: true });
+assert.equal(nonRepositoryTop.error, undefined);
+assert.equal(nonRepositoryTop.status, 128, 'non-repository fixture resolved a Git top level');
+assert.match(nonRepositoryTop.stderr, /not a git repository/i);
+assert.equal(await captureWorktree(nonRepository), null, 'true non-repository granted a fingerprint');
 const outside = path.join(scratch, 'outside');
 fs.mkdirSync(outside);
 fs.writeFileSync(path.join(outside, 'outside.txt'),'synthetic outside');
