@@ -543,7 +543,12 @@ export async function probeLocalProvider(
 
 export function skillsHealth(root = path.join(AGENT_DIR, 'neura'), availableTools = ['read'], commands?: SlashCommandInfo[]): CapabilityHealth {
   const report = inspectSkillDiscovery(inspectSkills({ root, piVersion: PI_VERSION, availableTools }), commands);
-  const health = capability('skills', false, report.valid ? report.enabled.length ? 'ready' : 'disabled' : 'unhealthy',
+  let state: CapabilityHealth['state'] = 'unhealthy';
+  if (report.valid) {
+    state = 'disabled';
+    if (report.enabled.length > 0) state = 'ready';
+  }
+  const health = capability('skills', false, state,
     '', report.valid ? null : 'restore the supported registry/selection; remove reserved-name collisions and reload Pi',
     report.valid ? undefined : cleanProblem('schema', report.errors.join('; ')));
   // This label contains only a locally computed public manifest digest and validation

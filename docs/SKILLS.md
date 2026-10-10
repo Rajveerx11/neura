@@ -37,11 +37,20 @@ so a broken opt-in file does not prevent rollback. Only rollback of a wholly
 pre-catalog staged release may omit skill validation: its manifest and receipt
 must declare no skill files, and all physical registry components must be absent.
 Partial catalogs, dangling links, receipt/hash drift, and invalid journals remain
-rejected. New preparation, sealing, activation and launch checks still require
+rejected. Before recovery mutates targets or backup inventory, the next receipt
+must contain only release-owned files, the release manifest, the Learn receipt,
+and bounded Learn module paths; self-consistent receipt-only extra hashes do not
+grant ownership. This compares ownership to staged release declarations; it does
+not authenticate a mutable staged manifest or transaction against same-user
+compromise. A fabricated manifest declaration is outside this guarantee.
+New preparation, sealing, activation and launch checks still require
 the supported registry. Launch checks and runtime
 resource discovery fail closed for invalid supported selections. The catalog,
 validator, discovery gate and managed installer are protected-control paths;
-headless Work blocks direct edits and commands explicitly naming these paths.
+headless Work blocks direct edits and sandbox commands naming canonical aliases
+of these paths. Filesystem tools and explicit shell path operands reject NTFS
+streams (including `::$DATA`), drive-relative paths, and UNC/device/extended
+namespaces before target I/O or approval; use ordinary local-drive paths.
 These application checks do not make arbitrary repository scripts a sandbox.
 Similarly named ordinary task files remain task-scoped. Plain Pi is
 unchanged by the Neura extension.

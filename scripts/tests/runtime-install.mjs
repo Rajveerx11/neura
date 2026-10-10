@@ -80,6 +80,37 @@ try {
   write(legacyReceiptPath, JSON.stringify({...legacyReceipt, manifestHash:'0'.repeat(64)}));
   assert.match(run('recover', false).stderr, /manifest identity mismatch/, 'legacy recovery bypassed receipt identity');
   write(legacyReceiptPath, receiptBytes);
+  // A byte-consistent receipt/journal/absent inventory cannot authorize an extra
+  // user-owned target. Compare all target and pending bytes before/after failure.
+  const inventory = root => fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
+    const file = path.join(root, entry.name);
+    return entry.isDirectory() ? [[path.relative(home, file), 'directory'], ...inventory(file)] : [[path.relative(home, file), sha(file)]];
+  });
+  for (const extra of ['agent/neura/user-owned.txt', 'agent/extensions/custom.ts', 'agent/neura/.install-state.json', 'agent/neura/node_modules']) {
+    // The receipt's own path is already present in the journal, but remains an
+    // unauthorized next.files entry even with a matching staged byte digest.
+    if (extra !== 'agent/neura/.install-state.json' && extra !== 'agent/neura/node_modules') {
+      write(path.join(stage, extra), 'synthetic user-owned marker');
+      write(live(extra), 'synthetic user-owned marker');
+    }
+    const extraFiles = { ...legacyReceipt.files, [extra]: 'a'.repeat(64) };
+    if (extra !== 'agent/neura/.install-state.json' && extra !== 'agent/neura/node_modules') extraFiles[extra] = sha(path.join(stage, extra));
+    write(legacyReceiptPath, JSON.stringify({ ...legacyReceipt, files: extraFiles }));
+    const extraEntries = [...new Set([...Object.keys(extraFiles), 'agent/neura/.install-state.json', 'agent/extensions/autogit.ts'])];
+    write(path.join(legacyPending, 'journal.json'), JSON.stringify(extraEntries));
+    fs.rmSync(path.join(legacyPending, 'backup'), { recursive: true, force: true });
+    extraEntries.forEach((_name, index) => write(path.join(legacyPending, 'backup', `absent-${index}`), ''));
+    const before = inventory(home);
+    assert.match(run('recover', false).stderr, /unowned or invalid install receipt entry/, extra);
+    assert.deepEqual(inventory(home), before, 'rejected extra receipt changed targets or transaction inventory');
+    if (extra !== 'agent/neura/.install-state.json' && extra !== 'agent/neura/node_modules') {
+      fs.rmSync(path.join(stage, extra)); fs.rmSync(live(extra));
+    }
+  }
+  write(legacyReceiptPath, receiptBytes);
+  write(path.join(legacyPending, 'journal.json'), JSON.stringify(legacyEntries));
+  fs.rmSync(path.join(legacyPending, 'backup'), { recursive: true, force: true });
+  legacyEntries.forEach((_name, index) => write(path.join(legacyPending, 'backup', `absent-${index}`), ''));
   run('recover');
   assert.equal(fs.existsSync(legacyPending), false, 'legacy journal was not cleared');
   assert.equal(fs.existsSync(live('agent/extensions/one.ts')), false, 'legacy partial activation was not rolled back');

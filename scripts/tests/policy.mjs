@@ -56,6 +56,159 @@ for (const file of ['ordinary-task-file.txt', 'agent/extensions/skill-doctor-not
 }
 assert.equal(await guard({ toolName: WORK_SANDBOX_TOOL, input: { command: 'npm test' } }, headlessWork), undefined,
   'skill control protection widened to ordinary sandbox verification');
+// Real Pi native tools, mediated by the actual headless Work hook. Fixtures only.
+const nativeTools = {};
+for (const name of ['read', 'edit', 'write']) {
+  const module = await import(pathToFileURL(path.join(repoRoot, `node_modules/@earendil-works/pi-coding-agent/dist/core/tools/${name}.js`)).href);
+  nativeTools[name] = module[`create${name[0].toUpperCase()}${name.slice(1)}Tool`];
+}
+const streamWorkspace = path.join(scratchRoot, 'stream-workspace');
+fs.mkdirSync(streamWorkspace, { recursive: true });
+const streamContext = { ...headlessWork, cwd: streamWorkspace, model: undefined };
+let confirmations = 0;
+const approvingContext = { ...streamContext, hasUI: true, ui: { confirm: async () => { confirmations++; return true; } } };
+const toolInput = (toolName, raw) => {
+  const input = { path: raw };
+  if (toolName === 'write') input.content = 'replacement';
+  else if (toolName === 'edit') input.edits = [{ oldText: 'original', newText: 'replacement' }];
+  return input;
+};
+const executeMediated = async (toolName, raw, ctx = streamContext) => {
+  const input = toolInput(toolName, raw);
+  const blocked = await guard({ toolName, input }, ctx);
+  if (!blocked?.block) await nativeTools[toolName](streamWorkspace).execute('synthetic', input, undefined, undefined, ctx);
+  return blocked;
+};
+for (const name of ['agent/neura/skills-registry.mjs', 'agent/neura/skills-manifest.json', 'agent/neura/runtime-install.mjs', 'agent/extensions/skill-doctor.ts']) {
+  const target = path.join(streamWorkspace, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, 'original');
+  const ordinaryForms = [target, target.toUpperCase(), `@${target}`, pathToFileURL(target).href];
+  const streamForms = ['::$DATA', ':$DATA', ':named', ':named:$DATA'].flatMap(suffix => [target + suffix, `@${target}${suffix}`, pathToFileURL(target + suffix).href]);
+  for (const toolName of ['read', 'edit', 'write']) {
+    for (const raw of ordinaryForms) {
+      assert.equal((await executeMediated(toolName, raw))?.block, true, `Work allowed control ${toolName}: ${raw}`);
+    }
+    for (const raw of streamForms) {
+      const action = inspectAction({ toolName, input: toolInput(toolName, raw) }, streamWorkspace);
+      assert.equal(action.route, 'deny', `stream remained approvable: ${raw}`);
+      assert.equal(action.facts.target, undefined, 'unsupported namespace acquired a filesystem identity');
+      assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true);
+    }
+    assert.equal(fs.readFileSync(target, 'utf8'), 'original');
+  }
+}
+const ordinaryTarget = path.join(streamWorkspace, 'ordinary-task.txt');
+for (const raw of [ordinaryTarget, `@${ordinaryTarget}`, pathToFileURL(ordinaryTarget).href]) {
+  fs.writeFileSync(ordinaryTarget, 'original');
+  assert.equal(await executeMediated('read', raw), undefined);
+  assert.equal(await executeMediated('edit', raw), undefined);
+  assert.equal(fs.readFileSync(ordinaryTarget, 'utf8'), 'replacement');
+  assert.equal(await executeMediated('write', raw), undefined);
+}
+// Ordinary protected paths can still be approved; unsupported aliases cannot.
+const approvedControl = path.join(streamWorkspace, 'agent/neura/skills-registry.mjs');
+assert.equal(await executeMediated('write', approvedControl, approvingContext), undefined);
+assert.equal(confirmations, 1);
+assert.equal(fs.readFileSync(approvedControl, 'utf8'), 'replacement');
+fs.writeFileSync(approvedControl, 'original');
+const ambiguousForms = [
+  'C:relative.txt', '\\\\server\\share\\file.txt', '\\\\?\\C:\\file.txt', '\\\\.\\C:\\file.txt', '\\??\\C:\\file.txt',
+  'file://server/share/file.txt', 'file:///C:/file.txt%3A%3A%24DATA', 'file:///C:/bad%00.txt',
+  ...(process.platform === 'win32' ? ['\\rooted.txt', '/rooted.txt'] : []),
+];
+for (const raw of ambiguousForms) {
+  for (const toolName of ['read', 'edit', 'write']) {
+    assert.equal(inspectAction({ toolName, input: toolInput(toolName, raw) }, streamWorkspace).route, 'deny', raw);
+    assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true, raw);
+  }
+}
+assert.equal(confirmations, 1, 'unsupported namespace reached interactive approval');
+// Trap the actual filesystem boundary, not just the displayed policy summary.
+const { default: probeFs } = await import('node:fs');
+const { syncBuiltinESMExports } = await import('node:module');
+const ioMethods = ['statSync', 'lstatSync', 'realpathSync', 'openSync', 'readFileSync'];
+const originals = new Map(ioMethods.map(name => [name, probeFs[name]]));
+let unsupportedIO = 0;
+let filesystemIO = 0;
+try {
+  for (const name of ioMethods) {
+    probeFs[name] = (...args) => {
+      filesystemIO++;
+      if (String(args[0]).includes('unsupported-io')) { unsupportedIO++; throw Error('unsupported target reached filesystem'); }
+      return originals.get(name)(...args);
+    };
+  }
+  syncBuiltinESMExports();
+  for (const raw of [path.join(streamWorkspace, 'unsupported-io.txt::$DATA'), '\\\\unsupported-io\\share\\file.txt', 'unsupported-io:named']) {
+    for (const toolName of ['read', 'edit', 'write']) {
+      const before = filesystemIO;
+      assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true);
+      assert.equal(filesystemIO, before, 'unsupported native path performed filesystem I/O before denial');
+    }
+    assert.equal(inspectAction({ toolName: WORK_SANDBOX_TOOL, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route, 'deny');
+  }
+  assert.equal(unsupportedIO, 0, 'unsupported path performed filesystem I/O before denial');
+} finally {
+  for (const [name, original] of originals) probeFs[name] = original;
+  syncBuiltinESMExports();
+}
+const controlAlias = path.join(streamWorkspace, 'control-alias');
+fs.symlinkSync(path.join(streamWorkspace, 'agent/neura'), controlAlias, process.platform === 'win32' ? 'junction' : 'dir');
+for (const toolName of ['read', 'edit', 'write']) {
+  assert.equal((await executeMediated(toolName, path.join(controlAlias, 'skills-registry.mjs')))?.block, true);
+}
+for (const toolName of [WORK_SANDBOX_TOOL, 'human_away_exec']) {
+  for (const raw of [path.join(controlAlias, 'skills-registry.mjs'), pathToFileURL(path.join(controlAlias, 'skills-registry.mjs')).href]) {
+    const event = { toolName, input: { command: `npm test -- "${raw}"` } };
+    assert.equal(inspectAction(event, streamWorkspace).route, 'human', 'development allowlist bypassed canonical control alias');
+    assert.equal((await guard(event, streamContext))?.block, true);
+  }
+  for (const raw of [ordinaryTarget + '::$DATA', ...ambiguousForms]) {
+    assert.equal(inspectAction({ toolName, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route, 'deny', raw);
+  }
+  for (const command of [
+    'npm test', `npm test -- "${ordinaryTarget}"`, 'npm test -- --registry=https://registry.npmjs.org', 'npm run build',
+    'npm run test:unit', 'npm test:unit',
+    'dotnet test /p:CollectCoverage=true', 'dotnet build /p:Configuration=Release',
+    'dotnet test -p:CollectCoverage=true', 'dotnet build -p:Configuration=Release',
+    'dotnet build /property:Configuration=Release', 'dotnet build -property:Configuration=Release',
+    `dotnet build /p:OutputPath="${ordinaryTarget}"`,
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'allow', command);
+  }
+  for (const raw of ['README:named', 'README:$DATA', 'README:named:$DATA', 'README::$DATA']) {
+    for (const command of [`npm test -- ${raw}`, `npm test -- --output=${raw}`]) {
+      assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', command);
+    }
+  }
+  for (const command of [
+    'dotnet test /p:OutputPath=README:named', 'dotnet test -p:OutputPath=README:named',
+    'dotnet build /p:OutputPath=C:relative',
+    'dotnet build /p:OutputPath="\\\\?\\C:\\hostile"',
+    'dotnet build -p:OutputPath="file://server/share/hostile"',
+    'dotnet build /p:OutputPath=ordinary.txt:named',
+    'dotnet test /p:CollectCoverage=true -- README:named',
+    'dotnet test -- /p:CollectCoverage=true',
+    'npm test -- /p:CollectCoverage=true', 'npm test -- -p:CollectCoverage=true',
+    'dotnet test /pp:CollectCoverage=true', 'dotnet build /p:=Release', 'dotnet build /p:OutputPath=',
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', command);
+  }
+  for (const command of ['npm test -- README:named', 'npm test -- --output=README:named']) {
+    const before = confirmations;
+    assert.equal((await guard({ toolName, input: { command } }, approvingContext))?.block, true);
+    assert.equal(confirmations, before, 'extensionless stream reached approval');
+  }
+  assert.equal(inspectAction({ toolName, input: { command: `dotnet build /p:OutputPath="${path.join(controlAlias, 'skills-registry.mjs')}"` } }, streamWorkspace).route,
+    'human', 'MSBuild property syntax exempted a canonical control path');
+  for (const raw of [approvedControl, path.join(controlAlias, 'skills-registry.mjs'), ordinaryTarget + '::$DATA']) {
+    const action = inspectAction({ toolName, input: { command: `rm -rf "${raw}"` } }, streamWorkspace);
+    assert.equal(action.route, 'deny', 'protected-control matching weakened hard denial');
+    assert.equal(action.category, 'broad-destruction');
+  }
+}
+console.log('PASS native Pi read/edit/write Work mediation: streams/namespaces denied, controls approved only by ordinary identity, drive/alias/fileURL positives');
 await modes.commands.get('mode').handler('plan', context);
 const ordinaryPatch = inspectAction({ toolName: 'write', input: { path: path.join(repoRoot, 'ordinary-task-file.txt'), content: 'task' } }, repoRoot);
 assert.equal(ordinaryPatch.route, 'allow', 'metadata mandated blanket approval for ordinary workspace effects');

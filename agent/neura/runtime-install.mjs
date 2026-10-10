@@ -146,6 +146,15 @@ function verify(root, expectedState, checkOwnership = true, quick = false, legac
     if (expectedState.files[name] !== expected) throw Error(`install receipt missing or mismatched: ${name}`);
   }
   if (!Object.hasOwn(expectedState.files, 'agent/neura/.learn-runtime-lock')) throw Error('Learn runtime receipt missing');
+  // Receipt hashes establish bytes, not ownership. Validate the complete key set
+  // before target reads or any recovery mutation, including in quick checks.
+  const owned = new Set([...Object.keys(manifest.files), manifestName, 'agent/neura/.learn-runtime-lock']);
+  for (const [name, expected] of Object.entries(expectedState.files)) {
+    managedName(name);
+    if ((!owned.has(name) && !name.startsWith('agent/neura/node_modules/')) || !/^[0-9a-f]{64}$/.test(expected)) {
+      throw Error(`unowned or invalid install receipt entry: ${name}`);
+    }
+  }
   for (const [name, expected] of Object.entries(expectedState.files)) {
     if (quick && name.startsWith('agent/neura/node_modules/')) continue;
     const file = located(name);
