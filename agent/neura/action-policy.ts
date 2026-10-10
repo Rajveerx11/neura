@@ -188,29 +188,65 @@ function resolveTarget(raw: string, cwd: string, stripToolAlias: boolean): strin
   return path.isAbsolute(normalized) ? path.resolve(normalized) : path.resolve(cwd, normalized);
 }
 
-function shellFilesystemSpellings(command: string): string[] | null {
+function shellFilesystemSpellings(command: string, cwd: string): { paths: string[]; uncertain: boolean } | null {
   const tokens = shellTokens(command);
   if (tokens === null) return null;
+  // Reuse the command-specific binder: rg patterns and Git objects are not paths.
+  const parsed = planShellFilesystemArguments(tokens);
+  if (parsed !== null) return { paths: parsed, uncertain: false };
   const packageManager = /^(?:npm|pnpm|yarn|bun)$/i.test(tokens[0] ?? "");
   const scriptIndex = tokens[1]?.toLowerCase() === "run" ? 2 : 1;
   const msbuild = tokens[0]?.toLowerCase() === "dotnet" && /^(?:test|build)$/i.test(tokens[1] ?? "");
+  const fallbackPathContext = isKnownDevelopmentCommand(command) || deleteTarget(command) !== null;
+  const paths: string[] = [];
+  let uncertain = false;
   let literalArguments = false;
-  return tokens.map((token, index) => {
-    if (token === "--") literalArguments = true;
-    // The script selector is command syntax, not an extensionless stream operand.
-    if (packageManager && index === scriptIndex && /^(?:test|lint|build|check|typecheck|verify)(?::[\w.-]+)?$/i.test(token)) return "";
-    // Recognize only dotnet test/build's property option, before the literal-args
-    // delimiter. Screen its value normally; never exempt paths inside the option.
+  let codeArgument = false;
+  for (const [index, token] of tokens.entries()) {
+    if (codeArgument) { codeArgument = false; uncertain = true; continue; }
+    if (token === "--") { literalArguments = true; continue; }
+    // Script names do not identify files and do not extend the development allowlist.
+    if (packageManager && index === scriptIndex && /^[\w.-]+(?::[\w.-]+)*$/.test(token)) continue;
+    if (tokens[0] === "node" && !literalArguments) {
+      if (/^(?:-e|-p|--eval|--print)$/.test(token)) { codeArgument = true; uncertain = true; continue; }
+      if (/^--(?:eval|print)=/.test(token)) { uncertain = true; continue; }
+    }
+    if (tokens[0] === "git" && !literalArguments) {
+      // Before --, show/log's colon operands name objects, not working-tree streams.
+      if (/^(?:show|log)$/.test(tokens[1] ?? "") && index > 1 && /^[^-]+:/.test(token)
+          && !/^[a-z]:|^file:|^[\\/]/i.test(token)) { uncertain = true; continue; }
+      if (tokens[1] === "clone" && index === 2 && /^[\w.-]+@[\w.-]+:[^\s]+$/.test(token)) continue;
+    }
+    let raw = token;
+    let propertyValue = false;
+    // Only dotnet test/build's recognized property options, before --. Values
+    // still undergo screening; properties can contain paths as well as text.
     if (msbuild && index > 1 && !literalArguments && /^[-/](?:p|property):/i.test(token)) {
       const property = /^[-/](?:p|property):[a-z_][\w]*=(.+)$/i.exec(token);
-      return property ? property[1] : token;
+      if (property) { raw = property[1]; propertyValue = true; }
     }
-    return token.replace(/^--?[^=:]+=/, "");
-  })
-    // Public network URLs are not filesystem arguments. This is explicit operand
-    // screening, not a complete shell parser; bare colons also cover README:named.
-    .filter(token => !/^[a-z][\w+.-]+:\/\//i.test(token) || /^file:\/\//i.test(token))
-    .filter(token => /[\\/]|\.[\w-]+$|:/.test(token));
+    const option = propertyValue ? null : /^--?([^=:]+)=(.*)$/.exec(raw);
+    if (option) raw = option[2];
+    if (/^[a-z][\w+.-]+:\/\//i.test(raw) && !/^file:/i.test(raw)) continue;
+    if (raw.includes(":")) {
+      // Unknown option values may be query text, not files. --output is the
+      // explicit output-path spelling screened by this fallback, not a binder.
+      if ((option && option[1] !== "output") || raw.startsWith("-")) {
+        uncertain = true;
+        continue;
+      }
+      if (!/^file:|^[a-z]:|[\\/]|:\$DATA$/i.test(raw)) {
+        // An existing basename alone cannot turn unknown command text into a
+        // path. In development/delete contexts it only escalates to denial;
+        // a missing/changed base never grants automatic execution.
+        if (!fallbackPathContext) { uncertain = true; continue; }
+        const base = resolvePlanShellTarget(raw.slice(0, raw.indexOf(":")), cwd);
+        if (base === null || !fs.existsSync(base)) { uncertain = true; continue; }
+      }
+      paths.push(raw);
+    } else if (/[\\/]|\.[\w-]+$/.test(raw)) paths.push(raw);
+  }
+  return { paths, uncertain };
 }
 
 function shellTouchesControl(command: string, spellings: string[], workspace: string, cwd: string): boolean {
@@ -489,7 +525,8 @@ export function inspectAction(
         facts: {},
       });
     }
-    const spellings = shellFilesystemSpellings(command) ?? [];
+    const screening = shellFilesystemSpellings(command, executionCwd) ?? { paths: [], uncertain: true };
+    const spellings = screening.paths;
     if (spellings.some(raw => normalizedFilesystemPath(raw, false) === null)) {
       return result(base, {
         summary: "shell command with unsupported filesystem path", category: "protected-control", risk: "high", route: "deny",
@@ -520,6 +557,14 @@ export function inspectAction(
         summary: redactCommand(command), category: /push|publish|merge|apply|deploy/i.test(command) ? "remote-mutation" : "protected-control",
         risk: "critical", route: "human", reason: humanOnly.why,
         saferPath: "Use a reversible local operation or wait for Rajveer to approve the exact command.",
+        facts: {},
+      });
+    }
+    if (screening.uncertain) {
+      return result(base, {
+        summary: redactCommand(command), category: "unclassified-shell", risk: "high", route: "human",
+        reason: "Colon-bearing arguments may be command syntax or text rather than filesystem operands.",
+        saferPath: "Use a recognized command form or wait for exact human review; ambiguous arguments cannot run unattended.",
         facts: {},
       });
     }

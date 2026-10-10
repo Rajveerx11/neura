@@ -48,10 +48,18 @@ the supported registry. Launch checks and runtime
 resource discovery fail closed for invalid supported selections. The catalog,
 validator, discovery gate and managed installer are protected-control paths;
 headless Work blocks direct edits and sandbox commands naming canonical aliases
-of these paths. Filesystem tools and explicit shell path operands reject NTFS
-streams (including `::$DATA`), drive-relative paths, and UNC/device/extended
-namespaces before target I/O or approval; use ordinary local-drive paths.
-These application checks do not make arbitrary repository scripts a sandbox.
+of these paths. Filesystem tools reject NTFS streams (including `::$DATA`),
+drive-relative paths, and UNC/device/extended namespaces before filesystem
+inspection or approval; use ordinary local-drive paths. Shell screening uses
+recognized path operands rather than interpreting every colon as a filename:
+patterns, Git objects, script selectors and code can contain colons. Unsupported
+recognized paths reject. In development or bounded-delete contexts, stream
+operands with existing extensionless bases also reject; existence alone does not
+classify unknown command text. Ambiguous colon arguments or option values require
+human review, never automatic execution. Ordinary-base existence is mutable
+and is not an authorization guarantee. No unsupported stream target is probed.
+These application checks are not a complete shell parser and do not make arbitrary
+repository scripts a sandbox.
 Similarly named ordinary task files remain task-scoped. Plain Pi is
 unchanged by the Neura extension.
 

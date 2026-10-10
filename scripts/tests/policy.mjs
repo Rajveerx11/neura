@@ -98,6 +98,9 @@ for (const name of ['agent/neura/skills-registry.mjs', 'agent/neura/skills-manif
     assert.equal(fs.readFileSync(target, 'utf8'), 'original');
   }
 }
+// Existing extensionless bases are evidence of stream operands, not a blanket
+// interpretation of every colon as a path. Text/object contexts below stay text.
+for (const name of ['README', 'ordinary.txt', 'HEAD', 'foo', 'dev']) fs.writeFileSync(path.join(streamWorkspace, name), 'ordinary');
 const ordinaryTarget = path.join(streamWorkspace, 'ordinary-task.txt');
 for (const raw of [ordinaryTarget, `@${ordinaryTarget}`, pathToFileURL(ordinaryTarget).href]) {
   fs.writeFileSync(ordinaryTarget, 'original');
@@ -146,7 +149,8 @@ try {
       assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true);
       assert.equal(filesystemIO, before, 'unsupported native path performed filesystem I/O before denial');
     }
-    assert.equal(inspectAction({ toolName: WORK_SANDBOX_TOOL, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route, 'deny');
+    assert.equal(inspectAction({ toolName: WORK_SANDBOX_TOOL, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route,
+      raw === 'unsupported-io:named' ? 'human' : 'deny', 'missing untyped colon base must not grant unattended execution');
   }
   assert.equal(unsupportedIO, 0, 'unsupported path performed filesystem I/O before denial');
 } finally {
@@ -164,6 +168,55 @@ for (const toolName of [WORK_SANDBOX_TOOL, 'human_away_exec']) {
     assert.equal(inspectAction(event, streamWorkspace).route, 'human', 'development allowlist bypassed canonical control alias');
     assert.equal((await guard(event, streamContext))?.block, true);
   }
+  // Recorded independently against main 3eb6355. Syntax/text must reach its
+  // original allowlist/human route, even when colliding filesystem bases exist.
+  for (const [command, expected] of [
+    ['git show HEAD:README.md', 'human'], ['git log --pretty=format:%h', 'human'],
+    ['docker run -p8080:80img', 'human'], ['docker run -p 8080:80 img', 'human'],
+    ['npm run dev:server', 'human'], ["rg 'foo::bar'", 'allow'],
+    ['node -e "console.log(\'a:b\')"', 'human'], ['git clone git@github.com:org/repo.git', 'human'],
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, expected, `main route parity: ${command}`);
+  }
+  for (const command of [
+    'npm test -- not-yet-created:named', 'npm test -- --query=README:named',
+    'npm test -- --query=foo/bar:baz', 'npm test -- -p:CollectCoverage=true',
+    'node -e "README:named"', 'node --eval="file://server/share/file.txt"',
+    'printf "%s" "README:named"', 'unknown-command README:named',
+  ]) {
+    const event = { toolName, input: { command } };
+    assert.equal(inspectAction(event, streamWorkspace).route, 'human', command);
+    assert.equal((await guard(event, streamContext))?.block, true, 'uncertain syntax ran unattended');
+  }
+  const changingBase = path.join(streamWorkspace, 'changing-base');
+  const changingEvent = { toolName, input: { command: 'npm test -- changing-base:named' } };
+  assert.equal(inspectAction(changingEvent, streamWorkspace).route, 'human');
+  fs.writeFileSync(changingBase, 'ordinary');
+  assert.equal(inspectAction(changingEvent, streamWorkspace).route, 'deny');
+  const beforeChangingApproval = confirmations;
+  assert.equal((await guard(changingEvent, approvingContext))?.block, true);
+  assert.equal(confirmations, beforeChangingApproval, 'existing extensionless stream reached approval');
+  fs.rmSync(changingBase);
+  assert.equal(inspectAction(changingEvent, streamWorkspace).route, 'human', 'existence changes granted automatic execution');
+  const textApproval = { toolName, input: { command: 'node -e "console.log(\'a:b\')"' } };
+  const beforeTextApproval = confirmations;
+  assert.equal(await guard(textApproval, approvingContext), undefined, 'ordinary code text became nonapprovable');
+  assert.equal(confirmations, beforeTextApproval + 1);
+  for (const command of [
+    'rg -e "README:named"', 'rg --regexp="foo::bar"', 'rg --replace "a:b" foo',
+    'Select-String -Pattern "README:named" -Path ordinary-task.txt',
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'allow', `text binder: ${command}`);
+  }
+  for (const command of [
+    'rg -e foo README:named', 'rg --files -- README:named', 'rg -f README:named foo',
+    'Get-Content -LiteralPath README:named', 'npm test -- missing::$DATA',
+    'npm test -- C:relative', 'npm test -- file:///C:/bad%00.txt',
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', `filesystem operand: ${command}`);
+  }
+  assert.equal(inspectAction({ toolName, input: { command: `rg -e foo "${path.join(controlAlias, 'skills-registry.mjs')}"` } }, streamWorkspace).route,
+    'human', 'recognized path binder bypassed a canonical control alias');
   for (const raw of [ordinaryTarget + '::$DATA', ...ambiguousForms]) {
     assert.equal(inspectAction({ toolName, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route, 'deny', raw);
   }
@@ -190,7 +243,7 @@ for (const toolName of [WORK_SANDBOX_TOOL, 'human_away_exec']) {
     'dotnet build /p:OutputPath=ordinary.txt:named',
     'dotnet test /p:CollectCoverage=true -- README:named',
     'dotnet test -- /p:CollectCoverage=true',
-    'npm test -- /p:CollectCoverage=true', 'npm test -- -p:CollectCoverage=true',
+    'npm test -- /p:CollectCoverage=true',
     'dotnet test /pp:CollectCoverage=true', 'dotnet build /p:=Release', 'dotnet build /p:OutputPath=',
   ]) {
     assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', command);
