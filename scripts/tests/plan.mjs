@@ -330,5 +330,8 @@ const nativeConfig = spawnSync(process.execPath, [path.join(repoRoot, 'scripts/t
   cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
 });
 assert.equal(nativeConfig.status, 0, 'Real-session configured native delegation regressions failed');
-await import('./plan-traversal.mjs');
+const traversal = spawnSync(process.execPath, [path.join(repoRoot, 'scripts/tests/plan-traversal.mjs')], {
+  cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
+});
+assert.equal(traversal.status, 0, 'Plan traversal regressions failed');
 console.log('PASS plan');

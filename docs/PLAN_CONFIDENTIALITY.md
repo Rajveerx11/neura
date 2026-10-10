@@ -103,8 +103,10 @@ Unsigned tool-call IDs/names remain intact while arguments are redacted. Opaque
 images and unknown content are withheld.
 
 Provider-signed or reasoning-bearing assistant turns and their paired tool results
-are projected into labeled, redacted plain-text historical user context. Reasoning,
-encrypted data, signatures, and that turn's tool protocol are withheld, not edited,
+are projected into labeled, redacted plain-text historical user context. Sanitized
+tool names/arguments preserve research attribution; result content is explicitly
+labeled as untrusted tool output, not a user instruction. Reasoning, encrypted
+data, signatures, and that turn's tool protocol are withheld, not edited,
 forged, or blindly replayed. Original session history is unchanged. This deliberately
 forfeits signed reasoning continuity in Plan to preserve confidentiality. Offline
 exact-Pi Anthropic/Responses payload-shaping regressions cover this projection;
