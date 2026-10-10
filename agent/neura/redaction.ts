@@ -61,6 +61,49 @@ function redactUrlCredentials(text: string, checkBudget?: () => void): string {
     });
 }
 
+function redactJwtCandidates(text: string, checkBudget?: () => void): string {
+  // Consume each maximal base64url run once, instead of retrying its long
+  // suffix at every internal -eyJ word boundary when a dot/segment is absent.
+  const runs = text.matchAll(/[A-Za-z0-9_-]+/g);
+  function nextRun() {
+    const match = runs.next().value;
+    if (!match) return undefined;
+    const start = match.index;
+    const end = start + match[0].length;
+    let jwtStart = -1;
+    let wordEnd = start;
+    for (let index = start; index < end; index++) {
+      if ((index - start) % 4096 === 0) checkBudget?.();
+      // Within this alphabet only '-' is non-word. Keep the earliest legacy
+      // boundary and the last signature word end (greedy trailing-hyphen trim).
+      if (text[index] !== "-") wordEnd = index + 1;
+      if (jwtStart < 0 && (index === start || text[index - 1] === "-") && text.startsWith("eyJ", index)) jwtStart = index;
+    }
+    return { start, end, jwtStart, wordEnd };
+  }
+  const parts: string[] = [];
+  let cursor = 0;
+  let header = nextRun();
+  let payload = nextRun();
+  let signature = nextRun();
+  while (header) {
+    checkBudget?.();
+    if (payload && signature && header.jwtStart >= 0 && header.end - header.jwtStart >= 11
+        && payload.end - payload.start >= 8 && signature.wordEnd - signature.start >= 8
+        && payload.start === header.end + 1 && text[header.end] === "."
+        && signature.start === payload.end + 1 && text[payload.end] === ".") {
+      parts.push(text.slice(cursor, header.jwtStart), REDACTED);
+      cursor = signature.wordEnd;
+      // All three runs were consumed; any unconsumed signature suffix is only
+      // hyphens and cannot start another JWT. Preserve it in the next slice.
+      header = nextRun(); payload = nextRun(); signature = nextRun();
+    } else {
+      header = payload; payload = signature; signature = nextRun();
+    }
+  }
+  return parts.length ? parts.join("") + text.slice(cursor) : text;
+}
+
 export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFINITY, checkBudget?: () => void): string {
   checkBudget?.();
   let text = redactPrivateKeyBlocks(String(value ?? ""), checkBudget);
@@ -71,8 +114,7 @@ export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFI
     .replace(/\b((?:[A-Z][A-Z0-9_]*)?(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`)
     .replace(/(--?(?:password|passwd|token|api-key|secret|credential)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`);
   checkBudget?.();
-  text = redactUrlCredentials(text, checkBudget)
-    .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, REDACTED)
+  text = redactJwtCandidates(redactUrlCredentials(text, checkBudget), checkBudget)
     .replace(/\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AIza[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16})\b/g, REDACTED)
     .replace(/\bhttps?:\/\/[^\s<>"']+/ig, redactUrlQuery);
   checkBudget?.();

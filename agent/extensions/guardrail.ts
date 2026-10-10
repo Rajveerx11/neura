@@ -3,7 +3,7 @@
 // YOLO deliberately bypasses Neura application guardrails. Human Away sends eligible actions to the isolated Headmaster, then clamps every
 // verdict through deterministic policy and queues anything not approved.
 
-import { createReadToolDefinition, createGrepToolDefinition, createFindToolDefinition, createLsToolDefinition, createBashToolDefinition, truncateHead } from "@earendil-works/pi-coding-agent";
+import { createReadToolDefinition, createGrepToolDefinition, createFindToolDefinition, createLsToolDefinition, createBashToolDefinition, SettingsManager, truncateHead } from "@earendil-works/pi-coding-agent";
 import { authorizePlanPath, readPlanFile, inspectPlanFiles, parsePlanInspection, planMetadata } from "../neura/plan-files.ts";
 import { redactSensitiveValue } from "../neura/redaction.ts";
 import { getMode, isModeRestorePending } from "../neura/mode-state.ts";
@@ -18,6 +18,13 @@ export default function (pi) {
 
   const safePlanCalls = new Set<string>();
   const localTools = { read: createReadToolDefinition, grep: createGrepToolDefinition, find: createFindToolDefinition, ls: createLsToolDefinition, bash: createBashToolDefinition };
+  let nativeSettings: SettingsManager;
+  pi.on("session_start", () => {
+    safePlanCalls.clear();
+    // Match Pi's runtime settings snapshot, including on /reload. Its public
+    // getters preserve shell-path normalization without private SDK access.
+    nativeSettings = SettingsManager.inMemory(pi.getSettings());
+  });
   async function planExecute(name, input, signal, ctx, callId, onUpdate) {
     if (signal?.aborted) throw new Error("Plan inspection aborted.");
     if (name === "bash") {
@@ -26,9 +33,14 @@ export default function (pi) {
       return planExecute(inspection.tool, inspection.input, signal, ctx, callId, onUpdate);
     }
     if (name === "read") {
+      const deadline = Date.now() + 10_000;
+      const checkBudget = () => {
+        if (signal?.aborted) throw new Error("Plan inspection aborted.");
+        if (Date.now() > deadline) throw new Error("Plan inspection deadline reached; narrow the path or pattern.");
+      };
       return createReadToolDefinition(ctx.cwd, { operations: {
-        access: async file => { authorizePlanPath(ctx.cwd, file); },
-        readFile: async file => readPlanFile(ctx.cwd, file),
+        access: async file => { checkBudget(); authorizePlanPath(ctx.cwd, file); checkBudget(); },
+        readFile: async file => readPlanFile(ctx.cwd, file, checkBudget),
         detectImageMimeType: async () => null,
       } }).execute(callId, input, signal, onUpdate, ctx);
     }
@@ -40,13 +52,19 @@ export default function (pi) {
     const definition = factory(process.cwd());
     pi.registerTool({ ...definition, async execute(callId, input, signal, onUpdate, ctx) {
       if (isModeRestorePending()) throw new Error("Session restoration is pending.");
-      if (getMode() !== "plan") return factory(ctx.cwd).execute(callId, input, signal, onUpdate, ctx);
+      if (getMode() !== "plan") {
+        // Registered tools replace Pi's configured built-ins, not their defaults.
+        if (!nativeSettings) throw new Error("Native session settings are not initialized.");
+        const native = name === "read" ? createReadToolDefinition(ctx.cwd, { autoResizeImages: nativeSettings.getImageAutoResize() })
+          : name === "bash" ? createBashToolDefinition(ctx.cwd, { commandPrefix: nativeSettings.getShellCommandPrefix(), shellPath: nativeSettings.getShellPath() })
+          : factory(ctx.cwd);
+        return native.execute(callId, input, signal, onUpdate, ctx);
+      }
       const result = await planExecute(name, input, signal, ctx, callId, onUpdate);
       safePlanCalls.add(callId);
       return redactSensitiveValue(result);
     } });
   }
-  pi.on("session_start", () => { safePlanCalls.clear(); });
   pi.on("tool_result", event => {
     if (getMode() === "plan") return { content: redactSensitiveValue(event.content), details: redactSensitiveValue(event.details), structuredContent: redactSensitiveValue(event.structuredContent) };
   });

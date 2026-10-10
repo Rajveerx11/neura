@@ -326,4 +326,8 @@ const confidentiality = spawnSync(process.execPath, [path.join(repoRoot, 'script
   cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
 });
 assert.equal(confidentiality.status, 0, 'Real-loader Plan confidentiality regressions failed');
+const nativeConfig = spawnSync(process.execPath, [path.join(repoRoot, 'scripts/tests/plan-native-config.mjs')], {
+  cwd: repoRoot, stdio: 'inherit', windowsHide: true, timeout: 120_000,
+});
+assert.equal(nativeConfig.status, 0, 'Real-session configured native delegation regressions failed');
 console.log('PASS plan');

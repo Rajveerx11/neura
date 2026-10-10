@@ -48,6 +48,10 @@ const keyRedaction = spawnSync(process.execPath, ['--input-type=module', '-e', `
   console.log('PASS preprocessing redaction: PEM and URL positives/recognition controls, bounded failed matches and budget propagation');
 `], { cwd: repo, stdio: 'inherit', windowsHide: true, timeout: 5000 });
 assert.equal(keyRedaction.status, 0, 'Private-key redaction failed or exceeded the hostile-input process deadline');
+const jwtRedaction = spawnSync(process.execPath, [path.join(repo, 'scripts/tests/redaction.mjs')], {
+  cwd: repo, stdio: 'inherit', windowsHide: true, timeout: 20_000,
+});
+assert.equal(jwtRedaction.status, 0, 'JWT redaction/Plan preprocessing failed or exceeded the subprocess deadline');
 const cwd = repository(scratch, 'plan-files');
 const privateCanary = 'PRIVATE_FILE_CANARY_NOT_A_TOKEN';
 const globalCanary = 'GLOBAL_IGNORE_CANARY_NOT_A_TOKEN';
@@ -145,10 +149,10 @@ async function makeSession(neura) {
   return { loader, session };
 }
 let serial = 0;
-async function call(session, toolName, input) {
+async function call(session, toolName, input, signal = new AbortController().signal) {
   const tool = session.agent.state.tools.find(candidate => candidate.name === toolName);
   assert.ok(tool, `${toolName} missing from real session`);
-  return tool.execute(`inspection-${++serial}`, input, new AbortController().signal);
+  return tool.execute(`inspection-${++serial}`, input, signal);
 }
 async function denied(session, toolName, input) {
   const verdict = await session.extensionRunner.emitToolCall({ type: 'tool_call', toolCallId: `denied-${++serial}`, toolName, input });
@@ -166,6 +170,93 @@ try {
   const wrapper = loader.getExtensions().extensions.find(extension => extension.tools.has('read'));
   assert.equal(wrapper.resolvedPath, path.join(repo, 'agent/extensions/guardrail.ts'));
   assert.equal(wrapper.tools.size, 5);
+  // SDK rejection alone does not prove its async backend stopped. Observe the
+  // actual registered wrapper's descriptor reads and JWT iterator completion.
+  const budgetFile = path.join(cwd, 'read-budget.txt');
+  const budgetFailures = [];
+  const budgetOpen = fs.openSync, budgetRead = fs.readSync, budgetClose = fs.closeSync;
+  const budgetMatchAll = String.prototype.matchAll, budgetNow = Date.now;
+  // Keep hooks stable across cases: the real loader may retain function bindings.
+  let probe;
+  fs.openSync = function(file, ...args) {
+    const fd = budgetOpen.call(this, file, ...args);
+    if (probe && String(file) === budgetFile) probe.descriptor = fd;
+    return fd;
+  };
+  fs.readSync = function(fd, ...args) {
+    const count = budgetRead.call(this, fd, ...args);
+    if (probe && fd === probe.descriptor && ++probe.chunks === 1 && probe.kind === 'abort') probe.controller.abort();
+    return count;
+  };
+  fs.closeSync = function(fd, ...args) {
+    if (probe && fd === probe.descriptor) probe.closed++;
+    return budgetClose.call(this, fd, ...args);
+  };
+  String.prototype.matchAll = function(regex) {
+    const iterator = budgetMatchAll.call(this, regex);
+    if (probe && regex.source === '[A-Za-z0-9_-]+') {
+      const current = probe;
+      current.jwtStarted = true;
+      const next = iterator.next;
+      iterator.next = function(...args) {
+        const step = next.apply(this, args);
+        if (step.done) current.jwtFinished = true;
+        return step;
+      };
+    }
+    return iterator;
+  };
+  Date.now = () => {
+    if (!probe) return budgetNow();
+    if (probe.jwtStarted) probe.jwtChecks++;
+    return probe.clock + (probe.jwtStarted && probe.kind === 'deadline' ? 10_001 : 0);
+  };
+  syncBuiltinESMExports();
+  try {
+    for (const toolName of ['read', 'bash']) {
+      const input = toolName === 'read' ? { path: 'read-budget.txt' } : { command: 'Get-Content -LiteralPath read-budget.txt' };
+      for (const kind of ['abort', 'deadline']) {
+        fs.writeFileSync(budgetFile, 'eyJaaaaaaaa-'.repeat(40_000)); // eight 64-KiB reads
+        probe = { kind, controller: new AbortController(), clock: budgetNow(), chunks: 0, closed: 0,
+          jwtStarted: false, jwtFinished: false, jwtChecks: 0 };
+        try {
+          await assert.rejects(() => call(session, toolName, input, probe.controller.signal), kind === 'abort' ? /aborted/i : /deadline/i);
+          // Let the SDK backend's pending continuations settle before inspecting
+          // counters; an already-rejected outer promise must not mask more work.
+          await new Promise(resolve => setImmediate(resolve));
+          assert.equal(probe.closed, 1, 'Plan read did not close its descriptor');
+          if (kind === 'abort') {
+            assert.equal(probe.chunks, 1, 'Plan read continued chunks after abort');
+            assert.equal(probe.jwtStarted, false, 'Plan read entered redaction after abort');
+          } else {
+            assert.equal(probe.chunks, 8, 'Deadline fixture did not reach preprocessing');
+            assert.equal(probe.jwtStarted, true);
+            assert.ok(probe.jwtChecks > 0, 'Plan read never checked its deadline during JWT scanning');
+            assert.equal(probe.jwtFinished, false, 'Plan read finished JWT scanning after expiry');
+          }
+        } catch (error) {
+          budgetFailures.push(`${toolName}/${kind}`);
+          console.error('Plan read budget probe', { toolName, kind, chunks: probe.chunks, closed: probe.closed,
+            jwtStarted: probe.jwtStarted, jwtFinished: probe.jwtFinished, jwtChecks: probe.jwtChecks,
+            assertion: error instanceof Error ? error.message : 'unknown' });
+        } finally { probe = undefined; }
+      }
+      // A new call gets its own budget and remains a useful, redacted SDK read.
+      fs.writeFileSync(budgetFile, 'ordinary budget control\neyJaaaaaaaa.bbbbbbbb.cccccccc\n');
+      const healthy = JSON.stringify(await call(session, toolName, input));
+      assert.match(healthy, /ordinary budget control/);
+      assert.match(healthy, /REDACTED/);
+      assert.doesNotMatch(healthy, /eyJaaaaaaaa/);
+    }
+  } finally {
+    probe = undefined;
+    fs.openSync = budgetOpen; fs.readSync = budgetRead; fs.closeSync = budgetClose;
+    String.prototype.matchAll = budgetMatchAll; Date.now = budgetNow;
+    syncBuiltinESMExports();
+    fs.rmSync(budgetFile, { force: true });
+  }
+  assert.deepEqual(budgetFailures, [], 'Registered Plan read backend budget regressions');
+  console.log('PASS registered Plan read/Get-Content budgets: mid-chunk abort stops backend; JWT clock expiry stops scan; fresh-call redacted positives');
   const normal = await call(session, 'read', { path: 'src/normal.ts', limit: 1 });
   assert.match(JSON.stringify(normal), /ordinary source/);
   const redacted = await call(session, 'read', { path: 'src/normal.ts' });

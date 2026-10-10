@@ -2,7 +2,11 @@
 
 Neura Plan replaces SDK `read`, `grep`, `find`, `ls`, and `bash` with authorized
 local inspection. Plain Pi registers no wrappers; outside Plan each wrapper
-delegates to the current SDK implementation. Controlled `publish_plan` is unchanged.
+delegates to the current SDK implementation with the session's effective
+`shellCommandPrefix`, normalized `shellPath`, and `images.autoResize` settings.
+The native settings snapshot is refreshed on session start/reload, as in Pi;
+Plan never uses those shell settings or enables opaque image reads.
+Controlled `publish_plan` is unchanged.
 This is experimental source hardening, not a release or live-install claim.
 
 ## File boundary
