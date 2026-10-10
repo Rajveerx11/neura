@@ -59,7 +59,7 @@
   "files": {
     "agent/extensions/check-gate.ts": "0f228c9c43deeac54fcfdae996262ac3f83725853773e632a02bf22ba10a0d64",
     "agent/extensions/checkpoint.ts": "373b9019860664bf8d353b91887e5c7bd5dfb99d918c313d7716d64967ed910c",
-    "agent/extensions/cockpit.ts": "ecba0c59ba4616eaa8e10838daef67ab0e886305facf69b3c09efbbbb47a8b23",
+    "agent/extensions/cockpit.ts": "243e938a4d28276d416714850f4ee7f632cd704c4444a7b5ab48372286de7861",
     "agent/extensions/gmail-guardrail.ts": "66d9a1f327f01928c1e06076a74c853e4aa1f326b012ca7506a6a5e1942ea308",
     "agent/extensions/guardrail.ts": "d1f3c89cd0349d007b78f4765afc9e7a3c3da619744845f5578b058c4015719d",
     "agent/extensions/harness-health.ts": "b7e6798dbeebec2c316308c1219ac7fb601e9b4cbbf594910b4dcfae292e05e4",

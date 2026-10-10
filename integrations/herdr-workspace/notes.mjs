@@ -81,14 +81,67 @@ export async function createNote(root, title) {
   return checkedNote(root, file);
 }
 
-async function edit(root, file) {
-  if (!nano) throw new Error("GNU nano is unavailable. Install Git for Windows or add nano to PATH.");
-  const result = spawnSync(nano, [await checkedNote(root, file)], { stdio: "inherit", windowsHide: true });
+function isExecutable(file) {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch { return false; }
+}
+
+// Resolve only when preview is requested. Never run a shell, picker, watcher,
+// history/config command, or a Windows executable from the Linux Notes pane.
+export function leafExecutable({ platform = process.platform, env = process.env, home = os.homedir(), executable = isExecutable } = {}) {
+  const windows = platform === "win32";
+  const paths = windows ? path.win32 : path.posix;
+  // A Windows root without a drive/share (\\Tools or /Tools) is drive-relative.
+  const absolute = (file) => paths.isAbsolute(file) && (!windows || !/^[\\/]+$/.test(paths.parse(file).root));
+  const searchPath = windows ? Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1] : env.PATH;
+  const candidates = (searchPath || "").split(paths.delimiter)
+    .filter(absolute)
+    .map((directory) => paths.join(directory, windows ? "leaf.exe" : "leaf"));
+  candidates.push(windows
+    ? paths.join(env.LOCALAPPDATA || paths.join(home, "AppData", "Local"), "Programs", "leaf", "leaf.exe")
+    : paths.join(home, ".local", "bin", "leaf"));
+  return candidates.find((candidate) => absolute(candidate) && executable(candidate));
+}
+
+export async function previewNote(root, file, { run = spawnSync, ...discovery } = {}) {
+  const note = await checkedNote(root, file);
+  const leaf = leafExecutable(discovery);
+  if (!leaf) throw new Error("Leaf is unavailable. Install Leaf or add it to PATH (Windows: %LOCALAPPDATA%\\Programs\\leaf\\leaf.exe; Linux: ~/.local/bin/leaf).");
+  const result = run(leaf, [note], { stdio: "inherit", windowsHide: true, shell: false });
+  if (result.error) throw new Error(`Leaf preview could not start: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`Leaf preview failed (${result.signal ? `signal ${result.signal}` : `exit ${result.status}`}).`);
+}
+
+export async function editNote(root, file, { run = spawnSync, editor = nano } = {}) {
+  if (!editor) throw new Error("GNU nano is unavailable. Install Git for Windows or add nano to PATH.");
+  const result = run(editor, [await checkedNote(root, file)], { stdio: "inherit", windowsHide: true, shell: false });
   if (result.error) throw result.error;
+}
+
+export function noteSelection(answer, visible) {
+  const match = /^([rv]?)(\d+)$/i.exec(answer);
+  if (!match) return undefined;
+  const note = visible[Number(match[2]) - 1];
+  return note ? { note, preview: Boolean(match[1]) } : undefined;
+}
+
+export async function recoverNoteAction(action, { report = console.error, pause }) {
+  try {
+    await action();
+    return true;
+  } catch (error) {
+    report(`\n${error instanceof Error ? error.message : String(error)}`);
+    await pause("Press Enter to return to Notes.");
+    return false;
+  }
 }
 
 async function main() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const recover = (action) => recoverNoteAction(action, { pause: (message) => rl.question(message) });
   try {
     const vault = await loadVault();
     let filter = "";
@@ -98,14 +151,14 @@ async function main() {
       const visible = all.filter((note) => note.relative.toLowerCase().includes(filter.toLowerCase())).slice(0, 40);
       console.log(" NEURA / OBSIDIAN NOTES");
       console.log(` Live vault: ${vault}`);
-      console.log(" Select a note and edit it directly in this Herdr pane with GNU nano.");
-      console.log(" Nano: Ctrl+O save | Enter confirm | Ctrl+X close editor\n");
+      console.log(" Select a note to edit with GNU nano or preview Markdown with Leaf in this pane.");
+      console.log(" Nano: Ctrl+O save | Enter confirm | Ctrl+X close editor. Close Leaf to return.\n");
       visible.forEach((note, index) => {
         const stamp = new Date(note.modified).toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
         console.log(`${String(index + 1).padStart(2)}  ${note.relative}  [${stamp}]`);
       });
       if (!visible.length) console.log("No matching Markdown notes.");
-      console.log("\n[number] edit | /text filter | n new note | r refresh | q close pane");
+      console.log("\n[number] edit | r[number]/v[number] Leaf preview | /text filter | n new note | r refresh | q close pane");
       const answer = (await rl.question("> ")).trim();
       if (/^(q|quit)$/i.test(answer)) break;
       if (/^(r|refresh)$/i.test(answer)) { filter = ""; continue; }
@@ -113,12 +166,14 @@ async function main() {
       if (/^(n|new)$/i.test(answer)) {
         const title = await rl.question("Note title: ");
         if (!safeTitle(title)) continue;
-        await edit(vault, await createNote(vault, title));
+        await recover(async () => editNote(vault, await createNote(vault, title)));
         continue;
       }
-      if (/^\d+$/.test(answer)) {
-        const note = visible[Number(answer) - 1];
-        if (note) await edit(vault, note.full);
+      const selected = noteSelection(answer, visible);
+      if (selected?.preview) {
+        await recover(() => previewNote(vault, selected.note.full));
+      } else if (selected) {
+        await recover(() => editNote(vault, selected.note.full));
       }
     }
   } catch (error) {

@@ -111,15 +111,16 @@ export function normalizeClaude(raw, plan) {
   ] };
 }
 
-export function normalizeCodex(raw, plan) {
+export function normalizeCodex(raw, plan, now = Date.now()) {
   const window = (item, fallback) => {
     const seconds = item?.limit_window_seconds;
-    const hours = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 3600) : undefined;
+    const hours = Number.isFinite(seconds) && seconds > 0 ? seconds / 3600 : undefined;
     const label = hours === 168 ? "Wk" : hours ? `${hours}h` : fallback;
-    const reset = Number.isFinite(item?.reset_at) ? item.reset_at : Number.isFinite(item?.reset_after_seconds) ? Math.floor(Date.now() / 1000) + item.reset_after_seconds : undefined;
-    return { label, remaining: percentRemaining(item?.used_percent), reset };
+    const reset = Number.isFinite(item?.reset_at) ? item.reset_at : Number.isFinite(item?.reset_after_seconds) ? Math.floor(now / 1000) + item.reset_after_seconds : undefined;
+    const used = item?.used_percent;
+    return { label, remaining: Number.isFinite(used) && used >= 0 && used <= 100 ? percentRemaining(used) : undefined, reset };
   };
-  return { plan: plan || firstString(raw?.plan_type), windows: [window(raw?.rate_limit?.primary_window, "5h"), window(raw?.rate_limit?.secondary_window, "Wk")] };
+  return { plan: plan || firstString(raw?.plan_type), windows: [window(raw?.rate_limit?.primary_window, "Primary"), window(raw?.rate_limit?.secondary_window, "Secondary")] };
 }
 
 export function normalizeCursor(raw) {
@@ -178,20 +179,22 @@ function isSupportedProvider(value) {
   return ["claude", "codex", "cursor"].includes(value) ? value : undefined;
 }
 
-function providerForPane(pane) {
+export function providerForPane(pane) {
   const direct = providerForAgent(pane.agent);
   if (direct || String(pane.agent).toLowerCase() !== "pi") return direct;
-  try {
-    const result = JSON.parse(execFileSync(HERDR, ["pane", "get", pane.pane_id], CLI_OPTIONS));
-    return isSupportedProvider(result?.result?.pane?.tokens?.usage_provider);
-  } catch { return undefined; }
+  // Herdr 0.9.x exposes current token metadata on agent list as well as pane get.
+  return isSupportedProvider(pane.tokens?.usage_provider);
 }
 
-function reportToken(paneId, token) {
+export function usageMetadataArgs(paneId, token, ttlMs = TTL_MS) {
   const args = ["pane", "report-metadata", paneId, "--source", SOURCE];
-  args.push(...(token ? ["--token", `usage=${token}`] : ["--clear-token", "usage"]));
+  args.push(...(token ? ["--token", `usage=${token}`, "--ttl-ms", String(ttlMs)] : ["--clear-token", "usage"]));
+  return args;
+}
+
+function reportToken(paneId, token, ttlMs) {
   try {
-    execFileSync(HERDR, args, { stdio: "ignore", windowsHide: true, timeout: 5_000 });
+    execFileSync(HERDR, usageMetadataArgs(paneId, token, ttlMs), { stdio: "ignore", windowsHide: true, timeout: 5_000 });
     return true;
   } catch {
     // A cached pane may have closed between list and report; keep refresh best-effort.
@@ -199,31 +202,50 @@ function reportToken(paneId, token) {
   }
 }
 
-async function main() {
-  if (!HERDR) return; // Never discover a workspace-controlled executable through PATH.
-  const panes = listAgentPanes();
-  const providerPanes = panes.map((pane) => ({ ...pane, provider: providerForPane(pane) })).filter((pane) => pane.provider);
-  const cache = loadCache();
-  const now = Date.now();
+// Injectable I/O keeps the actual entrypoint testable without accounts or a live server.
+export async function runUsageReport({
+  listPanes = listAgentPanes, readCache = loadCache, writeCache = saveCache,
+  credentials = credentialsFor, revisionFor = (provider) => {
+    const file = credentialCandidates(provider).find(existsSync);
+    return file && credentialRevision(file);
+  }, fetch = fetchUsage, report = reportToken, clock = Date.now, forceRefresh = force,
+} = {}) {
+  const providerPanes = listPanes().map((pane) => ({ ...pane, provider: providerForPane(pane) })).filter((pane) => pane.provider);
+  const cache = readCache();
   const providers = [...new Set(providerPanes.map((pane) => pane.provider))];
   for (const provider of providers) {
-    const credentials = credentialsFor(provider);
-    if (!credentials) { delete cache.providers[provider]; continue; }
-    const file = credentialCandidates(provider).find(existsSync);
-    const revision = file && credentialRevision(file);
+    const auth = credentials(provider);
+    if (!auth) { delete cache.providers[provider]; continue; }
+    const revision = revisionFor(provider);
     const cached = cache.providers[provider];
-    if (!force && revision && cached?.revision === revision && cached?.fetchedAt && now - cached.fetchedAt <= TTL_MS) continue;
-    try { cache.providers[provider] = { fetchedAt: now, revision, token: renderUsage(await fetchUsage(provider, credentials)) }; }
-    catch {
+    const age = clock() - cached?.fetchedAt;
+    if (!forceRefresh && revision && cached?.revision === revision && age >= 0 && age < TTL_MS) continue;
+    try {
+      const token = renderUsage(await fetch(provider, auth));
+      cache.providers[provider] = { fetchedAt: clock(), revision, token };
+    } catch {
       // Failed or expired credentials must remove stale quota instead of republishing it.
       delete cache.providers[provider];
     }
   }
   const activePanes = providerPanes.map((pane) => pane.pane_id);
-  const pendingClears = clearStalePanes(cache.panes, activePanes, (paneId) => reportToken(paneId, undefined));
-  for (const pane of providerPanes) reportToken(pane.pane_id, cache.providers[pane.provider]?.token);
+  const pendingClears = clearStalePanes(cache.panes, activePanes, (paneId) => report(paneId, undefined));
+  for (const pane of providerPanes) {
+    const cached = cache.providers[pane.provider];
+    const age = clock() - cached?.fetchedAt;
+    const fresh = age >= 0 && age < TTL_MS;
+    const token = fresh ? cached.token : undefined;
+    // A blank $usage hides why Codex limits are absent. Never substitute stale quota.
+    const display = pane.provider === "codex" && (!token || token === "usage unavailable") ? "limits unavailable" : token;
+    report(pane.pane_id, display, fresh ? TTL_MS - age : TTL_MS);
+  }
   cache.panes = [...new Set([...activePanes, ...pendingClears])];
-  saveCache(cache);
+  writeCache(cache);
+}
+
+async function main() {
+  if (!HERDR) return; // Never discover a workspace-controlled executable through PATH.
+  await runUsageReport();
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
