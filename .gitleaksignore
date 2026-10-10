@@ -3,3 +3,7 @@
 904ea00d58ccb76821f4d123db66706dbd5f5801:agent/neura/release-manifest.json:generic-api-key:94
 3e6c71c29f3d09b8a89407c654b04c17b8fd0212:agent/neura/release-manifest.json:generic-api-key:107
 cac09d6c0b496b2738ba6fae1cda9d0329ca1bb6:agent/neura/release-manifest.json:generic-api-key:107
+
+# Reviewed synthetic failed-PEM-match source fixture: no usable key material.
+# Exact squash commit/path/rule/line only; future commits remain scanned.
+96ad5c37ada8f899e1dde9dafaf23759f2b958b3:scripts/tests/plan-confidentiality.mjs:private-key:28

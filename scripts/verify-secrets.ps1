@@ -42,7 +42,7 @@ if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
     throw "Verified Gitleaks archive did not contain gitleaks.exe."
 }
 
-$scanArgs = @('git', $resolvedRepository, '--log-opts', '--all', '--no-banner', '--no-color', '--redact=100', '--timeout', '180')
+$scanArgs = @('git', $resolvedRepository, '--log-opts', '--all', '--no-banner', '--no-color', '--redact=100', '--timeout', '180', '--gitleaks-ignore-path', $resolvedRepository)
 $configPath = Join-Path $resolvedRepository '.gitleaks.toml'
 if (Test-Path -LiteralPath $configPath -PathType Leaf) { $scanArgs += @('--config', $configPath) }
 # Windows PowerShell can turn native stderr into a terminating error before
