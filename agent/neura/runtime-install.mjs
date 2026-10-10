@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { inspectSkills, selectionPath } from './skills-registry.mjs';
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const digest = (file) => hash(fs.readFileSync(file));
@@ -48,7 +49,19 @@ function sourceManifest() {
     safe(current);
     if (!exists(current) || digest(current) !== expected) throw Error(`source hash mismatch: ${name}`);
   }
+  validateSkills(path.join(source, 'agent/neura'), manifest);
   return manifest;
+}
+function validateSkills(root, release, checkSelection = true) {
+  const report = inspectSkills({ root, piVersion: release.piVersion, selectionFile: checkSelection ? selectionPath() : null });
+  if (!report.valid) throw Error(report.errors.join('; '));
+  for (const skill of report.packages) {
+    const name = `agent/neura/skills/${skill.name}/${skill.version}/SKILL.md`;
+    if (release.files[name] !== skill.sha256) throw Error('skill package is not release-owned');
+  }
+  for (const name of ['agent/neura/skills-manifest.json', 'agent/neura/skills-registry.mjs']) {
+    if (!Object.hasOwn(release.files, name)) throw Error('skill registry is not release-owned');
+  }
 }
 function previousFiles(previous, previousManifest) {
   if (!previous || previous.schemaVersion !== 1 || !previous.files || Array.isArray(previous.files) ||
@@ -76,6 +89,7 @@ function ownership(manifest) {
   if (allowed.schemaVersion !== 1 || !allowed.extensions || Array.isArray(allowed.extensions)) throw Error('invalid user extension allowlist');
   // Never overwrite an edited managed file or an unrecognized legacy file.
   for (const [name, expected] of Object.entries(manifest.files)) {
+    if (name.startsWith('agent/neura/skills/') && Object.hasOwn(oldFiles, name) && oldFiles[name] !== expected) throw Error('immutable skill version cannot be reused');
     const file = asTarget(name);
     safe(file);
     if (exists(file) && digest(file) !== expected && digest(file) !== oldFiles[name]) throw Error(`unowned or modified managed file: ${name}`);
@@ -120,7 +134,7 @@ function state(manifest, root) {
   return { schemaVersion: 1, sourceCommit: commit, manifestHash: digest(path.join(root, manifestName)),
     version: manifest.neuraVersion, installedAt: new Date().toISOString(), files };
 }
-function verify(root, expectedState, checkOwnership = true, quick = false) {
+function verify(root, expectedState, checkOwnership = true, quick = false, legacySkillsRecovery = false) {
   const located = (name) => root === agent ? asTarget(name) : path.join(root, name);
   const manifest = valid(read(located(manifestName)));
   if (expectedState.schemaVersion !== 1 || !expectedState.files || Array.isArray(expectedState.files) ||
@@ -132,12 +146,33 @@ function verify(root, expectedState, checkOwnership = true, quick = false) {
     if (expectedState.files[name] !== expected) throw Error(`install receipt missing or mismatched: ${name}`);
   }
   if (!Object.hasOwn(expectedState.files, 'agent/neura/.learn-runtime-lock')) throw Error('Learn runtime receipt missing');
+  // Receipt hashes establish bytes, not ownership. Validate the complete key set
+  // before target reads or any recovery mutation, including in quick checks.
+  const owned = new Set([...Object.keys(manifest.files), manifestName, 'agent/neura/.learn-runtime-lock']);
+  for (const [name, expected] of Object.entries(expectedState.files)) {
+    managedName(name);
+    if ((!owned.has(name) && !name.startsWith('agent/neura/node_modules/')) || !/^[0-9a-f]{64}$/.test(expected)) {
+      throw Error(`unowned or invalid install receipt entry: ${name}`);
+    }
+  }
   for (const [name, expected] of Object.entries(expectedState.files)) {
     if (quick && name.startsWith('agent/neura/node_modules/')) continue;
     const file = located(name);
     safe(file);
     if (!exists(file) || digest(file) !== expected) throw Error(`installed file drift: ${name}`);
   }
+  const registryRoot = path.dirname(located('agent/neura/skills-manifest.json'));
+  // Only recovery may accept a wholly pre-catalog transaction. Never infer legacy
+  // from one missing file: declarations, receipt entries, or any physical registry
+  // component (including dangling links) require full supported-skills validation.
+  const skillEntry = name => name === 'agent/neura/skills-manifest.json' || name === 'agent/neura/skills-registry.mjs'
+    || name === 'agent/neura/skills' || name.startsWith('agent/neura/skills/');
+  const declaredSkills = Object.keys(manifest.files).some(skillEntry) || Object.keys(expectedState.files).some(skillEntry);
+  const registryPresent = ['skills-manifest.json', 'skills-registry.mjs', 'skills'].some(name => {
+    try { fs.lstatSync(path.join(registryRoot, name)); return true; }
+    catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  });
+  if (!legacySkillsRecovery || declaredSkills || registryPresent) validateSkills(registryRoot, manifest, checkOwnership);
   if (checkOwnership) {
     if (process.versions.node.split('.').map(Number).some(Number.isNaN) ||
         process.versions.node.localeCompare(manifest.nodeMinimum, undefined, { numeric: true }) < 0) throw Error(`Node ${manifest.nodeMinimum}+ required`);
@@ -160,7 +195,7 @@ function recover() {
   const root = path.join(transaction, 'stage');
   if (!Array.isArray(entries) || !exists(path.join(root, stateName))) throw Error('invalid install journal; manual recovery required');
   const next = read(path.join(root, stateName));
-  verify(root, next, false);
+  verify(root, next, false, false, true);
   const oldStateIndex = entries.indexOf(stateName);
   const oldStateBackup = path.join(transaction, 'backup', String(oldStateIndex));
   let oldFiles = {};

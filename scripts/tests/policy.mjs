@@ -1,4 +1,4 @@
-import { repoRoot, scratchRoot, assert, execFileSync, spawnSync, fs, path, pathToFileURL, isSafeExternalUrl, isPlanToolInputAllowed, files, state, widgets, context, guard, modes } from './harness.mjs';
+import { repoRoot, scratchRoot, assert, execFileSync, spawnSync, fs, path, pathToFileURL, isSafeExternalUrl, isPlanToolInputAllowed, files, state, widgets, context, guard, modes, modeState, WORK_SANDBOX_TOOL } from './harness.mjs';
 await modes.commands.get("mode").handler("plan", context);
 const { inspectAction } = await import('../../agent/neura/action-policy.ts');
 for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-tools', 'plan-shell-parser', 'process']) {
@@ -11,7 +11,7 @@ for (const file of ['action-contracts', 'action-paths', 'capabilities', 'mode-to
   assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
   assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ agent/neura/${file}.ts` } }, repoRoot).route, 'human');
 }
-for (const file of ['agent/extensions/mcp.ts', 'agent/neura/process-security.ts']) {
+for (const file of ['agent/extensions/mcp.ts', 'agent/neura/process-security.ts', 'agent/extensions/skill-doctor.ts', 'agent/neura/runtime-install.mjs', 'agent/neura/skills-registry.mjs', 'agent/neura/skills-manifest.json']) {
   const target = path.join(repoRoot, file);
   assert.equal(await guard({ toolName: 'read', input: { path: target } }, context), undefined, `Plan blocked read-only inspection of ${file}`);
   for (const toolName of ['edit', 'write']) {
@@ -24,13 +24,245 @@ for (const file of ['agent/extensions/mcp.ts', 'agent/neura/process-security.ts'
   assert.equal(inspectAction({ toolName: 'read', input: { path: target } }, repoRoot, { protectControlReads: true }).route, 'human');
   assert.equal(inspectAction({ toolName: 'human_away_exec', input: { command: `sed -i s/a/b/ ${file}` } }, repoRoot).route, 'human');
 }
-for (const file of ['ordinary-task-file.txt', 'agent/extensions/mcp-helper.ts', 'agent/neura/process-security-notes.ts']) {
+for (const file of ['ordinary-task-file.txt', 'agent/extensions/mcp-helper.ts', 'agent/neura/process-security-notes.ts', 'agent/extensions/skill-doctor-notes.ts', 'agent/neura/runtime-install-notes.mjs', 'agent/neura/skills-registry-notes.mjs', 'agent/neura/skills-manifest-example.json']) {
   for (const toolName of ['edit', 'write']) {
     const action = inspectAction({ toolName, input: { path: path.join(repoRoot, file), content: 'task' } }, repoRoot);
     assert.equal(action.route, 'allow', `control-path protection widened to ordinary ${toolName} ${file}`);
     assert.equal(action.capability.approvalClass, 'task-scoped');
   }
 }
+// Supported skill validation is control-plane code, not a routine task edit.
+// Exercise real headless Work mediation without executing or writing anything.
+await modes.commands.get('mode').handler('work', context);
+assert.equal(modeState.getMode(), 'work');
+const headlessWork = { ...context, hasUI: false, ui: undefined };
+for (const file of ['agent/extensions/skill-doctor.ts', 'agent/neura/runtime-install.mjs', 'agent/neura/skills-registry.mjs', 'agent/neura/skills-manifest.json']) {
+  for (const toolName of ['read', 'edit', 'write']) {
+    const event = { toolName, input: { path: file, content: 'synthetic' } };
+    assert.equal((await guard(event, headlessWork))?.block, true, `headless Work allowed ${toolName} of ${file}`);
+  }
+  const event = { toolName: WORK_SANDBOX_TOOL, input: { command: `sed -i s/a/b/ ${file}` } };
+  const action = inspectAction(event, repoRoot);
+  assert.equal(action.route, 'human', `sandbox command bypassed ${file} approval`);
+  assert.equal(action.category, 'protected-control');
+  assert.equal(action.capability.approvalClass, 'exception-boundary');
+  assert.equal((await guard(event, headlessWork))?.block, true, `headless sandbox command bypassed ${file}`);
+}
+for (const file of ['ordinary-task-file.txt', 'agent/extensions/skill-doctor-notes.ts', 'agent/neura/runtime-install-notes.mjs', 'agent/neura/skills-registry-notes.mjs', 'agent/neura/skills-manifest-example.json']) {
+  for (const toolName of ['edit', 'write']) {
+    assert.equal(await guard({ toolName, input: { path: file, content: 'synthetic' } }, headlessWork), undefined,
+      `headless Work unnecessarily blocked ordinary ${toolName} ${file}`);
+  }
+}
+assert.equal(await guard({ toolName: WORK_SANDBOX_TOOL, input: { command: 'npm test' } }, headlessWork), undefined,
+  'skill control protection widened to ordinary sandbox verification');
+// Real Pi native tools, mediated by the actual headless Work hook. Fixtures only.
+const nativeTools = {};
+for (const name of ['read', 'edit', 'write']) {
+  const module = await import(pathToFileURL(path.join(repoRoot, `node_modules/@earendil-works/pi-coding-agent/dist/core/tools/${name}.js`)).href);
+  nativeTools[name] = module[`create${name[0].toUpperCase()}${name.slice(1)}Tool`];
+}
+const streamWorkspace = path.join(scratchRoot, 'stream-workspace');
+fs.mkdirSync(streamWorkspace, { recursive: true });
+const streamContext = { ...headlessWork, cwd: streamWorkspace, model: undefined };
+let confirmations = 0;
+const approvingContext = { ...streamContext, hasUI: true, ui: { confirm: async () => { confirmations++; return true; } } };
+const toolInput = (toolName, raw) => {
+  const input = { path: raw };
+  if (toolName === 'write') input.content = 'replacement';
+  else if (toolName === 'edit') input.edits = [{ oldText: 'original', newText: 'replacement' }];
+  return input;
+};
+const executeMediated = async (toolName, raw, ctx = streamContext) => {
+  const input = toolInput(toolName, raw);
+  const blocked = await guard({ toolName, input }, ctx);
+  if (!blocked?.block) await nativeTools[toolName](streamWorkspace).execute('synthetic', input, undefined, undefined, ctx);
+  return blocked;
+};
+for (const name of ['agent/neura/skills-registry.mjs', 'agent/neura/skills-manifest.json', 'agent/neura/runtime-install.mjs', 'agent/extensions/skill-doctor.ts']) {
+  const target = path.join(streamWorkspace, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, 'original');
+  const ordinaryForms = [target, target.toUpperCase(), `@${target}`, pathToFileURL(target).href];
+  const streamForms = ['::$DATA', ':$DATA', ':named', ':named:$DATA'].flatMap(suffix => [target + suffix, `@${target}${suffix}`, pathToFileURL(target + suffix).href]);
+  for (const toolName of ['read', 'edit', 'write']) {
+    for (const raw of ordinaryForms) {
+      assert.equal((await executeMediated(toolName, raw))?.block, true, `Work allowed control ${toolName}: ${raw}`);
+    }
+    for (const raw of streamForms) {
+      const action = inspectAction({ toolName, input: toolInput(toolName, raw) }, streamWorkspace);
+      assert.equal(action.route, 'deny', `stream remained approvable: ${raw}`);
+      assert.equal(action.facts.target, undefined, 'unsupported namespace acquired a filesystem identity');
+      assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true);
+    }
+    assert.equal(fs.readFileSync(target, 'utf8'), 'original');
+  }
+}
+// Existing extensionless bases are evidence of stream operands, not a blanket
+// interpretation of every colon as a path. Text/object contexts below stay text.
+for (const name of ['README', 'ordinary.txt', 'HEAD', 'foo', 'dev']) fs.writeFileSync(path.join(streamWorkspace, name), 'ordinary');
+const ordinaryTarget = path.join(streamWorkspace, 'ordinary-task.txt');
+for (const raw of [ordinaryTarget, `@${ordinaryTarget}`, pathToFileURL(ordinaryTarget).href]) {
+  fs.writeFileSync(ordinaryTarget, 'original');
+  assert.equal(await executeMediated('read', raw), undefined);
+  assert.equal(await executeMediated('edit', raw), undefined);
+  assert.equal(fs.readFileSync(ordinaryTarget, 'utf8'), 'replacement');
+  assert.equal(await executeMediated('write', raw), undefined);
+}
+// Ordinary protected paths can still be approved; unsupported aliases cannot.
+const approvedControl = path.join(streamWorkspace, 'agent/neura/skills-registry.mjs');
+assert.equal(await executeMediated('write', approvedControl, approvingContext), undefined);
+assert.equal(confirmations, 1);
+assert.equal(fs.readFileSync(approvedControl, 'utf8'), 'replacement');
+fs.writeFileSync(approvedControl, 'original');
+const ambiguousForms = [
+  'C:relative.txt', '\\\\server\\share\\file.txt', '\\\\?\\C:\\file.txt', '\\\\.\\C:\\file.txt', '\\??\\C:\\file.txt',
+  'file://server/share/file.txt', 'file:///C:/file.txt%3A%3A%24DATA', 'file:///C:/bad%00.txt',
+  ...(process.platform === 'win32' ? ['\\rooted.txt', '/rooted.txt'] : []),
+];
+for (const raw of ambiguousForms) {
+  for (const toolName of ['read', 'edit', 'write']) {
+    assert.equal(inspectAction({ toolName, input: toolInput(toolName, raw) }, streamWorkspace).route, 'deny', raw);
+    assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true, raw);
+  }
+}
+assert.equal(confirmations, 1, 'unsupported namespace reached interactive approval');
+// Trap the actual filesystem boundary, not just the displayed policy summary.
+const { default: probeFs } = await import('node:fs');
+const { syncBuiltinESMExports } = await import('node:module');
+const ioMethods = ['statSync', 'lstatSync', 'realpathSync', 'openSync', 'readFileSync'];
+const originals = new Map(ioMethods.map(name => [name, probeFs[name]]));
+let unsupportedIO = 0;
+let filesystemIO = 0;
+try {
+  for (const name of ioMethods) {
+    probeFs[name] = (...args) => {
+      filesystemIO++;
+      if (String(args[0]).includes('unsupported-io')) { unsupportedIO++; throw Error('unsupported target reached filesystem'); }
+      return originals.get(name)(...args);
+    };
+  }
+  syncBuiltinESMExports();
+  for (const raw of [path.join(streamWorkspace, 'unsupported-io.txt::$DATA'), '\\\\unsupported-io\\share\\file.txt', 'unsupported-io:named']) {
+    for (const toolName of ['read', 'edit', 'write']) {
+      const before = filesystemIO;
+      assert.equal((await executeMediated(toolName, raw, approvingContext))?.block, true);
+      assert.equal(filesystemIO, before, 'unsupported native path performed filesystem I/O before denial');
+    }
+    assert.equal(inspectAction({ toolName: WORK_SANDBOX_TOOL, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route,
+      raw === 'unsupported-io:named' ? 'human' : 'deny', 'missing untyped colon base must not grant unattended execution');
+  }
+  assert.equal(unsupportedIO, 0, 'unsupported path performed filesystem I/O before denial');
+} finally {
+  for (const [name, original] of originals) probeFs[name] = original;
+  syncBuiltinESMExports();
+}
+const controlAlias = path.join(streamWorkspace, 'control-alias');
+fs.symlinkSync(path.join(streamWorkspace, 'agent/neura'), controlAlias, process.platform === 'win32' ? 'junction' : 'dir');
+for (const toolName of ['read', 'edit', 'write']) {
+  assert.equal((await executeMediated(toolName, path.join(controlAlias, 'skills-registry.mjs')))?.block, true);
+}
+for (const toolName of [WORK_SANDBOX_TOOL, 'human_away_exec']) {
+  for (const raw of [path.join(controlAlias, 'skills-registry.mjs'), pathToFileURL(path.join(controlAlias, 'skills-registry.mjs')).href]) {
+    const event = { toolName, input: { command: `npm test -- "${raw}"` } };
+    assert.equal(inspectAction(event, streamWorkspace).route, 'human', 'development allowlist bypassed canonical control alias');
+    assert.equal((await guard(event, streamContext))?.block, true);
+  }
+  // Recorded independently against main 3eb6355. Syntax/text must reach its
+  // original allowlist/human route, even when colliding filesystem bases exist.
+  for (const [command, expected] of [
+    ['git show HEAD:README.md', 'human'], ['git log --pretty=format:%h', 'human'],
+    ['docker run -p8080:80img', 'human'], ['docker run -p 8080:80 img', 'human'],
+    ['npm run dev:server', 'human'], ["rg 'foo::bar'", 'allow'],
+    ['node -e "console.log(\'a:b\')"', 'human'], ['git clone git@github.com:org/repo.git', 'human'],
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, expected, `main route parity: ${command}`);
+  }
+  for (const command of [
+    'npm test -- not-yet-created:named', 'npm test -- --query=README:named',
+    'npm test -- --query=foo/bar:baz', 'npm test -- -p:CollectCoverage=true',
+    'node -e "README:named"', 'node --eval="file://server/share/file.txt"',
+    'printf "%s" "README:named"', 'unknown-command README:named',
+  ]) {
+    const event = { toolName, input: { command } };
+    assert.equal(inspectAction(event, streamWorkspace).route, 'human', command);
+    assert.equal((await guard(event, streamContext))?.block, true, 'uncertain syntax ran unattended');
+  }
+  const changingBase = path.join(streamWorkspace, 'changing-base');
+  const changingEvent = { toolName, input: { command: 'npm test -- changing-base:named' } };
+  assert.equal(inspectAction(changingEvent, streamWorkspace).route, 'human');
+  fs.writeFileSync(changingBase, 'ordinary');
+  assert.equal(inspectAction(changingEvent, streamWorkspace).route, 'deny');
+  const beforeChangingApproval = confirmations;
+  assert.equal((await guard(changingEvent, approvingContext))?.block, true);
+  assert.equal(confirmations, beforeChangingApproval, 'existing extensionless stream reached approval');
+  fs.rmSync(changingBase);
+  assert.equal(inspectAction(changingEvent, streamWorkspace).route, 'human', 'existence changes granted automatic execution');
+  const textApproval = { toolName, input: { command: 'node -e "console.log(\'a:b\')"' } };
+  const beforeTextApproval = confirmations;
+  assert.equal(await guard(textApproval, approvingContext), undefined, 'ordinary code text became nonapprovable');
+  assert.equal(confirmations, beforeTextApproval + 1);
+  for (const command of [
+    'rg -e "README:named"', 'rg --regexp="foo::bar"', 'rg --replace "a:b" foo',
+    'Select-String -Pattern "README:named" -Path ordinary-task.txt',
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'allow', `text binder: ${command}`);
+  }
+  for (const command of [
+    'rg -e foo README:named', 'rg --files -- README:named', 'rg -f README:named foo',
+    'Get-Content -LiteralPath README:named', 'npm test -- missing::$DATA',
+    'npm test -- C:relative', 'npm test -- file:///C:/bad%00.txt',
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', `filesystem operand: ${command}`);
+  }
+  assert.equal(inspectAction({ toolName, input: { command: `rg -e foo "${path.join(controlAlias, 'skills-registry.mjs')}"` } }, streamWorkspace).route,
+    'human', 'recognized path binder bypassed a canonical control alias');
+  for (const raw of [ordinaryTarget + '::$DATA', ...ambiguousForms]) {
+    assert.equal(inspectAction({ toolName, input: { command: `npm test -- "${raw}"` } }, streamWorkspace).route, 'deny', raw);
+  }
+  for (const command of [
+    'npm test', `npm test -- "${ordinaryTarget}"`, 'npm test -- --registry=https://registry.npmjs.org', 'npm run build',
+    'npm run test:unit', 'npm test:unit',
+    'dotnet test /p:CollectCoverage=true', 'dotnet build /p:Configuration=Release',
+    'dotnet test -p:CollectCoverage=true', 'dotnet build -p:Configuration=Release',
+    'dotnet build /property:Configuration=Release', 'dotnet build -property:Configuration=Release',
+    `dotnet build /p:OutputPath="${ordinaryTarget}"`,
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'allow', command);
+  }
+  for (const raw of ['README:named', 'README:$DATA', 'README:named:$DATA', 'README::$DATA']) {
+    for (const command of [`npm test -- ${raw}`, `npm test -- --output=${raw}`]) {
+      assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', command);
+    }
+  }
+  for (const command of [
+    'dotnet test /p:OutputPath=README:named', 'dotnet test -p:OutputPath=README:named',
+    'dotnet build /p:OutputPath=C:relative',
+    'dotnet build /p:OutputPath="\\\\?\\C:\\hostile"',
+    'dotnet build -p:OutputPath="file://server/share/hostile"',
+    'dotnet build /p:OutputPath=ordinary.txt:named',
+    'dotnet test /p:CollectCoverage=true -- README:named',
+    'dotnet test -- /p:CollectCoverage=true',
+    'npm test -- /p:CollectCoverage=true',
+    'dotnet test /pp:CollectCoverage=true', 'dotnet build /p:=Release', 'dotnet build /p:OutputPath=',
+  ]) {
+    assert.equal(inspectAction({ toolName, input: { command } }, streamWorkspace).route, 'deny', command);
+  }
+  for (const command of ['npm test -- README:named', 'npm test -- --output=README:named']) {
+    const before = confirmations;
+    assert.equal((await guard({ toolName, input: { command } }, approvingContext))?.block, true);
+    assert.equal(confirmations, before, 'extensionless stream reached approval');
+  }
+  assert.equal(inspectAction({ toolName, input: { command: `dotnet build /p:OutputPath="${path.join(controlAlias, 'skills-registry.mjs')}"` } }, streamWorkspace).route,
+    'human', 'MSBuild property syntax exempted a canonical control path');
+  for (const raw of [approvedControl, path.join(controlAlias, 'skills-registry.mjs'), ordinaryTarget + '::$DATA']) {
+    const action = inspectAction({ toolName, input: { command: `rm -rf "${raw}"` } }, streamWorkspace);
+    assert.equal(action.route, 'deny', 'protected-control matching weakened hard denial');
+    assert.equal(action.category, 'broad-destruction');
+  }
+}
+console.log('PASS native Pi read/edit/write Work mediation: streams/namespaces denied, controls approved only by ordinary identity, drive/alias/fileURL positives');
+await modes.commands.get('mode').handler('plan', context);
 const ordinaryPatch = inspectAction({ toolName: 'write', input: { path: path.join(repoRoot, 'ordinary-task-file.txt'), content: 'task' } }, repoRoot);
 assert.equal(ordinaryPatch.route, 'allow', 'metadata mandated blanket approval for ordinary workspace effects');
 assert.equal(ordinaryPatch.capability.approvalClass, 'task-scoped');

@@ -1,19 +1,21 @@
 # Neura status
 
-Last documentation audit: 2026-10-08
+Last documentation audit: 2026-10-09
 
-Latest release: `2.5.1`. Current merged source: `a0205eb`, including Work,
-modular verification, and Learn Mode; these changes are unreleased. This checkout
-adds source-only compatibility and installer readiness work targeting exact Pi `1.1.0`; that work
-is not merged, released, or installed. Node: `24.15+` (CI `24.16.0`).
+Latest release: `2.5.1`. Current merged source: `3eb6355`, including Work,
+modular verification, Learn Mode, the command launcher, shared capability/policy/
+process contracts, and exact Pi `1.1.0` compatibility; these changes are unreleased.
+This checkout adds PR96's source-only reproducible opt-in guidance reconciliation;
+it is not merged, released, or installed. Node: `24.15+` (CI `24.16.0`).
 
 Standing requirement (2026-10-06): Neura must work with the latest stable Pi after
 every upstream update. npm's latest stable Pi was checked as `1.1.0` on 2026-10-08;
-PR98's older `1.0.4` target failed the real latest-Pi gate. This isolated source
-candidate advances the coupled pins and identity, with real-loader/session
-modifier, reload, duration and cancellation regressions. Historical `1.0.4`
-review/CI does not certify the new candidate; fresh review and new-head required
-CI remain pending. Version agreement alone is not full compatibility or a
+PR98's older `1.0.4` target failed the real latest-Pi gate; merged main now
+advances the coupled pins and identity, with real-loader/session modifier,
+reload, duration and cancellation regressions. PR96 retains that target and
+updates its immutable guidance package and exact compatibility metadata.
+Historical `1.0.4` review/CI does not certify this reconciliation; its local
+validation/review and new-head required remote CI must be evaluated separately. Version agreement alone is not full compatibility or a
 live-install guarantee; the owner's device/live state was not inspected. Update Neura and its exact pins rather than downgrade Pi
 or bypass runtime checks. Follow the
 [Pi compatibility policy](DEPENDENCIES.md#pi-compatibility-policy) and
@@ -63,7 +65,7 @@ release gates and issue ownership live in
 | Plan confidentiality | Major gap | Broad searches can discover ignored or historical secrets. Track [#35](https://github.com/Rajveerx11/neura/issues/35). |
 | Approvals | Partially hardened | Cross-process locking, flushed appends, bounded Windows contention retries, and corruption/crash rejection are covered. Automatic recovery, authenticated tamper evidence, and stronger remote binding remain [#33](https://github.com/Rajveerx11/neura/issues/33). |
 | Integrations and memory | Major gap | Public defaults no longer include a concrete Composio route, but October, MCP, Gmail, memory, redaction, and credential scoping still need work. Track [#29](https://github.com/Rajveerx11/neura/issues/29) and [#34](https://github.com/Rajveerx11/neura/issues/34). |
-| Skills | Major gap | Public defaults no longer load a personal `~/.claude/skills` path, but optional skills are not fully pinned, manifested, or isolated from personal state. Track [#38](https://github.com/Rajveerx11/neura/issues/38). |
+| Skills | Source-only supported guidance slice | One repository-owned `neura-verification` guidance skill is versioned, hashed, exact-Pi-compatible, and disabled by default. Installer/runtime validation and real Pi loader smoke tests cover its opt-in profile; read-only doctor and health's structured capability data carry exact manifest validation without personal-directory scanning; the compact health widget summarizes readiness, not the exact skill digest. Permissions restrict, never grant. External skills remain unsupported and no live/release attestation is made. See [skills contract](SKILLS.md) and [#38](https://github.com/Rajveerx11/neura/issues/38). |
 | Type and test safety | Tests improved; strict typing open | Hermetic suites, seeded fuzzing, races, crash rejection, and content-bound receipts shipped; [#27](https://github.com/Rajveerx11/neura/issues/27) is closed. Configured typecheck passes; strict migration remains [#26](https://github.com/Rajveerx11/neura/issues/26). TypeScript LSP was unavailable on 2026-10-06 (`typescript-language-server` missing); no clean LSP result is claimed. |
 | CI and releases | Guarded experimental path | Windows `harness`, Ubuntu `portable-proof`, dependency review, aggregate CI, and CodeQL use explicit runners and immutable GitHub-owned action pins. Tag automation publishes no npm package and can create only a draft prerelease after release gates; stable tags are blocked while this status says not production-ready. |
 | UX and accessibility | Owner-supplied logo and image-backed launch implemented; wider surfaces covered | Windows Terminal owns the local logo artwork and Pi owns a centred functional launch editor with a logo-only fallback. Terminal widths are regression-tested. Plan and Learn real-Edge browser checks were repeated in this isolated Pi update with synthetic homes/profiles. These checks do not attest a clean-host install or live UI match. Track [#53](https://github.com/Rajveerx11/neura/issues/53) and [#54](https://github.com/Rajveerx11/neura/issues/54). |
