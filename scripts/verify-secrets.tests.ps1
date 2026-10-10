@@ -92,7 +92,29 @@ try {
         throw "Secret fixture did not produce the expected Gitleaks rejection."
     }
 
-    Write-Output "Neura secret tests: clean history and reviewed manifest digest passed; tampered archive, other digest, off-path key, and synthetic token rejected."
+    # The historical synthetic PEM exception is bound to one immutable commit.
+    # An identical fixture at the same path/line in a new commit must still fail.
+    $ignoreSource = Get-Content (Join-Path (Split-Path -Parent $PSScriptRoot) '.gitleaksignore') -Raw
+    $pemFingerprint = '96ad5c37ada8f899e1dde9dafaf23759f2b958b3:scripts/tests/plan-confidentiality.mjs:private-key:28'
+    $pemIgnores = @($ignoreSource -split '\r?\n' | Where-Object { $_ -match '^[^#].*:scripts/tests/plan-confidentiality\.mjs:private-key:' })
+    if ($pemIgnores.Count -ne 1 -or $pemIgnores[0] -ne $pemFingerprint) {
+        throw 'Synthetic PEM exception escaped its reviewed commit/path/rule/line binding.'
+    }
+    $pemRepository = New-TestRepository 'pem-fingerprint'
+    Commit-TestFile $pemRepository '.gitleaks.toml' $config
+    Commit-TestFile $pemRepository '.gitleaksignore' $ignoreSource
+    New-Item -ItemType Directory -Path (Join-Path $pemRepository 'scripts\tests') -Force | Out-Null
+    $pemFixture = Get-Content (Join-Path $PSScriptRoot 'tests\plan-confidentiality.mjs') -Raw
+    Commit-TestFile $pemRepository 'scripts/tests/plan-confidentiality.mjs' $pemFixture
+    $newPemRejected = $false
+    try { & $scanScript -RepositoryRoot $pemRepository -ToolCache $toolCache *>$null }
+    catch {
+        if ($_.FullyQualifiedErrorId -like 'Neura.SecretLeak*') { $newPemRejected = $true }
+        else { throw }
+    }
+    if (-not $newPemRejected) { throw 'Historical PEM fingerprint bypassed a different commit.' }
+
+    Write-Output "Neura secret tests: clean history, reviewed manifest digest and exact PEM binding passed; tampered archive, other digest, off-path key, synthetic token and new-commit PEM rejected."
 } finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
     if ($resolvedTestRoot.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -and
