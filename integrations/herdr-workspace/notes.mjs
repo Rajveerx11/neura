@@ -128,8 +128,20 @@ export function noteSelection(answer, visible) {
   return note ? { note, preview: Boolean(match[1]) } : undefined;
 }
 
+export async function recoverNoteAction(action, { report = console.error, pause }) {
+  try {
+    await action();
+    return true;
+  } catch (error) {
+    report(`\n${error instanceof Error ? error.message : String(error)}`);
+    await pause("Press Enter to return to Notes.");
+    return false;
+  }
+}
+
 async function main() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const recover = (action) => recoverNoteAction(action, { pause: (message) => rl.question(message) });
   try {
     const vault = await loadVault();
     let filter = "";
@@ -154,18 +166,14 @@ async function main() {
       if (/^(n|new)$/i.test(answer)) {
         const title = await rl.question("Note title: ");
         if (!safeTitle(title)) continue;
-        await editNote(vault, await createNote(vault, title));
+        await recover(async () => editNote(vault, await createNote(vault, title)));
         continue;
       }
       const selected = noteSelection(answer, visible);
       if (selected?.preview) {
-        try { await previewNote(vault, selected.note.full); }
-        catch (error) {
-          console.error(`\n${error instanceof Error ? error.message : String(error)}`);
-          await rl.question("Press Enter to return to Notes.");
-        }
+        await recover(() => previewNote(vault, selected.note.full));
       } else if (selected) {
-        await editNote(vault, selected.note.full);
+        await recover(() => editNote(vault, selected.note.full));
       }
     }
   } catch (error) {

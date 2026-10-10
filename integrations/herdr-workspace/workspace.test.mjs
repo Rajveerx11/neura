@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { loadVault, checkedNote, collectNotes, createNote, leafExecutable, previewNote, editNote, noteSelection } from "./notes.mjs";
+import { loadVault, checkedNote, collectNotes, createNote, leafExecutable, previewNote, editNote, noteSelection, recoverNoteAction } from "./notes.mjs";
 import { paneArgs, launchPane } from "./open-pane.mjs";
 import { calendarCommands, calendarEditArgs, calendarExecutable, calendarMenuArgs, calendarRun } from "./calendar.mjs";
 
@@ -63,7 +63,9 @@ test("calendar command arguments remain fixed except the edit search text", () =
 });
 
 test("vault refuses UNC and junctions; picker and creation stay inside the canonical vault", async (t) => {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), "neura-herdr-test-"));
+  // Windows CI may spell TEMP with an 8.3 alias; use the actual directory,
+  // not that alias, so linked-ancestor negatives test links rather than names.
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "neura-herdr-test-")));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const vault = path.join(base, "vault");
   const outside = path.join(base, "outside");
@@ -156,7 +158,7 @@ test("Leaf discovery rejects missing files and directories", (t) => {
 });
 
 function previewFixture(t) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "neura-leaf-preview-")));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "neura-leaf-preview-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   // Spaces, Unicode, apostrophe and shell metacharacters must stay one literal argv.
   const file = path.join(root, "-Résumé's note & $(whoami); [1].md");
@@ -182,7 +184,7 @@ test("Leaf preview spawns only the authorized note as literal argv, with no shel
 
 test("Leaf preview rejects outside, missing, non-Markdown and linked notes before discovery/spawn", async (t) => {
   const { root, file, options } = previewFixture(t);
-  const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "neura-leaf-outside-")));
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "neura-leaf-outside-")));
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
   const foreign = path.join(outside, "foreign.md");
   fs.writeFileSync(foreign, "outside");
@@ -230,6 +232,35 @@ test("Leaf unavailable/start/exit/signal errors are clear and leave nano usable"
   await assert.rejects(editNote(root, file, { editor: null, run: () => assert.fail("must not spawn") }), /GNU nano is unavailable/);
   const editorError = new Error("nano ENOENT");
   await assert.rejects(editNote(root, file, { editor: "GNU nano", run: () => ({ error: editorError }) }), (error) => error === editorError);
+});
+
+test("Notes action failures pause and recover for existing edits, new notes and preview", async (t) => {
+  const { root, file, options } = previewFixture(t);
+  const messages = [];
+  const pauses = [];
+  const recovery = { report: (message) => messages.push(message), pause: async (message) => { pauses.push(message); } };
+  const exitCode = process.exitCode;
+  let successfulEdits = 0;
+  const actions = [
+    () => editNote(root, file, { editor: null }),
+    () => editNote(root, path.join(root, "missing.md"), { editor: "GNU nano", run: () => assert.fail("must not spawn") }),
+    async () => editNote(root, await createNote(root, "Recovery new note"), { editor: "GNU nano", run: () => ({ error: new Error("nano ENOENT") }) }),
+    () => previewNote(root, file, { ...options, executable: () => false }),
+  ];
+  for (const action of actions) {
+    assert.equal(await recoverNoteAction(action, recovery), false);
+    assert.equal(await recoverNoteAction(() => editNote(root, file, {
+      editor: "GNU nano", run: () => { successfulEdits++; return { status: 0 }; },
+    }), recovery), true, "a failed action must not prevent the next edit");
+  }
+  assert.equal(successfulEdits, actions.length);
+  assert.equal(messages.length, actions.length);
+  assert.match(messages[0], /GNU nano is unavailable/);
+  assert.match(messages[2], /nano ENOENT/);
+  assert.match(messages[3], /Leaf is unavailable/);
+  assert.deepEqual(pauses, actions.map(() => "Press Enter to return to Notes."));
+  assert.equal(process.exitCode, exitCode, "recoverable actions must not mark the session failed");
+  assert.equal(fs.readFileSync(path.join(root, "Herdr Notes", "Recovery new note.md"), "utf8"), "# Recovery new note\n\n");
 });
 
 test("Notes selection keeps numeric edit, preview aliases and filtered indexes separate from menu commands", () => {
