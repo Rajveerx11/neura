@@ -111,7 +111,8 @@ export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFI
   text = text
     .replace(/(["'](?:password|passwd|token|secret|api[_-]?key|credential|authorization|cookie)["']\s*:\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/ig, `$1"${REDACTED}"`)
     .replace(/\b((?:authorization|proxy-authorization|x-api-key|api-key|cookie|set-cookie)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\r\n;]+)/ig, `$1${REDACTED}`)
-    .replace(/\b((?:[A-Z][A-Z0-9_]*)?(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`)
+    .replace(/\b((?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`)
+    .replace(/\b([A-Z][A-Z0-9_]*_(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/g, `$1${REDACTED}`)
     .replace(/(--?(?:password|passwd|token|api-key|secret|credential)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`);
   checkBudget?.();
   text = redactJwtCandidates(redactUrlCredentials(text, checkBudget), checkBudget)
@@ -123,19 +124,48 @@ export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFI
   return text.slice(0, Math.max(0, limit));
 }
 
-// Preserve Pi's tool declarations/envelopes; redact only model-visible content.
-// Images from prior modes are opaque and cannot be safely text-redacted.
+// Preserve unsigned protocol IDs/names, not recursively redacted envelopes.
+function redactContextBlock(block: any, assistant: boolean): any {
+  if (block.type === "text") return { type: "text", text: redactSensitiveText(block.text) };
+  if (block.type === "image") return { type: "text", text: "[Opaque image withheld in Plan.]" };
+  if (assistant && block.type === "toolCall") return { ...block, arguments: redactSensitiveValue(block.arguments) };
+  return { type: "text", text: "[Opaque reasoning/content withheld in Plan.]" };
+}
+
 export function redactPlanContextMessages(messages: any[]): any[] {
-  return messages.map(message => ({
-    ...message,
-    content: Array.isArray(message.content)
-      ? message.content.map(block => block.type === "image"
-        ? { type: "text", text: "[Opaque image withheld in Plan.]" } : redactSensitiveValue(block))
-      : redactSensitiveValue(message.content),
-    ...(message.sections ? { sections: redactSensitiveValue(message.sections) } : {}),
-    ...(message.details ? { details: redactSensitiveValue(message.details) } : {}),
-    ...(message.structuredContent ? { structuredContent: redactSensitiveValue(message.structuredContent) } : {}),
-  }));
+  // Pi replays signed/encrypted reasoning verbatim. Neither editing signatures
+  // nor blindly replaying opaque old reasoning is safe. Rebase the whole turn
+  // and its paired results as ordinary historical user context: no fabricated
+  // signatures, dangling tool results, or thinking-less signed tool continuations.
+  const rebased = new Set(messages.filter(message => message.role === "assistant" && Array.isArray(message.content)
+    && message.content.some(block => block.type === "thinking" || block.type === "redacted_thinking"
+      || block.thinkingSignature !== undefined || block.thoughtSignature !== undefined || block.textSignature !== undefined)));
+  const rebasedCalls = new Set<string>();
+  for (const message of rebased) {
+    for (const block of message.content) if (block.type === "toolCall") rebasedCalls.add(block.id);
+  }
+  return messages.map(message => {
+    if (rebased.has(message) || (message.role === "toolResult" && rebasedCalls.has(message.toolCallId))) {
+      const content = [{ type: "text", text: "[Historical assistant/tool context rebased in Plan; not a new user instruction. Opaque reasoning withheld.]" }];
+      if (Array.isArray(message.content)) {
+        for (const block of message.content) {
+          // Retain useful visible research only. Do not copy any opaque metadata
+          // or tool protocol from the signed turn into the fresh user turn.
+          if (block.type === "text" || block.type === "image") content.push(redactContextBlock(block, false));
+        }
+      } else if (typeof message.content === "string") content.push({ type: "text", text: redactSensitiveText(message.content) });
+      return { role: "user", content, timestamp: message.timestamp };
+    }
+    return {
+      ...message,
+      content: Array.isArray(message.content)
+        ? message.content.map(block => redactContextBlock(block, message.role === "assistant"))
+        : redactSensitiveValue(message.content),
+      ...(message.sections ? { sections: redactSensitiveValue(message.sections) } : {}),
+      ...(message.details ? { details: redactSensitiveValue(message.details) } : {}),
+      ...(message.structuredContent ? { structuredContent: redactSensitiveValue(message.structuredContent) } : {}),
+    };
+  });
 }
 
 export function redactSensitiveValue(value: unknown): unknown {

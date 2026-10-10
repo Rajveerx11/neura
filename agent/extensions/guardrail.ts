@@ -60,9 +60,13 @@ export default function (pi) {
           : factory(ctx.cwd);
         return native.execute(callId, input, signal, onUpdate, ctx);
       }
-      const result = await planExecute(name, input, signal, ctx, callId, onUpdate);
-      safePlanCalls.add(callId);
-      return redactSensitiveValue(result);
+      try {
+        return redactSensitiveValue(await planExecute(name, input, signal, ctx, callId, onUpdate));
+      } finally {
+        // Current service failures are useful diagnostics, not restored native
+        // content. tool_result and final-context hooks still redact their text.
+        safePlanCalls.add(callId);
+      }
     } });
   }
   pi.on("tool_result", event => {
@@ -95,11 +99,15 @@ export default function (pi) {
   pi.on("agent_start", () => { consecutiveStops = 0; });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (isModeRestorePending()) return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
+    if (isModeRestorePending()) {
+      if (getMode() === "plan") safePlanCalls.add(event.toolCallId);
+      return { block: true, reason: "Session restoration is waiting for the previous host operation to finish. All tools are blocked." };
+    }
     const mode = getMode();
     // Pi's indirect tools reach registered capabilities beyond the active list.
     // Keep them YOLO-only until Neura has reviewed their complete execution surface.
     if (mode !== "yolo" && ["codemode", "tool_search"].includes(event.toolName)) {
+      if (mode === "plan") safePlanCalls.add(event.toolCallId);
       return { block: true, reason: `${event.toolName} is available only in YOLO mode.` };
     }
 
@@ -113,6 +121,7 @@ export default function (pi) {
         if (!Object.hasOwn(localTools, event.toolName)) safePlanCalls.add(event.toolCallId);
         return;
       }
+      safePlanCalls.add(event.toolCallId);
       return {
         block: true,
         reason: `PLAN mode blocked ${event.toolName}. Use research tools or publish_plan for one plans/*.html artifact; switch with Shift+Tab or /mode before implementation.`,

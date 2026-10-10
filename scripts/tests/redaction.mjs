@@ -43,6 +43,20 @@ bounded('JWT failed matches and neighboring synchronous redaction expressions', 
   const trailingHyphens = '-'.repeat(480_000);
   assert.equal(redactSensitiveText('eyJaaaaaaaa.bbbbbbbb.cccccccc' + trailingHyphens), '[REDACTED]' + trailingHyphens);
 `);
+bounded('Credential assignment recognition without corrupting camelCase source', String.raw`
+  import assert from 'node:assert/strict';
+  import { redactSensitiveText } from './agent/neura/redaction.ts';
+  for (const text of ['const accessToken = getToken();', 'if (apiSecret === x) useSecret();', 'accessToken == otherToken',
+    'const clientPassword = getPassword();', 'credentialsToken=lookup();']) {
+    assert.equal(redactSensitiveText(text) === text, true, 'CamelCase source changed');
+  }
+  for (const key of ['TOKEN', 'token', 'Password', 'API_KEY', 'GITHUB_TOKEN', 'MY_APP_SECRET', 'SERVICE_API_KEY', 'A_PASSWORD']) {
+    assert.equal(redactSensitiveText(key + '=synthetic-value'), key + '=[REDACTED]');
+    assert.equal(redactSensitiveText(key + '="synthetic value"'), key + '=[REDACTED]');
+  }
+  // Long failed uppercase prefixes must retain subprocess-bounded behavior.
+  assert.equal(redactSensitiveText('A_'.repeat(240_000)) === 'A_'.repeat(240_000), true);
+`);
 bounded('JWT legacy recognition positives and boundary/minimum/overlap negatives', String.raw`
   import assert from 'node:assert/strict';
   import { redactSensitiveText } from './agent/neura/redaction.ts';
@@ -90,8 +104,11 @@ bounded('Plan JWT preprocessing: bounded long-line failure, in-scan deadline/abo
   assert.equal(findProjectRoot(cwd), cwd, 'Preprocessing fixture acquired a Git ancestor');
   const hostile = path.join(cwd, 'hostile.txt');
   fs.writeFileSync(hostile, 'eyJaaaaaaaa-'.repeat(40_000));
-  // Preserve explicit size rejection, rather than returning a false no-match.
-  await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: 'absent', literal: true, path: 'hostile.txt' }), /line.*limit/i);
+  // Preserve an explicit per-file limit notice, not a false successful no-match.
+  const skipped = await inspectPlanFiles(cwd, 'grep', { pattern: 'absent', literal: true, path: 'hostile.txt' });
+  assert.match(skipped, /No authorized matches/);
+  assert.match(skipped, /skipped files exceeding content limits/);
+  assert.equal(skipped.includes('eyJ'), false, 'Overlong preprocessing input leaked');
   const originalMatchAll = String.prototype.matchAll;
   const originalNow = Date.now;
   for (const kind of ['deadline', 'abort']) {

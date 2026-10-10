@@ -21,7 +21,8 @@ Each concrete entry is authorized before listing, traversal, or content delivery
   `GIT_CONFIG_GLOBAL`, HOME config, and `XDG_CONFIG_HOME/git/config` or the
   default XDG `git/ignore` lookup;
 - in-workspace links to authorized source are usable; outside/ignored links,
-  junction escapes, hard-linked files, special files, and files above 8 MiB are not;
+  junction escapes, hard-linked files, and special files are denied. Authorized
+  files above 8 MiB may be listed, but their content cannot be read;
 - an opened descriptor is checked against authorized file identity before and
   after reading, with path/ignore authorization repeated before returning bytes;
 - only UTF-8 text is delivered. Binary/images are denied because opaque payloads
@@ -35,8 +36,13 @@ and lazy fetch. Config errors, missing Git, and timeouts fail closed. Config con
 and subprocess diagnostics are never returned to the model. Non-Git workspaces
 still use containment/private-path rules; Git exclusions apply in Git workspaces.
 
-Enumeration reauthorizes every entry; it never sends broad host-tool search output
-to the model and then tries to filter it. Traversal deduplicates canonical
+Enumeration reauthorizes every entry using one fresh batched Git exclusion query
+per directory; identical lexical/canonical names are deduplicated. Results are
+not cached across directories, calls, or content reads. Each read still performs
+fresh before/after authorization. Literal filesystem names such as `[id]` are
+discoverable internally; model-supplied wildcard paths remain unsupported. No
+broad host-tool search output is sent to the model and then filtered.
+Traversal deduplicates canonical
 directories (including link cycles), observes cancellation between entries and
 within file scans, and is bounded to 10 seconds/10,000 entries. Grep checks the
 clock/abort signal on every line and yields every 32 lines. The same budget is
@@ -45,10 +51,14 @@ and URL-credential failed matches no longer retry every suffix. Deadline expiry
 and cancellation are explicit errors, not successful no-match results. Narrow the
 path when an entry/match limit notice appears. SDK read offset/limit and
 2,000-line/50-KiB output truncation remain; other inspection output uses SDK head
-truncation. Search has bounded match/context limits. Files above 8 MiB and grep
-lines above 16,384 characters produce explicit size-limit errors, including in
-recursive searches; matching input is not silently clipped. Displayed lines are
-clipped to 500 characters.
+truncation. Search has bounded match/context limits. Direct reads above 8 MiB
+produce explicit size-limit errors. Grep skips authorized files above 8 MiB or
+containing lines above 16,384 characters, continues neighboring files, and reports
+a generic content-limit notice without skipped filenames/counts. Matching input
+is not silently clipped. Displayed lines are clipped to 500 characters. Find/ls
+metadata batching is substantially faster; grep still pays fresh per-file Git
+process/identity costs, so broader or slower searches may need narrower paths or
+globs to fit the unchanged ten-second budget.
 
 ## Plan bash is an adapter, not a shell
 
@@ -87,7 +97,18 @@ Plan tool-result content, details and structured output are redacted. Restored o
 previous-mode tool results not authorized by the current Plan service are withheld
 from Plan context; re-inspect through the authorized tools. Final
 `context_with_system` redaction covers conversation text and system sections while
-preserving Pi tool declarations. Opaque images from earlier modes are withheld.
+preserving Pi tool declarations. Current service/block errors retain sanitized
+diagnostics; an old native error is not trusted merely because it is an error.
+Unsigned tool-call IDs/names remain intact while arguments are redacted. Opaque
+images and unknown content are withheld.
+
+Provider-signed or reasoning-bearing assistant turns and their paired tool results
+are projected into labeled, redacted plain-text historical user context. Reasoning,
+encrypted data, signatures, and that turn's tool protocol are withheld, not edited,
+forged, or blindly replayed. Original session history is unchanged. This deliberately
+forfeits signed reasoning continuity in Plan to preserve confidentiality. Offline
+exact-Pi Anthropic/Responses payload-shaping regressions cover this projection;
+live provider cryptographic acceptance and every adapter are not certified.
 
 Redaction is defense-in-depth, not proof that arbitrary secrets can be recognized.
 It cannot make a model forget content previously sent in another mode. Concurrent

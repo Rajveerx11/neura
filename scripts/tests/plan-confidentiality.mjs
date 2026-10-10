@@ -343,13 +343,22 @@ try {
   await assert.rejects(() => call(session, 'grep', { pattern: 'a.*b', path: 'hostile-lines.txt' }), /regex/);
   assert.match(await inspectPlanFiles(cwd, 'grep', { pattern: 'a.*b', literal: true, path: hostileLines }), /No authorized matches/);
   assert.match(await inspectPlanFiles(cwd, 'grep', { pattern: 'a[^a]$', path: hostileLines }), /No authorized matches/);
-  // Do not silently clip matching input into a false successful no-match.
-  fs.writeFileSync(path.join(cwd, 'oversize-line.txt'), `${'a'.repeat(16_385)}needle\n`);
-  await assert.rejects(() => call(session, 'grep', { pattern: 'needle', path: 'oversize-line.txt' }), /line.*limit/i);
-  fs.unlinkSync(path.join(cwd, 'oversize-line.txt'));
-  fs.writeFileSync(path.join(cwd, 'oversize-file.txt'), Buffer.alloc(8 * 1024 * 1024 + 1, 'a'));
-  await assert.rejects(() => call(session, 'grep', { pattern: 'needle', path: '.' }), /file size limit/i);
-  fs.unlinkSync(path.join(cwd, 'oversize-file.txt'));
+  // Per-file overruns are explicit skips, never clipped successful matches.
+  const limitsDir = path.join(cwd, 'content-limits');
+  fs.mkdirSync(limitsDir);
+  fs.writeFileSync(path.join(limitsDir, 'normal.txt'), 'ordinary needle\n');
+  fs.writeFileSync(path.join(limitsDir, 'oversize-line.txt'), `${'a'.repeat(16_385)}needle\n`);
+  const longLineOnly = JSON.stringify(await call(session, 'grep', { pattern: 'needle', path: 'content-limits/oversize-line.txt' }));
+  assert.match(longLineOnly, /No authorized matches/);
+  assert.match(longLineOnly, /skipped files exceeding content limits/);
+  assert.doesNotMatch(longLineOnly, /needle/);
+  fs.writeFileSync(path.join(limitsDir, 'oversize-file.txt'), Buffer.alloc(8 * 1024 * 1024 + 1, 'a'));
+  const skippedNeighbors = JSON.stringify(await call(session, 'grep', { pattern: 'needle', path: 'content-limits' }));
+  assert.match(skippedNeighbors, /normal\.txt:1:ordinary needle/);
+  assert.match(skippedNeighbors, /skipped files exceeding content limits/);
+  assert.doesNotMatch(skippedNeighbors, /oversize-(?:file|line)\.txt/);
+  await assert.rejects(() => call(session, 'read', { path: 'content-limits/oversize-file.txt' }), /file size limit/i);
+  fs.rmSync(limitsDir, { recursive: true });
   // Instrument the actual per-line matcher, not traversal: the abort and clock
   // advance happen only after 40 lines of this single file have been scanned.
   const originalTest = RegExp.prototype.test;
@@ -418,6 +427,117 @@ try {
   fs.unlinkSync(pemLines);
   fs.unlinkSync(hostileLines);
   await assert.rejects(() => call(session, 'find', { pattern: '*', limit: 100000 }), /limit/);
+  // Service failures and guardrail blocks are current Plan diagnostics, unlike
+  // restored/native output. Exercise execute -> tool_result -> final context.
+  const diagnosticFailures = [];
+  for (const [toolName, input, expected] of [
+    ['grep', { pattern: 'a.*', path: '.' }, /Plan regex supports/],
+    ['read', { path: '.env' }, /confidential/],
+    ['bash', { command: 'git show HEAD:src/normal.ts' }, /Plan bash accepts|Plan bash|Plan inspection/],
+  ]) {
+    const toolCallId = `failed-plan-${++serial}`;
+    const tool = session.agent.state.tools.find(candidate => candidate.name === toolName);
+    let error;
+    try { await tool.execute(toolCallId, input, new AbortController().signal); } catch (caught) { error = caught; }
+    assert.ok(error instanceof Error);
+    const result = await session.extensionRunner.emitToolResult({ type: 'tool_result', toolCallId, toolName, input,
+      content: [{ type: 'text', text: error.message + '\nAPI_TOKEN=diagnostic-secret' }], isError: true });
+    const context = await session.extensionRunner.emitContext([{ role: 'toolResult', toolCallId, toolName,
+      content: result.content, isError: true, timestamp: 1 }]);
+    if (!expected.test(JSON.stringify(context)) || JSON.stringify(context).includes('diagnostic-secret')) diagnosticFailures.push(toolName);
+  }
+  for (const toolName of ['write', 'codemode']) {
+    const toolCallId = `blocked-plan-${++serial}`;
+    const input = toolName === 'write' ? { path: '.env', content: 'never written' } : {};
+    const blocked = await session.extensionRunner.emitToolCall({ type: 'tool_call', toolCallId, toolName, input });
+    assert.equal(blocked?.block, true);
+    const context = await session.extensionRunner.emitContext([{ role: 'toolResult', toolCallId, toolName,
+      content: [{ type: 'text', text: blocked.reason }], isError: true, timestamp: 1 }]);
+    if (!JSON.stringify(context).includes(blocked.reason)) diagnosticFailures.push(toolName);
+  }
+  const restoredError = await session.extensionRunner.emitContext([{ role: 'toolResult', toolCallId: 'restored-error',
+    toolName: 'read', content: [{ type: 'text', text: 'Old native error TOKEN=restored-secret' }], isError: true, timestamp: 1 }]);
+  assert.match(JSON.stringify(restoredError), /Earlier tool content withheld/);
+  assert.doesNotMatch(JSON.stringify(restoredError), /Old native error|restored-secret/);
+  const reviewFailures = diagnosticFailures.map(name => `diagnostics/${name}`);
+  // Real file callers must show ordinary camelCase auth code unchanged while
+  // still masking uppercase prefixed assignments and legacy bare credentials.
+  const authCode = 'const accessToken = getToken();\nif (apiSecret === x) useSecret();\n';
+  const authFixture = path.join(cwd, 'src', 'auth-code.ts');
+  fs.writeFileSync(authFixture, authCode + 'GITHUB_TOKEN=env-canary\ntoken=bare-canary\n');
+  try {
+    for (const [toolName, input] of [['read', { path: 'src/auth-code.ts' }],
+      ['grep', { pattern: 'accessToken|apiSecret|GITHUB_TOKEN|^token=', path: 'src/auth-code.ts' }]]) {
+      const value = JSON.stringify(await call(session, toolName, input));
+      if (!value.includes('const accessToken = getToken();') || !value.includes('if (apiSecret === x) useSecret();')
+        || !value.includes('REDACTED') || /env-canary|bare-canary/.test(value)) reviewFailures.push(`source/${toolName}`);
+    }
+    const value = JSON.stringify(await call(session, 'read', { path: 'src/auth-code.ts' }));
+    if (!value.includes('if (apiSecret === x) useSecret();') || !value.includes('REDACTED')) reviewFailures.push('source/equality');
+  } finally { fs.rmSync(authFixture, { force: true }); }
+  // Public exact-Pi provider shaping, with no network: Anthropic stops in the
+  // onPayload hook; Responses conversion is a pure exported API helper.
+  const { stream: anthropicStream } = await import('@earendil-works/pi-ai/api/anthropic-messages');
+  const { convertResponsesMessages } = await import('@earendil-works/pi-ai/api/openai-responses-shared');
+  const protocolName = 'inspect_AbCdEf0123456789xyZ_AbCdEf0123456789xyZ';
+  const callId = 'call_AbCdEf0123456789xyZ_AbCdEf0123456789xyZ';
+  const signature = 'AbCdEf0123456789xyZ_'.repeat(4);
+  for (const api of ['anthropic-messages', 'openai-responses']) {
+    const model = { api, provider: api === 'anthropic-messages' ? 'anthropic' : 'openai', id: 'synthetic', name: 'Synthetic',
+      baseUrl: 'https://example.invalid', reasoning: true, input: ['text'], maxTokens: 2048, contextWindow: 20000,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+    const assistant = content => ({ role: 'assistant', content, api, provider: model.provider, model: model.id, stopReason: 'toolUse', timestamp: 1 });
+    const id = api === 'openai-responses' ? `${callId}|fc_synthetic` : callId;
+    const toolCall = { type: 'toolCall', id, name: protocolName, arguments: { token: 'argument-canary', query: 'ordinary research' }, namespace: 'synthetic' };
+    const result = { role: 'toolResult', toolCallId: id, toolName: protocolName, content: [{ type: 'text', text: 'ordinary result' }], timestamp: 1 };
+    const system = { role: 'system', content: 'Plan research', timestamp: 1, toolsAdded: [{ name: protocolName,
+      description: 'Synthetic read-only research', parameters: { type: 'object', properties: { query: { type: 'string' } } } }] };
+    async function shape(messages, thinkingEnabled = false) {
+      if (api === 'openai-responses') return convertResponsesMessages(model, { messages }, new Set(['openai']));
+      let payload, sent = false;
+      const stream = anthropicStream(model, { messages }, { thinkingEnabled, client: { messages: { stream() { sent = true; throw new Error('No network allowed'); } } },
+        onPayload(value) { payload = value; throw new Error('Synthetic payload captured'); } });
+      await stream.result();
+      assert.equal(sent, false, 'Provider transport was reached');
+      assert.ok(payload, 'Provider did not shape the sanitized context');
+      return payload;
+    }
+    const unsignedInput = [system, assistant([toolCall]), result];
+    const unsigned = await session.extensionRunner.emitContext(unsignedInput);
+    const outCall = unsigned.find(message => message.role === 'assistant')?.content.find(block => block.type === 'toolCall');
+    if (outCall?.id !== id || outCall?.name !== protocolName || outCall?.namespace !== 'synthetic'
+      || outCall?.arguments.token !== '[REDACTED]' || outCall?.arguments.query !== 'ordinary research') reviewFailures.push(`protocol/${api}`);
+    const wire = await shape(unsigned);
+    const serialized = JSON.stringify(wire);
+    if (serialized.includes('argument-canary') || !serialized.includes(callId) || !serialized.includes(protocolName)
+      || serialized.includes('No result provided')) reviewFailures.push(`wire/${api}`);
+    // Neither known secrets nor unknown private notes in old thinking may leak.
+    // An opaque payload cannot be declared safe merely because a regex misses it.
+    const reasoningCases = [
+      { type: 'thinking', thinking: 'old-private-note TOKEN=thinking-canary', thinkingSignature: api === 'openai-responses'
+        ? JSON.stringify({ type: 'reasoning', id: 'rs_synthetic', summary: [], encrypted_content: signature }) : signature },
+      { type: 'thinking', thinking: '[Reasoning redacted]', thinkingSignature: api === 'openai-responses'
+        ? JSON.stringify({ type: 'reasoning', id: 'rs_redacted', summary: [], encrypted_content: signature }) : signature, redacted: true },
+      { type: 'thinking', thinking: 'old-private-note TOKEN=thinking-canary' },
+      { ...toolCall, thoughtSignature: signature },
+      { type: 'text', text: 'ordinary signed answer', textSignature: signature },
+    ];
+    for (const block of reasoningCases) {
+      const source = [system, assistant(block.type === 'toolCall' ? [block] : [block, toolCall]), result,
+        { role: 'user', content: 'Continue authorized research', timestamp: 2 }];
+      const snapshot = JSON.stringify(source);
+      const context = await session.extensionRunner.emitContext(source);
+      const text = JSON.stringify(context);
+      if (/old-private-note|thinking-canary/.test(text) || text.includes(signature)
+        || context.some(message => message.role === 'assistant' || message.role === 'toolResult')) reviewFailures.push(`signed/${api}/${block.type}`);
+      assert.equal(JSON.stringify(source) === snapshot, true, 'Redaction mutated original signed history');
+      const shaped = JSON.stringify(await shape(context, true));
+      if (/old-private-note|thinking-canary|encrypted_content|redacted_thinking|tool_use|function_call_output/.test(shaped)
+        || shaped.includes(signature)) reviewFailures.push(`signed-wire/${api}/${block.type}`);
+    }
+  }
+  assert.deepEqual(reviewFailures, [], 'Fresh review regressions: diagnostics/source/provider protocol');
+  console.log('PASS fresh review: real Plan diagnostics, source fidelity, protocol IDs/arguments, opaque reasoning rebasing and offline Anthropic/Responses shaping');
   // Real final-context emission includes restored system text and tool schemas.
   const toolDefinition = { name: 'synthetic', description: 'normal', parameters: { type: 'object', properties: { token: { type: 'string' } } } };
   const finalContext = await session.extensionRunner.emitContext([

@@ -37,34 +37,57 @@ function gitMetadata(cwd: string, args: string[], input?: string): string {
   return result.stdout;
 }
 
-function excluded(root: string, target: string): boolean {
+function privatePath(root: string, target: string): boolean {
   const relative = path.relative(root, target);
-  if (SECRET_PATH.test(`/${relative}`) || relative.split(/[\\/]/).some(part => PRIVATE_COMPONENT.test(part))
-      || PRIVATE_FILE.test(path.basename(relative))) return true;
-  const project = findProjectRoot(root);
-  if (fs.existsSync(path.join(project, ".git")) && relative) {
-    // --no-index applies ignore rules even to tracked files. No ignore cache:
-    // authorization must reflect a rule change between enumeration and reading.
-    return gitMetadata(project, ["check-ignore", "--no-index", "-z", "--stdin"], `${path.relative(project, target).replaceAll("\\", "/")}\0`).length > 0;
-  }
-  return false;
+  return SECRET_PATH.test(`/${relative}`) || relative.split(/[\\/]/).some(part => PRIVATE_COMPONENT.test(part))
+    || PRIVATE_FILE.test(path.basename(relative));
 }
 
-export function authorizePlanPath(cwd: string, requested: string): { root: string; lexical: string; canonical: string; stat: fs.Stats } {
+function validateModelPath(requested: string): void {
   if (!requested || requested.length > 4096 || /[\x00-\x1f\x7f*?\[\]{}]/.test(requested)
       || /^[@~]|^[\\/]{2}/.test(requested) || /:/.test(requested.replace(/^[a-z]:[\\/]/i, ""))) {
     throw new Error("Plan requires a concrete workspace path (no aliases, devices, or wildcards).");
   }
-  const root = fs.realpathSync(cwd);
+}
+
+type PlanPath = { root: string; lexical: string; canonical: string; stat: fs.Stats };
+
+// Only internal enumeration may supply literal filesystem names. Model paths
+// still pass validateModelPath; containment/private/link/type checks are shared.
+function concreteIdentity(root: string, requested: string): PlanPath {
+  if (!requested || requested.length > 4096 || /[\x00-\x1f\x7f]/.test(requested)) throw new Error("Unsupported Plan filesystem identity.");
   const lexical = path.resolve(root, requested);
-  if (!isPathInside(root, lexical) || excluded(root, lexical)) throw new Error("Plan path is outside the workspace or confidential.");
+  if (!isPathInside(root, lexical) || privatePath(root, lexical)) throw new Error("Plan path is outside the workspace or confidential.");
   const canonical = fs.realpathSync(lexical);
-  if (!isPathInside(root, canonical) || excluded(root, canonical)) throw new Error("Plan link resolves outside the workspace or to confidential data.");
+  if (!isPathInside(root, canonical) || privatePath(root, canonical)) throw new Error("Plan link resolves outside the workspace or to confidential data.");
   const stat = fs.statSync(canonical);
   if (!stat.isFile() && !stat.isDirectory()) throw new Error("Plan supports only regular files and directories.");
   if (stat.isFile() && stat.nlink !== 1) throw new Error("Plan rejects hard-linked files.");
-  if (stat.isFile() && stat.size > MAX_FILE_BYTES) throw new Error("Plan file size limit reached.");
   return { root, lexical, canonical, stat };
+}
+
+function ignoredPaths(root: string, targets: PlanPath[]): Set<string> {
+  // One fresh query per batch. Results are local to this synchronous enumeration
+  // or authorization, never reused for another directory/call or a content read.
+  const paths = new Set(targets.flatMap(target => [target.lexical, target.canonical]).filter(target => target !== root));
+  if (!paths.size) return new Set();
+  const project = findProjectRoot(root);
+  if (!fs.existsSync(path.join(project, ".git"))) return new Set();
+  const input = [...paths].map(target => path.relative(project, target).replaceAll("\\", "/")).join("\0") + "\0";
+  const ignored = gitMetadata(project, ["check-ignore", "--no-index", "-z", "--stdin"], input);
+  return new Set(ignored.split("\0").filter(Boolean).map(relative => path.resolve(project, relative)));
+}
+
+function authorizeConcretePath(root: string, requested: string): PlanPath {
+  const target = concreteIdentity(root, requested);
+  const ignored = ignoredPaths(root, [target]);
+  if (ignored.has(target.lexical) || ignored.has(target.canonical)) throw new Error("Plan path is outside the workspace or confidential.");
+  return target;
+}
+
+export function authorizePlanPath(cwd: string, requested: string): PlanPath {
+  validateModelPath(requested);
+  return authorizeConcretePath(fs.realpathSync(cwd), requested);
 }
 
 function sameFile(a: fs.Stats, b: fs.Stats): boolean {
@@ -72,10 +95,16 @@ function sameFile(a: fs.Stats, b: fs.Stats): boolean {
 }
 
 export function readPlanFile(cwd: string, requested: string, checkBudget?: () => void): Buffer {
+  validateModelPath(requested);
+  return readConcreteFile(fs.realpathSync(cwd), requested, checkBudget);
+}
+
+function readConcreteFile(root: string, requested: string, checkBudget?: () => void): Buffer {
   checkBudget?.();
-  const before = authorizePlanPath(cwd, requested);
+  const before = authorizeConcretePath(root, requested);
   checkBudget?.();
   if (!before.stat.isFile()) throw new Error("Plan read requires a regular file.");
+  if (before.stat.size > MAX_FILE_BYTES) throw new Error("Plan file size limit reached.");
   const fd = fs.openSync(before.canonical, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
     const opened = fs.fstatSync(fd);
@@ -89,7 +118,7 @@ export function readPlanFile(cwd: string, requested: string, checkBudget?: () =>
       offset += count;
       checkBudget?.();
     }
-    const after = authorizePlanPath(cwd, requested);
+    const after = authorizeConcretePath(root, requested);
     checkBudget?.();
     if (before.canonical !== after.canonical || !sameFile(opened, fs.fstatSync(fd)) || !sameFile(opened, after.stat)) {
       throw new Error("Plan file changed during reading.");
@@ -193,66 +222,107 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
     if (signal?.aborted) throw new Error("Plan inspection aborted.");
     if (Date.now() > deadline) throw new Error("Plan inspection deadline reached; narrow the path or pattern.");
   }
-  async function visit(requested: string): Promise<void> {
+  let skippedContent = false;
+  function displayPath(target: PlanPath): string {
+    return path.relative(start.stat.isDirectory() ? start.lexical : path.dirname(start.lexical), target.lexical).replaceAll("\\", "/");
+  }
+  function selected(target: PlanPath): boolean {
+    const display = displayPath(target);
+    return matchesGlob(glob, display) || (!glob.includes("/") && matchesGlob(glob, path.basename(display)));
+  }
+  function enumerate(requested: string): PlanPath[] {
+    checkBudget();
+    // Fresh directory authorization immediately before enumeration, even when a
+    // parent's batch previously allowed it. Never carry ignore results into it.
+    const directory = authorizeConcretePath(start.root, requested);
+    checkBudget();
+    if (!directory.stat.isDirectory() || seen.has(directory.canonical)) return [];
+    seen.add(directory.canonical);
+    const children: PlanPath[] = [];
+    for (const name of fs.readdirSync(directory.canonical).sort()) {
+      checkBudget();
+      if (++visited > 10_000) { stopped = true; break; }
+      try { children.push(concreteIdentity(start.root, path.join(directory.lexical, name))); }
+      catch { /* Confidential/unreadable/non-regular entries are not listed. */ }
+    }
+    const ignored = ignoredPaths(start.root, children);
+    checkBudget();
+    return children.filter(child => {
+      if (ignored.has(child.lexical) || ignored.has(child.canonical)) return false;
+      try {
+        // Do not publish a stale identity if a link/file changed while Git ran.
+        const current = concreteIdentity(start.root, child.lexical);
+        return current.canonical === child.canonical && sameFile(current.stat, child.stat);
+      } catch { return false; }
+    });
+  }
+  async function grepFile(target: PlanPath): Promise<void> {
     await setImmediate();
     checkBudget();
-    if (++visited > 10_000 || matches >= limit) { stopped = true; return; }
-    let target: ReturnType<typeof authorizePlanPath>;
-    try { target = authorizePlanPath(cwd, requested); } catch (error) {
-      if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
-      return;
-    }
-    const display = path.relative(start.stat.isDirectory() ? start.lexical : path.dirname(start.lexical), target.lexical).replaceAll("\\", "/");
-    if (target.stat.isDirectory()) {
-      if (seen.has(target.canonical)) return;
-      seen.add(target.canonical);
-      // Reauthorize immediately before enumeration. Each child is separately
-      // authorized before stat, output, traversal, and (for grep) content read.
-      authorizePlanPath(cwd, requested);
-      for (const name of fs.readdirSync(target.canonical).sort()) {
-        if (stopped) break;
-        await visit(path.join(target.lexical, name));
-      }
-      return;
-    }
-    if (tool === "ls") { output.push(display); matches++; return; }
-    if (!(matchesGlob(glob, display) || (!glob.includes("/") && matchesGlob(glob, path.basename(display))))) return;
-    if (tool === "find") { output.push(display); matches++; return; }
     let text: string;
-    try { text = readPlanFile(cwd, target.lexical, checkBudget).toString("utf8"); } catch (error) {
+    try { text = readConcreteFile(start.root, target.lexical, checkBudget).toString("utf8"); } catch (error) {
       // Abort/expiry during preprocessing is not an unreadable no-match result.
       checkBudget();
-      if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
+      if (error instanceof Error && error.message === "Plan file size limit reached.") skippedContent = true;
       return;
     }
     const lines = text.split("\n");
+    // Skip the whole file before matching/output, including overlong context
+    // lines. The notice has no filename/count and is only set after authorization.
+    for (let index = 0; index < lines.length; index++) {
+      if (index % 32 === 0) checkBudget();
+      if (lines[index].length > 16_384) { skippedContent = true; return; }
+    }
+    const display = displayPath(target);
     for (let index = 0; index < lines.length && matches < limit; index++) {
       if (index % 32 === 0) await setImmediate();
       checkBudget();
       const line = lines[index];
-      if (line.length > 16_384) throw new Error("Plan grep line length limit reached (16,384 characters); narrow the path.");
       const hit = regex ? regex.test(line) : (input.ignoreCase ? line.toLowerCase().includes(pattern.toLowerCase()) : line.includes(pattern));
       if (!hit) continue;
       matches++;
       for (let row = Math.max(0, index - context); row <= Math.min(lines.length - 1, index + context); row++) output.push(`${display}:${row + 1}:${lines[row].slice(0, 500)}`);
     }
   }
-  if (tool === "ls") {
-    if (!start.stat.isDirectory()) throw new Error("Plan ls requires a directory.");
-    for (const name of fs.readdirSync(start.canonical).sort()) {
+  async function visitDirectory(requested: string): Promise<void> {
+    await setImmediate();
+    checkBudget();
+    let children: PlanPath[];
+    try { children = enumerate(requested); } catch (error) {
       checkBudget();
-      if (matches >= limit) { stopped = true; break; }
-      try {
-        const child = authorizePlanPath(cwd, path.join(start.lexical, name));
-        output.push(`${name}${child.stat.isDirectory() ? "/" : ""}`); matches++;
-      } catch (error) {
-        if (error instanceof Error && error.message === "Plan file size limit reached.") throw error;
-        // Confidential/unreadable entries are not listed.
-      }
-      await setImmediate();
+      if (error instanceof Error && error.message.includes("Git")) throw error;
+      return;
     }
-  } else await visit(start.lexical);
-  return redactSensitiveText(output.join("\n") || "No authorized matches.", Number.POSITIVE_INFINITY, checkBudget) + (stopped || matches >= limit ? "\n[Plan inspection limit reached; narrow the path or pattern.]" : "");
+    // Metadata output is synchronous with its fresh batch: no yield, recursion
+    // or content read can change ignores between that query and child delivery.
+    for (const child of children) {
+      checkBudget();
+      if (matches >= limit) { stopped = true; return; }
+      if (tool === "ls") {
+        output.push(`${path.basename(child.lexical)}${child.stat.isDirectory() ? "/" : ""}`); matches++;
+      } else if (tool === "find" && child.stat.isFile() && selected(child)) {
+        output.push(displayPath(child)); matches++;
+      }
+    }
+    if (tool === "ls" || stopped) return;
+    for (const child of children) {
+      checkBudget();
+      if (stopped || matches >= limit) { stopped = true; return; }
+      if (child.stat.isDirectory()) await visitDirectory(child.lexical);
+      else if (tool === "grep" && selected(child)) await grepFile(child);
+    }
+  }
+  if (tool === "ls" && !start.stat.isDirectory()) throw new Error("Plan ls requires a directory.");
+  visited = 1;
+  if (!limit) stopped = true;
+  else if (start.stat.isDirectory()) await visitDirectory(start.lexical);
+  else if (selected(start)) {
+    if (tool === "find") { output.push(displayPath(start)); matches++; }
+    else await grepFile(start);
+  }
+  return redactSensitiveText(output.join("\n") || "No authorized matches.", Number.POSITIVE_INFINITY, checkBudget)
+    + (skippedContent ? "\n[Plan skipped files exceeding content limits; narrow the path or glob.]" : "")
+    + (stopped || matches >= limit ? "\n[Plan inspection limit reached; narrow the path or pattern.]" : "");
 }
 
 export function planMetadata(cwd: string, command: "pwd" | "head"): string {

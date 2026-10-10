@@ -102,7 +102,8 @@ assert.equal(await captureWorktree(root, { maxBytes: 1 }), null, 'size limit ign
 assert.equal(await captureWorktree(root, { maxFiles: 1 }), null, 'entry limit ignored');
 assert.equal(await captureWorktree(root, { signal: AbortSignal.abort() }), null);
 // isolate() is a real repository with an unborn HEAD, not a non-repository.
-assert.equal(fs.realpathSync(git(scratch, 'rev-parse', '--show-toplevel').trim()), fs.realpathSync(scratch));
+// Native resolution expands Windows 8.3 TEMP aliases on both sides.
+assert.equal(fs.realpathSync.native(git(scratch, 'rev-parse', '--show-toplevel').trim()), fs.realpathSync.native(scratch));
 assert.equal(git(scratch, 'symbolic-ref', '--short', 'HEAD').trim(), 'main');
 const unbornHead = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: scratch, encoding: 'utf8', windowsHide: true });
 assert.equal(unbornHead.error, undefined);
