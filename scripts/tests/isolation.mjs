@@ -1,6 +1,22 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { git } from './git-fixture.mjs';
+
+// Preprocessing/non-repository probes must be siblings of the isolated Git root,
+// not descendants. This does not change Pi's real-Git discovery boundary.
+export function nonGitFixture() {
+  const fixture = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-nongit-'));
+  const cleanup = () => fs.rmSync(fixture, { recursive: true, force: true });
+  try {
+    for (let directory = fixture; ; directory = path.dirname(directory)) {
+      if (fs.existsSync(path.join(directory, '.git'))) throw new Error('Non-Git fixture has a Git ancestor.');
+      if (directory === path.dirname(directory)) break;
+    }
+    process.on('exit', cleanup);
+    return fixture;
+  } catch (error) { cleanup(); throw error; }
+}
 
 // Only synthetic test state can reach a suite, including when run directly.
 export function isolate() {
@@ -23,6 +39,10 @@ export function isolate() {
     GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_EMAIL: 'test@example.invalid',
   });
   fs.writeFileSync(process.env.GIT_CONFIG_GLOBAL, '[core]\n autocrlf = false\n');
+  // Pi bounds ancestor resource discovery at .git. Use a real synthetic repo:
+  // Plan's fail-closed ignore authorization must not encounter an invalid marker.
+  // No host templates/hooks or user Git configuration enter this test boundary.
+  git(scratch, '-c', 'core.hooksPath=/dev/null', 'init', '--quiet', '--initial-branch=main', '--template=');
   fs.mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true });
   process.on('exit', () => fs.rmSync(scratch, { recursive: true, force: true }));
   return scratch;

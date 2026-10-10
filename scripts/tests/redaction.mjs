@@ -1,17 +1,23 @@
 // Subprocess bounds keep synchronous failed-match regressions from hanging Plan.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { isolate } from './isolation.mjs';
+import { isolate, nonGitFixture } from './isolation.mjs';
 isolate();
 const repo = path.resolve(import.meta.dirname, '../..');
-function bounded(name, code) {
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4096,
-  });
-  // Never dump tokens/file content when a recognition or budget assertion fails.
-  assert.equal(result.status, 0, `${name}: subprocess failed/exceeded 5s (status=${result.status}, error=${result.error?.code ?? 'none'})`);
-  console.log(`PASS ${name}: subprocess bound 5s`);
+function bounded(name, code, fixture) {
+  try {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', code, ...(fixture ? [fixture] : [])], {
+      cwd: repo, encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4096,
+    });
+    // Never dump tokens/file content when a recognition or budget assertion fails.
+    assert.equal(result.status, 0, `${name}: subprocess failed/exceeded 5s (status=${result.status}, error=${result.error?.code ?? 'none'})`);
+    console.log(`PASS ${name}: subprocess bound 5s`);
+  } finally {
+    // Parent-owned fixture cleanup also runs when the bounded child is killed.
+    if (fixture) fs.rmSync(fixture, { recursive: true, force: true });
+  }
 }
 bounded('JWT failed matches and neighboring synchronous redaction expressions', String.raw`
   import assert from 'node:assert/strict';
@@ -76,10 +82,12 @@ bounded('Plan JWT preprocessing: bounded long-line failure, in-scan deadline/abo
   import assert from 'node:assert/strict';
   import fs from 'node:fs';
   import path from 'node:path';
-  import { isolate } from './scripts/tests/isolation.mjs';
   import { inspectPlanFiles } from './agent/neura/plan-files.ts';
-  const scratch = isolate();
-  const cwd = path.join(scratch, 'jwt-plan'); fs.mkdirSync(cwd);
+  import { findProjectRoot } from './agent/neura/plan-policy.ts';
+  // Inherit the synthetic profile, but inspect outside its Git ancestry: this
+  // bound measures preprocessing, not repeated Git ignore subprocess startup.
+  const cwd = process.argv[1];
+  assert.equal(findProjectRoot(cwd), cwd, 'Preprocessing fixture acquired a Git ancestor');
   const hostile = path.join(cwd, 'hostile.txt');
   fs.writeFileSync(hostile, 'eyJaaaaaaaa-'.repeat(40_000));
   // Preserve explicit size rejection, rather than returning a false no-match.
@@ -119,4 +127,4 @@ bounded('Plan JWT preprocessing: bounded long-line failure, in-scan deadline/abo
     await assert.rejects(() => inspectPlanFiles(cwd, 'grep', { pattern: 'absent', literal: true, path: 'hostile.txt' }, controller.signal), /aborted/);
     assert.equal(timerFired, true, 'Real abort timer was starved or inspection completed without observing it');
   } finally { clearTimeout(timer); String.prototype.matchAll = originalMatchAll; }
-`);
+`, nonGitFixture());

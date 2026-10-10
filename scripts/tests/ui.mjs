@@ -148,7 +148,8 @@ const { registerHealth } = await import('../../agent/extensions/harness-health.t
 let inspectHealth;
 let inspectedHealth = 0;
 let failHealth = false;
-registerHealth({registerCommand(_name,command){inspectHealth=command.handler;}}, async ()=>{ inspectedHealth++; if (failHealth) throw new Error("Authorization: Bearer stale-widget-secret"); return {
+const healthCommands = [{ name: 'skill:fixture', source: 'skill', sourceInfo: { path: 'synthetic' } }];
+registerHealth({getAllTools(){return [{name:'read'}];},getCommands(){return healthCommands;},registerCommand(_name,command){inspectHealth=command.handler;}}, async (_cwd, _signal, _tools, commands)=>{ assert.equal(commands, healthCommands, 'health must receive current public discovery identity'); inspectedHealth++; if (failHealth) throw new Error("Authorization: Bearer stale-widget-secret"); return {
   state:'degraded',pi:piRuntimeStatus('9.9.9',runtimeContract.piVersion),
   identity:'neura 2.5.1 · source:0123456789ab · manifest abcdef012345',
   core:'fixture',workflow:'fixture',context:'fixture',workspace:'fixture',bridges:'fixture',
@@ -181,7 +182,7 @@ for (const outcome of ['ready', 'reject', 'pre-aborted']) {
   const pending = new Promise((resolve, reject) => { finish = outcome === 'reject' ? reject : resolve; });
   const running = new Promise((resolve) => { started = resolve; });
   let handler;
-  registerHealth({ registerCommand(_name, command) { handler = command.handler; } }, async (_cwd, signal) => {
+  registerHealth({ getAllTools() { return [{name:'read'}]; }, getCommands() { return []; }, registerCommand(_name, command) { handler = command.handler; } }, async (_cwd, signal) => {
     calls++;
     assert.equal(signal, controller.signal);
     started();

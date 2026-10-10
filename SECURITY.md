@@ -96,7 +96,13 @@ response-time or embargo guarantee is offered.
   flags: it lacks trusted required-suite/candidate-bound evidence. Quick PASS is
   detector-only feedback, never complete engineering verification. See
   [verification limits](docs/VERIFICATION.md).
-- Checkpoints/undo, host health, memory, skill scans, and October are YOLO-only.
+- Checkpoints/undo, host health, memory, and October are YOLO-only.
+  `/skill-doctor` is read-only registry/discovery-identity validation in any mode;
+  it does not scan personal skill directories or run host diagnostics. Supported
+  skill validator/catalog, discovery-gate, and managed installer changes remain
+  protected-control actions requiring
+  explicit Work approval; headless Work fails closed. Skill permissions restrict,
+  never grant authority. See [supported skills](docs/SKILLS.md).
 - `/health` executes only existing absolute stdio MCP binaries and sends
   bounded initialize requests only to HTTPS or loopback HTTP endpoints.
   All configured HTTP header values must use placeholders from the existing

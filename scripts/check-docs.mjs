@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspectSkills } from '../agent/neura/skills-registry.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const required = [
@@ -129,6 +130,9 @@ assert.equal(`>=${release.nodeMinimum}`, rootPackage.engines.node);
 assert.deepEqual(release.automaticExecutables, contract.automaticExecutables);
 assert.deepEqual(release.runtimePackages, JSON.parse(fs.readFileSync(path.join(repoRoot, 'agent/settings.json'))).packages);
 const managed = ['agent/extensions', 'agent/themes', 'agent/neura'].flatMap(dir => fs.readdirSync(path.join(repoRoot, dir)).filter(name => name !== 'release-manifest.json' && fs.statSync(path.join(repoRoot, dir, name)).isFile()).map(name => `${dir}/${name}`));
+const skills = inspectSkills({ root: path.join(repoRoot, 'agent/neura'), selectionFile: null, piVersion: contract.piVersion });
+assert.equal(skills.valid, true, skills.errors.join('; '));
+managed.push(...skills.packages.map(skill => `agent/neura/skills/${skill.name}/${skill.version}/SKILL.md`));
 managed.push('agent/mcp.json', 'launcher/neura.cmd');
 assert.deepEqual(Object.keys(release.files).sort(), managed.sort(), 'release manifest does not cover every managed file');
 for (const [name, expected] of Object.entries(release.files)) {
