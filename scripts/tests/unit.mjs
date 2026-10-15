@@ -319,11 +319,21 @@ assert.deepEqual(piRuntimeStatus("9.9.9", runtimeContract.piVersion), {
   label: `pi 9.9.9 (requires ${runtimeContract.piVersion})`,
   action: "update Neura for installed Pi 9.9.9; do not downgrade Pi",
 }, "Pi runtime drift was not actionable");
-for (const version of ["0.99.2", "1.0.4", "1.0.5"]) {
+const requiredPiParts = runtimeContract.piVersion.split('.').map(Number);
+assert.equal(requiredPiParts.length, 3);
+assert.ok(requiredPiParts.every(Number.isSafeInteger), 'Pi target must be an exact stable version');
+const previousPiParts = [...requiredPiParts];
+const previousPiIndex = previousPiParts.findLastIndex(part => part > 0);
+assert.ok(previousPiIndex >= 0, 'Pi target needs an older stable regression fixture');
+previousPiParts[previousPiIndex] -= 1;
+previousPiParts.fill(0, previousPiIndex + 1);
+const nextPiParts = [...requiredPiParts];
+nextPiParts[2] += 1;
+for (const version of ['0.0.0', previousPiParts.join('.')]) {
   assert.equal(piRuntimeStatus(version, runtimeContract.piVersion).action,
     `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`, "older Pi did not get an upgrade action");
 }
-for (const version of ["1.1.1", `${runtimeContract.piVersion}-beta.1`, "invalid"]) {
+for (const version of [nextPiParts.join("."), `${runtimeContract.piVersion}-beta.1`, "invalid"]) {
   assert.match(piRuntimeStatus(version, runtimeContract.piVersion).action, /update Neura.*do not downgrade Pi/, "mismatch recommended a Pi downgrade");
 }
 assert.deepEqual(piRuntimeStatus(null, runtimeContract.piVersion), {

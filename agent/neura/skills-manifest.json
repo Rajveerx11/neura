@@ -3,18 +3,18 @@
   "skills": [
     {
       "name": "neura-verification",
-      "version": "1.0.1",
-      "path": "skills/neura-verification/1.0.1/SKILL.md",
-      "sha256": "6302764dbd2a6a1a61fe815e03f997838a2a2cb83e0b6b8a4f7a2cd281de7e68",
+      "version": "1.0.2",
+      "path": "skills/neura-verification/1.0.2/SKILL.md",
+      "sha256": "ff51599de9f8b128d0f16c0f91dcfa76ca0e806abaf4c7b826ecba19bfeaa8af",
       "source": {
         "repository": "https://github.com/Rajveerx11/neura",
-        "path": "agent/neura/skills/neura-verification/1.0.1/SKILL.md",
-        "version": "1.0.1"
+        "path": "agent/neura/skills/neura-verification/1.0.2/SKILL.md",
+        "version": "1.0.2"
       },
       "owner": "Rajveerx11",
       "updatePolicy": "reviewed-version-and-digest-change-with-smoke-tests",
       "compatibility": {
-        "pi": "1.1.0",
+        "pi": "1.2.0",
         "profile": "read-only-guidance-v1"
       },
       "permissions": {
