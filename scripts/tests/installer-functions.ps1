@@ -73,7 +73,8 @@ foreach ($case in @(@('node', 'v24.19.0'), @('npm', '11.6.0'), @('pi', $pin), @(
 }
 $probe = [PSCustomObject]@{ Found = $true; ExitCode = 0; Output = 'v22.19.0' }
 if ((Get-NeuraVersionProblem 'node' $probe $pin $minimum) -notlike '*24.15.0 or newer*') { throw 'Old Node accepted' }
-$probe.Output = '1.1.1'
+$reviewedPi = [version]$pin
+$probe.Output = '{0}.{1}.{2}' -f $reviewedPi.Major, $reviewedPi.Minor, ($reviewedPi.Build + 1)
 $newer = Get-NeuraVersionProblem 'pi' $probe $pin $minimum
 if ($newer -notlike '*Update Neura; do not downgrade Pi.*' -or $newer -like '*npm install*') { throw 'Newer Pi was downgraded' }
 foreach ($older in @('0.99.2', '1.0.4', '1.0.5')) {
