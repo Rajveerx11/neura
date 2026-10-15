@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Advanced the coupled Pi runtime, AI, and TUI target to exact `1.2.0` after
+  fresh dependency-update CI rejected the stale `1.1.0` target. Updated runtime
+  identity and immutable guidance `1.0.2` together. Required compatibility,
+  audit, browser, and installer checks remain enforced. This source update does
+  not install a live harness or establish production readiness. Rollback restores
+  the coupled dependency graph, contracts, guidance manifest, and release hashes;
+  it never downgrades the user's global Pi.
+
 - Advanced coordinated Pi runtime, AI, TUI, lockfile and runtime/managed identity
   to exact `1.1.0` after the latest-stable gate rejected `1.0.4`. Reviewed the
   official source and published lifecycle/dependency delta; external resolutions

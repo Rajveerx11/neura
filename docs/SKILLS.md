@@ -1,7 +1,7 @@
 # Reproducible optional skills
 
 Neura supports one repository-owned, read-only guidance skill:
-`neura-verification` version `1.0.1`. It interprets existing harness/proof evidence;
+`neura-verification` version `1.0.2`. It interprets existing harness/proof evidence;
 it does not execute verification, health, installers, network calls, or writes.
 It is **disabled by default**. Unsupported optional/personal skills are outside
 this supported catalog; do not enable them as Neura capabilities.
@@ -11,7 +11,7 @@ this supported catalog; do not enable them as Neura capabilities.
 The machine-readable catalog is
 [`agent/neura/skills-manifest.json`](../agent/neura/skills-manifest.json).
 Each entry records the repository and source path, immutable package version,
-SHA-256 of its only file (`SKILL.md`), exact Pi compatibility (`1.1.0`), owner,
+SHA-256 of its only file (`SKILL.md`), exact Pi compatibility (`1.2.0`), owner,
 update policy, empty dependency list, and declarative permission restrictions.
 The managed release manifest also hashes the catalog, validator, and package.
 Versioned content plus digest avoids a circular hash of the commit containing
@@ -112,3 +112,7 @@ contract together with Neura's existing pins; never downgrade Pi to fit a skill.
 
 This source-only slice does not attest a clean-host install, live drift, release,
 or production readiness. Human Away remains preview-only.
+
+Version `1.0.2` advances the guidance target to Pi `1.2.0`. The prior
+`1.0.1` bytes remain in Git history; the active tree and manifest select only
+the new version and digest, preserving the registry ban on undeclared files. Permissions and default-disabled behavior are unchanged.
