@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 2.6.0-rc.1 (experimental candidate)
+
+Prepared on 2026-10-15. Publication remains gated; latest published release is
+`2.5.1`. See [candidate notes](releases/v2.6.0-rc.1.md) for scope, migration,
+verification, and rollback. Entries below preserve their original dated evidence;
+they do not independently certify this combined release candidate.
+
+- Aligned the release version, package/lock identity, runtime contract, managed
+  release manifest, and launch identity for `2.6.0-rc.1`. The compact launch
+  status preserves the complete RC version and READY indicator at 30 columns.
+  Both npm manifests
+  remain private; the Learn runtime retains its independent package version.
+  No production claim, live installation, or automatic stable promotion is made.
 
 - Advanced the coupled Pi runtime, AI, and TUI target to exact `1.2.0` after
   fresh dependency-update CI rejected the stale `1.1.0` target. Updated runtime

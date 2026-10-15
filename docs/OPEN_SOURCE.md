@@ -30,8 +30,9 @@ and production readiness are separate decisions.
 - [x] Historical release records remain labelled with channel that applied when
       published.
 
-Merged main also contains Work, Learn, and the 18-suite verifier. These are
-unreleased additions to `2.5.1`, not evidence that a new public release exists.
+The `2.6.0-rc.1` source candidate includes Work, Learn, Pi `1.2.0`, and the
+18-suite verifier. Candidate metadata and a GitHub draft do not establish a
+published release or completion of the remaining gates.
 
 ## Remaining public-release work
 
@@ -76,7 +77,8 @@ unreleased additions to `2.5.1`, not evidence that a new public release exists.
       profile.
 - [ ] Verify badge, issue forms, private advisory flow, branch protection, and CI
       from an external contributor account.
-- [ ] Create release notes that state experimental support scope and rollback.
+- [x] Prepared [v2.6.0-rc.1 notes](releases/v2.6.0-rc.1.md) with experimental
+      support scope, remaining limitations, migration, and rollback.
 - [ ] Re-run dependency, signature, secret, and documentation checks.
 
 ## Current blockers

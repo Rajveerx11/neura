@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "neuraVersion": "2.5.1",
+  "neuraVersion": "2.6.0-rc.1",
   "piVersion": "1.2.0",
   "nodeMinimum": "24.15.0",
   "automaticExecutables": {
@@ -69,7 +69,7 @@
     "agent/extensions/mcp.ts": "74b06da5ae9422f0864e779bd7408a9e9f54abfbbbc7c86474687a1f097a2ffb",
     "agent/extensions/modes.ts": "00197031dabe90ad9366e8329105a612df254c1e1845ea123cc482fd0ac9edd5",
     "agent/extensions/neura-memory.ts": "896b30dbe39c4b190993afd8b2405d4af255076676b342a073342155dbde1160",
-    "agent/extensions/neura.ts": "1da15609a8410a12a957cd18fa2c499548b28ede142da648b1c159307014bdf0",
+    "agent/extensions/neura.ts": "fb7adf40e10d9f41dec1aad5b32f0ba1d47bc8f58bd4b5fc26c814849fb2e5ba",
     "agent/extensions/october-bus.ts": "702da7afaeefc5670fd265a97c5893d8d7df581869a5d27b67e0efcf43c98866",
     "agent/extensions/plan-artifact.ts": "31a92daa7edb05856c27d5facf00ddb942c28bcc57217ae62c2ca704c8896073",
     "agent/extensions/presets.ts": "40a9268042a9564606c237d18901c07048783d7869f20efcbbfff7a7f275882a",
@@ -105,7 +105,7 @@
     "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e9766a7637436a87da406fa09cc80a15400722d49899520dcdd039caeac3da05",
-    "agent/neura/runtime-contract.json": "f83de8477f5e6a8fb895e352f5603372c2f721c884a29bc7f3881923d78663aa",
+    "agent/neura/runtime-contract.json": "0178a61dc8167e6002ed5cadef8ec8ab279b4bf0b860220af25391733aea9d4c",
     "agent/neura/runtime-install.mjs": "3f8e399fb15be05156b3654f57185894c28a14e5562a7fcd5ef22f74230cbacb",
     "agent/neura/skills-manifest.json": "1f76fdaa90aeec1fbed93e39cb78b73f97563b5eebcc1f16a707d42829ba3821",
     "agent/neura/skills-registry.mjs": "b2280dececb252c0a2f050c5432af9d93863fd7b4548e12006f29644e9306bb7",

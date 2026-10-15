@@ -16,9 +16,11 @@ Neura is a Windows-first engineering-agent harness built on
 interface, explicit operating modes, verification, recovery, local memory,
 model presets, and policy guardrails around stock Pi.
 
-Latest release: **2.5.1**. This checkout targets Pi `1.2.0` with source-only
-compatibility and installer-readiness changes; those changes and merged Work, Learn, and verification
-improvements are unreleased. Older checkouts and live installations may differ. Neura is
+Current candidate: **[2.6.0-rc.1](docs/releases/v2.6.0-rc.1.md)**, targeting exact
+Pi `1.2.0`. It includes Work, Learn, modular verification, Plan confidentiality
+hardening, and installer-readiness changes. Latest published release remains
+**2.5.1** until this candidate passes the release gates and is published.
+Older checkouts and live installations may differ. Neura is
 Apache-2.0-licensed experimental software in a public repository. It is **not
 production-ready**. Human Away remains preview-only and is not approved for
 unattended high-impact work. Public source availability is not a production or
