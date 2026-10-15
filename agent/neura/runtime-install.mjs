@@ -30,9 +30,14 @@ function safe(file) {
     if (p === path.dirname(p)) break;
   }
 }
+// Match the release gate's stable/prerelease identity grammar. Pi and Node
+// prerequisites keep their separate stable-version checks below.
+const numericIdentifier = '(?:0|[1-9]\\d*)';
+const prereleaseIdentifier = '(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)';
+const neuraVersion = new RegExp(`^${numericIdentifier}\\.${numericIdentifier}\\.${numericIdentifier}(?:-${prereleaseIdentifier}(?:\\.${prereleaseIdentifier})*)?$`);
 function valid(manifest) {
   if (manifest.schemaVersion !== 1 || !manifest.files || Array.isArray(manifest.files) ||
-      !/^\d+\.\d+\.\d+$/.test(manifest.neuraVersion) || !/^\d+\.\d+\.\d+$/.test(manifest.piVersion) ||
+      (typeof manifest.neuraVersion !== 'string' || manifest.neuraVersion.trim() !== manifest.neuraVersion || !neuraVersion.test(manifest.neuraVersion)) || !/^\d+\.\d+\.\d+$/.test(manifest.piVersion) ||
       !/^\d+\.\d+\.\d+$/.test(manifest.nodeMinimum) || !manifest.automaticExecutables || !manifest.runtimePackages || !manifest.capabilities) throw Error('invalid release manifest');
   for (const [name, expected] of Object.entries(manifest.files)) {
     managedName(name);

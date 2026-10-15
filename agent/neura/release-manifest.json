@@ -106,7 +106,7 @@
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e9766a7637436a87da406fa09cc80a15400722d49899520dcdd039caeac3da05",
     "agent/neura/runtime-contract.json": "0178a61dc8167e6002ed5cadef8ec8ab279b4bf0b860220af25391733aea9d4c",
-    "agent/neura/runtime-install.mjs": "3f8e399fb15be05156b3654f57185894c28a14e5562a7fcd5ef22f74230cbacb",
+    "agent/neura/runtime-install.mjs": "4a57e8fb87388d2d2a25a60269caafffea0e628b6d91154f96ea1a68b0bf9019",
     "agent/neura/skills-manifest.json": "1f76fdaa90aeec1fbed93e39cb78b73f97563b5eebcc1f16a707d42829ba3821",
     "agent/neura/skills-registry.mjs": "b2280dececb252c0a2f050c5432af9d93863fd7b4548e12006f29644e9306bb7",
     "agent/neura/skills/neura-verification/1.0.2/SKILL.md": "ff51599de9f8b128d0f16c0f91dcfa76ca0e806abaf4c7b826ecba19bfeaa8af",

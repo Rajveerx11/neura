@@ -13,6 +13,10 @@ they do not independently certify this combined release candidate.
   Both npm manifests
   remain private; the Learn runtime retains its independent package version.
   No production claim, live installation, or automatic stable promotion is made.
+- Enabled strict Neura prerelease identities in the managed installer while
+  retaining stable Pi/Node prerequisite checks. Real staging rejects malformed
+  numeric prereleases before mutation; synthetic activation, upgrade, and
+  recovery exercise the current candidate identity.
 
 - Advanced the coupled Pi runtime, AI, and TUI target to exact `1.2.0` after
   fresh dependency-update CI rejected the stale `1.1.0` target. Updated runtime
