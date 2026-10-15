@@ -95,7 +95,7 @@ and workspace-contained overrides are rejected.
 ## Development graph
 
 `package.json` pins Pi `1.2.0`, Pi API/TUI types `1.2.0`, Playwright Core
-`1.63.0`, axe-core `4.13.0`, Typebox `1.3.34`, TypeScript `7.0.2`, and Node types
+`1.63.0`, axe-core `4.13.0`, Typebox `1.3.36`, TypeScript `7.0.2`, and Node types
 `26.6.4`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
@@ -107,6 +107,17 @@ Learn HTML. Browser contexts receive no
 credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
 Learn browser assertions also run in CI; the current artifact step is Plan-specific.
+
+Typebox `1.3.36` was reviewed on 2026-10-15 against the published `1.3.34`
+package. Only two executable modules changed: object cleaning now checks that a
+property is a schema before recursing, and union priority sorting preserves
+custom record-key patterns. The published manifest adds no dependencies or
+lifecycle scripts. The locked install with scripts disabled, TypeScript check,
+real Pi loader/session integration tests, and root vulnerability audit passed.
+After the coordinated Pi `1.2.0` prerequisite merge, fresh registry signature
+verification passed for all 134 root packages, with 39 verified attestations.
+Required CI and platform checks remain merge prerequisites. Rollback restores
+the previous exact root pin, lockfile, and this version record together.
 
 The historical 2026-09-24 root-graph review found zero known high npm
 vulnerabilities; all 246 audited packages had verified registry signatures and
