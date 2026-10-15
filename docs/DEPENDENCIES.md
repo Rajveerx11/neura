@@ -114,8 +114,9 @@ property is a schema before recursing, and union priority sorting preserves
 custom record-key patterns. The published manifest adds no dependencies or
 lifecycle scripts. The locked install with scripts disabled, TypeScript check,
 real Pi loader/session integration tests, and root vulnerability audit passed.
-Registry signature verification could not complete because its download failed;
-required CI and platform checks remain merge prerequisites. Rollback restores
+After the coordinated Pi `1.2.0` prerequisite merge, fresh registry signature
+verification passed for all 134 root packages, with 39 verified attestations.
+Required CI and platform checks remain merge prerequisites. Rollback restores
 the previous exact root pin, lockfile, and this version record together.
 
 The historical 2026-09-24 root-graph review found zero known high npm
