@@ -163,7 +163,7 @@ try {
   setMode('plan');
   const { session, loader } = await makeSession(true);
   setMode('plan');
-  const prompt = JSON.stringify((await session.extensionRunner.emitBeforeAgentStart('inspect source', undefined, { cwd })).systemPromptOptions);
+  const prompt = JSON.stringify((await session.extensionRunner.emitBeforeAgentStart({ messageType: 'user', prompt: 'inspect source' }, { cwd })).systemPromptOptions);
   assert.match(prompt, /single-character \. \(no repetition, groups, or escapes; use literal=true \/ rg -F\)/);
   assert.match(prompt, /Git historical content, object\/index reads and comparisons are unavailable/);
   assert.doesNotMatch(prompt, /at most one \.\*|git --no-pager/);

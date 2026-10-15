@@ -1,4 +1,5 @@
 import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, editorFactory, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
+import { renderFakeCursor, stripTerminalSequences } from '@earendil-works/pi-tui';
 const repairAction = "update Neura for installed Pi 9.9.9; do not downgrade Pi";
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
@@ -79,10 +80,13 @@ const launchEditor = editorFactory(
   { borderColor: (value) => value, selectList: {} },
   { matches: () => false },
 );
+// Pi 1.2 uses invisible APC markers around the fake cursor. Count visible
+// content rather than treating those editor control sequences as another row.
+assert.equal(stripTerminalSequences(renderFakeCursor(' ')).trim(), '', 'empty fake cursor must have no visible text');
 for (const width of [30, 40, 56, 72, 92, 120]) {
   const rawLines = launchEditor.render(width);
   const launchText = rawLines.map(stripAnsi).join("\n");
-  const contentLines = rawLines.filter((line) => stripAnsi(line).trim().length > 0);
+  const contentLines = rawLines.filter((line) => stripTerminalSequences(line).trim().length > 0);
   const contentWidth = Math.min(84, width, Math.max(30, Math.floor(width * 0.58)));
   assert.equal(contentLines.length, 9, `launch content height is wrong at ${width} columns`);
   const wordmarkRows = contentLines.slice(0, 5);
