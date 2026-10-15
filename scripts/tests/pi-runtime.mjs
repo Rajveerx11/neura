@@ -17,7 +17,12 @@ const { createAgentSession, createCodemodeExtension, createToolSearchExtension, 
 const { createAssistantMessageEventStream } = await import('@earendil-works/pi-ai/compat');
 const { parseArgs } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js');
 const { Type } = await import('typebox');
+const { validateThemeJson } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.js');
+const theme = JSON.parse(fs.readFileSync(path.join(repo, 'agent/themes/neura-dark.json'), 'utf8'));
+validateThemeJson('neura-dark', theme);
+assert.throws(() => validateThemeJson('unsupported metadata', { ...theme, unsupportedMetadata: true }), /Invalid theme/);
 const { default: guardrail } = await import('../../agent/extensions/guardrail.ts');
+const { default: modes } = await import('../../agent/extensions/modes.ts');
 const { setMode } = await import('../../agent/neura/mode-state.ts');
 const agentDir = process.env.PI_CODING_AGENT_DIR;
 const cwd = path.join(scratch, 'workspace');
@@ -189,6 +194,60 @@ try {
   assert.ok(runtimeEvents.some(event => event.type === 'agent_settled' && event.aborted === false), 'normal settlement flag missing');
   assert.ok(modified.messages.some(message => message.role === 'assistant' && Number.isFinite(message.durationMs)), 'assistant duration missing');
 
+  // Pi 1.2 custom-triggered runs must cross the real Neura mode boundary,
+  // including while asynchronous startup is busy and cancellation is pending.
+  for (const cancelDuringStartup of [false, true]) {
+    let entered, release;
+    const startupEntered = new Promise(resolve => { entered = resolve; });
+    const startupReleased = new Promise(resolve => { release = resolve; });
+    let startupEvents = 0, providerCalls = 0;
+    const { session: custom } = await makeSession(true, [guardrail, modes, pi => {
+      pi.on('before_agent_start', async event => {
+        startupEvents++;
+        assert.equal(event.messageType, 'custom');
+        assert.equal(event.message.customType, 'startup-security');
+        assert.equal('prompt' in event, false, 'custom start impersonated a user prompt');
+        assert.match(event.systemPrompt, /NEURA MODE: PLAN/);
+        entered();
+        await startupReleased;
+      });
+    }], ['+codemode', '+tool_search']);
+    setMode('plan');
+    const customEvents = [];
+    custom.subscribe(event => customEvents.push(event));
+    custom.agent.streamFunction = (model, context, options) => {
+      providerCalls++;
+      if (cancelDuringStartup) assert.equal(options.signal.aborted, true, 'startup abort reached an uncancelled provider');
+      assert.match(context.systemPrompt, /NEURA MODE: PLAN/);
+      assert.equal(context.tools.some(tool => ['codemode', 'tool_search', 'write'].includes(tool.name)), false,
+        'custom-triggered provider received a restricted capability');
+      const stream = createAssistantMessageEventStream();
+      response(stream, model, [{ type: 'text', text: 'synthetic custom response' }], options.signal.aborted ? 'aborted' : 'stop');
+      return stream;
+    };
+    const run = custom.sendCustomMessage({ customType: 'startup-security', content: 'synthetic custom start', display: false }, { triggerTurn: true });
+    await startupEntered;
+    assert.equal(custom.isIdle, false, 'async startup appeared idle');
+    assert.equal(custom.isStreaming, true, 'async startup did not reserve its run');
+    assert.equal(providerCalls, 0, 'provider ran before startup boundary completed');
+    let abort;
+    if (cancelDuringStartup) abort = custom.abort();
+    else await custom.sendCustomMessage({ customType: 'queued-startup', content: 'synthetic queued message', display: false }, { triggerTurn: true });
+    assert.equal(startupEvents, 1, 'message during startup opened a competing run');
+    release();
+    await run;
+    if (abort) await abort;
+    assert.equal(startupEvents, 1);
+    assert.equal(custom.isIdle, true);
+    assert.equal(customEvents.filter(event => event.type === 'agent_settled').at(-1)?.aborted, cancelDuringStartup);
+    if (!cancelDuringStartup) {
+      assert.ok(providerCalls > 0, 'custom-triggered positive control never reached provider');
+      assert.ok(custom.messages.some(message => message.role === 'custom' && message.customType === 'queued-startup'), 'startup message was lost');
+    }
+    assert.equal(requests, 0, 'custom startup enabled native MCP');
+    assert.equal(fs.existsSync(marker), false, 'custom startup spawned native stdio MCP');
+  }
+
   // Observe a genuine aborted settlement; no provider or timing guess is used.
   let started;
   const streamStarted = new Promise(resolve => { started = resolve; });
@@ -229,7 +288,7 @@ try {
   try { await Promise.race([firstRequest, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('stock Pi MCP positive control timed out')), 5_000); })]); }
   finally { clearTimeout(timer); }
   assert.ok(requests > 0, 'stock Pi native MCP never connected');
-  console.log('PASS Pi 1.1 real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/reload execution, duration/aborted settlement, YOLO and stock Pi controls');
+  console.log('PASS Pi 1.2 real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/reload execution, custom startup/busy/cancellation, duration/aborted settlement, YOLO and stock Pi controls');
 } finally {
   for (const session of sessions) {
     try { await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'exit' }); } finally { session.dispose(); }
