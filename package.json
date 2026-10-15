@@ -1,6 +1,6 @@
 {
   "name": "neura-harness",
-  "version": "2.5.1",
+  "version": "2.6.0-rc.1",
   "description": "Windows-first engineering-agent harness for Pi with explicit modes, policy guardrails, recovery, and verification.",
   "private": true,
   "license": "Apache-2.0",

@@ -38,5 +38,7 @@ closed when documentation already answers them or required evidence is missing.
 
 Start with the [documentation index](docs/README.md),
 [Learn guide](docs/LEARN_MODE.md), or [verification guide](docs/VERIFICATION.md).
-For a bug report, include the source commit as well as `VERSION`: unreleased
-features share `2.5.1` with older source, so the version alone is insufficient.
+For a bug report, include the source commit as well as `VERSION` and whether
+you are running a source checkout or an installed release candidate. Historical
+unreleased source shared `2.5.1` with older releases; version alone cannot
+identify the installed behavior.

@@ -19,32 +19,37 @@ Roadmap: [#31](https://github.com/Rajveerx11/neura/issues/31)
 
 ## P0 release blockers
 
-Issue state checked 2026-09-12. Merged source improvements remain unreleased;
+Issue state checked 2026-10-15. Merged improvements are in the experimental source candidate;
 closing one issue does not establish production readiness.
 
 | Issue | Required outcome |
 |---|---|
 | [#24](https://github.com/Rajveerx11/neura/issues/24) | Make Human Away transactional and resource bounded. |
-| [#22](https://github.com/Rajveerx11/neura/issues/22) | Pin and contain every automatically executed dependency. |
 | [#21](https://github.com/Rajveerx11/neura/issues/21) | Add a complete runtime manifest, atomic install, and rollback. |
 
 ## P1 hardening
 
 | Area | Issues |
 |---|---|
-| Plan confidentiality | [#35](https://github.com/Rajveerx11/neura/issues/35) |
 | Approval integrity | [#33](https://github.com/Rajveerx11/neura/issues/33) |
 | Gmail and provider credentials | [#34](https://github.com/Rajveerx11/neura/issues/34) |
 | Prompt ingress, memory, redaction, and MCP | [#29](https://github.com/Rajveerx11/neura/issues/29) |
-| Skill provenance | [#38](https://github.com/Rajveerx11/neura/issues/38) |
-| Runtime architecture and strict typing | [#25](https://github.com/Rajveerx11/neura/issues/25), [#26](https://github.com/Rajveerx11/neura/issues/26) |
+| Strict typing | [#26](https://github.com/Rajveerx11/neura/issues/26) |
 | Durable recovery | [#28](https://github.com/Rajveerx11/neura/issues/28) |
-| Health, diagnostics, and evaluation | [#39](https://github.com/Rajveerx11/neura/issues/39), [#30](https://github.com/Rajveerx11/neura/issues/30) |
+| Evaluation and operations | [#30](https://github.com/Rajveerx11/neura/issues/30) |
+
+Full verified proof PASS is separately blocked by [#91](https://github.com/Rajveerx11/neura/issues/91);
+quick detector PASS does not close that delivery gate.
 
 ## Completed source milestones
 
 | Delivery | Covered outcome |
 |---|---|
+| [#22](https://github.com/Rajveerx11/neura/issues/22), closed | Exact executable identities, contained offline proof runtime, and restricted automatic Git/process behavior. This does not establish clean-host installation or full proof PASS. |
+| [#25](https://github.com/Rajveerx11/neura/issues/25), closed | Shared runtime capability, policy, and process contracts. Strict typing remains #26. |
+| [#35](https://github.com/Rajveerx11/neura/issues/35), closed | Scoped Plan confidentiality hardening, ignored/private read denial, and historical Git content denial; application-level containment retains documented race and ingress limits. |
+| [#38](https://github.com/Rajveerx11/neura/issues/38), closed | Hashed, versioned repository-owned guidance with exact Pi compatibility and default-disabled opt-in. External skills remain unsupported. |
+| [#39](https://github.com/Rajveerx11/neura/issues/39), closed | Core versus optional readiness, bounded probes, redacted errors, runtime identity, and remediation. Evaluation/operations remain #30. |
 | [#36](https://github.com/Rajveerx11/neura/issues/36), closed | Owner-confirmed token revocation and replacement, value-free incident record, complete-history secret scanning, and negative regression coverage. |
 | [#23](https://github.com/Rajveerx11/neura/issues/23), closed | Work is default; `work_exec` uses network-disabled WSL2 bubblewrap. This does not close every search/confidentiality gap. |
 | [#27](https://github.com/Rajveerx11/neura/issues/27), closed | Isolated modular suites, seeded fuzzing, approval concurrency/crash rejection, and content-bound verification receipts. Strict typing remains #26. |
