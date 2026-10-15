@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "neuraVersion": "2.5.1",
-  "piVersion": "1.1.0",
+  "piVersion": "1.2.0",
   "nodeMinimum": "24.15.0",
   "automaticExecutables": {
     "git": {
@@ -76,7 +76,7 @@
     "agent/extensions/ship-report.ts": "6c1139aea7ede3206e3b12c7ad89024068c602be8fa1b07b72b4c943591c2fc6",
     "agent/extensions/skill-doctor.ts": "3ce91c98d96e44cd0c1de6af3b8307df2c218739020f037f292317ecc29eafdf",
     "agent/extensions/transcript-actions.ts": "9ddaa815f6e71a10bffabd6bb2ba21e923690adfa112eb216702e4df6f95ceb8",
-    "agent/themes/neura-dark.json": "77069a8bd3ae511d98f9919b1700ec95e19b74c8046e59da8e5ebd1ea754ac8a",
+    "agent/themes/neura-dark.json": "3d232755cc82059f1bafe13867fdf0f6663e2b2acaf378af7a2cfa5e73a9d9fd",
     "agent/neura/action-policy.ts": "00c749e502f569ff5c7874201b10eace130a8bccfc2128784d6e23d71c548ab5",
     "agent/neura/approval-store.ts": "b6f68b44fe639014eb94636135688d0d13655d2518c1fadc42f764149b6e1bd3",
     "agent/neura/cockpit-state.ts": "c367ae8f3f84bbb69013013f4e673fe4448d42850b5c09356c704c2d2d19419b",
@@ -105,11 +105,11 @@
     "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e9766a7637436a87da406fa09cc80a15400722d49899520dcdd039caeac3da05",
-    "agent/neura/runtime-contract.json": "5fbb9272cdadf53cde88e4f91bf6d8a25943bd10e152327a5d1cafea6acfe18e",
+    "agent/neura/runtime-contract.json": "f83de8477f5e6a8fb895e352f5603372c2f721c884a29bc7f3881923d78663aa",
     "agent/neura/runtime-install.mjs": "3f8e399fb15be05156b3654f57185894c28a14e5562a7fcd5ef22f74230cbacb",
-    "agent/neura/skills-manifest.json": "994da2c879bdd76dae8385c18181f500f0afe8e7d22d460d78d7928d2a263063",
-    "agent/neura/skills-registry.mjs": "dd372e49d287a5e0b8ade8f1f409abeb76d375ee66501f7a59544fa91a48f8bd",
-    "agent/neura/skills/neura-verification/1.0.1/SKILL.md": "6302764dbd2a6a1a61fe815e03f997838a2a2cb83e0b6b8a4f7a2cd281de7e68",
+    "agent/neura/skills-manifest.json": "1f76fdaa90aeec1fbed93e39cb78b73f97563b5eebcc1f16a707d42829ba3821",
+    "agent/neura/skills-registry.mjs": "b2280dececb252c0a2f050c5432af9d93863fd7b4548e12006f29644e9306bb7",
+    "agent/neura/skills/neura-verification/1.0.2/SKILL.md": "ff51599de9f8b128d0f16c0f91dcfa76ca0e806abaf4c7b826ecba19bfeaa8af",
     "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
     "agent/neura/verification.ts": "60a71a0572b0527486654ae37ece6bac8a92eadbb7ab25ab45a424508e572708",
     "agent/mcp.json": "7e10d172a4a372b759284d5d9cb8937c2317a47ff32768fc673eb591a21b0cee",
