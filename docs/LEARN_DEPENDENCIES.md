@@ -37,8 +37,8 @@ option is no longer consumed by either reviewed 6.3.289 or 6.4.299; the reviewed
 This is an entry-point review, not a complete PDF.js/native/WASM audit.
 Linux synthetic document validation passed all 43 assertions, including real
 PDF rasterization, OCR, PPTX and malformed-input checks. The nested graph audit
-reported no known vulnerabilities. Registry signature verification could not
-complete because its download failed; required CI and Windows validation remain
+reported no known vulnerabilities. Registry signatures verified all 21 installed packages and three attestations
+after network access was restored; required CI and Windows validation remain
 merge prerequisites. Rollback restores both nested dependency files, their
 release-manifest hashes, and this version record before reinstalling.
 
