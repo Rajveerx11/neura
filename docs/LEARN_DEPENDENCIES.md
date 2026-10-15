@@ -24,9 +24,27 @@ change review, not a complete native-code audit. Registry integrity/signatures
 and synthetic document tests must pass before merge. Rollback restores both
 nested manifest and lockfile plus their release-manifest hashes before reinstall.
 
+The 6.4.299 PDF.js refresh was reviewed on 2026-10-15 at published upstream
+commit `d0991a0d53f3bb3a7307e3b83f279c1d117aafb3`. The published manifest has
+no lifecycle scripts; its only dependency declaration change is the optional
+canvas minimum from `^1.0.0` to `^1.0.10`, satisfied by the existing exact pin.
+The scoped published-source review checked `legacy/build/pdf.mjs` document
+options, Node binary-data factories, canvas integration, and local worker loading.
+Captured document bytes, disabled system fonts and worker fetching, and local
+font/CMap/WASM paths remain in use. The historical `isEvalSupported:false`
+option is no longer consumed by either reviewed 6.3.289 or 6.4.299; the reviewed
+6.4.299 legacy bundles contain no JavaScript eval or Function constructor calls.
+This is an entry-point review, not a complete PDF.js/native/WASM audit.
+Linux synthetic document validation passed all 43 assertions, including real
+PDF rasterization, OCR, PPTX and malformed-input checks. The nested graph audit
+reported no known vulnerabilities. Registry signature verification could not
+complete because its download failed; required CI and Windows validation remain
+merge prerequisites. Rollback restores both nested dependency files, their
+release-manifest hashes, and this version record before reinstalling.
+
 | Package | Version | License | Purpose and reviewed surface |
 |---|---|---|---|
-| `pdfjs-dist` | `6.3.289` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `isEvalSupported:false`, `useWorkerFetch:false`, and disabled system fonts. Never invoke document JavaScript, actions, attachments, or links. |
+| `pdfjs-dist` | `6.4.299` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `isEvalSupported:false`, `useWorkerFetch:false`, and disabled system fonts. Never invoke document JavaScript, actions, attachments, or links. |
 | `@napi-rs/canvas` | `1.0.10` | MIT | Skia-backed raster canvas. Reviewed `index.js`, `js-binding.js`, `load-image.js`, and platform package selection. Pass PNG/JPEG bytes, never paths or URLs. Filter image dimensions before decoding; disable automatic system/user font discovery in parser processes. Native bindings are still trusted executable dependencies. |
 | `yauzl` | `3.4.0` | MIT | ZIP directory and streaming inflate. Reviewed `index.js` `fromBuffer`, lazy entry dispatch, filename validation, local entry reads, and size validation. Add aggregate/per-entry limits, CRC checks, duplicate/link/encryption rejection. Never extract ZIP entries to disk. |
 | `saxes` | `6.0.0` | ISC | Namespace-aware XML. Reviewed `saxes.js` entry imports, SAX events, namespace handling, and entity errors. Its runtime dependency is `xmlchars`; no external entity resolver or network transport. Explicitly reject DTD/entity declarations before parsing; cap depth, nodes, XML bytes, and text. |
