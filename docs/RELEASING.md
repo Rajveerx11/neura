@@ -12,9 +12,10 @@ Neura uses semantic versions:
 `VERSION` is the machine-readable source. Changelog and release-note filenames
 must match it.
 
-Latest release remains `2.5.1`. Work, modular verification, and Learn are merged
-but unreleased. Prepare a new version and release note for their eventual
-release; do not retrofit their behavior into historical v2.5.1 notes.
+Current source candidate is [`2.6.0-rc.1`](releases/v2.6.0-rc.1.md), covering
+Work, modular verification, Learn, and Pi `1.3.0` compatibility. Latest published
+release remains `2.5.1` until the candidate is published. Historical v2.5.1 notes
+retain their original scope and must not be rewritten as current evidence.
 
 ## Open-source release gate
 
@@ -94,8 +95,10 @@ runtime bundle and does not satisfy those gates.
 ## Automated draft-prerelease path
 
 Tag automation accepts only an annotated `v*` tag whose target is contained in
-`origin/main`. `VERSION`, root package and lock versions, nested package/lock
-versions, and `docs/releases/v$version.md` must agree. Run locally before tagging:
+`origin/main`. `VERSION`, root package and lock versions, runtime/release identities, and
+`docs/releases/v$version.md` must agree. The private Learn runtime keeps its
+independent version, with its nested manifest and lock versions matching each
+other. Run locally before tagging:
 
 ```powershell
 $version = (Get-Content .\VERSION -Raw).Trim()

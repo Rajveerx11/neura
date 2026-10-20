@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 2.6.0-rc.1 (experimental candidate)
+
+Prepared on 2026-10-15. Publication remains gated; latest published release is
+`2.5.1`. See [candidate notes](releases/v2.6.0-rc.1.md) for scope, migration,
+verification, and rollback. Entries below preserve their original dated evidence;
+they do not independently certify this combined release candidate.
+
+- Aligned the release version, package/lock identity, runtime contract, managed
+  release manifest, and launch identity for `2.6.0-rc.1`. The compact launch
+  status preserves the complete RC version and READY indicator at 30 columns.
+  Both npm manifests
+  remain private; the Learn runtime retains its independent package version.
+  No production claim, live installation, or automatic stable promotion is made.
+- Enabled strict Neura prerelease identities in the managed installer while
+  retaining stable Pi/Node prerequisite checks. Real staging rejects malformed
+  numeric prereleases before mutation; synthetic activation, upgrade, and
+  recovery exercise the current candidate identity.
 
 - Advanced coordinated Pi pins, runtime identity and immutable guidance `1.0.3`
   to exact `1.3.0` after the latest-stable gate rejected `1.2.0`. Added real

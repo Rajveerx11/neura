@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const candidateVersion = fs.readFileSync(new URL('../../VERSION', import.meta.url), 'utf8').trim();
 const sha = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'neura-install-test-'));
 const home = path.join(tmp, 'home');
@@ -27,11 +28,34 @@ const build = (extension = 'one.ts') => {
   for (const name of skillFiles) write(path.join(source, 'agent/neura', name), fs.readFileSync(new URL(`../../agent/neura/${name}`, import.meta.url)));
   const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd', ...skillFiles.map(name => `agent/neura/${name}`)];
   const files = Object.fromEntries(names.map(name => [name, sha(path.join(source, name))]));
-  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:'2.5.1', piVersion:'1.3.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
+  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:candidateVersion, piVersion:'1.3.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
 };
 const seal = () => { run('prepare'); write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt'); write(path.join(stage, 'agent/neura/node_modules/example.js'), 'pinned'); run('seal'); };
 try {
   build();
+  const candidateManifestPath = path.join(source, 'agent/neura/release-manifest.json');
+  const candidateManifest = JSON.parse(fs.readFileSync(candidateManifestPath));
+  // Exercise actual staging validation, including explicit RC acceptance even
+  // when the repository's future VERSION returns to a stable release.
+  for (const version of ['2.5.1', '2.6.0-rc.1', '2.6.0-0', '2.6.0-beta.01a']) {
+    write(candidateManifestPath, JSON.stringify({...candidateManifest, neuraVersion:version}));
+    run('prepare');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(stage, 'agent/neura/release-manifest.json'))).neuraVersion, version);
+    run('recover');
+  }
+  for (const version of ['01.6.0', '2.06.0', '2.6.00', '2.6.0-01', '2.6.0-rc.01',
+    '2.6.0-', '2.6.0-rc..1', '2.6.0-rc_1', 'v2.6.0-rc.1', '2.6', '2.6.0+build',
+    '2.6.0-rc.1\n', ' 2.6.0', '', null, 26, ['2.6.0'], {}]) {
+    write(candidateManifestPath, JSON.stringify({...candidateManifest, neuraVersion:version}));
+    assert.match(run('prepare', false).stderr, /invalid release manifest/);
+    assert.equal(fs.existsSync(path.dirname(stage)), false, 'invalid release identity reached staging');
+  }
+  for (const field of ['piVersion', 'nodeMinimum']) {
+    write(candidateManifestPath, JSON.stringify({...candidateManifest, [field]:'1.2.0-rc.1'}));
+    assert.match(run('prepare', false).stderr, /invalid release manifest/, `${field} accepted a prerelease prerequisite`);
+    assert.equal(fs.existsSync(path.dirname(stage)), false, 'invalid prerequisite reached staging');
+  }
+  write(candidateManifestPath, JSON.stringify(candidateManifest));
   // Pre-catalog interrupted first-install transaction, using main's receipt and
   // journal contract. Recovery must roll back it, not activate an old release.
   const legacyNames = ['agent/extensions/one.ts', 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd'];
@@ -170,7 +194,8 @@ try {
   run('recover');
   assert.equal(fs.existsSync(live('agent/neura/.install-state.json')), false, 'interrupted first install left a release receipt');
   assert.equal(fs.existsSync(path.join(home, '.pi/neura-install-pending')), false, 'interrupted first install left a journal');
-  seal(); run('activate'); run('check');
+  seal(); run('activate');
+  assert.ok(run('check').stdout.includes(`Neura ${candidateVersion} manifest`), 'installed candidate identity was lost');
   const alternateAgent = path.join(tmp, 'alternate-agent');
   fs.cpSync(path.join(home, '.pi/agent'), alternateAgent, {recursive: true});
   run('check', true, {PI_CODING_AGENT_DIR: alternateAgent});

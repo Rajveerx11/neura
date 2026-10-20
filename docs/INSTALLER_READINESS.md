@@ -1,6 +1,6 @@
 # Neura installer readiness
 
-Updated: 2026-10-08. Scope: **Neura only**, inspired by Pi/Hermes installation
+Updated: 2026-10-20. Scope: **Neura only**, inspired by Pi/Hermes installation
 patterns. This is source-only preparation, not a published installer, live
 installation, or production-readiness claim. Extend `install.ps1` and
 `agent/neura/runtime-install.mjs`; do not build a second activation engine.
@@ -8,8 +8,8 @@ installation, or production-readiness claim. Extend `install.ps1` and
 ## First implemented slice
 
 - Exact Pi coding-agent/API/TUI pins, root lockfile, runtime contract, and managed
-  manifest now target stable `1.1.0`. Dependency review is in
-  [DEPENDENCIES.md](DEPENDENCIES.md#pi-110-compatibility-slice-2026-10-08).
+  manifest now target stable `1.3.0`. Dependency review is in
+  [DEPENDENCIES.md](DEPENDENCIES.md#pi-130-compatibility-slice-2026-10-19).
 - Neura's launcher combines `--no-mcp` with `--tui-mode regular` to stop native startup connections even
   when configuration or explicit builtin selection would otherwise enable them.
   The existing explicit YOLO-only MCP wrapper remains in place. `codemode` and
@@ -20,8 +20,8 @@ installation, or production-readiness claim. Extend `install.ps1` and
   downgrade; health uses the same no-downgrade policy.
 - `npm run check:pi-latest` performs bounded public-registry discovery without
   installation. CI/release gates fail on stale targets or unavailable evidence.
-  A daily target-check workflow is prepared, but is not active until published
-  to the default branch. This detects lag; it does not automatically fix Neura.
+  The daily target-check workflow is present on the default branch. This detects
+  lag; it does not automatically fix Neura.
 - Draft-release source packaging now includes a Windows-friendly ZIP and its
   SHA-256 alongside the existing tarball and SBOMs. These are source artifacts,
   not self-contained runtime bundles. No new artifact has been published.
@@ -41,7 +41,22 @@ installation, or production-readiness claim. Extend `install.ps1` and
 | Clean-host rehearsal | Exercise fresh install, repeat install, upgrade, interruption, recovery, rollback, junction rejection, missing network/artifacts, and newer Pi on disposable Windows machines. Do not rehearse against the owner's live profile without explicit authorization. |
 | Release evidence | Run typecheck, all suites, browser/WSL checks, audits/signatures, docs, independent review, and required CI on a clean candidate. Record failures and remaining limitations; retain experimental/Human Away preview labels. |
 
-## Current candidate validation (2026-10-08)
+## Current candidate validation (2026-10-20)
+
+The `2.6.0-rc.1` candidate targets Pi `1.3.0` and immutable guidance `1.0.3`.
+The Pi 1.3 base passed the checks recorded in [STATUS.md](STATUS.md); that
+base evidence does not certify this combined RC/dependency candidate.
+Historical Pi 1.2 main `8e8e8d7` passed [CI run 38694416311](https://github.com/Rajveerx11/neura/actions/runs/38694416311),
+including the 18-suite Windows harness, real-browser checks, audits/signatures,
+latest-Pi discovery, and ephemeral installation/drift.
+These checks cover synthetic or disposable runner profiles; they are not a
+new unprivileged Windows device rehearsal or a live installation on the owner's
+machine. Version metadata and the combined release commit require fresh CI and
+the separate gated draft-release workflow before release assets are eligible.
+Current publication and production blockers remain in [STATUS.md](STATUS.md)
+and [OPEN_SOURCE.md](OPEN_SOURCE.md).
+
+## Historical repository validation (2026-10-08)
 
 - Exact Pi `1.1.0` configured typecheck, all 18 isolated harness suites,
   11 release checks and 35-file docs validation passed, including focused unit,
@@ -55,7 +70,7 @@ installation, or production-readiness claim. Extend `install.ps1` and
   temporary-profile cleanup after passing viewport assertions; the environment-only
   parent-owned cleanup invocation then passed after observing direct child exit.
   This is not physical Edge descendant-drain or live-profile evidence.
-- Fresh review and new-head required CI remain pending; old PR98 `1.0.4` review
+- At that audit, fresh review and new-head required CI remained pending; old PR98 `1.0.4` review
   and portable CI do not certify this candidate. No live installation/drift,
   clean-host bootstrap, TypeScript LSP or full proof PASS is claimed.
 
@@ -97,8 +112,9 @@ complete live installation is atomic.
 The owner's live profile and source/live drift were not inspected in this
 isolated preparation. Previous device drift evidence is historical, not a
 check of this candidate, and never permission to sync or install. No live Neura/Pi
-installation, WSL provisioning, tag, or release is part of this slice. Source
-commits and PR delivery follow the owner's separate explicit authorization. The proof runner's full verified PASS
+installation or WSL provisioning is part of this preparation. The separately
+authorized candidate/release work must still satisfy the applicable release
+gates and does not waive installation blockers. The proof runner's full verified PASS
 remains unavailable independently of these repository checks.
 
 Track the remaining installer boundary in

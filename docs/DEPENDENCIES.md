@@ -90,23 +90,34 @@ and workspace-contained overrides are rejected.
 | Tool | Pin and integrity | Source and lifecycle review | Privileged behavior |
 |---|---|---|---|
 | Gitleaks CLI | `8.30.1`; Windows x64 archive SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e` | [Official release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). CI downloads the exact archive, verifies its published digest, then extracts it. No installer or floating action tag runs. | Reads the complete Git history in CI. Findings are fully redacted; checkout credentials are removed before the scanner starts. |
-| GitHub Actions | `actions/checkout` `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` `v7.1.0` (`949feb2413d6458794dcd2491c4babbbce0c15c1`), and `actions/upload-artifact` `v7.0.1` (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`) | Official GitHub-maintained actions, pinned to immutable commits. Checkout and setup-node use the supported Node 24 action runtime. | Checkout reads repository history, setup-node provisions the pinned Node version and npm cache, and upload-artifact stores generated Plan evidence for seven days. |
+| GitHub Actions | `actions/checkout` `v7.0.1` (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` `v7.1.0` (`949feb2413d6458794dcd2491c4babbbce0c15c1`), and `actions/upload-artifact` `v7.0.2` (`cf430e030ddbb5b0abf93d22962f4752f3646cd9`) | Official GitHub-maintained actions, pinned to immutable commits. Checkout and setup-node use the supported Node 24 action runtime. | Checkout reads repository history, setup-node provisions the pinned Node version and npm cache, and upload-artifact stores generated Plan evidence for seven days. |
 
 ## Development graph
 
 `package.json` pins Pi `1.3.0`, Pi API/TUI types `1.3.0`, Playwright Core
-`1.63.0`, axe-core `4.13.0`, Typebox `1.3.34`, TypeScript `7.0.2`, and Node types
-`26.6.4`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
+`1.64.0`, axe-core `4.14.0`, Typebox `1.3.36`, TypeScript `7.0.2`, and Node types
+`26.6.5`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
-already present on the Windows runner. Version `1.63.0` retains Node 20+
+already present on the Windows runner. Version `1.64.0` retains Node 20+
 support; rollback restores the prior manifest and lockfile together. axe-core
 has no consumer install hook and runs only against generated local Plan and
 Learn HTML. Browser contexts receive no
 credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
 Learn browser assertions also run in CI; the current artifact step is Plan-specific.
+
+Typebox `1.3.36` was reviewed on 2026-10-15 against the published `1.3.34`
+package. Only two executable modules changed: object cleaning now checks that a
+property is a schema before recursing, and union priority sorting preserves
+custom record-key patterns. The published manifest adds no dependencies or
+lifecycle scripts. The locked install with scripts disabled, TypeScript check,
+real Pi loader/session integration tests, and root vulnerability audit passed.
+After the coordinated Pi `1.2.0` prerequisite merge, fresh registry signature
+verification passed for all 134 root packages, with 39 verified attestations.
+Required CI and platform checks remain merge prerequisites. Rollback restores
+the previous exact root pin, lockfile, and this version record together.
 
 The historical 2026-09-24 root-graph review found zero known high npm
 vulnerabilities; all 246 audited packages had verified registry signatures and

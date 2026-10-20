@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "neuraVersion": "2.5.1",
+  "neuraVersion": "2.6.0-rc.1",
   "piVersion": "1.3.0",
   "automaticExecutables": {
     "git": {

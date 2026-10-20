@@ -1,5 +1,6 @@
 import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, editorFactory, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
 import { renderFakeCursor, stripTerminalSequences } from '@earendil-works/pi-tui';
+const currentVersion = fs.readFileSync(path.join(repoRoot, "VERSION"), "utf8").trim();
 const repairAction = "update Neura for installed Pi 9.9.9; do not downgrade Pi";
 for (const width of [24, 40, 56, 72, 92, 120]) {
   const lines = healthLines({
@@ -93,7 +94,7 @@ for (const width of [30, 40, 56, 72, 92, 120]) {
   assert.equal(new Set(wordmarkRows.map(widthOf)).size, 1, `launch wordmark is not a fixed-width face at ${width} columns`);
   assert.ok(wordmarkRows.every((line) => /[█▀▄]/.test(stripAnsi(line))), `launch wordmark is not block-rendered at ${width} columns`);
   assert.doesNotMatch(launchText, /▌|▐/, `approximated ANSI mark still overdraws the image-backed launch at ${width} columns`);
-  assert.match(launchText, /Neura Agent v2\.5\.1\s+·\s+READY/, `launch status missing at ${width} columns`);
+  assert.ok(rawLines.some((line) => stripAnsi(line).trim().replace(/\s+/g, " ") === `Neura v${currentVersion} · READY`), `complete current launch identity/status missing at ${width} columns`);
   assert.match(launchText, /NEURA AGENT · TYPE YOUR TASK/, `Neura-only launch prompt missing at ${width} columns`);
   const firstContentLine = rawLines.findIndex((line) => line.length > 0);
   assert.ok(firstContentLine > 0, `launch surface is not vertically centred at ${width} columns`);
