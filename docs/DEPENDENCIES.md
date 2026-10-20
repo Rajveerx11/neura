@@ -1,6 +1,6 @@
 # Dependency policy and review
 
-Pi/development source review: 2026-10-15 (Pi 1.2.0). Learn runtime review: 2026-09-07.
+Pi/development source review: 2026-10-19 (Pi 1.3.0). Learn runtime review: 2026-09-07.
 MCP lifecycle and automatic-execution review: 2026-09-13. Public-default
 configuration review: 2026-09-15.
 
@@ -27,7 +27,7 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 
 | Package | Pin | Source and lifecycle review | Privileged behavior |
 |---|---:|---|---|
-| `@earendil-works/pi-coding-agent` | `1.2.0` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.2.0); custom-run startup, busy/cancellation, tool routing, theme validation and published lifecycle/dependency changes reviewed. Seven coupled runtime packages have maintainer publish hooks, no consumer install hooks. See current compatibility evidence below; signature counts and supported-platform CI requirements are recorded below. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. Neura's launcher disables native MCP; indirect tools are YOLO-only. |
+| `@earendil-works/pi-coding-agent` | `1.3.0` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.3.0); resumed tool selection, codemode cancellation/admission, provider, overlay and exact internal dependency changes reviewed. Seven coupled runtime packages have maintainer publish hooks, no consumer install hooks. See current compatibility evidence below; signature counts and supported-platform CI requirements are recorded below. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. Neura's launcher disables native MCP; indirect tools are YOLO-only. |
 | `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
@@ -94,7 +94,7 @@ and workspace-contained overrides are rejected.
 
 ## Development graph
 
-`package.json` pins Pi `1.2.0`, Pi API/TUI types `1.2.0`, Playwright Core
+`package.json` pins Pi `1.3.0`, Pi API/TUI types `1.3.0`, Playwright Core
 `1.63.0`, axe-core `4.13.0`, Typebox `1.3.34`, TypeScript `7.0.2`, and Node types
 `26.6.4`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
@@ -194,14 +194,44 @@ That is historical evidence. Pi `0.85.1` was source-reviewed from the installed
 release and verified through Neura's loader harness, typecheck, dependency audit,
 and full verification suite on 2026-09-15; a fresh live-drift result is recorded
 separately. The September source, development APIs, and CI pinned `0.87.1`;
-that is historical evidence, not the current `1.2.0` graph. The 0.87.0 canonical-session and context-edit changes
+that is historical evidence, not the current `1.3.0` graph. The 0.87.0 canonical-session and context-edit changes
 were reviewed against Neura's session, footer, and extension APIs; the complete
 harness and configured typecheck passed on the exact 0.87.1 development graph.
 The installer does not replace a user's global Pi. Rolling back requires
 restoring the prior manifest, lockfile, runtime contract, and live Neura files
 together; do not downgrade a newer global Pi silently.
 
-### Pi 1.2.0 compatibility slice (2026-10-15)
+### Pi 1.3.0 compatibility slice (2026-10-19)
+
+Fresh dependency-PR CI rejected the stale `1.2.0` target. Official tag `v1.3.0`
+resolves to `71023aec1546d6d677a65669c5665c0927ce0dd0`. Three direct exact pins,
+seven coupled lock entries, runtime identity and immutable guidance `1.0.3`
+advance together; external resolutions and Learn pins remain unchanged.
+Published packages have no consumer install hooks; both graphs were installed
+with lifecycle scripts disabled. Upstream internal dependencies are now exact.
+
+Reviewed the resumed active-tool restoration and explicit/modifier selection
+policy, bounded codemode worker cancellation/admission, session sharing setting,
+provider/model selection and malformed tool-argument rejection, and owned-overlay
+closure. No Neura runtime relaxation was needed. New real-session tests cover
+restored codemode denial in four restricted modes before/after reload, explicit
+selection precedence and a YOLO positive control. Existing startup/cancellation,
+native MCP and stock-Pi controls remain required. No sessions are shared.
+
+Configured typecheck, docs, latest-target discovery, 11 release tests, real Pi
+resume/loadout controls, skills and synthetic installation passed. Root/Learn
+audits report zero known vulnerabilities; registry signatures verified 134/21
+installed packages, with 39/3 verified attestations. The full harness passed
+17/18 suites: Plan failed its alternate-shell fixture because PATH selected
+Git's mingw64/bin layout, not the expected cmd layout. Independent source review
+found no actionable changed-code defect; required CodeRabbit is rate-limited and
+LSP is unavailable. Complete harness, browser checks and fresh required CI remain
+gates; version agreement is not compatibility certification.
+No live installation, clean-host rehearsal or production readiness is claimed.
+Rollback restores all coupled pins, locks, contracts, guidance and release hashes;
+never downgrade a user's newer Pi.
+
+### Historical Pi 1.2.0 compatibility slice (2026-10-15)
 
 Fresh dependency-update CI rejected the stale `1.1.0` target. Official tag
 `v1.2.0` resolves to `06a466935536f8c9bcacb2d5efc0fc021be1bdff`.
@@ -366,8 +396,8 @@ selected for testing.
 
 Exact pins make the validated graph reproducible; they must advance with stable
 Pi releases rather than become a permanent ceiling. `latest` may be queried for
-release discovery, never used as a runtime dependency specifier. On 2026-10-15,
-npm latest and this checkout's exact pins agree at `1.2.0`. The bounded
+release discovery, never used as a runtime dependency specifier. On 2026-10-19,
+npm latest and this checkout's exact pins agree at `1.3.0`. The bounded
 `npm run check:pi-latest` command checks that agreement in CI and release gates;
 the daily target-check workflow takes effect only after it reaches the default
 branch. A successful target check alone does not establish runtime compatibility.

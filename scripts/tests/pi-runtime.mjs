@@ -57,7 +57,7 @@ fs.writeFileSync(path.join(cwd, '.pi/settings.json'), JSON.stringify({ extension
 const modelRuntime = await ModelRuntime.create({ authPath: path.join(agentDir, 'synthetic-auth.json'), modelsPath: null, refreshOnCreate: false });
 const settingsManager = SettingsManager.inMemory({ extensions: ['+builtin:mcp'], packages: [] }, { projectTrusted: true });
 const sessions = [];
-async function makeSession(disabled, extraFactories = [], tools) {
+async function makeSession(disabled, extraFactories = [], tools, sessionManager = SessionManager.inMemory(cwd)) {
   const loader = new DefaultResourceLoader({
     cwd, agentDir, settingsManager, noContextFiles: true, noSkills: true, noPromptTemplates: true, noThemes: true,
     additionalExtensionPaths: ['builtin:mcp'],
@@ -66,7 +66,7 @@ async function makeSession(disabled, extraFactories = [], tools) {
   });
   await loader.reload();
   const { session } = await createAgentSession({
-    cwd, agentDir, modelRuntime, settingsManager, resourceLoader: loader, sessionManager: SessionManager.inMemory(cwd),
+    cwd, agentDir, modelRuntime, settingsManager, resourceLoader: loader, sessionManager,
     model: modelRuntime.getModels()[0], tools,
   });
   sessions.push(session);
@@ -194,6 +194,26 @@ try {
   assert.ok(runtimeEvents.some(event => event.type === 'agent_settled' && event.aborted === false), 'normal settlement flag missing');
   assert.ok(modified.messages.some(message => message.role === 'assistant' && Number.isFinite(message.durationMs)), 'assistant duration missing');
 
+  // Pi 1.3 restores transcript tools on resume; restoration is not authority.
+  const resumeFactories = [guardrail, createCodemodeExtension(), createToolSearchExtension()];
+  const { session: resumed } = await makeSession(true, resumeFactories, undefined, modified.sessionManager);
+  assert.equal(resumed.getActiveToolNames().includes('codemode'), true, 'resume lost the transcript loadout');
+  assert.equal(resumed.getActiveToolNames().includes('write'), false, 'resume re-enabled a disabled tool');
+  for (const reloaded of [false, true]) {
+    if (reloaded) await resumed.reload();
+    for (const mode of ['plan', 'work', 'learn', 'human-away']) {
+      setMode(mode);
+      const denied = await callTool(resumed, 'codemode', { code: 'return "resume must not grant execution";' });
+      assert.equal(denied.isError, true, `restored codemode escaped ${mode}`);
+    }
+  }
+  setMode('yolo');
+  assert.equal((await callTool(resumed, 'codemode', { code: 'return "resumed YOLO control";' })).isError, false);
+  const { session: explicit } = await makeSession(true, resumeFactories, ['read'], modified.sessionManager);
+  assert.deepEqual(explicit.getActiveToolNames(), ['read'], 'explicit selection lost to transcript tools');
+  assert.equal(requests, 0, 'resume enabled native MCP');
+  assert.equal(fs.existsSync(marker), false);
+
   // Pi 1.2 custom-triggered runs must cross the real Neura mode boundary,
   // including while asynchronous startup is busy and cancellation is pending.
   for (const cancelDuringStartup of [false, true]) {
@@ -288,7 +308,7 @@ try {
   try { await Promise.race([firstRequest, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('stock Pi MCP positive control timed out')), 5_000); })]); }
   finally { clearTimeout(timer); }
   assert.ok(requests > 0, 'stock Pi native MCP never connected');
-  console.log('PASS Pi 1.2 real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/reload execution, custom startup/busy/cancellation, duration/aborted settlement, YOLO and stock Pi controls');
+  console.log('PASS Pi 1.3 real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/resume/reload execution, custom startup/busy/cancellation, duration/aborted settlement, YOLO and stock Pi controls');
 } finally {
   for (const session of sessions) {
     try { await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'exit' }); } finally { session.dispose(); }

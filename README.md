@@ -17,7 +17,7 @@ interface, explicit operating modes, verification, recovery, local memory,
 model presets, and policy guardrails around stock Pi.
 
 Current candidate: **[2.6.0-rc.1](docs/releases/v2.6.0-rc.1.md)**, targeting exact
-Pi `1.2.0`. It includes Work, Learn, modular verification, Plan confidentiality
+Pi `1.3.0`. It includes Work, Learn, modular verification, Plan confidentiality
 hardening, and installer-readiness changes. Latest published release remains
 **2.5.1** until this candidate passes the release gates and is published.
 Older checkouts and live installations may differ. Neura is
@@ -110,7 +110,7 @@ resumed sources must be reimported before new verified citations. See the
 
 - Windows 11 or a current supported Windows release.
 - PowerShell, Git, Node.js **24.15+** with npm, and the latest stable Pi.
-  This checkout's exact reviewed Pi pin is `1.2.0`. CI exercises Node `24.16.0`.
+  This checkout's exact reviewed Pi pin is `1.3.0`. CI exercises Node `24.16.0`.
   Newer Pi releases require a coordinated Neura update, never a Pi downgrade.
 - uv/`uvx` `0.12.11`, hash-pinned WSL CPython `3.12.3`, and the five reviewed
   proof wheels in a dedicated wheelhouse configured by `NEURA_WSL_UV_DIR` and
@@ -137,7 +137,7 @@ adaptations, regression tests, and CI. See the
 [Pi update policy](docs/DEPENDENCIES.md#pi-compatibility-policy) and
 [current evidence](docs/STATUS.md).
 
-As of 2026-10-15, npm's latest stable Pi is `1.2.0`; this checkout's runtime
+As of 2026-10-19, npm's latest stable Pi is `1.3.0`; this checkout's runtime
 contract and development graph now pin that version. `npm run check:pi-latest`
 checks the public registry without installing anything and fails on target drift
 or unavailable evidence. CI/release gates and a proposed daily workflow use it;
@@ -160,7 +160,7 @@ installer checks Node, npm, Pi, and Git before staging, rejecting failed/malform
 version probes. It does not yet provision missing prerequisites automatically.
 
 ```powershell
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.2.0
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
 git clone https://github.com/Rajveerx11/neura.git
 Set-Location .\neura
 npm ci --ignore-scripts

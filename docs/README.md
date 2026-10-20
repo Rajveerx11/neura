@@ -1,7 +1,7 @@
 # Documentation
 
 These guides describe the **[2.6.0-rc.1 candidate](releases/v2.6.0-rc.1.md)**,
-including Work, verification, Learn, and Pi `1.2.0` compatibility. Latest published
+including Work, verification, Learn, and Pi `1.3.0` compatibility. Latest published
 release remains **2.5.1** until the candidate is published. Older checkouts and
 live installations can differ; [STATUS.md](STATUS.md) records the audited revision and
 evidence. Historical plans and release notes retain their original context.
