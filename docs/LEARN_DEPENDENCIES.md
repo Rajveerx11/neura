@@ -32,9 +32,11 @@ The scoped published-source review checked `legacy/build/pdf.mjs` document
 options, Node binary-data factories, canvas integration, and local worker loading.
 Captured document bytes, disabled system fonts and worker fetching, and local
 font/CMap/WASM paths remain in use. The historical `isEvalSupported:false`
-option is no longer consumed by either reviewed 6.3.289 or 6.4.299; the reviewed
-6.4.299 legacy bundles contain no JavaScript eval or Function constructor calls.
-This is an entry-point review, not a complete PDF.js/native/WASM audit.
+option is no longer consumed by either reviewed 6.3.289 or 6.4.299 and is not
+an enforced security boundary. The 6.4.299 legacy bundles retain core-js's
+`Function('return this')()` global-object fallback; that fixed fallback is
+distinct from document-driven code generation. This entry-point review does
+not establish a complete PDF.js/native/WASM audit or OS isolation.
 Linux synthetic document validation passed all 43 assertions, including real
 PDF rasterization, OCR, PPTX and malformed-input checks. The nested graph audit
 reported no known vulnerabilities. Registry signatures verified all 21 installed packages and three attestations
