@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "neuraVersion": "2.5.1",
-  "piVersion": "1.2.0",
+  "piVersion": "1.3.0",
   "nodeMinimum": "24.15.0",
   "automaticExecutables": {
     "git": {
@@ -105,11 +105,11 @@
     "agent/neura/plan-renderer.ts": "9d54a705854ccac196bb82c03ea5576b28c2720da481ddb7c954face035554da",
     "agent/neura/process-security.ts": "47bd98661eaceb821bf5d9dd085da6551f826a55ac69437cae7673b3e2e3330d",
     "agent/neura/redaction.ts": "e9766a7637436a87da406fa09cc80a15400722d49899520dcdd039caeac3da05",
-    "agent/neura/runtime-contract.json": "f83de8477f5e6a8fb895e352f5603372c2f721c884a29bc7f3881923d78663aa",
+    "agent/neura/runtime-contract.json": "6775d1c551f898e97db0e9f4b6e20ec99108cbe382dac9acb5624822c59171f1",
     "agent/neura/runtime-install.mjs": "3f8e399fb15be05156b3654f57185894c28a14e5562a7fcd5ef22f74230cbacb",
-    "agent/neura/skills-manifest.json": "1f76fdaa90aeec1fbed93e39cb78b73f97563b5eebcc1f16a707d42829ba3821",
-    "agent/neura/skills-registry.mjs": "b2280dececb252c0a2f050c5432af9d93863fd7b4548e12006f29644e9306bb7",
-    "agent/neura/skills/neura-verification/1.0.2/SKILL.md": "ff51599de9f8b128d0f16c0f91dcfa76ca0e806abaf4c7b826ecba19bfeaa8af",
+    "agent/neura/skills-manifest.json": "1ebdcb7d2c7895af57a7fc32e9935576f57e22b21f83bfc67870480fbc6ae435",
+    "agent/neura/skills-registry.mjs": "f037eb416afc837ac2f7991775922aa73174c0f5a0427cfe572f4f5f7eab7001",
+    "agent/neura/skills/neura-verification/1.0.3/SKILL.md": "8618c0a766c72c68fbccb6f5d18d2162671d2f6ca63a52f4675a1fc5af389f43",
     "agent/neura/ui-tokens.ts": "acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a",
     "agent/neura/verification.ts": "60a71a0572b0527486654ae37ece6bac8a92eadbb7ab25ab45a424508e572708",
     "agent/mcp.json": "7e10d172a4a372b759284d5d9cb8937c2317a47ff32768fc673eb591a21b0cee",

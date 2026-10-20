@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Advanced coordinated Pi pins, runtime identity and immutable guidance `1.0.3`
+  to exact `1.3.0` after the latest-stable gate rejected `1.2.0`. Added real
+  resumed-session loadout, restricted-mode denial/reload, explicit-selection and
+  YOLO positive controls. Existing startup/cancellation and stock-Pi checks
+  remain required. This is source-only: no live installation or release claim.
+  Rollback restores coupled pins, locks, contracts, guidance and managed hashes;
+  never downgrade a newer global Pi.
+
 - Advanced the coupled Pi runtime, AI, and TUI target to exact `1.2.0` after
   fresh dependency-update CI rejected the stale `1.1.0` target. Updated runtime
   identity and immutable guidance `1.0.2` together. Required compatibility,
