@@ -96,7 +96,7 @@ and workspace-contained overrides are rejected.
 
 `package.json` pins Pi `1.3.0`, Pi API/TUI types `1.3.0`, Playwright Core
 `1.64.0`, axe-core `4.14.0`, Typebox `1.3.36`, TypeScript `7.0.2`, and Node types
-`26.6.4`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
+`26.6.5`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge

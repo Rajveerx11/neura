@@ -46,8 +46,7 @@ installation, or production-readiness claim. Extend `install.ps1` and
 The `2.6.0-rc.1` candidate targets Pi `1.3.0` and immutable guidance `1.0.3`.
 The Pi 1.3 base passed the checks recorded in [STATUS.md](STATUS.md); that
 base evidence does not certify this combined RC/dependency candidate.
-Historical Pi 1.2
-Main `8e8e8d7` passed [CI run 38694416311](https://github.com/Rajveerx11/neura/actions/runs/38694416311),
+Historical Pi 1.2 main `8e8e8d7` passed [CI run 38694416311](https://github.com/Rajveerx11/neura/actions/runs/38694416311),
 including the 18-suite Windows harness, real-browser checks, audits/signatures,
 latest-Pi discovery, and ephemeral installation/drift.
 These checks cover synthetic or disposable runner profiles; they are not a
