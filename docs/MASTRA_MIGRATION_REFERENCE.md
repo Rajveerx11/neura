@@ -481,7 +481,7 @@ A failed quick result sends one follow-up requesting the root cause be fixed wit
 
 ### Redaction and context trust
 
-The central redactor covers known secret assignments, environment/header/CLI forms, complete private-key blocks, URL passwords and sensitive query values, known provider token prefixes, JWTs, and long high-entropy strings. It limits output after redaction and supports budget checks. Several scanners are deliberately linearized to avoid regex-driven denial of service. It is heuristic; unknown secrets can escape detection. Source: `agent/neura/redaction.ts`.
+The central redactor handles assignments in environment variables, headers and command arguments. It masks recognized secrets, complete private-key blocks, URL passwords and sensitive query values, provider token prefixes, JWTs, and long high-entropy strings. It limits output after redaction and supports budget checks. Several scanners use linear passes to avoid regex-driven denial of service. Unknown secret formats can escape detection. Source: `agent/neura/redaction.ts`.
 
 Plan context handling additionally withholds images and opaque thinking. Signed assistant turns and paired tool results that cannot safely be modified in place are rebased into explicitly historical, untrusted user text, avoiding fabricated signatures or dangling tool results. Tool arguments are redacted. Exact protocol IDs/names are retained only where compatible with the safe unsigned structure. A Mastra message adapter must preserve these semantics rather than directly editing provider-signed content.
 
