@@ -182,7 +182,7 @@ export function piRuntimeStatus(installedVersion: string | null, requiredVersion
       installed: null,
       required: requiredVersion,
       label: `pi missing (requires ${requiredVersion})`,
-      action: `npm install -g @earendil-works/pi-coding-agent@${requiredVersion}`,
+      action: `reinstall Neura’s owned Pi ${requiredVersion} runtime; leave stock Pi unchanged`,
     };
   }
   if (installed !== requiredVersion) {
@@ -193,7 +193,7 @@ export function piRuntimeStatus(installedVersion: string | null, requiredVersion
       label: `pi ${versionLabel(installed)} (requires ${requiredVersion})`,
       action: /^\d+\.\d+\.\d+$/.test(installed) && /^\d+\.\d+\.\d+$/.test(requiredVersion)
         && installed.localeCompare(requiredVersion, undefined, { numeric: true }) < 0
-        ? `npm install -g @earendil-works/pi-coding-agent@${requiredVersion}`
+        ? `reinstall Neura’s owned Pi ${requiredVersion} runtime; leave stock Pi unchanged`
         : `update Neura for installed Pi ${versionLabel(installed)}; do not downgrade Pi`,
     };
   }

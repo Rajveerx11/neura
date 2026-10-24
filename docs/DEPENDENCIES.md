@@ -9,9 +9,11 @@ reproducible development graph. Pi-managed runtime extensions are pinned in
 `agent/settings.json`; `install.ps1` merges those exact pins into the live
 harness without replacing unrelated local packages or model choices.
 
-Learn's document runtime has a separate exact manifest and lockfile under
-`agent/neura/`. See [LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md) for six direct
-pins, licenses, reviewed entry points, native/WASM trust, and parser limits.
+Neura's private Pi and Learn runtime share the existing exact manifest and
+lockfile under `agent/neura/`. Pi `1.4.0` and external Undici `8.12.2` are direct
+pins, with the literal override `undici@8.10.2` to `8.12.2`. The six Learn pins
+are unchanged; see [LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md) for their
+licenses, reviewed entry points, native/WASM trust, and parser limits.
 Development setup needs both graphs:
 
 ```powershell
@@ -337,11 +339,49 @@ found in the bundle. Exhaustion/crash behavior was not tested. Neura-specific
 reachability of those other paths has not been fully traced. Whether this
 bundled exposure predates Pi 1.4 was not established.
 
-The High dependency-review finding remains open. Passing npm audits and
-`scripts/tests/undici.mjs` do not clear the shipped executable. A reviewed
-bundle-level fix and shipped-entry validation are required before closing this
-finding or merging the candidate. Do not patch installed vendor files, downgrade
-Pi, or bypass checks as a substitute.
+The owner-authorized remediation selects a different supported Neura entry,
+not a vendor patch. `launcher/neura.cmd` keeps the full receipt check, then runs
+Node directly against the owned `dist/cli.js` with `--no-mcp --tui-mode regular`.
+This official unbundled entry calls `setupCli()` and `main()`; its unbundled
+`core/http-dispatcher.js` imports external Undici and installs that fetch.
+Headmaster selects the same owned entry and adds `--no-mcp` to its tool-free
+child flags. Neither path selects Pi from process argv, PATH, APPDATA or NODE_PATH.
+No preload, global Pi update or vendor-file edit is used.
+
+`owned-pi.mjs` validates release/contract/declaration/lock version agreement,
+fixed entry paths, receipt hashes and the external Undici identity. Before each
+Headmaster child, it also checks the complete sealed module inventory and hashes;
+an earlier launcher check is not reused as evidence. Malformed receipt paths or
+hashes and unknown, missing, modified or linked module files fail closed. Linked
+or escaping paths and nearer shadow packages are refused before outside reads.
+Installer callers retain their existing complete receipt verification without a
+second full module scan in the resolver.
+Fresh sealing, activation and checks require the private runtime. Recovery alone
+can still roll back a wholly historical verified transaction without it. The
+receipt schema and `.learn-runtime-lock` name stay unchanged.
+
+The nested lock adds 121 package entries. Every added version/integrity already
+exists in the reviewed root lock; all pre-existing Learn entries are byte-for-byte
+unchanged. Pi's artifact integrity is
+`sha512-Z41LpZ3yYHSC/UUps6Mr39UMFPwH8elhJBG9DY1P7kuzsE5qSK/6eMj2EHzO5evJRQWLbKSqUMw+4nCNtIyiQg==`.
+Undici uses the exact artifact recorded above. The earlier source and consumer
+lifecycle reviews apply to these same artifacts. Lock generation and private
+installation use scripts disabled and a task-local npm cache. The resulting
+private graph reports zero npm vulnerabilities, 142 verified registry signatures
+and 40 verified attestations on 2026-10-24. These checks do not attest vendor-built
+bundles or the host runtime.
+
+`scripts/tests/undici.mjs` now resolves the selected private unbundled dispatcher,
+asserts its fixed external Undici resolution and installed global fetch, then
+runs the existing bounded parser, encoding and integrity controls through it.
+Synthetic installer tests cover missing/modified runtime refusal, full launcher
+preflight, Windows argv/exit status/custom paths, and interrupted recovery.
+Synthetic Headmaster tests inspect complete child argv and refuse drift in
+non-selected imported files before any child runs, without models or auth. Real
+owned-CLI version/help smoke runs explicitly offline and leaves module inventory
+unchanged.
+Independent review and required new-head CI must still assess this remediation
+before the High finding can close. Stock Pi's bundled artifact is unchanged.
 
 The override also leaves Node's bundled global-fetch Undici unchanged, reported
 locally as `7.29.0` by Node `24.19.0`, and does not update existing global/live Pi.

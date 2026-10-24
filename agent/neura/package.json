@@ -16,11 +16,16 @@
   },
   "engines": { "node": ">=24.15.0" },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
     "@napi-rs/canvas": "1.0.11",
     "@tesseract.js-data/eng": "1.0.0",
     "pdfjs-dist": "6.4.299",
     "saxes": "6.0.0",
     "tesseract.js": "7.0.0",
-    "yauzl": "3.4.0"
+    "yauzl": "3.4.0",
+    "undici": "8.12.2"
+  },
+  "overrides": {
+    "undici@8.10.2": "8.12.2"
   }
 }

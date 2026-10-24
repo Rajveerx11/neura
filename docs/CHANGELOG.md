@@ -23,6 +23,13 @@ they do not independently certify this combined release candidate.
   resolved-package regressions pass and both graph audits report zero findings.
   This does not patch Node's bundled global fetch or a live/global Pi installation.
 
+- Changed Neura launch and tool-free Headmaster to the sealed private unbundled
+  Pi `1.4.0` entry with external Undici `8.12.2`. Full launch preflight, exact
+  runtime identity, canonical no-link checks and historical recovery remain
+  enforced. Global Pi is no longer an installation prerequisite; stock Pi's
+  bundled artifact and Node's built-in fetch are unchanged. Independent review
+  and required CI remain merge gates.
+
 - Advanced the source candidate to exact Pi `1.4.0` and immutable guidance
   `1.0.4` after PR #130 latest-target CI rejected the stale pin. Added real
   new/default-inactive tool, pre-compaction removal, resume/tree/reload, restricted

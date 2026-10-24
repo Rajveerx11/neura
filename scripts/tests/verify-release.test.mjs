@@ -84,7 +84,12 @@ run("rejects an RC missing required safety text", (make) => {
 
 const piContract = { schemaVersion: 1, piVersion: '1.0.4' };
 const piManifest = { devDependencies: Object.fromEntries(['pi-ai', 'pi-coding-agent', 'pi-tui'].map(name => [`@earendil-works/${name}`, '1.0.4'])) };
-assert.equal(validatePiRelease(piContract, piManifest, { version: '1.0.4' }), '1.0.4');
+const ownedManifest = { dependencies: { '@earendil-works/pi-coding-agent': '1.0.4', undici: '8.12.2' }, overrides: { 'undici@8.10.2': '8.12.2' } };
+assert.equal(validatePiRelease(piContract, piManifest, { version: '1.0.4' }, ownedManifest), '1.0.4');
+for (const owned of [undefined, { ...ownedManifest, dependencies: {} }, { ...ownedManifest, overrides: {} },
+  { ...ownedManifest, dependencies: { ...ownedManifest.dependencies, '@earendil-works/pi-coding-agent': '1.0.3' } }]) {
+  assert.throws(() => validatePiRelease(piContract, piManifest, { version: '1.0.4' }, owned));
+}
 for (const version of ['1.0.5', '0.87.1', '1.0.4-beta.1', '', undefined]) {
   assert.throws(() => validatePiRelease(piContract, piManifest, { version }));
 }

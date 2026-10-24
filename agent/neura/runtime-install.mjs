@@ -5,6 +5,7 @@ import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { inspectSkills, selectionPath } from './skills-registry.mjs';
+import { resolveOwnedPi } from './owned-pi.mjs';
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const digest = (file) => hash(fs.readFileSync(file));
@@ -178,6 +179,23 @@ function verify(root, expectedState, checkOwnership = true, quick = false, legac
     catch (error) { if (error.code === 'ENOENT') return false; throw error; }
   });
   if (!legacySkillsRecovery || declaredSkills || registryPresent) validateSkills(registryRoot, manifest, checkOwnership);
+  const runtimeEntry = 'agent/neura/owned-pi.mjs';
+  const declaredRuntime = Object.hasOwn(manifest.files, runtimeEntry) || Object.hasOwn(expectedState.files, runtimeEntry);
+  let runtimePresent = false;
+  for (const name of ['owned-pi.mjs', 'node_modules/@earendil-works/pi-coding-agent']) {
+    const file = path.join(registryRoot, name);
+    safe(file);
+    try { fs.lstatSync(file); runtimePresent = true; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  const packageFile = path.join(registryRoot, 'package.json');
+  safe(packageFile);
+  if (exists(packageFile) && read(packageFile).dependencies?.['@earendil-works/pi-coding-agent']) runtimePresent = true;
+  // Only a wholly old verified transaction can recover without the private Pi graph.
+  if (!legacySkillsRecovery || declaredRuntime || runtimePresent) {
+    if (!Object.hasOwn(manifest.files, runtimeEntry)) throw Error('owned Pi resolver is not release-owned');
+    resolveOwnedPi(registryRoot, { release: manifest, receipt: expectedState });
+  }
   if (checkOwnership) {
     if (process.versions.node.split('.').map(Number).some(Number.isNaN) ||
         process.versions.node.localeCompare(manifest.nodeMinimum, undefined, { numeric: true }) < 0) throw Error(`Node ${manifest.nodeMinimum}+ required`);

@@ -1,4 +1,4 @@
-// The npm override covers Pi's resolved package, not Node's bundled fetch.
+// Exercise Neura's production-selected private unbundled dispatcher, not stock Pi.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,14 +9,24 @@ import { once } from 'node:events';
 import { gzipSync } from 'node:zlib';
 import { finished } from 'node:stream/promises';
 import { isolate } from './isolation.mjs';
+import { pathToFileURL } from 'node:url';
+import { resolveOwnedPi } from '../../agent/neura/owned-pi.mjs';
 
 isolate();
-const requireFromPi = createRequire(import.meta.resolve('@earendil-works/pi-coding-agent'));
+const runtimeRoot = path.resolve(import.meta.dirname, '../../agent/neura');
+const release = JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'release-manifest.json'), 'utf8'));
+const runtime = resolveOwnedPi(runtimeRoot, { release });
+const requireFromPi = createRequire(runtime.dispatcher);
 const undiciEntry = requireFromPi.resolve('undici');
+assert.equal(undiciEntry, runtime.undiciEntry, 'production dispatcher did not resolve the fixed owned module');
 const undiciRoot = path.dirname(undiciEntry);
 const manifest = JSON.parse(fs.readFileSync(path.join(undiciRoot, 'package.json'), 'utf8'));
 assert.equal(manifest.version, '8.12.2', 'Pi resolved the vulnerable npm Undici');
-const { fetch, Agent } = requireFromPi('undici');
+const fixedUndici = requireFromPi('undici');
+const { configureHttpDispatcher } = await import(pathToFileURL(runtime.dispatcher).href);
+configureHttpDispatcher(3_000);
+assert.equal(globalThis.fetch, fixedUndici.fetch, 'production dispatcher did not install the fixed external fetch');
+const { fetch } = globalThis;
 const { EventSourceStream } = requireFromPi(path.join(undiciRoot, 'lib/web/eventsource/eventsource-stream.js'));
 
 // Bounded parser inputs test retained fields, data-line nodes and chunk wrappers.
@@ -71,12 +81,12 @@ const server = http.createServer((request, response) => {
     response.end(gzipSync(body));
   } else response.end(body);
 });
-const agent = new Agent({ connections: 1 });
+const agent = fixedUndici.getGlobalDispatcher();
 server.listen(0, '127.0.0.1');
 await once(server, 'listening');
 const base = `http://127.0.0.1:${server.address().port}`;
 try {
-  const options = () => ({ dispatcher: agent, signal: AbortSignal.timeout(3_000) });
+  const options = () => ({ signal: AbortSignal.timeout(3_000) });
   assert.equal(await (await fetch(`${base}/gzip`, options())).text(), body.toString());
   await assert.rejects(fetch(`${base}/excess`, options()), error => /too many content-encodings/.test(error.cause?.message ?? ''));
   assert.equal(await (await fetch(`${base}/gzip`, options())).text(), body.toString(), 'encoding rejection poisoned later requests');
@@ -94,4 +104,4 @@ try {
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));
 }
-console.log(`PASS npm Undici ${manifest.version}: bounded EventSource retention, encoding decode/rejection, mixed-case SRI match/mismatch; Node bundled ${process.versions.undici ?? 'unknown'} unchanged`);
+console.log(`PASS owned unbundled Pi ${runtime.version} / npm Undici ${manifest.version}: bounded EventSource retention, encoding decode/rejection, mixed-case SRI match/mismatch; Node bundled ${process.versions.undici ?? 'unknown'} unchanged`);

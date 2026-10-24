@@ -58,18 +58,14 @@ function Get-NeuraVersionProblem($Name, $Probe, $RequiredPi, $RequiredNode) {
         return "$Name returned invalid version output; no installation was started."
     }
     if ($Name -eq 'node' -and $version -lt [version]$RequiredNode) { return "Node.js $RequiredNode or newer is required for Neura." }
-    if ($Name -eq 'pi' -and $value -cne $RequiredPi) {
-        if ($version -gt [version]$RequiredPi) { return "Pi $value is newer than Neura's reviewed $RequiredPi pin. Update Neura; do not downgrade Pi." }
-        return "Pi $value is installed; upgrade to reviewed Pi $RequiredPi before installing Neura."
-    }
     return $null
 }
 
 function Get-NeuraPrerequisiteProblems($RequiredPi, $RequiredNode) {
-    # Validate Node first: npm and Pi must never execute through an unsupported runtime.
+    # Validate Node first. Pi is private and validated in the sealed stage, never executed globally.
     $problem = Get-NeuraVersionProblem 'node' (Invoke-NeuraVersionProbe 'node' @('--version')) $RequiredPi $RequiredNode
     if ($problem) { return $problem }
-    foreach ($name in @('npm', 'pi', 'git')) {
+    foreach ($name in @('npm', 'git')) {
         $problem = Get-NeuraVersionProblem $name (Invoke-NeuraVersionProbe $name @('--version')) $RequiredPi $RequiredNode
         if ($problem) { $problem }
     }
@@ -406,5 +402,5 @@ if ((Test-Path $target) -and -not $ForceSettings) {
 }
 
 if (-not (Test-ProofRuntime)) { Write-Warning "WSL proof runtime unavailable or different from runtime-contract.json; proof will remain unavailable." }
-Write-Host "Neura installed. Run 'pi update --extensions --approve', then 'neura' and '/health'."
+Write-Host "Neura installed. Run 'neura update --extensions --approve', then 'neura' and '/health'."
 } finally { $installLock.Dispose() }

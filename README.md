@@ -20,8 +20,9 @@ Current candidate: **[2.6.0-rc.1](docs/releases/v2.6.0-rc.1.md)**, targeting exa
 Pi `1.4.0`. It includes Work, Learn, modular verification, Plan confidentiality
 hardening, and installer-readiness changes. Latest published release remains
 **2.5.1** until this candidate passes the release gates and is published.
-The Pi 1.4 candidate has an unresolved bundled Undici dependency finding. The
-checkout's npm override does not patch Pi's shipped CLI. Integration is blocked.
+Neura selects its owned, unbundled Pi CLI with fixed external Undici. Stock Pi's
+bundled artifact and Node's built-in fetch remain unchanged. Independent review
+and required CI must pass before this remediation can merge.
 See the [dependency evidence](docs/DEPENDENCIES.md#scoped-npm-undici-security-patch).
 
 Older checkouts and live installations may differ. Neura is
@@ -157,35 +158,32 @@ and the remaining one-step bootstrap, recovery, and clean-host gates.
 
 ## Install from source
 
-**Installation and launch are blocked for this candidate. Do not run any command
-in the sequence below until the bundled CLI fix is reviewed and shipped-entry
-checks pass.** This includes the global Pi install and all later Neura commands.
-See the [open dependency finding](docs/DEPENDENCIES.md#scoped-npm-undici-security-patch).
+Review the [security limits](SECURITY.md) and installer before using a clean
+profile. The [dependency remediation](docs/DEPENDENCIES.md#scoped-npm-undici-security-patch)
+documents the selected entry. This source candidate still needs independent
+review and required CI; it is not production-ready. Node, npm and Git must
+already be installed. Neura installs its private Pi graph without executing,
+requiring or replacing a global Pi. Never downgrade stock Pi.
 
-The sequence is retained as a non-executable post-fix reference, not current
-installation instructions. After that gate clears, review the
-[security limits](SECURITY.md) and installer before using a clean profile.
-Never downgrade a newer Pi. The installer checks prerequisites before staging
-but does not yet provision missing prerequisites automatically.
-
-```text
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
+```powershell
 git clone https://github.com/Rajveerx11/neura.git
 Set-Location .\neura
 npm ci --ignore-scripts
 npm ci --prefix agent/neura --ignore-scripts
 npm run verify
 powershell -File .\install.ps1
-pi update --extensions --approve
+neura update --extensions --approve
 neura
 ```
 
 `install.ps1` stages repository-controlled extensions, theme, policy modules,
 MCP configuration, and launcher, validates SHA-256 release hashes and the staged
-locked Learn runtime, then activates only those managed files with a recovery
-journal. Neura launch checks every installed byte against the receipt; `/health`
-uses a bounded managed-file check and leaves full Learn-runtime hashing to launch
-and `install.ps1 -Check`. Plain `pi` is unchanged.
+locked private Pi/Learn runtime, then activates only those managed files with a recovery
+journal. Neura launch checks every installed byte against the receipt, then runs
+`neura/node_modules/@earendil-works/pi-coding-agent/dist/cli.js` directly with Node.
+There is no global Pi fallback. `/health` uses a bounded managed-file and selected
+runtime identity check; full module hashing remains at launch and
+`install.ps1 -Check`. Plain `pi` is unchanged.
 Stop running Pi before upgrading: individual file replacement is not atomic.
 Existing model and credential choices in `settings.json` are preserved unless
 `-ForceSettings` is supplied. The installer also provisions Learn's separate

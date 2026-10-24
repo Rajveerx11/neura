@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { InspectedAction } from "./action-policy.ts";
 import type { ReviewVerdict } from "./approval-store.ts";
 import { scopedProcessEnvironment } from "./process-security.ts";
 import { redactSensitiveValue } from "./redaction.ts";
+import { resolveOwnedPi } from "./owned-pi.mjs";
 
 type RawVerdict = {
   decision: "approve_once" | "defer" | "deny";
@@ -28,14 +28,9 @@ function policyText(): string {
   }
 }
 
-function piEntry(): string | null {
-  const current = process.argv[1];
-  if (current && fs.existsSync(current) && /pi-coding-agent|[\\/]pi(?:\.js)?$/i.test(current)) return current;
-  if (process.platform === "win32" && process.env.APPDATA) {
-    const candidate = path.join(process.env.APPDATA, "npm", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return null;
+export function headmasterEntry(root = fileURLToPath(new URL(".", import.meta.url))): string | null {
+  try { return resolveOwnedPi(root).entry; }
+  catch { return null; }
 }
 
 function parseVerdict(output: string): RawVerdict | null {
@@ -100,7 +95,7 @@ export function clampHeadmasterVerdict(action: InspectedAction, raw: RawVerdict 
 
 function runHeadmaster(action: InspectedAction, options: HeadmasterOptions): Promise<RawVerdict | null> {
   if (String(process.env.NEURA_HEADMASTER ?? "").toLowerCase() === "off") return Promise.resolve(null);
-  const entry = piEntry();
+  const entry = headmasterEntry();
   if (!entry) return Promise.resolve(null);
 
   const dossier = JSON.stringify(redactSensitiveValue({
@@ -118,6 +113,7 @@ function runHeadmaster(action: InspectedAction, options: HeadmasterOptions): Pro
   }));
   const args = [
     entry,
+    "--no-mcp",
     "--print",
     "--no-session",
     "--no-extensions",
