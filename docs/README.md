@@ -1,7 +1,7 @@
 # Documentation
 
 These guides describe the **[2.6.0-rc.1 candidate](releases/v2.6.0-rc.1.md)**,
-including Work, verification, Learn, and Pi `1.3.0` compatibility. Latest published
+including Work, verification, Learn, and Pi `1.4.0` compatibility. Latest published
 release remains **2.5.1** until the candidate is published. Older checkouts and
 live installations can differ; [STATUS.md](STATUS.md) records the audited revision and
 evidence. Historical plans and release notes retain their original context.
@@ -23,6 +23,8 @@ evidence. Historical plans and release notes retain their original context.
 |---|---|
 | Set up a checkout and contribute | [Development](DEVELOPMENT.md), [Contributing](../CONTRIBUTING.md) |
 | Trace modes, extensions, lifecycle, and stored state | [Architecture](ARCHITECTURE.md) |
+| Migrate Neura to Mastra without dropping features | [Implementation reference](MASTRA_MIGRATION_REFERENCE.md), [issue plan](MASTRA_MIGRATION_PLAN.md), [issue links](MASTRA_MIGRATION_ISSUES.md) |
+| Inspect migration decisions and initial evidence | [Backlog review](MASTRA_BACKLOG_REVIEW.md), [planning checkpoint](MASTRA_MIGRATION_PROGRESS.md) |
 | Run suites and understand proof receipts | [Verification](VERIFICATION.md) |
 | Review dependency pins and executable trust | [Dependency policy](DEPENDENCIES.md), [Learn runtime review](LEARN_DEPENDENCIES.md) |
 | Apply terminal and learning-board design rules | [Design system](../DESIGN.md) |

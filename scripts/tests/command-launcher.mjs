@@ -65,7 +65,10 @@ const editorContainer = new Container();
 editorContainer.addChild(editor);
 tui.addChild(editorContainer);
 tui.setFocus(editor);
-const host = { ui: tui, editor, editorContainer, keybindings: keys, disposeActiveSelector() {} };
+const host = Object.assign(Object.create(InteractiveMode.prototype), {
+  ui: tui, editor, editorContainer, keybindings: keys, extensionDialogs: [],
+  programStatus: { setBlocked() {} }, disposeActiveSelector() {},
+});
 let component;
 const custom = (factory, options) => InteractiveMode.prototype.showExtensionCustom.call(host, (t, th, kb, done) => {
   component = factory(t, th, kb, done);
@@ -97,6 +100,21 @@ component.handleInput('\r');
 assert.equal((await screenResult.result).name, 'beta');
 assert.equal(editor.focused, true);
 assert.equal(editor.getValue(), 'unsent draft');
+assert.equal(host.extensionDialogs.length, 0, 'closed launcher retained a dialog');
+// Pi 1.4 stacks editor-slot dialogs. Closing a hidden one must not steal focus.
+const lower = await screen(read);
+const lowerComponent = component;
+const upper = await screen(read);
+const upperComponent = component;
+assert.equal(host.extensionDialogs.length, 2);
+lowerComponent.handleInput('\x1b');
+await lower.result;
+assert.equal(upperComponent.focused, true, 'hidden dialog closure stole focus');
+assert.equal(host.extensionDialogs.length, 1);
+upperComponent.handleInput('\x1b');
+await upper.result;
+assert.equal(editor.focused, true);
+assert.equal(host.extensionDialogs.length, 0);
 screenResult = await screen(read);
 component.handleInput('\x1b[A');
 component.handleInput('\r');

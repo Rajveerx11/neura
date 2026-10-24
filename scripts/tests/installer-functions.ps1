@@ -58,7 +58,7 @@ if ($profile.environment.PI_SKIP_VERSION_CHECK -ne '1') { throw 'Terminal startu
 $contractPath = Join-Path ([IO.Path]::GetDirectoryName($Source)) 'agent/neura/runtime-contract.json'
 $pin = ([IO.File]::ReadAllText($contractPath) | ConvertFrom-Json).piVersion
 $minimum = '24.15.0'
-foreach ($case in @(@('node', 'v24.19.0'), @('npm', '11.6.0'), @('pi', $pin), @('git', 'git version 2.50.1.windows.1'))) {
+foreach ($case in @(@('node', 'v24.19.0'), @('npm', '11.6.0'), @('git', 'git version 2.50.1.windows.1'))) {
     $probe = [PSCustomObject]@{ Found = $true; ExitCode = 0; Output = $case[1] }
     if (Get-NeuraVersionProblem $case[0] $probe $pin $minimum) { throw "Valid $($case[0]) prerequisite rejected" }
     $probe.ExitCode = 37
@@ -73,14 +73,6 @@ foreach ($case in @(@('node', 'v24.19.0'), @('npm', '11.6.0'), @('pi', $pin), @(
 }
 $probe = [PSCustomObject]@{ Found = $true; ExitCode = 0; Output = 'v22.19.0' }
 if ((Get-NeuraVersionProblem 'node' $probe $pin $minimum) -notlike '*24.15.0 or newer*') { throw 'Old Node accepted' }
-$reviewedPi = [version]$pin
-$probe.Output = '{0}.{1}.{2}' -f $reviewedPi.Major, $reviewedPi.Minor, ($reviewedPi.Build + 1)
-$newer = Get-NeuraVersionProblem 'pi' $probe $pin $minimum
-if ($newer -notlike '*Update Neura; do not downgrade Pi.*' -or $newer -like '*npm install*') { throw 'Newer Pi was downgraded' }
-foreach ($older in @('0.99.2', '1.0.4', '1.0.5')) {
-    $probe.Output = $older
-    if ((Get-NeuraVersionProblem 'pi' $probe $pin $minimum) -notlike "*upgrade to reviewed Pi $pin*") { throw 'Old Pi mismatch missed' }
-}
 if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
     $native = Join-Path $Scratch 'version-probe.cmd'
     [IO.File]::WriteAllText($native, "@echo off`r`necho $pin`r`nexit /b 37`r`n")
@@ -101,4 +93,13 @@ function Invoke-NeuraVersionProbe($Name, $Arguments) {
 }
 $problems = @(Get-NeuraPrerequisiteProblems $pin $minimum)
 if ($problems.Count -ne 1 -or $script:probeCalls.Count -ne 1 -or $script:probeCalls[0] -ne 'node') { throw 'Pi/npm executed after failed Node prerequisite' }
+$script:probeCalls = @()
+function Invoke-NeuraVersionProbe($Name, $Arguments) {
+    $script:probeCalls += $Name
+    if ($Name -eq 'pi') { throw 'Global Pi must not execute during installation' }
+    $output = if ($Name -eq 'node') { 'v24.19.0' } elseif ($Name -eq 'git') { 'git version 2.50.1.windows.1' } else { '11.6.0' }
+    [PSCustomObject]@{ Found = $true; ExitCode = 0; Output = $output }
+}
+$problems = @(Get-NeuraPrerequisiteProblems $pin $minimum)
+if ($problems.Count -ne 0 -or ($script:probeCalls -join ',') -ne 'node,npm,git') { throw 'Core prerequisites still require global Pi' }
 [Console]::WriteLine('PASS installer functions')

@@ -14,9 +14,10 @@ process.env.PI_OFFLINE = '1';
 const repo = path.resolve(import.meta.dirname, '../..');
 pinnedPi(repo);
 const { createAgentSession, createCodemodeExtension, createToolSearchExtension, createMcpExtension, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } = await import('@earendil-works/pi-coding-agent');
-const { createAssistantMessageEventStream } = await import('@earendil-works/pi-ai/compat');
+const { createAssistantMessageEventStream, getCurrentTools, getCurrentSystemPrompt } = await import('@earendil-works/pi-ai/compat');
 const { parseArgs } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js');
 const { Type } = await import('typebox');
+const { stream: anthropicStream } = await import('@earendil-works/pi-ai/api/anthropic-messages');
 const { validateThemeJson } = await import('../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.js');
 const theme = JSON.parse(fs.readFileSync(path.join(repo, 'agent/themes/neura-dark.json'), 'utf8'));
 validateThemeJson('neura-dark', theme);
@@ -57,10 +58,10 @@ fs.writeFileSync(path.join(cwd, '.pi/settings.json'), JSON.stringify({ extension
 const modelRuntime = await ModelRuntime.create({ authPath: path.join(agentDir, 'synthetic-auth.json'), modelsPath: null, refreshOnCreate: false });
 const settingsManager = SettingsManager.inMemory({ extensions: ['+builtin:mcp'], packages: [] }, { projectTrusted: true });
 const sessions = [];
-async function makeSession(disabled, extraFactories = [], tools, sessionManager = SessionManager.inMemory(cwd)) {
+async function makeSession(disabled, extraFactories = [], tools, sessionManager = SessionManager.inMemory(cwd), extensionPaths = []) {
   const loader = new DefaultResourceLoader({
     cwd, agentDir, settingsManager, noContextFiles: true, noSkills: true, noPromptTemplates: true, noThemes: true,
-    additionalExtensionPaths: ['builtin:mcp'],
+    additionalExtensionPaths: ['builtin:mcp', ...extensionPaths],
     disabledBuiltinExtensions: disabled ? ['mcp'] : [],
     extensionFactories: [{ name: 'mcp', builtin: true, replaceable: true, factory: createMcpExtension() }, ...extraFactories],
   });
@@ -147,10 +148,11 @@ try {
       : { type: 'done', reason: stopReason, message });
   }
   let toolSerial = 0, modifierExecutions = 0;
-  async function callTool(session, name, args) {
+  async function callTool(session, name, args, inspectProvider) {
     const id = `modifier-${toolSerial++}`;
     let first = true;
-    session.agent.streamFunction = model => {
+    session.agent.streamFunction = async (model, context, options) => {
+      if (inspectProvider) await inspectProvider(context, options, model);
       const stream = createAssistantMessageEventStream();
       response(stream, model, first ? [{ type: 'toolCall', id, name, arguments: args }] : [{ type: 'text', text: 'synthetic done' }], first ? 'toolUse' : 'stop');
       first = false;
@@ -158,7 +160,7 @@ try {
     };
     await session.prompt('synthetic local tool call');
     const result = session.messages.find(message => message.role === 'toolResult' && message.toolCallId === id);
-    assert.ok(result, 'actual agent pipeline did not return the tool result');
+    assert.ok(result, `actual agent pipeline did not return the tool result: ${session.messages.filter(message => message.role === 'assistant').at(-1)?.errorMessage ?? 'no assistant error'}`);
     return result;
   }
   const { session: modified } = await makeSession(true, [guardrail, createCodemodeExtension(), createToolSearchExtension(), pi => {
@@ -214,6 +216,132 @@ try {
   assert.equal(requests, 0, 'resume enabled native MCP');
   assert.equal(fs.existsSync(marker), false);
 
+  // Pi 1.4 replays the whole branch, not just its compaction checkpoint.
+  // A removed tool must stay off; an unmentioned extension tool defaults on.
+  const restoredNames = ['fixture_restored', 'fixture_removed', 'fixture_new', 'fixture_inactive'];
+  let restoredExecutions = 0;
+  let transportControlChecked = false;
+  const restorationTools = pi => {
+    for (const name of restoredNames) pi.registerTool({ name, label: name, description: `Synthetic ${name}`, parameters: Type.Object({}),
+      ...(name === 'fixture_inactive' ? { defaultActive: false } : {}),
+      execute: async () => { restoredExecutions++; return { content: [{ type: 'text', text: 'restoration control' }], details: {} }; },
+    });
+  };
+  function compactedHistory() {
+    const manager = SessionManager.inMemory(cwd);
+    const initial = manager.appendMessage({ role: 'system', content: '', timestamp: Date.now(),
+      toolsAdded: ['fixture_restored', 'fixture_removed'].map(name => ({ name, description: name, parameters: Type.Object({}) })) });
+    const removed = manager.appendMessage({ role: 'system', content: '', timestamp: Date.now(), toolsRemoved: [{ name: 'fixture_removed' }] });
+    manager.appendMessage({ role: 'user', content: 'synthetic history', timestamp: Date.now() });
+    const compacted = manager.appendCompaction('synthetic summary; no model used', null, 0);
+    assert.equal(manager.buildSessionContext().messages.some(message => message.toolsRemoved?.some(tool => tool.name === 'fixture_removed')), false,
+      'fixture must hide the explicit removal from compacted context');
+    return { manager, initial, removed, compacted };
+  }
+  const history = compactedHistory();
+  const { session: restoredStock } = await makeSession(true, [restorationTools], undefined, history.manager);
+  function assertRestored(candidate) {
+    assert.equal(candidate.getActiveToolNames().includes('fixture_restored'), true);
+    assert.equal(candidate.getActiveToolNames().includes('fixture_new'), true, 'unmentioned tool did not activate');
+    assert.equal(candidate.getActiveToolNames().includes('fixture_removed'), false, 'pre-compaction removal was forgotten');
+    assert.equal(candidate.getActiveToolNames().includes('fixture_inactive'), false, 'defaultActive:false tool activated');
+  }
+  assertRestored(restoredStock);
+  await restoredStock.reload();
+  // Upstream reload currently reactivates direct extension tools. Characterize
+  // stock behavior; Neura must still enforce its own boundary below.
+  assert.equal(restoredStock.getActiveToolNames().includes('fixture_removed'), true);
+  assert.equal(restoredStock.getActiveToolNames().includes('fixture_inactive'), false);
+  await restoredStock.navigateTree(history.initial, { summarize: false });
+  assert.equal(restoredStock.getActiveToolNames().includes('fixture_removed'), true, 'tree did not restore the earlier branch loadout');
+  await restoredStock.navigateTree(history.removed, { summarize: false });
+  assertRestored(restoredStock);
+  await restoredStock.navigateTree(history.compacted, { summarize: false });
+  assertRestored(restoredStock);
+  assert.equal((await callTool(restoredStock, 'fixture_new', {})).isError, false, 'stock new-tool control failed');
+  assert.equal((await callTool(restoredStock, 'fixture_restored', {})).isError, false, 'stock restored-tool control failed');
+  assert.equal(restoredExecutions, 2);
+  restoredExecutions = 0;
+  for (const mode of ['plan', 'work', 'learn', 'human-away']) {
+    const { manager, compacted } = compactedHistory();
+    const { session: restricted } = await makeSession(true, [guardrail, modes, restorationTools, pi => {
+      // Simulate an extension activating capabilities after Neura's startup hook.
+      pi.on('before_agent_start', () => pi.setActiveTools([...pi.getActiveTools(), 'fixture_new', 'fixture_restored']));
+    }], undefined, manager);
+    for (const phase of ['resume', 'reload', 'tree']) {
+      if (phase === 'reload') await restricted.reload();
+      if (phase === 'tree') await restricted.navigateTree(compacted, { summarize: false });
+      setMode(mode);
+      for (const name of ['fixture_new', 'fixture_restored']) {
+        let payloads = 0;
+        const denied = await callTool(restricted, name, {}, async (context, options, model) => {
+          assert.equal(typeof options.onPayload, 'function', 'SDK provider hook missing');
+          let payload, transportCalls = 0;
+          const client = { beta: { messages: { create() { transportCalls++; throw Error('Synthetic transport reached'); } } } };
+          const providerModel = { ...model, api: 'anthropic-messages', provider: 'anthropic', id: 'synthetic',
+            baseUrl: 'https://example.invalid', maxTokens: 2048 };
+          const shaped = anthropicStream(providerModel, context, {
+            apiKey: 'synthetic-no-network', client, maxRetries: 0,
+            async onPayload(value) {
+              payload = await options.onPayload(value, model);
+              throw Error('Synthetic payload captured before transport');
+            },
+          });
+          await shaped.result();
+          assert.equal(transportCalls, 0, 'provider transport was reached');
+          assert.ok(payload, 'actual provider did not serialize the request');
+          payloads++;
+          if (!transportControlChecked) {
+            // Let one synthetic request reach the same stub to prove its API shape.
+            const control = anthropicStream(providerModel, context, {
+              apiKey: 'synthetic-no-network', client, maxRetries: 0, onPayload: value => value,
+            });
+            const result = await control.result();
+            assert.equal(transportCalls, 1, 'transport control missed the SDK client method');
+            assert.match(result.errorMessage ?? '', /Synthetic transport reached/);
+            transportControlChecked = true;
+          }
+          // Prior blocked calls/results may name the tool; executable declarations must not.
+          assert.equal(JSON.stringify(payload.tools ?? []).includes('fixture_'), false, `${mode} exposed a restricted schema`);
+          function inspectDefinitions(value) {
+            if (Array.isArray(value)) value.forEach(inspectDefinitions);
+            else if (value && typeof value === 'object') {
+              if (value.type === 'tool_definition') assert.equal(JSON.stringify(value).includes('fixture_'), false, 'inline tool definition escaped');
+              Object.values(value).forEach(inspectDefinitions);
+            }
+          }
+          inspectDefinitions(payload);
+          assert.equal(restricted.getActiveToolNames().some(tool => restoredNames.includes(tool)), false);
+        });
+        assert.ok(payloads > 0, 'provider boundary control never ran');
+        assert.equal(denied.isError, true, `${name} escaped ${mode} after ${phase}`);
+        assert.equal(restoredExecutions, 0, 'restricted tool had a side effect');
+      }
+    }
+    setMode('yolo');
+    assert.equal((await callTool(restricted, 'fixture_new', {})).isError, false, 'YOLO new-tool control failed');
+    assert.equal((await callTool(restricted, 'fixture_restored', {})).isError, false, 'YOLO restored-tool control failed');
+    assert.equal(restoredExecutions, 2);
+    restoredExecutions = 0;
+  }
+  assert.equal(transportControlChecked, true, 'provider transport positive control never ran');
+  assert.equal(requests, 0, 'restoration connected native MCP');
+  assert.equal(fs.existsSync(marker), false, 'restoration started native stdio MCP');
+
+  // Exercise jiti aliases through a real file extension, not a direct import.
+  const aliasFixture = path.join(scratch, 'models-alias.ts');
+  fs.writeFileSync(aliasFixture, `
+    import { clampThinkingLevel } from '@earendil-works/pi-ai/models';
+    import { clampThinkingLevel as legacyClamp } from '@mariozechner/pi-ai/models';
+    export default function () {
+      const model = { reasoning: false };
+      if (clampThinkingLevel(model, 'high') !== 'off' || legacyClamp(model, 'high') !== 'off') throw Error('model alias mismatch');
+    }
+  `);
+  const { loader: aliasLoader } = await makeSession(true, [], undefined, SessionManager.inMemory(cwd), [aliasFixture]);
+  assert.deepEqual(aliasLoader.getExtensions().errors, []);
+  assert.ok(aliasLoader.getExtensions().extensions.some(extension => extension.path === aliasFixture));
+
   // Pi 1.2 custom-triggered runs must cross the real Neura mode boundary,
   // including while asynchronous startup is busy and cancellation is pending.
   for (const cancelDuringStartup of [false, true]) {
@@ -238,8 +366,8 @@ try {
     custom.agent.streamFunction = (model, context, options) => {
       providerCalls++;
       if (cancelDuringStartup) assert.equal(options.signal.aborted, true, 'startup abort reached an uncancelled provider');
-      assert.match(context.systemPrompt, /NEURA MODE: PLAN/);
-      assert.equal(context.tools.some(tool => ['codemode', 'tool_search', 'write'].includes(tool.name)), false,
+      assert.match(getCurrentSystemPrompt(context.messages), /NEURA MODE: PLAN/);
+      assert.equal(getCurrentTools(context.messages).some(tool => ['codemode', 'tool_search', 'write'].includes(tool.name)), false,
         'custom-triggered provider received a restricted capability');
       const stream = createAssistantMessageEventStream();
       response(stream, model, [{ type: 'text', text: 'synthetic custom response' }], options.signal.aborted ? 'aborted' : 'stop');
@@ -308,7 +436,7 @@ try {
   try { await Promise.race([firstRequest, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('stock Pi MCP positive control timed out')), 5_000); })]); }
   finally { clearTimeout(timer); }
   assert.ok(requests > 0, 'stock Pi native MCP never connected');
-  console.log('PASS Pi 1.3 real loader/session: native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/resume/reload execution, custom startup/busy/cancellation, duration/aborted settlement, YOLO and stock Pi controls');
+  console.log('PASS Pi 1.4 real loader/session: pre-compaction removals, unmentioned/default-inactive tools, tree/reload, restricted provider payloads, models aliases, native MCP disable, override/reload/load-failure denial, nested deferred policy, real modifier/resume/reload execution, custom startup/busy/cancellation, duration/aborted settlement, YOLO and stock Pi controls');
 } finally {
   for (const session of sessions) {
     try { await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'exit' }); } finally { session.dispose(); }

@@ -56,6 +56,10 @@ assert.equal(parseRuntimeContract({ schemaVersion: "1", piVersion: runtimeContra
 const skillSmoke = spawnSync(process.execPath, [path.join(import.meta.dirname, 'skills.mjs')], {encoding:'utf8', windowsHide:true, timeout:60000});
 assert.equal(skillSmoke.status, 0, `Skill registry verification failed: ${skillSmoke.stdout}\n${skillSmoke.stderr}`);
 console.log(skillSmoke.stdout.trim());
+assert.doesNotMatch(installerSource, /foreach \(\$name in @\('npm', 'pi'/, 'installer executes global Pi');
+const ownedSmoke = spawnSync(process.execPath, [path.join(import.meta.dirname, 'owned-pi.mjs')], {encoding:'utf8', windowsHide:true, timeout:30000});
+assert.equal(ownedSmoke.status, 0, `Owned runtime verification failed: ${ownedSmoke.stdout}\n${ownedSmoke.stderr}`);
+console.log(ownedSmoke.stdout.trim());
 console.log('PASS installer contract');
 const managedRelease = spawnSync(process.execPath, [path.join(import.meta.dirname, 'runtime-install.mjs')], {encoding:'utf8', windowsHide:true, timeout:60000});
 assert.equal(managedRelease.status, 0, `Managed release verification failed: ${managedRelease.stdout}\n${managedRelease.stderr}`);

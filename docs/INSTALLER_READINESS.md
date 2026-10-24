@@ -1,6 +1,6 @@
 # Neura installer readiness
 
-Updated: 2026-10-20. Scope: **Neura only**, inspired by Pi/Hermes installation
+Updated: 2026-10-24. Scope: **Neura only**, inspired by Pi/Hermes installation
 patterns. This is source-only preparation, not a published installer, live
 installation, or production-readiness claim. Extend `install.ps1` and
 `agent/neura/runtime-install.mjs`; do not build a second activation engine.
@@ -8,16 +8,23 @@ installation, or production-readiness claim. Extend `install.ps1` and
 ## First implemented slice
 
 - Exact Pi coding-agent/API/TUI pins, root lockfile, runtime contract, and managed
-  manifest now target stable `1.3.0`. Dependency review is in
-  [DEPENDENCIES.md](DEPENDENCIES.md#pi-130-compatibility-slice-2026-10-19).
+  manifest now target stable `1.4.0`. Dependency review is in
+  [DEPENDENCIES.md](DEPENDENCIES.md#pi-140-compatibility-slice-2026-10-24).
 - Neura's launcher combines `--no-mcp` with `--tui-mode regular` to stop native startup connections even
   when configuration or explicit builtin selection would otherwise enable them.
   The existing explicit YOLO-only MCP wrapper remains in place. `codemode` and
   `tool_search` are denied outside YOLO; nested deferred calls retain policy hooks.
-- `install.ps1` and `-Check` share prerequisite checks. Node is checked before
-  Pi/npm. Missing commands, native failures, malformed/multiline versions, old
-  Node, and Pi mismatches fail before staging. Newer Pi is never offered a
-  downgrade; health uses the same no-downgrade policy.
+- `install.ps1` and `-Check` share Node-first Node/npm/Git prerequisite checks.
+  Missing commands, native failures, malformed/multiline versions and old Node
+  fail before staging. No global Pi is required or executed. The staged private
+  Pi/Learn graph is installed with scripts disabled; sealing, activation and
+  checks validate the exact owned Pi and fixed external Undici identities.
+  Stock Pi is neither replaced nor offered a downgrade.
+- The launcher runs the owned unbundled `dist/cli.js` directly with Node after
+  full receipt verification. Missing, linked, modified or shadowed runtime paths
+  fail closed with no global fallback. Headmaster uses the same entry with
+  explicit `--no-mcp` and its existing tool-free flags. Historical verified
+  recovery remains supported without imposing the new graph on old transactions.
 - `npm run check:pi-latest` performs bounded public-registry discovery without
   installation. CI/release gates fail on stale targets or unavailable evidence.
   The daily target-check workflow is present on the default branch. This detects
@@ -36,14 +43,16 @@ installation, or production-readiness claim. Extend `install.ps1` and
 | WSL execution setup | Detect/install WSL2 with explicit elevation/reboot handling and resumable setup; provision bubblewrap and reviewed uv/CPython/offline wheels. Verify package and executable hashes against the contract. Never silently substitute a newer binary or fall back to host execution. |
 | Artifact delivery | Choose the distribution channel and trust/authenticity mechanism; verify a versioned archive before extracting and executing it. A checksum downloaded from the same mutable origin is not an independent publisher signature. The bootstrap must work without a repository checkout or Node already installed. |
 | Profile consistency | Reconcile hardcoded `~/.pi/agent` consumers before using another Neura profile root. Preserve credentials, sessions, learning data, approvals, memory, and user-owned extensions; do not stage or publish them. |
-| Cross-component recovery | Existing recovery covers managed files and staged Learn modules. Extend evidence to dependency activation, settings, PATH, launchers, Terminal resources, interruption, ownership, and path swaps. Do not describe the current installation as atomic. |
+| Cross-component recovery | Existing recovery covers managed files and staged private Pi/Learn modules. Extend evidence to dependency activation, settings, PATH, launchers, Terminal resources, interruption, ownership, and path swaps. Do not describe the current installation as atomic. |
 | Installer presentation | Add bounded terminal-native logo/progress output, plain/non-TTY fallback, reduced motion, and cancellation cleanup. Report actual stages; do not disguise failures with animation or invent completion percentages. |
 | Clean-host rehearsal | Exercise fresh install, repeat install, upgrade, interruption, recovery, rollback, junction rejection, missing network/artifacts, and newer Pi on disposable Windows machines. Do not rehearse against the owner's live profile without explicit authorization. |
 | Release evidence | Run typecheck, all suites, browser/WSL checks, audits/signatures, docs, independent review, and required CI on a clean candidate. Record failures and remaining limitations; retain experimental/Human Away preview labels. |
 
-## Current candidate validation (2026-10-20)
+## Current candidate validation (2026-10-24)
 
-The `2.6.0-rc.1` candidate targets Pi `1.3.0` and immutable guidance `1.0.3`.
+The `2.6.0-rc.1` candidate targets Pi `1.4.0` and immutable guidance `1.0.4`.
+Focused source-only loader, skills and managed installer checks pass locally.
+Fresh full harness, browser, audit/signature and required CI evidence remains a gate.
 The Pi 1.3 base passed the checks recorded in [STATUS.md](STATUS.md); that
 base evidence does not certify this combined RC/dependency candidate.
 Historical Pi 1.2 main `8e8e8d7` passed [CI run 38694416311](https://github.com/Rajveerx11/neura/actions/runs/38694416311),

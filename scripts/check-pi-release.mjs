@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const stable = /^\d+\.\d+\.\d+$/;
-export function validatePiRelease(contract, manifest, latest) {
+export function validatePiRelease(contract, manifest, latest, ownedManifest) {
   const pin = contract?.piVersion;
   assert.equal(contract?.schemaVersion, 1, 'invalid Neura runtime contract');
   assert.equal(typeof pin, 'string', 'missing Pi pin');
@@ -16,6 +16,9 @@ export function validatePiRelease(contract, manifest, latest) {
   for (const name of ['pi-ai', 'pi-coding-agent', 'pi-tui']) {
     assert.equal(manifest?.devDependencies?.[`@earendil-works/${name}`], pin, `${name} and runtime contract differ`);
   }
+  assert.equal(ownedManifest?.dependencies?.['@earendil-works/pi-coding-agent'], pin, 'owned Pi and runtime contract differ');
+  assert.equal(ownedManifest?.dependencies?.undici, '8.12.2', 'owned Undici pin differs');
+  assert.equal(ownedManifest?.overrides?.['undici@8.10.2'], '8.12.2', 'owned Undici override differs');
   return pin;
 }
 
@@ -48,7 +51,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const root = path.resolve(import.meta.dirname, '..');
     const contract = JSON.parse(fs.readFileSync(path.join(root, 'agent/neura/runtime-contract.json'), 'utf8'));
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-    const version = validatePiRelease(contract, manifest, await fetchLatestPi());
+    const ownedManifest = JSON.parse(fs.readFileSync(path.join(root, 'agent/neura/package.json'), 'utf8'));
+    const version = validatePiRelease(contract, manifest, await fetchLatestPi(), ownedManifest);
     console.log(`Latest stable Pi ${version} matches Neura's exact development/runtime pins (checked ${new Date().toISOString()}). Compatibility tests remain required.`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : 'Cannot verify latest stable Pi');

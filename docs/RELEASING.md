@@ -13,7 +13,7 @@ Neura uses semantic versions:
 must match it.
 
 Current source candidate is [`2.6.0-rc.1`](releases/v2.6.0-rc.1.md), covering
-Work, modular verification, Learn, and Pi `1.3.0` compatibility. Latest published
+Work, modular verification, Learn, and Pi `1.4.0` compatibility. Latest published
 release remains `2.5.1` until the candidate is published. Historical v2.5.1 notes
 retain their original scope and must not be rewritten as current evidence.
 

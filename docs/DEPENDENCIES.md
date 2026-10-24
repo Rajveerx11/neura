@@ -1,6 +1,6 @@
 # Dependency policy and review
 
-Pi/development source review: 2026-10-19 (Pi 1.3.0). Learn runtime review: 2026-09-07.
+Pi/development source review: 2026-10-24 (Pi 1.4.0). Learn runtime review: 2026-09-07.
 MCP lifecycle and automatic-execution review: 2026-09-13. Public-default
 configuration review: 2026-09-15.
 
@@ -9,9 +9,11 @@ reproducible development graph. Pi-managed runtime extensions are pinned in
 `agent/settings.json`; `install.ps1` merges those exact pins into the live
 harness without replacing unrelated local packages or model choices.
 
-Learn's document runtime has a separate exact manifest and lockfile under
-`agent/neura/`. See [LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md) for six direct
-pins, licenses, reviewed entry points, native/WASM trust, and parser limits.
+Neura's private Pi and Learn runtime share the existing exact manifest and
+lockfile under `agent/neura/`. Pi `1.4.0` and external Undici `8.12.2` are direct
+pins, with the literal override `undici@8.10.2` to `8.12.2`. The six Learn pins
+are unchanged; see [LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md) for their
+licenses, reviewed entry points, native/WASM trust, and parser limits.
 Development setup needs both graphs:
 
 ```powershell
@@ -27,7 +29,7 @@ Learn's SQLite authorizer; CI exercises 24.16.0.
 
 | Package | Pin | Source and lifecycle review | Privileged behavior |
 |---|---:|---|---|
-| `@earendil-works/pi-coding-agent` | `1.3.0` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.3.0); resumed tool selection, codemode cancellation/admission, provider, overlay and exact internal dependency changes reviewed. Seven coupled runtime packages have maintainer publish hooks, no consumer install hooks. See current compatibility evidence below; signature counts and supported-platform CI requirements are recorded below. | Runs providers, tools, extensions, child processes, sessions, and filesystem operations with the host user's authority. Neura's launcher disables native MCP; indirect tools are YOLO-only. |
+| `@earendil-works/pi-coding-agent` | `1.4.0` | [Upstream release](https://github.com/earendil-works/pi/releases/tag/v1.4.0). Branch-wide tool restoration and model aliases reviewed alongside telemetry and codemode updates. TUI changes are covered below. Seven coupled runtime packages have maintainer publish hooks, no consumer install hooks. Compatibility evidence and registry verification counts are recorded below, along with supported-platform CI requirements. | Runs providers and tools with the host user's authority. It also uses that authority for extensions and child processes, plus session/filesystem operations. Neura's launcher disables native MCP. Indirect tools are YOLO-only. |
 | `@ollama/pi-web-search` | `0.0.5` | Published package contains only `index.ts`, README, and license; no dependencies or lifecycle scripts. Repository metadata is absent, so the shipped source was reviewed directly. | Sends search/fetch requests to local Ollama at `127.0.0.1:11434`; Ollama performs external web access. Direct fetch remains disabled in Plan. |
 | `@spences10/pi-redact` | `0.0.14` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-redact); no install hook. Registry signature verified. | Intercepts tool output before model context and performs local pattern-based redaction. |
 | `@spences10/pi-lsp` | `0.0.44` | [Source](https://github.com/spences10/my-pi/tree/main/packages/pi-lsp); no install hook. Registry signature verified. | Starts language servers and reads project files after project-trust checks. |
@@ -94,7 +96,7 @@ and workspace-contained overrides are rejected.
 
 ## Development graph
 
-`package.json` pins Pi `1.3.0`, Pi API/TUI types `1.3.0`, Playwright Core
+`package.json` pins Pi `1.4.0`, Pi API/TUI types `1.4.0`, Playwright Core
 `1.64.0`, axe-core `4.14.0`, Typebox `1.3.36`, TypeScript `7.0.2`, and Node types
 `26.6.5`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
@@ -212,7 +214,182 @@ The installer does not replace a user's global Pi. Rolling back requires
 restoring the prior manifest, lockfile, runtime contract, and live Neura files
 together; do not downgrade a newer global Pi silently.
 
-### Pi 1.3.0 compatibility slice (2026-10-19)
+### Pi 1.4.0 compatibility slice (2026-10-24)
+
+PR #130 CI rejected the stale Pi 1.3 target. Official `v1.4.0` resolves to
+`4a080252f06caf63a525d7873c5d94d3c23887e0`, following
+`71023aec1546d6d677a65669c5665c0927ce0dd0` for 1.3. Three exact direct pins,
+seven coupled Earendil lock entries, runtime identity and immutable guidance
+`1.0.4` advance together. Neura remains `2.6.0-rc.1`. Learn, proof, Git and
+managed extension pins are unchanged. CI already reads the runtime contract.
+No workflow version bypass or downgrade was needed.
+
+Compared every top-level field of all seven old/new published manifests before
+installation. Intra-Earendil dependency versions advance exactly. TUI adds only
+`marked-cjk-friendly` `0.1.2`. Telemetry adds its `./render` export, and coding-agent
+adds a maintainer `generate:references` script. Other manifest fields and scripts
+are unchanged apart from versions. The seven packages have maintainer
+`prepublishOnly` build hooks, but no consumer preinstall/install/postinstall or
+prepare hooks. The new CJK package has build/test/lint scripts only, no lifecycle
+hooks or runtime dependencies. Its `marked >=15.0.0` peer resolves to the existing
+locked `18.0.11`. Both source graphs were installed with `npm ci --ignore-scripts`.
+
+The MIT-licensed CJK extension is published from `tats-u/markdown-cjk-friendly`.
+Read its complete executable module and package metadata, including the MIT license. It replaces
+Marked emphasis/deletion tokenizers using Unicode flanking checks, global regex
+delimiter scans and recursive inline tokenization. No file, network, process or
+dynamic-code operations were found. This is not proof of arbitrary-input regex
+performance or native/WASM provenance. Actual Pi TUI controls exercise Chinese,
+Japanese, Korean, supplementary-plane text, emphasis/strikethrough, English,
+code/escape exclusions, resize/cache invalidation, and bounded delimiter-heavy
+inputs up to 8,192 characters. No new renderer framework or live UI was used.
+
+Published tarball SHA-512 values were computed and matched the registry-verified
+artifacts and lock entries:
+
+| Package | Artifact integrity |
+|---|---|
+| `pi-agent-core-1.4.0` | `sha512-PoKY84SKUwnt7S5QBZaGUqfNO1kjP3KHpHUA9QpFTj4cOjaVWMYIcBPJ6FDRCdE8Zen9OSECQUd0uUfVgtSmgA==` |
+| `pi-ai-1.4.0` | `sha512-hQM/C4+1w8rHYACzDDf+0vQMnEnpzIop1tptIERVgR3ZeT/hHSzBNG8PaWPgxWQjqSeKCyBZSyp8uTT6eKK1pQ==` |
+| `pi-codemode-1.4.0` | `sha512-23CNAXpS9DuLzPMyYuvrXVVio46x4YhffCgCqaWmF7F5H8PooqjrQvX4ucF6M0BhUd+x2tV6r1J0dv8cCME4Cg==` |
+| `pi-coding-agent-1.4.0` | `sha512-Z41LpZ3yYHSC/UUps6Mr39UMFPwH8elhJBG9DY1P7kuzsE5qSK/6eMj2EHzO5evJRQWLbKSqUMw+4nCNtIyiQg==` |
+| `pi-mcp-1.4.0` | `sha512-92aZmmGsUpHHknYuKXZHRINQfahntw5hU9If0I0ZM49GojOaFHpkl5/GF3/aatqpt7v7GjZbBfpfSygGKW+pnw==` |
+| `pi-telemetry-1.4.0` | `sha512-MLIfowwUYIY65jSjMX82paZOrX/NTvLk6D08h+3Jq42a99RzUOewzuCR0zOlPul3D6UBfddat76VT6LvsHEs1w==` |
+| `pi-tui-1.4.0` | `sha512-4obPOjgOD7g4mGSlngIvxyujC1UPdmyI9zdVthbr8GufacFEX+Ce0+scPgHg++k2xj5+QjESM2d5TxvIuzCVmg==` |
+| `marked-cjk-friendly-0.1.2` | `sha512-GUj8HjiEbur9yhgUo52FBgKizggF1QtT6gVdrYdWW6ZB4lVVjgS3EyyXPyfyRD0V4ghGRPlO7MO80rgSWbm0eA==` |
+
+Pi 1.4 replays all branch system messages, including pre-compaction additions
+and removals. Unmentioned extension tools activate unless `defaultActive:false`.
+Explicit removals survive resume and tree navigation. Stock reload currently
+reactivates removed direct extension tools through `includeAllExtensionTools`.
+Tests record this upstream behavior rather than changing plain Pi. Neura's
+existing startup/input/agent-start/provider filters and deterministic tool-call
+guard deny new/restored capabilities in all four restricted modes across
+resume/reload/tree. Actual synthetic agent dispatch has zero side effects there.
+Provider serialization invokes the SDK payload hook and excludes those schemas.
+YOLO and stock-Pi execution controls pass. Native MCP still never connects under
+Neura's enforced disable.
+
+The real file-extension loader accepts both Earendil and legacy `pi-ai/models`
+aliases and exercises `clampThinkingLevel` from the validated models export.
+The synthetic provider tests now read prompt/tools from transcript replay helpers
+rather than removed flattened stream-context fields. The launcher test host uses
+Pi's actual dialog stack, with out-of-order close/focus controls. Source search
+found no Neura callers of removed telemetryContext, getPiUserAgent or transcript
+capability flags. Header attribution, grep `--no-config`, codemode queueing and
+TUI cleanup changes required no Neura policy relaxation.
+
+Focused real-session, skills, synthetic installer/immutable-upgrade, UI and
+configured typecheck checks passed, as did latest-target discovery. Full harness,
+browsers, independent review, CodeRabbit, signature audits and new-head CI remain
+separate gates. Root and Learn vulnerability audits now report zero findings
+after the scoped npm security patch below. No global/live Pi was installed or attested.
+Rollback restores coupled source pins, lock, contracts, guidance and hashes
+without downgrading the user's Pi.
+
+#### Scoped npm Undici security patch
+
+The initial root audit found three advisories in Pi's exact `undici 8.10.2`:
+[EventSource retention](https://github.com/advisories/GHSA-4qv8-2p9j-2685),
+[mixed-case SRI](https://github.com/advisories/GHSA-f72v-6w45-q472), and
+[excess content encodings](https://github.com/advisories/GHSA-xjj6-f33q-929c).
+The last is high severity. A reviewed root override, `"undici@8.10.2": "8.12.2"`,
+patches only that vulnerable npm version without changing Pi's exact `1.4.0` target.
+The generated lock hoists the replacement from coding-agent's nested directory
+to `node_modules/undici`. No unrelated resolved version or integrity changes.
+
+Official `nodejs/undici` source `v8.12.2` resolves to
+`bb6cc0ae9b6827ed273ed5ba344148273629638f`, compared with 8.10.2 at
+`5e541e0b9df7563e5766bbd469fbfe383d9ae6ca`. The downloaded 8.12.2 npm tarball
+matches the published SHA-512 and lock integrity:
+`sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==`.
+Published manifests and selected source changes were reviewed before installation.
+Node `>=22.19.0` and zero runtime dependencies are unchanged. There are no
+consumer preinstall/install/postinstall hooks. The existing maintainer `prepare`
+script (`husky && node ./scripts/platform-shell.js`) is unchanged and all scripts
+remain disabled during lock generation and installation.
+
+The reviewed fixes bound retained EventSource fields, data nodes and chunk
+wrappers, abort excess encodings before creating a response body, and normalize
+SRI algorithm case before verification. Agent TLS option handling also changes.
+The package remains MIT-licensed and adds optional Milo parser code under ISC.
+Milo is opt-in and was not enabled. This review does not attest every WASM/native
+component or establish arbitrary-input resource limits for the host.
+
+Integration tests resolve Undici from Pi's actual npm entry point. They check
+normal nested gzip decoding, rejection of six content encodings and a subsequent
+successful request. Correct and tampered SHA-256/384/512 SRI values are exercised
+with lower, upper and mixed-case algorithm tokens. Bounded EventSource tests
+cover normal events and field replacement, retained-field overflow, data-node
+and chunk limits, cleanup on error, and release of a full chunk buffer at a line
+ending. HTTP fixtures bind loopback only. Both graph vulnerability audits now
+report zero findings, and focused integration plus configured typecheck pass.
+
+This override patches the external npm module only. It does not rewrite Pi's
+vendored CLI/RPC bundle. The published `dist/bundle/cli.js` loads
+`dist/bundle/cli-runtime.js`, which calls bundled `configureHttpDispatcher()`
+before `main()`. That dispatcher installs the embedded, pre-fix fetch. The
+reviewed code is in `dist/bundle/chunks/chunk-MM3LKT73.js`, lines 129–130 and 271.
+
+Independent review on 2026-10-24 confirmed a bounded loopback integrity check.
+External npm fetch rejected an incorrect uppercase `SHA256` digest. Bundled
+fetch rejected lowercase `sha256` but accepted the same incorrect uppercase
+digest. Matching vulnerable EventSource and excess-encoding source was also
+found in the bundle. Exhaustion/crash behavior was not tested. Neura-specific
+reachability of those other paths has not been fully traced. Whether this
+bundled exposure predates Pi 1.4 was not established.
+
+The owner-authorized remediation selects a different supported Neura entry,
+not a vendor patch. `launcher/neura.cmd` keeps the full receipt check, then runs
+Node directly against the owned `dist/cli.js` with `--no-mcp --tui-mode regular`.
+This official unbundled entry calls `setupCli()` and `main()`; its unbundled
+`core/http-dispatcher.js` imports external Undici and installs that fetch.
+Headmaster selects the same owned entry and adds `--no-mcp` to its tool-free
+child flags. Neither path selects Pi from process argv, PATH, APPDATA or NODE_PATH.
+No preload, global Pi update or vendor-file edit is used.
+
+`owned-pi.mjs` validates release/contract/declaration/lock version agreement,
+fixed entry paths, receipt hashes and the external Undici identity. Before each
+Headmaster child, it also checks the complete sealed module inventory and hashes;
+an earlier launcher check is not reused as evidence. Malformed receipt paths or
+hashes and unknown, missing, modified or linked module files fail closed. Linked
+or escaping paths and nearer shadow packages are refused before outside reads.
+Installer callers retain their existing complete receipt verification without a
+second full module scan in the resolver.
+Fresh sealing, activation and checks require the private runtime. Recovery alone
+can still roll back a wholly historical verified transaction without it. The
+receipt schema and `.learn-runtime-lock` name stay unchanged.
+
+The nested lock adds 121 package entries. Every added version/integrity already
+exists in the reviewed root lock; all pre-existing Learn entries are byte-for-byte
+unchanged. Pi's artifact integrity is
+`sha512-Z41LpZ3yYHSC/UUps6Mr39UMFPwH8elhJBG9DY1P7kuzsE5qSK/6eMj2EHzO5evJRQWLbKSqUMw+4nCNtIyiQg==`.
+Undici uses the exact artifact recorded above. The earlier source and consumer
+lifecycle reviews apply to these same artifacts. Lock generation and private
+installation use scripts disabled and a task-local npm cache. The resulting
+private graph reports zero npm vulnerabilities, 142 verified registry signatures
+and 40 verified attestations on 2026-10-24. These checks do not attest vendor-built
+bundles or the host runtime.
+
+`scripts/tests/undici.mjs` now resolves the selected private unbundled dispatcher,
+asserts its fixed external Undici resolution and installed global fetch, then
+runs the existing bounded parser, encoding and integrity controls through it.
+Synthetic installer tests cover missing/modified runtime refusal, full launcher
+preflight, Windows argv/exit status/custom paths, and interrupted recovery.
+Synthetic Headmaster tests inspect complete child argv and refuse drift in
+non-selected imported files before any child runs, without models or auth. Real
+owned-CLI version/help smoke runs explicitly offline and leaves module inventory
+unchanged.
+Independent review and required new-head CI must still assess this remediation
+before the High finding can close. Stock Pi's bundled artifact is unchanged.
+
+The override also leaves Node's bundled global-fetch Undici unchanged, reported
+locally as `7.29.0` by Node `24.19.0`, and does not update existing global/live Pi.
+No host security clearance, Node/CI version change or live-install match is
+claimed. Remove the narrow override only when a reviewed upstream Pi graph no
+longer resolves the vulnerable version.
+
+### Historical Pi 1.3.0 compatibility slice (2026-10-19)
 
 Fresh dependency-PR CI rejected the stale `1.2.0` target. Official tag `v1.3.0`
 resolves to `71023aec1546d6d677a65669c5665c0927ce0dd0`. Three direct exact pins,
@@ -407,8 +584,8 @@ selected for testing.
 
 Exact pins make the validated graph reproducible; they must advance with stable
 Pi releases rather than become a permanent ceiling. `latest` may be queried for
-release discovery, never used as a runtime dependency specifier. On 2026-10-19,
-npm latest and this checkout's exact pins agree at `1.3.0`. The bounded
+release discovery, never used as a runtime dependency specifier. On 2026-10-24,
+npm latest and this checkout's exact pins agree at `1.4.0`. The bounded
 `npm run check:pi-latest` command checks that agreement in CI and release gates;
 the daily target-check workflow takes effect only after it reaches the default
 branch. A successful target check alone does not establish runtime compatibility.

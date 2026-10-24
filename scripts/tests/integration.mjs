@@ -10,8 +10,9 @@ assert.doesNotMatch(JSON.stringify(mcpConfig), /\b(?:npx|uvx|latest)\b|[A-Z]:\\U
 const launcher = fs.readFileSync(path.join(repoRoot, "launcher", "neura.cmd"), "utf-8");
 assert.doesNotMatch(launcher, /COMPOSIO_API_KEY|MY_PI_MCP_ENV_ALLOWLIST|powershell\s+-NoProfile/i, "public launcher should not import provider credentials by default");
 assert.doesNotMatch(launcher, /\bwt(?:\.exe)?\b/i, "terminal launcher still opens a second Windows Terminal window");
-assert.match(launcher, /pi --no-mcp --tui-mode regular %\*/, "Neura launcher allows unmediated native MCP startup or changed TUI mode");
-assert.match(launcher, /where pi >nul 2>&1[\s\S]+Neura requires Pi\./, "launcher does not clearly report missing Pi");
+assert.match(launcher, /node "%NEURA_AGENT_DIR%\\neura\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli\.js" --no-mcp --tui-mode regular %\*/, "Neura launcher did not select its owned regular unbundled CLI");
+assert.match(launcher, /runtime-install\.mjs" check \|\| exit \/b 1/, "launcher lost full preflight refusal");
+assert.doesNotMatch(launcher, /where pi|--quick|dist[\\/]bundle|^pi /m, "launcher retained global/bundled fallback or quick-only preflight");
 
 // Exercise the real resource loader: Neura's guarded /mcp replaces Pi's eager
 // built-in integration; plain Pi still retains its stock built-in extension.
@@ -57,16 +58,17 @@ if (process.platform === "win32") {
   delete env.Path;
   fs.writeFileSync(path.join(bin, "node.cmd"), [
     "@echo off",
+    'if "%~2"=="check" goto preflight',
+    'if not "%~1"=="%PI_CODING_AGENT_DIR%\\neura\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" exit /b 19',
+    '>"%LAUNCHER_RESULT%" echo %NEURA%',
+    '>"%LAUNCHER_RESULT%.args" echo %2 %3 %4 %5 %6 %7 %8 %9',
+    'exit /b 7',
+    ':preflight',
     ">>\"%NEURA_TEST_PREFLIGHT%\" echo check",
     "if defined NEURA_TEST_PREFLIGHT_FAIL exit /b 1",
     "exit /b 0",
   ].join("\r\n"));
-  fs.writeFileSync(path.join(bin, "pi.cmd"), [
-    "@echo off",
-    ">\"%LAUNCHER_RESULT%\" echo %NEURA%",
-    ">\"%LAUNCHER_RESULT%.args\" echo %*",
-    "exit /b 7",
-  ].join("\r\n"));
+  fs.writeFileSync(path.join(bin, "pi.cmd"), '@echo off\r\nexit /b 99\r\n');
   try {
     let run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
       env, encoding: "utf8", windowsHide: true,
@@ -91,8 +93,7 @@ if (process.platform === "win32") {
     run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
       env, encoding: "utf8", windowsHide: true,
     });
-    assert.equal(run.status, 1, "launcher did not fail when Pi was unavailable");
-    assert.match(run.stderr, /Neura requires Pi\./, "launcher did not explain that Pi was unavailable");
+    assert.equal(run.status, 7, "launcher still requires an ambient/global Pi");
   } finally {
     fs.rmSync(bin, { recursive: true, force: true });
   }
@@ -206,6 +207,9 @@ assert.equal(await guard({ toolName: "bash", input: { command: "terraform destro
 assert.equal(yoloPrompts, 0, "YOLO requested approval for a sensitive action");
 
 
+const undici = spawnSync(process.execPath, [path.join(import.meta.dirname, 'undici.mjs')], { encoding: 'utf8', windowsHide: true, timeout: 30_000 });
+assert.equal(undici.status, 0, `npm Undici regression failed: ${undici.stdout}\n${undici.stderr}`);
+console.log(undici.stdout.trim());
 const piRuntime = spawnSync(process.execPath, [path.join(import.meta.dirname, 'pi-runtime.mjs')], { encoding: 'utf8', windowsHide: true, timeout: 60_000 });
 assert.equal(piRuntime.status, 0, `Real Pi runtime regression failed: ${piRuntime.stdout}\n${piRuntime.stderr}`);
 console.log(piRuntime.stdout.trim());

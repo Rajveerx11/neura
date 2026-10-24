@@ -331,7 +331,7 @@ const nextPiParts = [...requiredPiParts];
 nextPiParts[2] += 1;
 for (const version of ['0.0.0', previousPiParts.join('.')]) {
   assert.equal(piRuntimeStatus(version, runtimeContract.piVersion).action,
-    `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`, "older Pi did not get an upgrade action");
+    `reinstall Neura’s owned Pi ${runtimeContract.piVersion} runtime; leave stock Pi unchanged`, "older Pi did not get an upgrade action");
 }
 for (const version of [nextPiParts.join("."), `${runtimeContract.piVersion}-beta.1`, "invalid"]) {
   assert.match(piRuntimeStatus(version, runtimeContract.piVersion).action, /update Neura.*do not downgrade Pi/, "mismatch recommended a Pi downgrade");
@@ -341,7 +341,7 @@ assert.deepEqual(piRuntimeStatus(null, runtimeContract.piVersion), {
   installed: null,
   required: runtimeContract.piVersion,
   label: `pi missing (requires ${runtimeContract.piVersion})`,
-  action: `npm install -g @earendil-works/pi-coding-agent@${runtimeContract.piVersion}`,
+  action: `reinstall Neura’s owned Pi ${runtimeContract.piVersion} runtime; leave stock Pi unchanged`,
 }, "missing Pi runtime was not actionable");
 assert.deepEqual(piRuntimeStatus(runtimeContract.piVersion, null), {
   valid: false,

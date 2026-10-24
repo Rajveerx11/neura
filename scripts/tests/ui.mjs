@@ -1,5 +1,44 @@
 import { repoRoot, assert, fs, path, healthLines, piRuntimeStatus, runtimeContract, loaded, state, extensionWithCommand, firstHandler, widgets, statuses, notices, editorFactory, ui, context, modeState, cockpitState, modes, stripAnsi, widthOf } from './harness.mjs';
-import { renderFakeCursor, stripTerminalSequences } from '@earendil-works/pi-tui';
+import { Markdown, renderFakeCursor, stripTerminalSequences } from '@earendil-works/pi-tui';
+// Exercise marked-cjk-friendly through Pi's real TUI Markdown entry point.
+// These bounded controls are not a proof of arbitrary-input regex performance.
+const markdownTheme = Object.fromEntries(['heading', 'link', 'linkUrl', 'code', 'codeBlock', 'codeBlockBorder',
+  'quote', 'quoteBorder', 'hr', 'listBullet', 'bold', 'italic', 'strikethrough', 'underline'].map(name => [name, text => text]));
+markdownTheme.bold = text => `\x1b[1m${text}\x1b[22m`;
+markdownTheme.italic = text => `\x1b[3m${text}\x1b[23m`;
+markdownTheme.strikethrough = text => `\x1b[9m${text}\x1b[29m`;
+for (const [source, visible, style] of [
+  ['**中文。**中文', '中文。中文', '\x1b[1m'],
+  ['**日本語。**続く', '日本語。続く', '\x1b[1m'],
+  ['**한국어(강조)**다음', '한국어(강조)다음', '\x1b[1m'],
+  ['𠀀**中文。**𠀀', '𠀀中文。𠀀', '\x1b[1m'],
+  ['中*文。*中', '中文。中', '\x1b[3m'],
+  ['中~~文。~~中', '中文。中', '\x1b[9m'],
+  ['**English** text', 'English text', '\x1b[1m'],
+  ['snake_case', 'snake_case', undefined],
+  ['`**中文。**`', '**中文。**', undefined],
+  ['\\*\\*中文。\\*\\*', '**中文。**', undefined],
+]) {
+  const markdown = new Markdown(source, 0, 0, markdownTheme);
+  for (const width of [24, 40, 80]) {
+    const lines = markdown.render(width);
+    assert.equal(lines.map(stripAnsi).join('').trimEnd(), visible);
+    assert.ok(lines.every(line => widthOf(line) <= width), `CJK Markdown overflow at ${width}`);
+    assert.equal(lines.join('').includes('\x1b[1m'), style === '\x1b[1m', 'code/escape or bold boundary changed');
+    if (style) assert.ok(lines.join('').includes(style), 'CJK emphasis was not rendered');
+    assert.deepEqual(markdown.render(width), lines, 'Markdown cache changed rendered content');
+  }
+  markdown.setText('plain replacement');
+  assert.equal(markdown.render(24).map(stripAnsi).join('').trimEnd(), 'plain replacement');
+}
+for (const size of [128, 512, 2048]) {
+  for (const source of ['中*_~'.repeat(size), '*'.repeat(size) + '中文。', ('中**文。**').repeat(size / 8)]) {
+    const started = performance.now();
+    const lines = new Markdown(source, 0, 0, markdownTheme).render(40);
+    assert.ok(performance.now() - started < 5_000, 'bounded CJK delimiter corpus exceeded five seconds');
+    assert.ok(lines.length <= source.length + 2 && lines.every(line => widthOf(line) <= 40));
+  }
+}
 const currentVersion = fs.readFileSync(path.join(repoRoot, "VERSION"), "utf8").trim();
 const repairAction = "update Neura for installed Pi 9.9.9; do not downgrade Pi";
 for (const width of [24, 40, 56, 72, 92, 120]) {

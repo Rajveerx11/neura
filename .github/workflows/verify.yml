@@ -74,6 +74,10 @@ jobs:
         run: |
           $requiredPi = (Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json).piVersion
           if ((& .\node_modules\.bin\pi.cmd --version).Trim() -ne $requiredPi) { throw 'Unexpected repository Pi version' }
+          node --input-type=module -e "import { resolveOwnedPi } from './agent/neura/owned-pi.mjs'; import fs from 'node:fs'; const release = JSON.parse(fs.readFileSync('agent/neura/release-manifest.json')); const runtime = resolveOwnedPi('agent/neura', { release }); if (runtime.version !== release.piVersion) process.exit(1);"
+          if ($LASTEXITCODE -ne 0) { throw 'Unexpected owned Pi runtime identity' }
+          $ownedPi = & node .\agent\neura\node_modules\@earendil-works\pi-coding-agent\dist\cli.js --version
+          if ($LASTEXITCODE -ne 0 -or ($ownedPi -join "`n").Trim() -ne $requiredPi) { throw 'Unexpected owned unbundled Pi version' }
 
       - name: Verify repository
         run: npm run verify

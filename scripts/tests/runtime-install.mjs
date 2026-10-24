@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runtimeDeclarations, runtimeModules, runtimeMetadata } from './owned-pi-fixture.mjs';
 
 const candidateVersion = fs.readFileSync(new URL('../../VERSION', import.meta.url), 'utf8').trim();
 const sha = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -23,14 +24,15 @@ const build = (extension = 'one.ts') => {
   write(path.join(source, 'agent/extensions', extension), extension);
   write(path.join(source, 'agent/neura/runtime-install.mjs'), fs.readFileSync(new URL('../..//agent/neura/runtime-install.mjs', import.meta.url)));
   write(path.join(source, 'agent/mcp.json'), '{}');
-  write(path.join(source, 'launcher/neura.cmd'), '@echo off');
-  const skillFiles = ['skills-registry.mjs', 'skills-manifest.json', 'skills/neura-verification/1.0.3/SKILL.md'];
+  write(path.join(source, 'launcher/neura.cmd'), fs.readFileSync(new URL('../../launcher/neura.cmd', import.meta.url)));
+  const skillFiles = ['skills-registry.mjs', 'skills-manifest.json', 'skills/neura-verification/1.0.4/SKILL.md'];
   for (const name of skillFiles) write(path.join(source, 'agent/neura', name), fs.readFileSync(new URL(`../../agent/neura/${name}`, import.meta.url)));
-  const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd', ...skillFiles.map(name => `agent/neura/${name}`)];
+  runtimeDeclarations(path.join(source, 'agent/neura'));
+  const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd', ...skillFiles.map(name => `agent/neura/${name}`), ...runtimeMetadata.map(name => `agent/neura/${name}`)];
   const files = Object.fromEntries(names.map(name => [name, sha(path.join(source, name))]));
-  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:candidateVersion, piVersion:'1.3.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
+  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:candidateVersion, piVersion:'1.4.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
 };
-const seal = () => { run('prepare'); write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt'); write(path.join(stage, 'agent/neura/node_modules/example.js'), 'pinned'); run('seal'); };
+const seal = () => { run('prepare'); write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt'); write(path.join(stage, 'agent/neura/node_modules/example.js'), 'pinned'); runtimeModules(path.join(stage, 'agent/neura')); run('seal'); };
 try {
   build();
   const candidateManifestPath = path.join(source, 'agent/neura/release-manifest.json');
@@ -135,6 +137,10 @@ try {
   write(path.join(legacyPending, 'journal.json'), JSON.stringify(legacyEntries));
   fs.rmSync(path.join(legacyPending, 'backup'), { recursive: true, force: true });
   legacyEntries.forEach((_name, index) => write(path.join(legacyPending, 'backup', `absent-${index}`), ''));
+  const partialRuntime = path.join(stage, 'agent/neura/node_modules/@earendil-works/pi-coding-agent');
+  fs.mkdirSync(partialRuntime, {recursive:true});
+  assert.match(run('recover', false).stderr, /owned Pi resolver is not release-owned/, 'mixed private-runtime recovery was treated as historical');
+  fs.rmSync(path.join(stage, 'agent/neura/node_modules/@earendil-works'), {recursive:true});
   run('recover');
   assert.equal(fs.existsSync(legacyPending), false, 'legacy journal was not cleared');
   assert.equal(fs.existsSync(live('agent/extensions/one.ts')), false, 'legacy partial activation was not rolled back');
@@ -160,7 +166,7 @@ try {
   write(releaseFile, JSON.stringify(badRelease));
   assert.match(run('prepare', false).stderr, /permissions are restrictions/);
   write(skillManifestFile, skillManifestBytes);
-  delete badRelease.files['agent/neura/skills/neura-verification/1.0.3/SKILL.md'];
+  delete badRelease.files['agent/neura/skills/neura-verification/1.0.4/SKILL.md'];
   badRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
   write(releaseFile, JSON.stringify(badRelease));
   assert.match(run('prepare', false).stderr, /not release-owned/);
@@ -173,7 +179,16 @@ try {
   assert.equal(fs.readFileSync(legacyModule, 'utf8'), 'unreceipted');
   fs.rmSync(path.dirname(legacyModule), {recursive:true, force:true});
   write(live('agent/settings.json'), '{"credential":"synthetic-only"}');
+  run('prepare');
+  write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt');
+  assert.match(run('seal', false).stderr, /ENOENT|owned Pi/, 'fresh seal accepted a missing private runtime');
+  run('recover');
   seal();
+  const stagedEntry = path.join(stage, 'agent/neura/node_modules/@earendil-works/pi-coding-agent/dist/cli.js');
+  const stagedEntryBytes = fs.readFileSync(stagedEntry);
+  write(stagedEntry, 'modified entry');
+  assert.match(run('activate', false).stderr, /installed file drift/, 'activation accepted a modified private entry');
+  write(stagedEntry, stagedEntryBytes);
   run('activate', false, {NEURA_INSTALL_TEST_CRASH_DURING_COPY:'1'});
   const partial = `${live('agent/extensions/one.ts')}.neura-install-0.tmp`;
   assert.equal(fs.readFileSync(partial, 'utf8'), 'partial');
@@ -199,12 +214,47 @@ try {
   const alternateAgent = path.join(tmp, 'alternate-agent');
   fs.cpSync(path.join(home, '.pi/agent'), alternateAgent, {recursive: true});
   run('check', true, {PI_CODING_AGENT_DIR: alternateAgent});
+  if (process.platform === 'win32') {
+    const bin = path.join(tmp, 'stock bin');
+    const marker = path.join(tmp, 'stock-called');
+    write(path.join(bin, 'pi.cmd'), `@echo off\r\necho stock>"${marker}"\r\nexit /b 23\r\n`);
+    const customAgent = path.join(tmp, 'custom agent with spaces');
+    fs.cpSync(alternateAgent, customAgent, {recursive:true});
+    const invoke = args => {
+      const caller = path.join(tmp, 'invoke.cmd');
+      write(caller, `@echo off\r\ncall "${live('launcher/neura.cmd')}" ${args}\r\nexit /b %errorlevel%\r\n`);
+      return spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', caller], {encoding:'utf8', env:{...process.env, USERPROFILE:home, HOME:home, PI_CODING_AGENT_DIR:customAgent, PATH:`${bin};${process.env.PATH}`}});
+    };
+    const launched = invoke('"hello world" "\\"quoted\\"" "" "C:\\path with spaces\\file"');
+    assert.equal(launched.status, 7, launched.stderr);
+    const output = JSON.parse(launched.stdout.trim().split(/\r?\n/).at(-1));
+    assert.deepEqual(output.argv, ['--no-mcp', '--tui-mode', 'regular', 'hello world', '"quoted"', '', 'C:\\path with spaces\\file']);
+    assert.equal(output.neura, '1');
+    assert.equal(output.agent, customAgent);
+    assert.equal(fs.existsSync(marker), false, 'Neura invoked ambient Pi');
+    const cli = path.join(customAgent, 'neura/node_modules/@earendil-works/pi-coding-agent/dist/cli.js');
+    fs.rmSync(cli);
+    assert.equal(invoke('"must not run"').status, 1, 'launcher fell back from a missing owned entry');
+    assert.equal(fs.existsSync(marker), false);
+    const stockCaller = path.join(tmp, 'stock-caller.cmd');
+    write(stockCaller, `@echo off\r\ncall "${path.join(bin, 'pi.cmd')}"\r\nexit /b %errorlevel%\r\n`);
+    const stock = spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', stockCaller], {encoding:'utf8'});
+    assert.equal(stock.status, 23, 'stock Pi dispatch changed');
+    assert.equal(fs.existsSync(marker), true);
+  }
   write(path.join(alternateAgent, 'extensions/one.ts'), 'tampered');
   run('check', false, {PI_CODING_AGENT_DIR: alternateAgent});
   assert.equal(fs.readFileSync(live('agent/settings.json'), 'utf8'), '{"credential":"synthetic-only"}');
   const liveModule = live('agent/neura/node_modules/example.js');
   write(liveModule, 'user-edited');
   run('check', false);
+  if (process.platform === 'win32') {
+    const caller = path.join(tmp, 'refuse.cmd');
+    write(caller, `@echo off\r\ncall "${live('launcher/neura.cmd')}"\r\nexit /b %errorlevel%\r\n`);
+    const refused = spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d','/c',caller], {encoding:'utf8', env:{...process.env, HOME:home, USERPROFILE:home, PI_CODING_AGENT_DIR:path.join(home,'.pi/agent')}});
+    assert.equal(refused.status, 1, 'launcher skipped the full module preflight');
+    assert.doesNotMatch(refused.stdout, /"argv"/, 'CLI ran after full preflight failure');
+  }
   run('check --quick'); // Health checks only managed files; launch still verifies Learn bytes.
   seal(); run('activate', false);
   run('recover');
@@ -212,6 +262,7 @@ try {
   run('prepare');
   write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt');
   write(path.join(stage, 'agent/neura/node_modules/new.js'), 'pinned');
+  runtimeModules(path.join(stage, 'agent/neura'));
   run('seal');
   write(liveModule, 'edited stale module');
   run('activate', false);
@@ -275,7 +326,7 @@ try {
   assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
   fs.rmSync(pending, {recursive:true, force:true});
   // Reviewed updates must use a new immutable package version, not just a new hash.
-  const packageName = 'agent/neura/skills/neura-verification/1.0.3/SKILL.md';
+  const packageName = 'agent/neura/skills/neura-verification/1.0.4/SKILL.md';
   const updateManifest = JSON.parse(fs.readFileSync(skillManifestFile));
   const updateRelease = JSON.parse(fs.readFileSync(releaseFile));
   fs.appendFileSync(path.join(source, packageName), '\nKeep evidence explicit.\n');
@@ -285,13 +336,13 @@ try {
   updateRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
   write(releaseFile, JSON.stringify(updateRelease));
   assert.match(run('prepare', false).stderr, /immutable skill version cannot be reused/);
-  const updatedName = packageName.replace('1.0.3', '1.0.4');
+  const updatedName = packageName.replace('1.0.4', '1.0.5');
   write(path.join(source, updatedName), fs.readFileSync(path.join(source, packageName)));
   fs.rmSync(path.join(source, packageName));
-  updateManifest.skills[0].version = '1.0.4';
+  updateManifest.skills[0].version = '1.0.5';
   updateManifest.skills[0].path = updatedName.slice('agent/neura/'.length);
   updateManifest.skills[0].source.path = updatedName;
-  updateManifest.skills[0].source.version = '1.0.4';
+  updateManifest.skills[0].source.version = '1.0.5';
   write(skillManifestFile, JSON.stringify(updateManifest));
   delete updateRelease.files[packageName];
   updateRelease.files[updatedName] = updateManifest.skills[0].sha256;

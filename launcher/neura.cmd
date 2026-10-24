@@ -6,9 +6,6 @@ if defined PI_CODING_AGENT_DIR set "NEURA_AGENT_DIR=%PI_CODING_AGENT_DIR%"
 call node "%NEURA_AGENT_DIR%\neura\runtime-install.mjs" check || exit /b 1
 set "NEURA=1"
 
-where pi >nul 2>&1 || (
-  echo Neura requires Pi. Run: npm install -g @earendil-works/pi-coding-agent 1>&2
-  exit /b 1
-)
-rem Preserve regular-terminal launch and disable eager native MCP for Neura only.
-pi --no-mcp --tui-mode regular %*
+rem Use the sealed unbundled CLI; never dispatch to stock/global Pi.
+node "%NEURA_AGENT_DIR%\neura\node_modules\@earendil-works\pi-coding-agent\dist\cli.js" --no-mcp --tui-mode regular %*
+exit /b %errorlevel%
