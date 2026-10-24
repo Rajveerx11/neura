@@ -214,6 +214,11 @@ try {
   const alternateAgent = path.join(tmp, 'alternate-agent');
   fs.cpSync(path.join(home, '.pi/agent'), alternateAgent, {recursive: true});
   run('check', true, {PI_CODING_AGENT_DIR: alternateAgent});
+  assert.equal(run('launch-check update --extensions --approve', false).status, 2, 'package dispatch code differs');
+  run('launch-check --source'); // Launcher data must not enable source-only verification.
+  for (const args of ['update', 'update --self', 'update --all', 'update --extensions', 'update --extensions --approve --all']) {
+    assert.equal(run(`launch-check ${args}`, false).status, 1, 'unsupported update accepted');
+  }
   if (process.platform === 'win32') {
     const bin = path.join(tmp, 'stock bin');
     const marker = path.join(tmp, 'stock-called');
@@ -232,8 +237,36 @@ try {
     assert.equal(output.neura, '1');
     assert.equal(output.agent, customAgent);
     assert.equal(fs.existsSync(marker), false, 'Neura invoked ambient Pi');
+    const quotedPrompt = invoke('"say \\"hello world\\""');
+    assert.equal(quotedPrompt.status, 7, quotedPrompt.stderr);
+    assert.deepEqual(JSON.parse(quotedPrompt.stdout.trim().split(/\r?\n/).at(-1)).argv,
+      ['--no-mcp', '--tui-mode', 'regular', 'say "hello world"'], 'quoted first prompt changed during routing');
+    const updated = invoke('update --extensions --approve');
+    assert.equal(updated.status, 7, updated.stderr);
+    const updateOutput = JSON.parse(updated.stdout.trim().split(/\r?\n/).at(-1));
+    assert.deepEqual(updateOutput.argv, ['update', '--extensions', '--approve'], 'update was routed through the regular CLI parser');
+    assert.equal(updateOutput.neura, '1');
+    assert.equal(updateOutput.agent, customAgent);
+    assert.equal(fs.existsSync(marker), false, 'extension update invoked stock Pi');
+    for (const args of ['update', 'update --self', 'update --all', 'update --extensions', 'update --extensions --approve --all', 'update --extensions --approve extra', 'update --extensions --approve ""', 'update --extensions --approve "" --self']) {
+      const refused = invoke(args);
+      assert.equal(refused.status, 1, `unsupported update accepted: ${args}`);
+      assert.doesNotMatch(refused.stdout, /"argv"/, 'unsupported update executed the synthetic CLI');
+    }
+    const preflight = path.join(customAgent, 'neura/runtime-install.mjs');
+    const savedPreflight = fs.readFileSync(preflight);
+    fs.writeFileSync(preflight, 'process.exitCode = -1;'); // Synthetic signed exit, not a native crash.
+    for (const args of ['"must not run"', 'update --extensions --approve']) {
+      const failedPreflight = invoke(args);
+      assert.equal(failedPreflight.status, 1, 'negative preflight status reached CLI dispatch');
+      assert.doesNotMatch(failedPreflight.stdout, /"argv"/, 'synthetic CLI ran after negative preflight status');
+    }
+    fs.writeFileSync(preflight, savedPreflight);
     const cli = path.join(customAgent, 'neura/node_modules/@earendil-works/pi-coding-agent/dist/cli.js');
     fs.rmSync(cli);
+    const missingUpdate = invoke('update --extensions --approve');
+    assert.equal(missingUpdate.status, 1, 'update skipped owned runtime verification');
+    assert.doesNotMatch(missingUpdate.stdout, /"argv"/, 'update executed after preflight failure');
     assert.equal(invoke('"must not run"').status, 1, 'launcher fell back from a missing owned entry');
     assert.equal(fs.existsSync(marker), false);
     const stockCaller = path.join(tmp, 'stock-caller.cmd');
@@ -248,6 +281,7 @@ try {
   const liveModule = live('agent/neura/node_modules/example.js');
   write(liveModule, 'user-edited');
   run('check', false);
+  run('launch-check --quick', false); // Prompt data cannot skip the complete module inventory.
   if (process.platform === 'win32') {
     const caller = path.join(tmp, 'refuse.cmd');
     write(caller, `@echo off\r\ncall "${live('launcher/neura.cmd')}"\r\nexit /b %errorlevel%\r\n`);

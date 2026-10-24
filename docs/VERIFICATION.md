@@ -25,7 +25,7 @@ existing Windows CI installation/drift rehearsal remains separate.
 | `npm run test:state-machine` | WORK default, transitions, persistence, provider payloads |
 | `npm run test:integration` | Real Pi extension registration/loader/session, enforced native MCP disable under config/CLI/reload/load failure, nested deferred policy, YOLO/stock-Pi positive controls, Gmail mediation, presets |
 | `npm run test:ui` | Logo, cockpit, widths, line caps, contrast, transcript affordances |
-| `npm run test:installer` | Installer contracts, text/binary drift, Node-first Node/npm/Git prerequisites, owned unbundled Pi/Undici identity, no-link/no-fallback and Windows argv/exit controls, historical/interrupted recovery, synthetic tool-free Headmaster |
+| `npm run test:installer` | Installer contracts, text/binary drift, Node-first Node/npm/Git prerequisites, owned unbundled Pi and external Undici identity, no-link/no-fallback and Windows argv/exit controls, historical/interrupted recovery, synthetic tool-free Headmaster |
 | `npm run test:sandbox` | Namespace/environment argument contracts and linked-workspace denial |
 | `npm run test:policy` | Positive/negative Plan paths, junctions, shell and Git boundaries |
 | `npm run test:plan` | Plan publication, restart, collisions, failed turns, ownership |

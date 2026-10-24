@@ -358,11 +358,17 @@ try {
   else if (mode === 'seal') seal();
   else if (mode === 'activate') activate();
   else if (mode === 'recover') recover();
-  else if (mode === 'check') {
+  else if (mode === 'check' || mode === 'launch-check') {
     if (exists(path.join(transaction, 'journal.json'))) throw Error('interrupted installation; run installer to recover');
     const receipt = read(asTarget(stateName));
-    verify(agent, receipt, true, process.argv.includes('--quick'));
-    if (process.argv.includes('--source') && digest(path.join(source, manifestName)) !== receipt.manifestHash) throw Error('live manifest differs from source');
+    // Launcher arguments are data; a prompt containing --quick must not weaken verification.
+    verify(agent, receipt, true, mode === 'check' && process.argv.includes('--quick'));
+    if (mode === 'check' && process.argv.includes('--source') && digest(path.join(source, manifestName)) !== receipt.manifestHash) throw Error('live manifest differs from source');
     console.log(`Neura ${receipt.version} manifest ${receipt.manifestHash.slice(0, 12)} commit ${receipt.sourceCommit} installed ${receipt.installedAt}`);
-  } else throw Error('usage: runtime-install.mjs prepare|seal|activate|recover|check [--source] [--quick]');
+    const args = process.argv.slice(3);
+    if (mode === 'launch-check' && args[0]?.toLowerCase() === 'update') {
+      if (args.length !== 3 || args[1] !== '--extensions' || args[2] !== '--approve') throw Error('supported update command: neura update --extensions --approve; update Neura itself through the installer');
+      process.exitCode = 2; // Verified package-only dispatch; never forward self-update arguments.
+    }
+  } else throw Error('usage: runtime-install.mjs prepare|seal|activate|recover|check [--source] [--quick] | launch-check [launcher arguments]');
 } catch (error) { console.error(`Neura install: ${error.message}`); process.exitCode = 1; }

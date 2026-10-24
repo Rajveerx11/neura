@@ -11,7 +11,8 @@ const launcher = fs.readFileSync(path.join(repoRoot, "launcher", "neura.cmd"), "
 assert.doesNotMatch(launcher, /COMPOSIO_API_KEY|MY_PI_MCP_ENV_ALLOWLIST|powershell\s+-NoProfile/i, "public launcher should not import provider credentials by default");
 assert.doesNotMatch(launcher, /\bwt(?:\.exe)?\b/i, "terminal launcher still opens a second Windows Terminal window");
 assert.match(launcher, /node "%NEURA_AGENT_DIR%\\neura\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli\.js" --no-mcp --tui-mode regular %\*/, "Neura launcher did not select its owned regular unbundled CLI");
-assert.match(launcher, /runtime-install\.mjs" check \|\| exit \/b 1/, "launcher lost full preflight refusal");
+assert.match(launcher, /node "%NEURA_AGENT_DIR%\\neura\\runtime-install\.mjs" launch-check %\*\r?\nif not errorlevel 0 exit \/b 1\r?\nif errorlevel 3 exit \/b 1\r?\nif errorlevel 2 goto update_extensions\r?\nif errorlevel 1 exit \/b 1/, "launcher lost complete preflight and signed-exit refusal");
+assert.doesNotMatch(launcher, /call node.*%\*/i, "launcher reparses prompt arguments through CALL");
 assert.doesNotMatch(launcher, /where pi|--quick|dist[\\/]bundle|^pi /m, "launcher retained global/bundled fallback or quick-only preflight");
 
 // Exercise the real resource loader: Neura's guarded /mcp replaces Pi's eager
@@ -54,27 +55,32 @@ if (process.platform === "win32") {
   const bin = fs.mkdtempSync(path.join(process.env.TEMP || process.cwd(), "neura-launcher-"));
   const resultFile = path.join(bin, "result.txt");
   const preflightCalls = path.join(bin, "preflight-calls.txt");
-  const env = { ...process.env, PATH: bin + ";" + process.env.SystemRoot + "\\System32", LAUNCHER_RESULT: resultFile, NEURA_TEST_PREFLIGHT: preflightCalls };
+  const agent = path.join(bin, "agent");
+  const runtime = path.join(agent, "neura");
+  const cli = path.join(runtime, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
+  fs.mkdirSync(path.dirname(cli), { recursive: true });
+  const env = { ...process.env, PATH: bin + ";" + process.env.SystemRoot + "\\System32", PI_CODING_AGENT_DIR: agent, LAUNCHER_RESULT: resultFile, NEURA_TEST_PREFLIGHT: preflightCalls };
   delete env.Path;
-  fs.writeFileSync(path.join(bin, "node.cmd"), [
-    "@echo off",
-    'if "%~2"=="check" goto preflight',
-    'if not "%~1"=="%PI_CODING_AGENT_DIR%\\neura\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" exit /b 19',
-    '>"%LAUNCHER_RESULT%" echo %NEURA%',
-    '>"%LAUNCHER_RESULT%.args" echo %2 %3 %4 %5 %6 %7 %8 %9',
-    'exit /b 7',
-    ':preflight',
-    ">>\"%NEURA_TEST_PREFLIGHT%\" echo check",
-    "if defined NEURA_TEST_PREFLIGHT_FAIL exit /b 1",
-    "exit /b 0",
-  ].join("\r\n"));
+  // Exercise an executable Node, not a batch shim that replaces its caller without CALL.
+  fs.copyFileSync(process.execPath, path.join(bin, "node.exe"));
+  fs.writeFileSync(path.join(runtime, "runtime-install.mjs"), `
+    import fs from 'node:fs';
+    fs.appendFileSync(process.env.NEURA_TEST_PREFLIGHT, process.argv[2] + '\\n');
+    process.exitCode = process.env.NEURA_TEST_PREFLIGHT_FAIL ? 1 : 0;
+  `);
+  fs.writeFileSync(cli, `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.LAUNCHER_RESULT, process.env.NEURA);
+    fs.writeFileSync(process.env.LAUNCHER_RESULT + '.args', process.argv.slice(2).join(' '));
+    process.exitCode = 7;
+  `);
   fs.writeFileSync(path.join(bin, "pi.cmd"), '@echo off\r\nexit /b 99\r\n');
   try {
     let run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd")], {
       env, encoding: "utf8", windowsHide: true,
     });
     assert.equal(run.status, 7, "launcher did not preserve Pi's exit code");
-    assert.equal(fs.readFileSync(preflightCalls, "utf8").trim(), "check", "launcher skipped release preflight");
+    assert.equal(fs.readFileSync(preflightCalls, "utf8").trim(), "launch-check", "launcher skipped release preflight");
     assert.equal(fs.readFileSync(resultFile, "utf8").trim(), "1", "launcher did not enforce Neura's native MCP startup barrier");
     assert.equal(fs.readFileSync(`${resultFile}.args`, "utf8").trim(), "--no-mcp --tui-mode regular");
     run = spawnSync(process.env.ComSpec, ["/d", "/c", path.join(repoRoot, "launcher", "neura.cmd"), "-e", "builtin:mcp", "--approve"], {
