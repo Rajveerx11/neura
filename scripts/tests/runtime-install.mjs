@@ -24,11 +24,11 @@ const build = (extension = 'one.ts') => {
   write(path.join(source, 'agent/neura/runtime-install.mjs'), fs.readFileSync(new URL('../..//agent/neura/runtime-install.mjs', import.meta.url)));
   write(path.join(source, 'agent/mcp.json'), '{}');
   write(path.join(source, 'launcher/neura.cmd'), '@echo off');
-  const skillFiles = ['skills-registry.mjs', 'skills-manifest.json', 'skills/neura-verification/1.0.3/SKILL.md'];
+  const skillFiles = ['skills-registry.mjs', 'skills-manifest.json', 'skills/neura-verification/1.0.4/SKILL.md'];
   for (const name of skillFiles) write(path.join(source, 'agent/neura', name), fs.readFileSync(new URL(`../../agent/neura/${name}`, import.meta.url)));
   const names = [`agent/extensions/${extension}`, 'agent/neura/runtime-install.mjs', 'agent/mcp.json', 'launcher/neura.cmd', ...skillFiles.map(name => `agent/neura/${name}`)];
   const files = Object.fromEntries(names.map(name => [name, sha(path.join(source, name))]));
-  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:candidateVersion, piVersion:'1.3.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
+  write(path.join(source, 'agent/neura/release-manifest.json'), JSON.stringify({schemaVersion:1, neuraVersion:candidateVersion, piVersion:'1.4.0',nodeMinimum:'24.15.0',automaticExecutables:{git:{}}, runtimePackages:[],capabilities:{work:'default'},files}));
 };
 const seal = () => { run('prepare'); write(path.join(stage, 'agent/neura/.learn-runtime-lock'), 'receipt'); write(path.join(stage, 'agent/neura/node_modules/example.js'), 'pinned'); run('seal'); };
 try {
@@ -160,7 +160,7 @@ try {
   write(releaseFile, JSON.stringify(badRelease));
   assert.match(run('prepare', false).stderr, /permissions are restrictions/);
   write(skillManifestFile, skillManifestBytes);
-  delete badRelease.files['agent/neura/skills/neura-verification/1.0.3/SKILL.md'];
+  delete badRelease.files['agent/neura/skills/neura-verification/1.0.4/SKILL.md'];
   badRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
   write(releaseFile, JSON.stringify(badRelease));
   assert.match(run('prepare', false).stderr, /not release-owned/);
@@ -275,7 +275,7 @@ try {
   assert.equal(fs.readFileSync(live('agent/neura/MEMORY.md'), 'utf8'), 'private');
   fs.rmSync(pending, {recursive:true, force:true});
   // Reviewed updates must use a new immutable package version, not just a new hash.
-  const packageName = 'agent/neura/skills/neura-verification/1.0.3/SKILL.md';
+  const packageName = 'agent/neura/skills/neura-verification/1.0.4/SKILL.md';
   const updateManifest = JSON.parse(fs.readFileSync(skillManifestFile));
   const updateRelease = JSON.parse(fs.readFileSync(releaseFile));
   fs.appendFileSync(path.join(source, packageName), '\nKeep evidence explicit.\n');
@@ -285,13 +285,13 @@ try {
   updateRelease.files['agent/neura/skills-manifest.json'] = sha(skillManifestFile);
   write(releaseFile, JSON.stringify(updateRelease));
   assert.match(run('prepare', false).stderr, /immutable skill version cannot be reused/);
-  const updatedName = packageName.replace('1.0.3', '1.0.4');
+  const updatedName = packageName.replace('1.0.4', '1.0.5');
   write(path.join(source, updatedName), fs.readFileSync(path.join(source, packageName)));
   fs.rmSync(path.join(source, packageName));
-  updateManifest.skills[0].version = '1.0.4';
+  updateManifest.skills[0].version = '1.0.5';
   updateManifest.skills[0].path = updatedName.slice('agent/neura/'.length);
   updateManifest.skills[0].source.path = updatedName;
-  updateManifest.skills[0].source.version = '1.0.4';
+  updateManifest.skills[0].source.version = '1.0.5';
   write(skillManifestFile, JSON.stringify(updateManifest));
   delete updateRelease.files[packageName];
   updateRelease.files[updatedName] = updateManifest.skills[0].sha256;

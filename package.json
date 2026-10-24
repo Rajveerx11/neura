@@ -61,14 +61,17 @@
     "test:fuzz": "node scripts/verify-harness.mjs --suite fuzz"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "1.3.0",
-    "@earendil-works/pi-coding-agent": "1.3.0",
-    "@earendil-works/pi-tui": "1.3.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-tui": "1.4.0",
     "@spences10/pi-mcp": "0.0.58",
     "@types/node": "26.6.5",
     "axe-core": "4.14.0",
     "playwright-core": "1.64.0",
     "typebox": "1.3.36",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "undici@8.10.2": "8.12.2"
   }
 }

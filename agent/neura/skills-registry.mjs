@@ -35,7 +35,7 @@ export function validateSkillText(text, name, availableTools = ['read']) {
   if (/!?\[[^\]]*\]\([^)]*\)|\[[^\]]+\]:\s*\S+|<\/?(?:script|iframe)\b/i.test(text)) fail('unsupported reference');
 }
 
-export function inspectSkills({ root = skillRoot, selectionFile = selectionPath(), piVersion = '1.3.0', availableTools = ['read'] } = {}) {
+export function inspectSkills({ root = skillRoot, selectionFile = selectionPath(), piVersion = '1.4.0', availableTools = ['read'] } = {}) {
   let manifestHash = 'unavailable';
   let manifest = null;
   try {

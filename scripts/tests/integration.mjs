@@ -206,6 +206,9 @@ assert.equal(await guard({ toolName: "bash", input: { command: "terraform destro
 assert.equal(yoloPrompts, 0, "YOLO requested approval for a sensitive action");
 
 
+const undici = spawnSync(process.execPath, [path.join(import.meta.dirname, 'undici.mjs')], { encoding: 'utf8', windowsHide: true, timeout: 30_000 });
+assert.equal(undici.status, 0, `npm Undici regression failed: ${undici.stdout}\n${undici.stderr}`);
+console.log(undici.stdout.trim());
 const piRuntime = spawnSync(process.execPath, [path.join(import.meta.dirname, 'pi-runtime.mjs')], { encoding: 'utf8', windowsHide: true, timeout: 60_000 });
 assert.equal(piRuntime.status, 0, `Real Pi runtime regression failed: ${piRuntime.stdout}\n${piRuntime.stderr}`);
 console.log(piRuntime.stdout.trim());

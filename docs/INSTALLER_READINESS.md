@@ -1,6 +1,6 @@
 # Neura installer readiness
 
-Updated: 2026-10-20. Scope: **Neura only**, inspired by Pi/Hermes installation
+Updated: 2026-10-24. Scope: **Neura only**, inspired by Pi/Hermes installation
 patterns. This is source-only preparation, not a published installer, live
 installation, or production-readiness claim. Extend `install.ps1` and
 `agent/neura/runtime-install.mjs`; do not build a second activation engine.
@@ -8,8 +8,8 @@ installation, or production-readiness claim. Extend `install.ps1` and
 ## First implemented slice
 
 - Exact Pi coding-agent/API/TUI pins, root lockfile, runtime contract, and managed
-  manifest now target stable `1.3.0`. Dependency review is in
-  [DEPENDENCIES.md](DEPENDENCIES.md#pi-130-compatibility-slice-2026-10-19).
+  manifest now target stable `1.4.0`. Dependency review is in
+  [DEPENDENCIES.md](DEPENDENCIES.md#pi-140-compatibility-slice-2026-10-24).
 - Neura's launcher combines `--no-mcp` with `--tui-mode regular` to stop native startup connections even
   when configuration or explicit builtin selection would otherwise enable them.
   The existing explicit YOLO-only MCP wrapper remains in place. `codemode` and
@@ -41,9 +41,11 @@ installation, or production-readiness claim. Extend `install.ps1` and
 | Clean-host rehearsal | Exercise fresh install, repeat install, upgrade, interruption, recovery, rollback, junction rejection, missing network/artifacts, and newer Pi on disposable Windows machines. Do not rehearse against the owner's live profile without explicit authorization. |
 | Release evidence | Run typecheck, all suites, browser/WSL checks, audits/signatures, docs, independent review, and required CI on a clean candidate. Record failures and remaining limitations; retain experimental/Human Away preview labels. |
 
-## Current candidate validation (2026-10-20)
+## Current candidate validation (2026-10-24)
 
-The `2.6.0-rc.1` candidate targets Pi `1.3.0` and immutable guidance `1.0.3`.
+The `2.6.0-rc.1` candidate targets Pi `1.4.0` and immutable guidance `1.0.4`.
+Focused source-only loader, skills and managed installer checks pass locally.
+Fresh full harness, browser, audit/signature and required CI evidence remains a gate.
 The Pi 1.3 base passed the checks recorded in [STATUS.md](STATUS.md); that
 base evidence does not certify this combined RC/dependency candidate.
 Historical Pi 1.2 main `8e8e8d7` passed [CI run 38694416311](https://github.com/Rajveerx11/neura/actions/runs/38694416311),

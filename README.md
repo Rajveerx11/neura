@@ -17,9 +17,13 @@ interface, explicit operating modes, verification, recovery, local memory,
 model presets, and policy guardrails around stock Pi.
 
 Current candidate: **[2.6.0-rc.1](docs/releases/v2.6.0-rc.1.md)**, targeting exact
-Pi `1.3.0`. It includes Work, Learn, modular verification, Plan confidentiality
+Pi `1.4.0`. It includes Work, Learn, modular verification, Plan confidentiality
 hardening, and installer-readiness changes. Latest published release remains
 **2.5.1** until this candidate passes the release gates and is published.
+The Pi 1.4 candidate has an unresolved bundled Undici dependency finding. The
+checkout's npm override does not patch Pi's shipped CLI. Integration is blocked.
+See the [dependency evidence](docs/DEPENDENCIES.md#scoped-npm-undici-security-patch).
+
 Older checkouts and live installations may differ. Neura is
 Apache-2.0-licensed experimental software in a public repository. It is **not
 production-ready**. Human Away remains preview-only and is not approved for
@@ -110,7 +114,7 @@ resumed sources must be reimported before new verified citations. See the
 
 - Windows 11 or a current supported Windows release.
 - PowerShell, Git, Node.js **24.15+** with npm, and the latest stable Pi.
-  This checkout's exact reviewed Pi pin is `1.3.0`. CI exercises Node `24.16.0`.
+  This checkout's exact reviewed Pi pin is `1.4.0`. CI exercises Node `24.16.0`.
   Newer Pi releases require a coordinated Neura update, never a Pi downgrade.
 - uv/`uvx` `0.12.11`, hash-pinned WSL CPython `3.12.3`, and the five reviewed
   proof wheels in a dedicated wheelhouse configured by `NEURA_WSL_UV_DIR` and
@@ -137,7 +141,7 @@ adaptations, regression tests, and CI. See the
 [Pi update policy](docs/DEPENDENCIES.md#pi-compatibility-policy) and
 [current evidence](docs/STATUS.md).
 
-As of 2026-10-19, npm's latest stable Pi is `1.3.0`; this checkout's runtime
+As of 2026-10-24, npm's latest stable Pi is `1.4.0`. This checkout's runtime
 contract and development graph now pin that version. `npm run check:pi-latest`
 checks the public registry without installing anything and fails on target drift
 or unavailable evidence. CI/release gates and a proposed daily workflow use it;
@@ -153,14 +157,19 @@ and the remaining one-step bootstrap, recovery, and clean-host gates.
 
 ## Install from source
 
-Review [security limits](SECURITY.md) and installer before running it.
-The following commands reproduce the currently pinned checkout on a clean profile;
-they are not instructions to downgrade an existing newer Pi installation. The
-installer checks Node, npm, Pi, and Git before staging, rejecting failed/malformed
-version probes. It does not yet provision missing prerequisites automatically.
+**Installation and launch are blocked for this candidate. Do not run any command
+in the sequence below until the bundled CLI fix is reviewed and shipped-entry
+checks pass.** This includes the global Pi install and all later Neura commands.
+See the [open dependency finding](docs/DEPENDENCIES.md#scoped-npm-undici-security-patch).
 
-```powershell
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
+The sequence is retained as a non-executable post-fix reference, not current
+installation instructions. After that gate clears, review the
+[security limits](SECURITY.md) and installer before using a clean profile.
+Never downgrade a newer Pi. The installer checks prerequisites before staging
+but does not yet provision missing prerequisites automatically.
+
+```text
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
 git clone https://github.com/Rajveerx11/neura.git
 Set-Location .\neura
 npm ci --ignore-scripts

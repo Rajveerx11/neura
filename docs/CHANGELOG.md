@@ -18,6 +18,19 @@ they do not independently certify this combined release candidate.
   numeric prereleases before mutation; synthetic activation, upgrade, and
   recovery exercise the current candidate identity.
 
+- Added the reviewed exact npm override `"undici@8.10.2": "8.12.2"` for
+  EventSource retention, excess encoding and mixed-case SRI advisories. Actual
+  resolved-package regressions pass and both graph audits report zero findings.
+  This does not patch Node's bundled global fetch or a live/global Pi installation.
+
+- Advanced the source candidate to exact Pi `1.4.0` and immutable guidance
+  `1.0.4` after PR #130 latest-target CI rejected the stale pin. Added real
+  new/default-inactive tool, pre-compaction removal, resume/tree/reload, restricted
+  payload/dispatch and model-alias controls. Added bounded CJK TUI rendering and
+  native dialog-stack focus checks. Stock reload reactivation is characterized.
+  No plain-Pi behavior or Neura permissions changed. Fresh integrated review/CI
+  remains required. No live installation or release is claimed.
+
 - Advanced coordinated Pi pins, runtime identity and immutable guidance `1.0.3`
   to exact `1.3.0` after the latest-stable gate rejected `1.2.0`. Added real
   resumed-session loadout, restricted-mode denial/reload, explicit-selection and
