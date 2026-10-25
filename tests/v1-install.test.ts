@@ -7,12 +7,31 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { windowsShortPath } from './windows-short-path.ts';
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('..', import.meta.url));
 const windowsRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
 const nativeModules = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
 const powershell = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+const NATIVE_PS_TIMEOUT_MS = 45000;
+
+async function nativePowerShell(phase: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) {
+  console.log(`[native-ps] ${phase}: start`);
+  try {
+    const result = await execute(powershell, ['-NoProfile', '-NonInteractive', ...args], { ...options, timeout: NATIVE_PS_TIMEOUT_MS, windowsHide: true });
+    console.log(`[native-ps] ${phase}: completed`);
+    return result;
+  } catch (error) {
+    console.error(`[native-ps] ${phase}: ${(error as { killed?: boolean }).killed ? `timed out after ${NATIVE_PS_TIMEOUT_MS} ms` : 'failed'}`);
+    throw error;
+  }
+}
+
+function nativeFailure(error: unknown): boolean {
+  const result = error as { killed?: boolean; code?: unknown };
+  return !result.killed && typeof result.code === 'number' && result.code !== 0;
+}
 
 function nativePowerShellEnvironment(home: string, inherited = process.env): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(inherited).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec)$/i.test(key)));
@@ -23,7 +42,11 @@ function nativePowerShellEnvironment(home: string, inherited = process.env): Nod
 test('Windows development installer: isolated positive/check plus preservation of unknown launchers', { skip: process.platform !== 'win32' }, async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-v1-install-')));
   const env = nativePowerShellEnvironment(scratch);
-  const run = (args: string[]) => execute(powershell, ['-NoProfile', '-File', path.join(root, 'install.ps1'), ...args], { cwd: root, env });
+  let phase = 0;
+  const run = (args: string[]) => {
+    const action = args.find(value => value === '-Check' || value === '-Development');
+    return nativePowerShell(`installer.${++phase}.${action?.slice(1).toLowerCase() ?? 'refusal'}`, ['-File', path.join(root, 'install.ps1'), ...args], { cwd: root, env });
+  };
   try {
     const bin = path.join(scratch, 'bin');
     await run(['-Development', '-BinDirectory', bin]);
@@ -33,12 +56,26 @@ test('Windows development installer: isolated positive/check plus preservation o
     assert.match((await run(['-Check', '-BinDirectory', bin])).stdout, /matches/);
     await run(['-Development', '-BinDirectory', bin]);
     await fs.writeFile(path.join(bin, 'neura.cmd'), '@echo user-owned\r\n');
-    await assert.rejects(run(['-Check', '-BinDirectory', bin]));
-    await assert.rejects(run(['-Development', '-BinDirectory', bin]));
+    await assert.rejects(run(['-Check', '-BinDirectory', bin]), nativeFailure);
+    await assert.rejects(run(['-Development', '-BinDirectory', bin]), nativeFailure);
     assert.equal(await fs.readFile(path.join(bin, 'neura.cmd'), 'utf8'), '@echo user-owned\r\n');
     const untouched = path.join(scratch, 'not-installed');
-    await assert.rejects(run(['-BinDirectory', untouched]));
+    await assert.rejects(run(['-BinDirectory', untouched]), nativeFailure);
     await assert.rejects(fs.stat(untouched));
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('Windows short-path fixture quotes spaces and cmd metacharacters without execution', { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-short-quoting-')));
+  try {
+    const valid = path.join(scratch, 'space & mkdir injected-marker & (test) %PATH% ! ^');
+    await fs.mkdir(valid);
+    const short = await windowsShortPath(valid);
+    assert.notEqual(path.relative(short, valid), '', 'must exercise a genuine 8.3 alias');
+    assert.equal(await fs.realpath(short), await fs.realpath(valid));
+    assert.deepEqual(await fs.readdir(scratch), [path.basename(valid)]);
+    assert.deepEqual(await fs.readdir(valid), []);
+    await assert.rejects(windowsShortPath(valid + '"'), /Unsupported short-path fixture/);
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 
@@ -50,7 +87,7 @@ test('Windows PowerShell fixtures pin native modules despite hostile inherited p
     const foreign = path.join(scratch, 'foreign-modules'); await fs.mkdir(foreign);
     const env = nativePowerShellEnvironment(scratch, { ...process.env, PSModulePath: foreign, WinPSModulePath: foreign });
     assert.equal(env.PSModulePath, nativeModules); assert.equal(env.WinPSModulePath, nativeModules);
-    const reply = await execute(powershell, ['-NoProfile', '-Command', `$ErrorActionPreference='Stop'; [pscustomobject]@{ major=$PSVersionTable.PSVersion.Major; module=(Get-Command Get-FileHash).Module.ModuleBase; hash=(Get-FileHash -LiteralPath ${quote(filename)} -Algorithm SHA256).Hash.ToLowerInvariant() } | ConvertTo-Json -Compress`], { cwd: scratch, env });
+    const reply = await nativePowerShell('native-module-hash', ['-Command', `$ErrorActionPreference='Stop'; [pscustomobject]@{ major=$PSVersionTable.PSVersion.Major; module=(Get-Command Get-FileHash).Module.ModuleBase; hash=(Get-FileHash -LiteralPath ${quote(filename)} -Algorithm SHA256).Hash.ToLowerInvariant() } | ConvertTo-Json -Compress`], { cwd: scratch, env });
     const result = JSON.parse(reply.stdout);
     assert.equal(result.major, 5);
     // Windows PowerShell may expose inbox cmdlets from PSHOME or its Modules subtree.
@@ -71,7 +108,7 @@ test('Windows development installer refuses non-ASCII source paths before writin
     await fs.copyFile(path.join(root, 'install.ps1'), path.join(source, 'install.ps1'));
     // Only isolate the path/encoding boundary; no real runtime, credentials or live install.
     await fs.writeFile(path.join(source, 'src', 'cli.ts'), 'process.exit(0);');
-    await assert.rejects(execute(powershell, ['-NoProfile', '-File', path.join(source, 'install.ps1'), '-Development', '-BinDirectory', bin], { cwd: scratch, env: nativePowerShellEnvironment(scratch) }), /non-ASCII source path/);
+    await assert.rejects(nativePowerShell('installer.reject-non-ascii', ['-File', path.join(source, 'install.ps1'), '-Development', '-BinDirectory', bin], { cwd: scratch, env: nativePowerShellEnvironment(scratch) }), /non-ASCII source path/);
     await assert.rejects(fs.stat(bin), { code: 'ENOENT' });
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
@@ -89,10 +126,13 @@ test('Legacy retirement inventory is read-only and preserves modified/private fi
     await fs.writeFile(path.join(profile, 'neura', '.install-state.json'), JSON.stringify({ schemaVersion: 1, files: {
       'agent/extensions/neura.ts': hash('owned'), 'agent/extensions/learn.ts': hash('old'), 'agent/neura/MEMORY.md': hash('synthetic private content'),
     } }));
-    const result = await execute(powershell, ['-NoProfile', '-File', path.join(root, 'scripts/retire-pi-neura.ps1'), '-ProfileRoot', profile], { cwd: root, env: nativePowerShellEnvironment(scratch) });
+    // The inventory fixture does not depend on this machine's WMI service or live process list.
+    const inventory = (processes: string) => nativePowerShell('retirement.inventory', ['-Command', `function Get-CimInstance { param($ClassName) ${processes} }; & ${quote(path.join(root, 'scripts/retire-pi-neura.ps1'))} -ProfileRoot ${quote(profile)}`], { cwd: root, env: nativePowerShellEnvironment(scratch) });
+    const result = await inventory('@()');
     assert.match(result.stdout, /Receipt-matched legacy files: 1/);
     assert.match(result.stdout, /modified\/private files preserved: 2/);
     assert.doesNotMatch(result.stdout, /synthetic private content|human changes/);
+    await assert.rejects(inventory("throw 'Synthetic process query failure'"), /Synthetic process query failure/);
     assert.equal(await fs.readFile(path.join(profile, 'extensions', 'neura.ts'), 'utf8'), 'owned');
     assert.equal(await fs.readFile(path.join(profile, 'extensions', 'learn.ts'), 'utf8'), 'human changes');
     assert.equal(await fs.readFile(path.join(profile, 'neura', 'MEMORY.md'), 'utf8'), 'synthetic private content');
@@ -112,7 +152,8 @@ test('Legacy retirement moves only owned synthetic files, journals recovery, and
       'agent/extensions/neura.ts': hash('owned'), 'agent/extensions/learn.ts': hash('old'), 'agent/neura/MEMORY.md': hash('synthetic private'),
     } }));
     // Only this test process mocks process enumeration; production has no bypass or test flag.
-    const run = (active: boolean, target = profile) => execute(powershell, ['-NoProfile', '-Command', `function Get-CimInstance { param($ClassName) ${active ? "[pscustomobject]@{ Name='node.exe'; CommandLine='synthetic/pi-coding-agent' }" : '@()'} }; & ${quote(path.join(root, 'scripts/retire-pi-neura.ps1'))} -Apply -ProfileRoot ${quote(target)} -BackupRoot ${quote(backup)}`], { cwd: root, env: nativePowerShellEnvironment(scratch) });
+    let phase = 0;
+    const run = (active: boolean, target = profile) => nativePowerShell(`retirement.${++phase}.${active ? 'active-refusal' : 'apply'}`, ['-Command', `function Get-CimInstance { param($ClassName) ${active ? "[pscustomobject]@{ Name='node.exe'; CommandLine='synthetic/pi-coding-agent' }" : '@()'} }; & ${quote(path.join(root, 'scripts/retire-pi-neura.ps1'))} -Apply -ProfileRoot ${quote(target)} -BackupRoot ${quote(backup)}`], { cwd: root, env: nativePowerShellEnvironment(scratch) });
     await assert.rejects(run(true), /Pi agents are active/);
     assert.equal(await fs.readFile(owned, 'utf8'), 'owned'); await assert.rejects(fs.stat(backup));
     const linked = path.join(scratch, 'linked-profile'); await fs.symlink(profile, linked, 'junction');

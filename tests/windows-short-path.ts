@@ -6,13 +6,16 @@ import path from 'node:path';
 
 export async function windowsShortPath(directory: string): Promise<string> {
   if (process.platform !== 'win32') throw new Error('Windows short-path fixture requires Windows.');
+  if (/["\r\n]/.test(directory)) throw new Error('Unsupported short-path fixture input.');
+  const canonical = await realpath(directory);
   const root = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
-  const modules = path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp)$/i.test(key)));
-  Object.assign(env, { HOME: path.dirname(directory), USERPROFILE: path.dirname(directory), PSModulePath: modules, WinPSModulePath: modules });
-  const quoted = `'${directory.replaceAll("'", "''")}'`;
-  const reply = await promisify(execFile)(path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-Command', `$ErrorActionPreference='Stop'; $fso=New-Object -ComObject Scripting.FileSystemObject; [Console]::WriteLine($fso.GetFolder(${quoted}).ShortPath)`], { env, timeout: 10000 });
-  const short = reply.stdout.trim();
-  if (!path.isAbsolute(short) || reply.stderr || await realpath(short) !== await realpath(directory)) throw new Error('Invalid short-path fixture result.');
+  env.NEURA_SHORT_DIRECTORY = canonical;
+  // The path is data in one quoted environment expansion, never interpolated command text.
+  const command = 'for %I in ("%NEURA_SHORT_DIRECTORY%") do @echo "%~sI"';
+  const reply = await promisify(execFile)(path.join(root, 'System32', 'cmd.exe'), ['/d', '/v:off', '/s', '/c', command], { cwd: canonical, env, windowsVerbatimArguments: true, windowsHide: true, timeout: 10000 });
+  const output = reply.stdout.trim();
+  const short = output.startsWith('"') && output.endsWith('"') ? output.slice(1, -1) : '';
+  if (!path.isAbsolute(short) || reply.stderr || await realpath(short) !== canonical) throw new Error('Invalid short-path fixture result.');
   return short;
 }
