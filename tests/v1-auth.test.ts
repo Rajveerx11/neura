@@ -150,15 +150,18 @@ test("malformed/expired token responses and redirects never save credentials or 
   await pending;
 });
 
-test("subscription requests carry only OAuth/account headers, current instructions, forced stream/store flags", async () => {
+test("subscription requests carry only OAuth/account headers, current instructions, forced stream/store flags", async (context) => {
   await fresh(); await login();
+  const expectedAccess = JSON.parse(await readFile(filename(), 'utf8')).access;
+  const now = Date.now();
+  context.mock.method(Date, 'now', () => now + 2000);
   let calls = 0;
   globalThis.fetch = async (url, init) => {
     calls++;
     assert.equal(String(url), CODEX_URL);
     assert.equal(init?.redirect, "error");
     const headers = new Headers(init?.headers);
-    assert.equal(headers.get("Authorization"), `Bearer ${jwt()}`);
+    assert.equal(headers.get("Authorization"), `Bearer ${expectedAccess}`);
     assert.equal(headers.get("ChatGPT-Account-ID"), "synthetic-account");
     assert.equal(headers.get("x-api-key"), null);
     assert.equal(headers.get("originator"), "neura");

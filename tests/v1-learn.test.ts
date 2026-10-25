@@ -109,6 +109,21 @@ test('Work v1: contained writes preserve stale/user bytes; Learn cannot use a st
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 
+test('Work writes reject the same wildcard and alias syntax as reads before publication', async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'work-path-syntax-')));
+  try {
+    const tools = createWorkspaceTools(scratch, () => 'work', () => 0);
+    const write = tools.find(tool => tool.name === 'write')!;
+    for (const requested of ['sample[1].txt', 'sample{1}.txt', '@sample.txt', '~sample.txt']) {
+      await assert.rejects(write.execute({ path: requested, content: 'synthetic', expectedHash: null }, {}), /concrete workspace-relative/);
+    }
+    assert.deepEqual(await fs.readdir(scratch), []);
+    await write.execute({ path: 'safe.txt', content: 'synthetic ordinary path', expectedHash: null }, {});
+    const result = decode(await tools.find(tool => tool.name === 'read')!.execute({ path: 'safe.txt' }, {}));
+    assert.equal(result.text, 'synthetic ordinary path');
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
 // Builtin mocks live only in child processes, never in the application or other tests.
 for (const scenario of ['denied', 'stale', 'cancelled', 'unavailable']) {
   test(`Work execution boundary: ${scenario} prevents sandbox/host payload effects`, async () => {

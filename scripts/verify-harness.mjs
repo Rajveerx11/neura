@@ -29,10 +29,12 @@ const chosen = args.length ? [[args[1], suites[args[1]]]] : Object.entries(suite
 let failures = 0;
 for (const [name, command] of chosen) {
   console.log(`\n=== ${name} ===`);
-  const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env, timeout: SUITE_TIMEOUT_MS });
+  // Cold hosted Windows PS5 starts cost ~23s each; installer cases intentionally use isolated processes.
+  const timeout = name === 'installer' ? 600_000 : SUITE_TIMEOUT_MS;
+  const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env, timeout });
   if (result.error || result.status !== 0) {
     failures++;
-    const detail = result.error?.code === 'ETIMEDOUT' ? `timed out after ${SUITE_TIMEOUT_MS} ms` : `exit ${result.status ?? 'unavailable'}`;
+    const detail = result.error?.code === 'ETIMEDOUT' ? `timed out after ${timeout} ms` : `exit ${result.status ?? 'unavailable'}`;
     console.error(`${name}: FAILED (${detail})`);
   }
   else console.log(`${name}: PASS`);

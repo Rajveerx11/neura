@@ -52,7 +52,7 @@ export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'le
     } };
   }
   function fileTarget(requested: string): string {
-    if (!requested || requested.length > 1024 || /[\x00-\x1f\x7f:*?"<>|]/.test(requested) || /^[\\/]{2}/.test(requested)) throw new Error('Use a concrete workspace-relative file path.');
+    if (!requested || requested.length > 1024 || /[\x00-\x1f\x7f:*?"<>|\[\]{}]/.test(requested) || /^[@~]|^[\\/]{2}/.test(requested)) throw new Error('Use a concrete workspace-relative file path.');
     const parts = requested.split(/[\\/]/);
     if (parts.some(part => !part || part === '..' || part.startsWith('.') || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$)/i.test(part) || /^(?:node_modules|sessions|approvals|memory|private|secrets)$/i.test(part))) throw new Error('Private, ambiguous or dependency path denied.');
     const file = path.resolve(root, requested);

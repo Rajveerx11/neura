@@ -12,7 +12,8 @@ const harness = readFileSync(new URL('../verify-harness.mjs', import.meta.url), 
 
 function validateHarness(source) {
   assert.match(source, /const SUITE_TIMEOUT_MS = 300_000;/, 'Each suite needs a generous fixed deadline');
-  assert.match(source, /timeout: SUITE_TIMEOUT_MS/, 'Subprocess deadline must be applied');
+  assert.match(source, /name === 'installer' \? 600_000 : SUITE_TIMEOUT_MS/, 'Only installer receives the measured cold-host budget');
+  assert.match(source, /env: process\.env, timeout \}/, 'Subprocess deadline must be applied');
 }
 
 function validate(sources) {
@@ -71,18 +72,25 @@ for (const [name, before, after] of mutations) {
   assert.ok(workflows[name].includes(before), `Mutation target missing: ${name} ${before}`);
   assert.throws(() => validate({ ...workflows, [name]: workflows[name].replace(before, after) }), `Weakened contract escaped: ${name} ${before}`);
 }
-assert.throws(() => validateHarness(harness.replace('timeout: SUITE_TIMEOUT_MS', 'timeout: undefined')), 'Removing the suite deadline must fail');
-const timeoutProbe = spawnSync(process.execPath, ['--input-type=module', '-e', `
-  import child from 'node:child_process'; import { syncBuiltinESMExports } from 'node:module';
-  child.spawnSync = () => ({ error: Object.assign(new Error('Synthetic suite timeout'), { code: 'ETIMEDOUT' }), status: null });
-  syncBuiltinESMExports(); process.argv = [process.execPath, 'harness', '--suite', 'runtime'];
-  await import('./scripts/verify-harness.mjs');
-`], { cwd: root, encoding: 'utf8', timeout: 20000 });
-assert.ifError(timeoutProbe.error);
-assert.equal(timeoutProbe.status, 1);
-assert.match(timeoutProbe.stderr, /runtime: FAILED \(timed out after 300000 ms\)/);
+assert.throws(() => validateHarness(harness.replace('env: process.env, timeout }', 'env: process.env }')), 'Removing the suite deadline must fail');
+assert.throws(() => validateHarness(harness.replace('600_000', 'Infinity')), 'Installer deadline must remain bounded');
+for (const [suite, deadline] of [['runtime', 300000], ['installer', 600000]]) {
+  const timeoutProbe = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import child from 'node:child_process'; import { syncBuiltinESMExports } from 'node:module';
+    child.spawnSync = (_file, _args, options) => {
+      assert.equal(options.timeout, ${deadline});
+      return { error: Object.assign(new Error('Synthetic suite timeout'), { code: 'ETIMEDOUT' }), status: null };
+    };
+    syncBuiltinESMExports(); process.argv = [process.execPath, 'harness', '--suite', '${suite}'];
+    await import('./scripts/verify-harness.mjs');
+  `], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  assert.ifError(timeoutProbe.error);
+  assert.equal(timeoutProbe.status, 1);
+  assert.ok(timeoutProbe.stderr.includes(`${suite}: FAILED (timed out after ${deadline} ms)`));
+}
 const distribution = spawnSync(process.execPath, ['scripts/check-pi-free.mjs', '--distribution'], { cwd: root, encoding: 'utf8', timeout: 20000 });
 assert.ifError(distribution.error);
 assert.equal(distribution.status, 1, 'Uncleared distribution must not succeed');
 assert.match(distribution.stderr, /Distribution blocked: bundled Mastra EE license scope/);
-console.log(`CI contracts: four workflows, ${mutations.length + 1} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);
+console.log(`CI contracts: four workflows, ${mutations.length + 2} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);
