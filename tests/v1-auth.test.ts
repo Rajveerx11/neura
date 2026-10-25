@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { createHash } from "node:crypto";
 import { request } from "node:http";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile, mkdir, symlink, link, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -226,6 +228,73 @@ test("expired credentials refresh once under concurrency and atomically retain r
   assert.equal(refreshes, 1);
   assert.equal(JSON.parse(await readFile(filename(), "utf8")).refresh, "synthetic-rotated");
 });
+
+for (const scenario of ['caller', 'timeout', 'logout']) {
+  test(`completed refresh persistence honors ${scenario} cancellation without inference`, async () => {
+    const source = String.raw`
+      import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
+      import os from 'node:os'; import path from 'node:path'; import { syncBuiltinESMExports } from 'node:module';
+      const scenario = process.argv[1];
+      const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-refresh-persist-')));
+      process.env.NEURA_HOME = scratch; process.env.HOME = scratch; process.env.USERPROFILE = scratch;
+      const filename = path.join(scratch, 'codex-auth.json');
+      const jwt = 'synthetic.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now()/1000)+3600, 'https://api.openai.com/auth': { chatgpt_account_id:'synthetic-account' } })).toString('base64url') + '.unsigned';
+      await fs.writeFile(filename, JSON.stringify({ version:1, access:jwt, refresh:'synthetic-old', expires:1, accountId:'synthetic-account' }), { mode:0o600 });
+      const caller = new AbortController(); const timeout = new AbortController();
+      const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
+      AbortSignal.timeout = ms => ms === 15000 ? timeout.signal : nativeTimeout(ms);
+      let persisting = false; let publications = 0; let requests = 0; let logout;
+      let logoutCodex;
+      const open = fs.open; const realpath = fs.realpath; const rename = fs.rename;
+      fs.open = async (...args) => {
+        const file = await open(...args);
+        if (args[1] === 'wx' && path.basename(String(args[0])).startsWith('.codex-auth.')) {
+          persisting = true; const sync = file.sync.bind(file);
+          file.sync = async () => { await sync(); if (scenario === 'caller') caller.abort(); if (scenario === 'timeout') timeout.abort(new DOMException('Synthetic deadline', 'TimeoutError')); };
+        }
+        return file;
+      };
+      fs.realpath = async (...args) => {
+        const result = await realpath(...args);
+        if (persisting && scenario === 'logout' && !logout) logout = logoutCodex();
+        return result;
+      };
+      fs.rename = async (...args) => { publications++; return rename(...args); };
+      syncBuiltinESMExports();
+      globalThis.fetch = async (url, init) => {
+        requests++;
+        assert.equal(String(url), 'https://auth.openai.com/oauth/token', 'no inference/API fallback after cancellation');
+        assert.equal(new URLSearchParams(String(init.body)).get('refresh_token'), 'synthetic-old');
+        return new Response(JSON.stringify({ access_token:jwt, refresh_token:'synthetic-rotated', expires_in:3600, token_type:'Bearer' }), { headers:{'content-type':'application/json'} });
+      };
+      try {
+        ({ logoutCodex } = await import('./src/auth.ts'));
+        const { createConfiguredModel } = await import('./src/providers.ts');
+        const model = createConfiguredModel({ provider:'openai-codex', model:'synthetic' });
+        await assert.rejects(model.doGenerate({ prompt:[{role:'user',content:[{type:'text',text:'Synthetic input'}]}], abortSignal:caller.signal }), { name: scenario === 'timeout' ? 'TimeoutError' : 'AbortError' });
+        assert.equal(persisting, true, 'cancel only after successful refresh reaches persistence');
+        assert.equal(requests, 1);
+        if (scenario === 'logout') {
+          await logout;
+          await assert.rejects(fs.stat(filename), { code:'ENOENT' });
+          assert.equal(publications, 0, 'logout before rename must prevent credential publication');
+        } else {
+          assert.equal(JSON.parse(await fs.readFile(filename, 'utf8')).refresh, 'synthetic-rotated');
+          assert.equal(publications, 1);
+        }
+        assert.ok(!(await fs.readdir(scratch)).some(name => name.startsWith('.codex-auth.') || name.endsWith('.lock')));
+        console.log('completed refresh cancellation passed: ' + scenario);
+      } finally { await fs.rm(scratch, { recursive:true, force:true }); }
+    `;
+    const reply = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source, scenario], {
+      cwd: path.resolve(import.meta.dirname, '..'),
+      env: Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp)$/i.test(key))),
+      timeout: 20000,
+    });
+    assert.match(reply.stdout, new RegExp(`completed refresh cancellation passed: ${scenario}`));
+    assert.equal(reply.stderr, '');
+  });
+}
 
 test("refresh failure or identity switch denies inference with no API fallback", async () => {
   for (const response of [() => json({ error: "synthetic-private-value" }, 401), () => json(tokens({ access_token: jwt("different-account") }))]) {

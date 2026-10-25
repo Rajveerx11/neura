@@ -8,6 +8,12 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const files = ['verify', 'release', 'runtime-compatibility', 'codeql'];
 const workflows = Object.fromEntries(files.map(name => [name, readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8')]));
 const metadata = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+const harness = readFileSync(new URL('../verify-harness.mjs', import.meta.url), 'utf8');
+
+function validateHarness(source) {
+  assert.match(source, /const SUITE_TIMEOUT_MS = 300_000;/, 'Each suite needs a generous fixed deadline');
+  assert.match(source, /timeout: SUITE_TIMEOUT_MS/, 'Subprocess deadline must be applied');
+}
 
 function validate(sources) {
   for (const [name, source] of Object.entries(sources)) {
@@ -47,6 +53,7 @@ function validate(sources) {
 }
 
 validate(workflows);
+validateHarness(harness);
 const codeqlPin = workflows.codeql.match(/github\/codeql-action\/init@[a-f0-9]{40}/)[0];
 const mutations = [
   ['verify', 'contents: read', 'contents: write'],
@@ -64,8 +71,18 @@ for (const [name, before, after] of mutations) {
   assert.ok(workflows[name].includes(before), `Mutation target missing: ${name} ${before}`);
   assert.throws(() => validate({ ...workflows, [name]: workflows[name].replace(before, after) }), `Weakened contract escaped: ${name} ${before}`);
 }
+assert.throws(() => validateHarness(harness.replace('timeout: SUITE_TIMEOUT_MS', 'timeout: undefined')), 'Removing the suite deadline must fail');
+const timeoutProbe = spawnSync(process.execPath, ['--input-type=module', '-e', `
+  import child from 'node:child_process'; import { syncBuiltinESMExports } from 'node:module';
+  child.spawnSync = () => ({ error: Object.assign(new Error('Synthetic suite timeout'), { code: 'ETIMEDOUT' }), status: null });
+  syncBuiltinESMExports(); process.argv = [process.execPath, 'harness', '--suite', 'runtime'];
+  await import('./scripts/verify-harness.mjs');
+`], { cwd: root, encoding: 'utf8', timeout: 20000 });
+assert.ifError(timeoutProbe.error);
+assert.equal(timeoutProbe.status, 1);
+assert.match(timeoutProbe.stderr, /runtime: FAILED \(timed out after 300000 ms\)/);
 const distribution = spawnSync(process.execPath, ['scripts/check-pi-free.mjs', '--distribution'], { cwd: root, encoding: 'utf8', timeout: 20000 });
 assert.ifError(distribution.error);
 assert.equal(distribution.status, 1, 'Uncleared distribution must not succeed');
 assert.match(distribution.stderr, /Distribution blocked: bundled Mastra EE license scope/);
-console.log(`CI contracts: four workflows, ${mutations.length} rejected mutations and current distribution denial passed.`);
+console.log(`CI contracts: four workflows, ${mutations.length + 1} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);

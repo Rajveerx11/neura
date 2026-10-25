@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
+const SUITE_TIMEOUT_MS = 300_000;
 const suites = {
   runtime: ['--test', 'tests/v1-runtime.test.ts'],
   auth: ['--test', 'tests/v1-auth.test.ts'],
@@ -28,8 +29,12 @@ const chosen = args.length ? [[args[1], suites[args[1]]]] : Object.entries(suite
 let failures = 0;
 for (const [name, command] of chosen) {
   console.log(`\n=== ${name} ===`);
-  const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env });
-  if (result.error || result.status !== 0) { failures++; console.error(`${name}: FAILED (exit ${result.status ?? 'unavailable'})`); }
+  const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env, timeout: SUITE_TIMEOUT_MS });
+  if (result.error || result.status !== 0) {
+    failures++;
+    const detail = result.error?.code === 'ETIMEDOUT' ? `timed out after ${SUITE_TIMEOUT_MS} ms` : `exit ${result.status ?? 'unavailable'}`;
+    console.error(`${name}: FAILED (${detail})`);
+  }
   else console.log(`${name}: PASS`);
 }
 console.log(`\nMastra v1 suites: ${chosen.length - failures}/${chosen.length} passed. This is not full legacy-feature/production parity.`);

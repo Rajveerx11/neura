@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, realpath, rm, writeFile, symlink, readdir, stat } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile, symlink, readdir, stat, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -13,6 +13,8 @@ import { createConfiguredModel } from "../src/providers.ts";
 import { appendSession, createSession, listSessions, resumeSession, saveSession, MAX_SESSION_MESSAGES, MAX_SESSION_BYTES } from "../src/session.ts";
 
 import { fixture } from "./model-fixture.ts";
+import { windowsShortPath } from "./windows-short-path.ts";
+import { lockSession } from "../src/session-lock.ts";
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const user = { role: "user", content: "Synthetic test input" };
 const text = (value: string) => ({ type: "text" as const, text: value });
@@ -231,7 +233,7 @@ test("session create/list/append/resume is bounded and rejects incomplete effect
     const alias = path.join(directory, "alias");
     await import("node:fs/promises").then(({ mkdir }) => mkdir(outside));
     await symlink(outside, alias, "junction");
-    await assert.rejects(createSession(path.join(alias, "sessions")), /outside .pi/);
+    await assert.rejects(createSession(path.join(alias, "sessions")), /outside .pi|Linked session/);
     await writeFile(path.join(directory, `${session.id}.json`), "x".repeat(MAX_SESSION_BYTES + 1));
     await assert.rejects(resumeSession(directory, session.id), /exceeds/);
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -258,6 +260,72 @@ test("session paths reject linked ancestors before creating directories or histo
     assert.deepEqual(await readdir(owned), names);
     assert.deepEqual((await resumeSession(owned, session.id)).messages, [user]);
   } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
+test("genuine Windows short names support session storage and leases without permitting Pi aliases", { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await realpath(await mkdtemp(path.join(tmpdir(), 'neura-session-short-')));
+  try {
+    const short = await windowsShortPath(scratch);
+    assert.notEqual(path.relative(short, scratch), '', 'fixture must exercise a genuine 8.3 spelling');
+    const directory = path.join(short, 'new', 'sessions');
+    const session = await createSession(directory);
+    await saveSession(directory, { ...session, messages: [user] });
+    assert.deepEqual((await resumeSession(directory, session.id)).messages, [user]);
+    const release = await lockSession(directory, session.id);
+    await assert.rejects(lockSession(await realpath(directory), session.id), /in use|unreconciled/);
+    await release();
+    const canonicalRelease = await lockSession(await realpath(directory), session.id); await canonicalRelease();
+    const alias = path.join(scratch, 'junction');
+    await symlink(path.join(scratch, 'new'), alias, 'junction');
+    await assert.rejects(lockSession(path.join(alias, 'sessions'), session.id), /Linked session/);
+    assert.ok(!(await readdir(await realpath(directory))).some(name => name.endsWith('.lock')));
+    const pi = path.join(scratch, '.pi'); await mkdir(pi);
+    const shortPi = await windowsShortPath(pi);
+    assert.ok(!shortPi.split(/[\\/]/).some(part => part.toLowerCase() === '.pi'), 'exercise canonical Pi refusal');
+    await assert.rejects(createSession(path.join(shortPi, 'uncreated', 'sessions')), /outside .pi/);
+    assert.deepEqual(await readdir(pi), []);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
+test("dangling session ancestors are rejected before any mkdir", async () => {
+  const source = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
+    import os from 'node:os'; import path from 'node:path'; import { syncBuiltinESMExports } from 'node:module';
+    const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-dangling-session-')));
+    try {
+      const target = path.join(scratch, 'missing-target'); const alias = path.join(scratch, 'dangling');
+      await fs.symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir');
+      let attempts = 0; const mkdir = fs.mkdir;
+      fs.mkdir = (...args) => { attempts++; return mkdir(...args); }; syncBuiltinESMExports();
+      const { createSession } = await import('./src/session.ts');
+      await assert.rejects(createSession(path.join(alias, 'new', 'sessions')), /Linked session/);
+      assert.equal(attempts, 0, 'reject existing links before attempting directory publication');
+      await assert.rejects(fs.stat(target), { code:'ENOENT' });
+      assert.equal((await fs.lstat(alias)).isSymbolicLink(), true);
+      console.log('dangling link rejected before mkdir');
+    } finally { await fs.rm(scratch, { recursive:true, force:true }); }
+  `;
+  const reply = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { cwd: path.resolve(import.meta.dirname, '..'), env: { SystemRoot: process.env.SystemRoot, PATH: path.dirname(process.execPath) }, timeout: 10000 });
+  assert.match(reply.stdout, /dangling link rejected before mkdir/);
+  assert.equal(reply.stderr, '');
+});
+
+test("session directory traversal terminates when a filesystem root is missing", async () => {
+  const source = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
+    import path from 'node:path'; import { syncBuiltinESMExports } from 'node:module';
+    let calls = 0;
+    const missing = async () => { if (++calls > 4) throw new Error('Non-progressing root traversal'); throw Object.assign(new Error('Synthetic missing root'), { code: 'ENOENT' }); };
+    fs.realpath = missing; fs.lstat = missing;
+    fs.mkdir = async () => { throw new Error('Must not create beneath missing root'); };
+    syncBuiltinESMExports();
+    const { createSession } = await import('./src/session.ts');
+    await assert.rejects(createSession(path.parse(process.cwd()).root), { code: 'ENOENT' });
+    console.log('root traversal bounded');
+  `;
+  const reply = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { cwd: path.resolve(import.meta.dirname, '..'), env: { SystemRoot: process.env.SystemRoot, PATH: path.dirname(process.execPath) }, timeout: 10000 });
+  assert.match(reply.stdout, /root traversal bounded/);
+  assert.equal(reply.stderr, '');
 });
 
 test("clean-environment import and Agent run perform no telemetry/license network or process calls", async () => {

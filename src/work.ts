@@ -15,7 +15,7 @@ const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).dige
 const inside = (root: string, file: string) => { const relative = path.relative(root, file); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
 export type WorkApproval = (description: string) => Promise<boolean>;
 export function assertWorkspaceOutsideNeuraHome(workspace: string, home = process.env.NEURA_HOME || path.join(os.homedir(), '.neura')): void {
-  const root = fs.realpathSync(workspace);
+  const root = fs.realpathSync.native(workspace);
   if (root.split(/[\\/]/).some(part => part.replace(/[. ]+$/, '').toLowerCase() === '.pi')) throw new Error('The legacy Pi profile cannot be a Neura workspace. Choose a separate project directory.');
   let ancestor = path.resolve(home); const suffix: string[] = [];
   let privateRoot: string;
@@ -23,7 +23,7 @@ export function assertWorkspaceOutsideNeuraHome(workspace: string, home = proces
     try {
       const stat = fs.lstatSync(ancestor);
       if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Linked or non-directory Neura home ancestors are forbidden.');
-      privateRoot = path.join(fs.realpathSync(ancestor), ...suffix); break;
+      privateRoot = path.join(fs.realpathSync.native(ancestor), ...suffix); break;
     } catch (error) {
       const parent = path.dirname(ancestor);
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === ancestor) throw error;
@@ -36,9 +36,9 @@ export const WORK_INSTRUCTIONS = `You are Neura, a practical engineering assista
 
 export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'learn', generation: () => number, approve: WorkApproval = async () => false): ToolDefinition[] {
   const exposed = generation();
-  const root = fs.realpathSync(workspace);
+  const root = fs.realpathSync.native(workspace);
   assertWorkspaceOutsideNeuraHome(root);
-  const applicationRoot = fs.realpathSync(new URL('..', import.meta.url));
+  const applicationRoot = fs.realpathSync.native(new URL('..', import.meta.url));
   const ownsControlPlane = path.relative(applicationRoot, root) === '' || inside(applicationRoot, root) || inside(root, applicationRoot);
   function check(signal?: AbortSignal, workOnly = false) {
     signal?.throwIfAborted();

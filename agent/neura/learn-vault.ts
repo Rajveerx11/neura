@@ -80,9 +80,11 @@ async function configuredVault(): Promise<string | null> {
   if (!configured) {
     const home = process.env.NEURA_HOME || path.join(os.homedir(), ".neura");
     if (!path.isAbsolute(home) || home.split(/[\\/]/).some(part => part.replace(/[. ]+$/, "").toLowerCase() === ".pi")) throw new Error("Learn configuration requires a Neura-owned absolute home outside Pi.");
-    try { await realLearnDirectory(home); }
+    let canonicalHome: string;
+    try { canonicalHome = await realLearnDirectory(home); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
-    const config = path.join(home, "learn-vault.json");
+    if (canonicalHome.split(/[\\/]/).some(part => part.replace(/[. ]+$/, "").toLowerCase() === ".pi")) throw new Error("Learn configuration requires a Neura-owned absolute home outside Pi.");
+    const config = path.join(canonicalHome, "learn-vault.json");
     try {
       const parsed = JSON.parse(await readLearnRegular(config, CONFIG_LIMIT));
       if (!parsed || parsed.version !== 1 || typeof parsed.vault !== "string" || Object.keys(parsed).some((key) => !["version", "vault"].includes(key))) {

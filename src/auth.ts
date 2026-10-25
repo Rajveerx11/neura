@@ -122,6 +122,7 @@ async function save(root: string, credential: Credential, signal: AbortSignal) {
     finally { await file.close(); }
     signal.throwIfAborted();
     if (await authRoot(false) !== root) throw new Error("Neura home changed during authentication");
+    signal.throwIfAborted();
     await rename(temporary, filename);
   } finally { await unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; }); }
 }
@@ -179,7 +180,8 @@ export async function codexAuthorization(signal?: AbortSignal): Promise<{ access
       let cred = await load(root);
       if (cred.expires <= Date.now() + 60_000) {
         cred = await tokenRequest(new URLSearchParams({ grant_type: "refresh_token", client_id: CLIENT_ID, refresh_token: cred.refresh }), operation.signal, cred);
-        await save(root, cred, operation.signal);
+        // A completed refresh has rotated server state; caller cancellation must not lose it.
+        await save(root, cred, operation.controller.signal);
       }
       operation.signal.throwIfAborted();
       return { access: cred.access, accountId: cred.accountId };

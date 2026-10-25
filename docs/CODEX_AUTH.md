@@ -95,8 +95,12 @@ directory prevents two Neura processes from rotating or replacing the same
 credential concurrently. A crashed process can leave a lock: recovery is manual,
 only after confirming no authentication operation still owns it. No lock is
 removed automatically. Writes use a flushed exclusive temporary file and rename.
-Refresh writes the rotated refresh token before inference can proceed. Refresh
-failure or an account identity change denies the request.
+Refresh writes the rotated refresh token before inference can proceed. Once a
+validated refresh completes, caller cancellation or its timeout does not discard
+the rotated credential. The caller still receives cancellation and inference is
+not dispatched. Explicit logout cancels persistence, including a final check
+before publication, and removes the local credential. Refresh failure or an
+account identity change denies the request.
 
 The callback server binds only `127.0.0.1`, first port 1455 then 1457. It never
 cancels another listener or accepts manually pasted codes. The redirect URI uses
@@ -215,13 +219,19 @@ Actionable parent follow-up:
 
 ## Session boundary review for the parent
 
+Native Windows path resolution accepts equivalent 8.3 spellings for CLI
+workspace/home containment. Session and Learn directory checks inspect actual
+components for links/junctions rather than rejecting a different spelling. The
+canonical private home is still checked against `.pi` before Learn configuration
+is read. These checks do not certify hostile concurrent filesystem replacement.
+
 The new CLI workspace hash separates default history directories. Its exclusive
 session lease covers the lifecycle from resume through effects to save. Together
 they address accidental cross-root resume and competing CLI writers without
 changing the session format.
 
-The lower-level `saveSession`/`appendSession` helpers still have a documented
-single-writer ceiling at `src/session.ts:117`: two callers can load the same
+The lower-level `saveSession`/`appendSession` helpers in `src/session.ts` still
+have a documented single-writer ceiling: two callers can load the same
 revision and the later save can overwrite the earlier history. A temporary-home
 reproducer saved synthetic A then stale B and confirmed that only B remained
 (exit 0). This is a low-severity API contract limit, not a reproduced lease bypass

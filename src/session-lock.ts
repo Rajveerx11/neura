@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { sessionDirectory } from './session.ts';
 
 /** CLI single-writer lease. Stale locks fail closed; never guess whether a crashed effect ran. */
 export async function lockSession(directory: string, id: string): Promise<() => Promise<void>> {
   if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Invalid session identity.');
-  const canonical = await fs.realpath(directory);
-  if (canonical.toLowerCase() !== path.resolve(directory).toLowerCase()) throw new Error('Linked session directory denied.');
+  const canonical = await sessionDirectory(directory);
   const filename = path.join(canonical, `${id}.lock`);
   const token = randomUUID();
   let handle;
@@ -21,7 +21,7 @@ export async function lockSession(directory: string, id: string): Promise<() => 
     if (released) return;
     released = true;
     const stat = await fs.lstat(filename);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size !== token.length || await fs.realpath(directory) !== canonical || await fs.readFile(filename, 'utf8') !== token) throw new Error('Session lock changed; retained for manual reconciliation.');
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size !== token.length || await sessionDirectory(directory) !== canonical || await fs.readFile(filename, 'utf8') !== token) throw new Error('Session lock changed; retained for manual reconciliation.');
     await fs.unlink(filename);
   };
 }

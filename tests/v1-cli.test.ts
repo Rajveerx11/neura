@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { workshopFixture } from '../scripts/learn-workshop-fixture.mjs';
+import { windowsShortPath } from './windows-short-path.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -56,6 +57,32 @@ test('CLI source check is independent of workspace/private-home configuration an
       assert.equal(reply.stderr, '');
     }
     assert.deepEqual(await fs.readdir(scratch), []);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('CLI genuine short workspace/home spellings share history and retain private/Pi guards', { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-short-')));
+  try {
+    const workspace = path.join(scratch, 'project'); const home = path.join(scratch, 'home');
+    await fs.mkdir(workspace); await fs.mkdir(home);
+    const short = await windowsShortPath(scratch);
+    assert.notEqual(path.relative(short, scratch), '');
+    const shortWorkspace = path.join(short, 'project'); const shortHome = path.join(short, 'home');
+    const run = (cwd: string, privateHome: string) => exec(process.execPath, [path.join(root, 'src/cli.ts'), '--cwd', cwd, '--prompt', '/sessions'], { cwd: root, env: syntheticEnvironment(privateHome) });
+    const first = JSON.parse((await run(shortWorkspace, shortHome)).stdout);
+    const second = JSON.parse((await run(workspace, home)).stdout);
+    assert.equal(first.length, 1); assert.equal(second.length, 2);
+    assert.ok(second.some((session: { id: string }) => session.id === first[0].id));
+    await assert.rejects(run(home, shortHome), /private Neura home/);
+    await assert.rejects(run(shortWorkspace, workspace), /private Neura home/);
+    const linked = path.join(scratch, 'linked-home'); await fs.symlink(home, linked, 'junction');
+    await assert.rejects(run(workspace, path.join(linked, 'uncreated')), /Linked|private Neura home/);
+    await assert.rejects(fs.stat(path.join(home, 'uncreated')), { code: 'ENOENT' });
+    const pi = path.join(scratch, '.pi'); await fs.mkdir(pi);
+    const untouchedHome = path.join(scratch, 'untouched-home');
+    await assert.rejects(run(await windowsShortPath(pi), untouchedHome), /legacy Pi profile/);
+    await assert.rejects(fs.stat(untouchedHome), { code: 'ENOENT' });
+    assert.deepEqual(await fs.readdir(pi), []);
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 

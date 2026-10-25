@@ -47,7 +47,7 @@ Real account login remains a manual personal-use gate; distribution is not clear
     say(JSON.stringify({ framework: 'Mastra', version: runtime.dependencies['@mastra/core'], modes: ['work', 'learn'], node: process.version, platform: process.platform, learnFirstCreation: process.platform === 'win32' ? 'supported' : 'requires native Windows', history: 'Neura-owned; no Pi imports', status: 'development; license/distribution and real-auth gates remain' }, null, 2));
     return;
   }
-  const workspace = fs.realpathSync(path.resolve(values.cwd ?? process.cwd()));
+  const workspace = fs.realpathSync.native(path.resolve(values.cwd ?? process.cwd()));
   if (!fs.statSync(workspace).isDirectory()) throw new Error('Workspace must be a directory.');
   let mode: 'work' | 'learn' = 'work';
   if (values.mode !== undefined && !['work', 'learn'].includes(values.mode)) throw new Error('Only Work and Learn are implemented in this v1.');

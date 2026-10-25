@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from "node:fs/promises";
 import path from "node:path";
+import { assertUnlinkedDirectoryAncestors } from "../agent/neura/directory-path.ts";
 
 export const MAX_SESSION_MESSAGES = 200;
 export const MAX_SESSION_BYTES = 1024 * 1024;
@@ -15,27 +16,27 @@ function checkDirectory(directory: string) {
   }
 }
 
-async function sessionDirectory(directory: string, create = false): Promise<string> {
+export async function sessionDirectory(directory: string, create = false): Promise<string> {
   checkDirectory(directory);
   let ancestor = path.resolve(directory);
   while (true) {
     try {
+      await assertUnlinkedDirectoryAncestors(ancestor, "Linked session directory denied");
       const canonicalAncestor = await realpath(ancestor);
       checkDirectory(canonicalAncestor);
-      // Refuse linked existing ancestors before mkdir can publish beneath their targets.
-      if (path.relative(ancestor, canonicalAncestor) !== "") throw new Error("Linked session directory denied");
       break;
     }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      ancestor = path.dirname(ancestor);
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) throw error;
+      ancestor = parent;
     }
   }
   if (create) await mkdir(directory, { recursive: true, mode: 0o700 });
+  await assertUnlinkedDirectoryAncestors(directory, "Linked session directory denied");
   const canonical = await realpath(directory);
   checkDirectory(canonical);
-  if (path.relative(path.resolve(directory), canonical) !== "") throw new Error("Linked session directory denied");
-  if (!(await lstat(canonical)).isDirectory()) throw new Error("Session directory is not a directory");
   return canonical;
 }
 
