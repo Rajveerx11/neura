@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, rm, writeFile, symlink, readdir, stat } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile, symlink, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -113,7 +113,7 @@ test("tool images become model media parts, including after history resume", asy
   const result = await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => ({ content: [{ type: "image", mimeType: "image/png", data: png }] }), "image")] });
   const toolMessage = requests[1].prompt.find((message: any) => message.role === "tool");
   assert.deepEqual(toolMessage.content[0].output, { type: "content", value: [{ type: "media", mediaType: "image/png", data: png }] });
-  const directory = await mkdtemp(path.join(tmpdir(), "neura-session-image-"));
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-image-")));
   try {
     const session = await createSession(directory);
     await saveSession(directory, { ...session, messages: result.messages });
@@ -210,7 +210,7 @@ test("schema failure without assistant text returns usable feedback", async () =
 });
 
 test("session create/list/append/resume is bounded and rejects incomplete effects or traversal", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "neura-session-test-"));
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-test-")));
   try {
     const session = await createSession(directory);
     assert.deepEqual((await listSessions(directory)).map((entry) => entry.id), [session.id]);
@@ -238,7 +238,7 @@ test("session create/list/append/resume is bounded and rejects incomplete effect
 });
 
 test("session paths reject linked ancestors before creating directories or history", async () => {
-  const scratch = await mkdtemp(path.join(tmpdir(), "neura-session-links-"));
+  const scratch = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-links-")));
   try {
     const owned = path.join(scratch, "owned", "sessions");
     const session = await createSession(owned);

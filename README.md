@@ -200,4 +200,22 @@ real login or establish provider entitlement. See [dated evidence and remaining
 gates](docs/MASTRA_V1.md#evidence-and-remaining-gates). `verify:release` remains
 blocked by dependency licensing and distribution review.
 
+## CI and release automation
+
+PR and merge-queue checks retain the required `harness` and `portable-proof`
+names. Windows runs the full development suite, secret-scan regressions, registry
+signature audits and Learn browser checks. Ubuntu runs the portable contracts.
+`Required CI` rejects failed prerequisites, and CodeQL scans JavaScript/TypeScript.
+Both Windows workflows verify the downloaded Git identity and select that same
+binary through the explicit executable setting and child-process PATH.
+
+The daily dependency workflow checks both active dependency graphs and their
+registry signatures. Mandatory workflow-contract tests reject weakened gates.
+These are focused source contracts, not a general YAML validation service.
+
+Tag-triggered release automation remains blocked by Mastra licensing review.
+It cannot reach asset publication without the release gate and configured-host
+Work acceptance. A production release host is not provisioned or approved by
+these changes. No tag, release or deployment is part of this update.
+
 Apache-2.0 applies to Neura source. Third-party packages retain their own terms.

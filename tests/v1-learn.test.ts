@@ -17,7 +17,7 @@ import { pdf, zip, presentation } from '../scripts/learn-material-fixtures.mjs';
 const decode = (result: any) => JSON.parse(result.content.find((part: any) => part.type === 'text').text);
 
 test('Learn v1: actual document -> cited lesson -> attempt -> save -> new workshop -> resume', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-v1-learn-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-v1-learn-')));
   const oldHome = process.env.NEURA_HOME;
   const oldVault = process.env.NEURA_LEARN_VAULT;
   process.env.NEURA_HOME = path.join(scratch, 'private-home'); delete process.env.NEURA_LEARN_VAULT;
@@ -88,7 +88,7 @@ test('Learn v1: actual document -> cited lesson -> attempt -> save -> new worksh
 });
 
 test('Work v1: contained writes preserve stale/user bytes; Learn cannot use a stale Work writer', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-v1-work-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-v1-work-')));
   try {
     let mode: 'work' | 'learn' = 'work'; let generation = 0;
     const tools = createWorkspaceTools(scratch, () => mode, () => generation);
@@ -121,7 +121,7 @@ for (const scenario of ['denied', 'stale', 'cancelled', 'unavailable']) {
       import { syncBuiltinESMExports } from 'node:module';
       import { AUTOMATIC_GIT_ARGUMENTS } from './agent/neura/process-security.ts';
       const scenario = process.argv[1];
-      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'neura-work-boundary-'));
+      const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'neura-work-boundary-')));
       const workspace = path.join(scratch, 'workspace');
       fs.mkdirSync(workspace);
       process.env.HOME = scratch; process.env.USERPROFILE = scratch;
@@ -192,7 +192,7 @@ for (const scenario of ['denied', 'stale', 'cancelled', 'unavailable']) {
 }
 
 test('Work never exposes the Neura credential home or its reserved auth file', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-private-home-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-private-home-')));
   const oldHome = process.env.NEURA_HOME;
   try {
     const home = path.join(scratch, 'home'); const workspace = path.join(scratch, 'project');
@@ -227,7 +227,7 @@ test('Work never exposes the Neura credential home or its reserved auth file', a
 });
 
 test('Work hashes original bytes but never exposes or rewrites redacted values', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-redaction-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-redaction-')));
   try {
     const filename = path.join(scratch, 'sample.md');
     const original = 'ordinary paragraph\nAuthorization: Bearer synthetic-one\n';
@@ -279,7 +279,7 @@ test('Work cannot rewrite its own reused runtime or bypass that boundary with an
 });
 
 test('Learn config is Neura-owned: explicit new-home config works; Pi aliases and linked homes are refused', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-vault-config-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-vault-config-')));
   const oldHome = process.env.NEURA_HOME; const oldVault = process.env.NEURA_LEARN_VAULT;
   delete process.env.NEURA_LEARN_VAULT;
   try {

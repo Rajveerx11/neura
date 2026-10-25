@@ -13,7 +13,7 @@ import { lockSession } from '../src/session-lock.ts';
 const call = (toolName: string, input: unknown) => ({ type: 'tool-call', toolCallId: toolName, toolName, input: JSON.stringify(input) });
 
 test('real Mastra Learn: material -> cited board -> learner attempt -> explicit save/resume', { skip: process.platform !== 'win32' }, async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-agent-learn-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-agent-learn-')));
   const oldHome = process.env.NEURA_HOME; const oldVault = process.env.NEURA_LEARN_VAULT;
   process.env.NEURA_HOME = path.join(scratch, 'private'); delete process.env.NEURA_LEARN_VAULT;
   try {
@@ -51,7 +51,7 @@ test('real Mastra Learn: material -> cited board -> learner attempt -> explicit 
 });
 
 test('session lease rejects concurrent and unreconciled writers; only its owner releases it', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-session-lock-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-session-lock-')));
   try {
     const id = '12345678-1234-4234-8234-123456789abc';
     const release = await lockSession(scratch, id);

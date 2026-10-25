@@ -13,12 +13,12 @@ const exec = promisify(execFile);
 const root = fileURLToPath(new URL('..', import.meta.url));
 
 function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp)$/i.test(key)));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp|neura_git_executable)$/i.test(key)));
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
 test('CLI uses real Mastra/local transport for a Learn board, exposes no Work tools and stops at the lesson', { skip: process.platform !== 'win32' }, async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-learn-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-learn-')));
   const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);
   const lesson = structuredClone(workshopFixture); lesson.references = [];
   const requests: any[] = [];
@@ -44,10 +44,12 @@ test('CLI uses real Mastra/local transport for a Learn board, exposes no Work to
 });
 
 test('CLI source check is independent of workspace/private-home configuration and creates no history', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-check-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-check-')));
   try {
+    const env = syntheticEnvironment(scratch);
+    assert.equal(env.NEURA_GIT_EXECUTABLE, process.env.NEURA_GIT_EXECUTABLE, 'preserve the CI-selected Git identity');
     for (const workspace of [scratch, path.join(scratch, 'missing-workspace')]) {
-      const reply = await exec(process.execPath, [path.join(root, 'src/cli.ts'), '--check', '--cwd', workspace], { cwd: scratch, env: syntheticEnvironment(scratch) });
+      const reply = await exec(process.execPath, [path.join(root, 'src/cli.ts'), '--check', '--cwd', workspace], { cwd: scratch, env });
       const check = JSON.parse(reply.stdout);
       assert.equal(check.framework, 'Mastra');
       assert.deepEqual(check.modes, ['work', 'learn']);
@@ -58,7 +60,7 @@ test('CLI source check is independent of workspace/private-home configuration an
 });
 
 test('CLI history is workspace-scoped and releases its writer lock; unavailable modes fail closed', async () => {
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-history-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-history-')));
   try {
     const home = path.join(scratch, 'home');
     const a = path.join(scratch, 'workspace-a'); const b = path.join(scratch, 'workspace-b');

@@ -8,7 +8,7 @@ import { createWorkspaceTools } from '../src/work.ts';
 
 test('configured-host Work acceptance: approved command succeeds only through the real sandbox', { timeout: 150000 }, async () => {
   assert.equal(process.platform, 'win32', 'Configured-host Work acceptance requires native Windows with WSL2/bubblewrap.');
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-host-'));
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-host-')));
   const oldHome = process.env.NEURA_HOME;
   try {
     const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);

@@ -16,6 +16,7 @@ const suites = {
   sandbox: ['scripts/tests/sandbox.mjs'],
   'process-contract': ['scripts/tests/process-contract.mjs'],
   'workspace-read': ['scripts/tests/plan-traversal.mjs'],
+  'ci-contract': ['scripts/tests/ci-contract.mjs'],
 };
 const args = process.argv.slice(2);
 if (args.length && (args.length !== 2 || args[0] !== '--suite' || !Object.hasOwn(suites, args[1]))) {
