@@ -142,7 +142,47 @@ try {
     }
     if (-not $decoyRejected) { throw 'Caller directory supplied an unauthorized scan exception.' }
 
-    Write-Output "Neura secret tests: clean history, reviewed manifest digest, exact PEM binding and target-repository ignore passed; tampered archive, other digest, off-path key, synthetic token, new-commit PEM and decoy-CWD exception rejected."
+    # Documentation exceptions remain bound to the reviewed historical commit.
+    # Use synthetic content: the preserved local reference draft is not a release input.
+    $documentationFingerprint = 'de328f3b28b431aad083219495e2cf8fab0f6db6:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484'
+    $documentationIgnores = @($ignoreSource -split '\r?\n' | Where-Object { $_ -match '^[^#].*:docs/MASTRA_MIGRATION_REFERENCE\.md:generic-api-key:' })
+    if ($documentationIgnores.Count -ne 1 -or $documentationIgnores[0] -cne $documentationFingerprint) {
+        throw 'Documentation exception escaped its reviewed commit/path/rule/line binding.'
+    }
+    $documentationRepository = New-TestRepository 'documentation-fingerprint'
+    Commit-TestFile $documentationRepository '.gitleaks.toml' $config
+    Commit-TestFile $documentationRepository '.gitleaksignore' $ignoreSource
+    New-Item -ItemType Directory -Path (Join-Path $documentationRepository 'docs') -Force | Out-Null
+    $documentationPath = 'docs/MASTRA_MIGRATION_REFERENCE.md'
+    $documentationProse = 'The central redactor covers known {0} assignments, environment/header/CLI forms.' -f 'secret'
+    $documentationFixture = ((@('') * 483) + @($documentationProse)) -join "`n"
+    Commit-TestFile $documentationRepository $documentationPath $documentationFixture
+    $newProseRejected = $false
+    try { & $scanScript -RepositoryRoot $documentationRepository -ToolCache $toolCache *>$null }
+    catch {
+        if ($_.FullyQualifiedErrorId -like 'Neura.SecretLeak*') { $newProseRejected = $true }
+        else { throw }
+    }
+    if (-not $newProseRejected) { throw 'Historical documentation fingerprint bypassed a different commit.' }
+
+    $documentationCommit = (& git -C $documentationRepository rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $documentationCommit -notmatch '^[0-9a-f]{40}$') { throw 'Could not resolve synthetic documentation commit.' }
+    $documentationIgnorePath = Join-Path $documentationRepository '.gitleaksignore'
+    $reviewedProseFingerprint = '{0}:{1}:generic-api-key:484' -f $documentationCommit, $documentationPath
+    [IO.File]::WriteAllText($documentationIgnorePath, $ignoreSource + "`r`n" + $reviewedProseFingerprint + "`r`n", [Text.UTF8Encoding]::new($false))
+    & $scanScript -RepositoryRoot $documentationRepository -ToolCache $toolCache *>$null
+
+    $documentationCanary = 'api_key="{0}"' -f ([guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N'))
+    Commit-TestFile $documentationRepository $documentationPath (((@('') * 483) + @($documentationCanary)) -join "`n")
+    $newCanaryRejected = $false
+    try { & $scanScript -RepositoryRoot $documentationRepository -ToolCache $toolCache *>$null }
+    catch {
+        if ($_.FullyQualifiedErrorId -like 'Neura.SecretLeak*') { $newCanaryRejected = $true }
+        else { throw }
+    }
+    if (-not $newCanaryRejected) { throw 'Documentation exception bypassed a new canary at the same path and line.' }
+
+    Write-Output "Neura secret tests: clean history, reviewed manifest digest, exact PEM/documentation binding and target-repository ignore passed; tampered archive, other digest, off-path key, synthetic token, new-commit PEM/prose, same-line canary and decoy-CWD exception rejected."
 } catch {
     Write-Output "Secret test failed before cleanup: $($_.FullyQualifiedErrorId)"
     throw

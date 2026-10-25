@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { executeProcess } from '../../agent/neura/process.ts';
-import { runProcess } from '../../agent/neura/core.ts';
+import { runProcess } from '../../agent/neura/process.ts';
 import { execute } from '../../agent/neura/verification.ts';
 
 const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-process-contract-'));

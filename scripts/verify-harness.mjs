@@ -1,48 +1,35 @@
+// Active Mastra v1 verification. Historical Pi harness is retained separately, not claimed passing.
 import { spawnSync } from 'node:child_process';
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
-import { suites, selectSuites, changedPaths } from './test-suites.mjs';
-import { captureWorktree } from '../agent/neura/verification.ts';
-
-const root = path.resolve(import.meta.dirname, '..');
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('..', import.meta.url));
+const suites = {
+  runtime: ['--test', 'tests/v1-runtime.test.ts'],
+  auth: ['--test', 'tests/v1-auth.test.ts'],
+  learn: ['--test', 'tests/v1-learn.test.ts'],
+  'agent-learn': ['--test', 'tests/v1-agent-learn.test.ts'],
+  installer: ['--test', 'tests/v1-install.test.ts'],
+  cli: ['--test', 'tests/v1-cli.test.ts'],
+  'learn-materials': ['scripts/tests/learn-materials.mjs'],
+  'learn-workshop': ['scripts/tests/learn-workshop.mjs'],
+  'learn-storage': ['scripts/tests/learn-storage.mjs'],
+  'learn-vault': ['scripts/tests/learn-vault.mjs'],
+  sandbox: ['scripts/tests/sandbox.mjs'],
+  'process-contract': ['scripts/tests/process-contract.mjs'],
+  'workspace-read': ['scripts/tests/plan-traversal.mjs'],
+};
 const args = process.argv.slice(2);
-const incremental = args[0] === '--changed';
-const before = incremental ? await captureWorktree(root) : null;
-if (incremental && !before) throw new Error('Cannot bind incremental checks to this worktree; run full verification.');
-let selected = Object.keys(suites);
-if (args[0] === '--suite' && args.length === 2 && Object.hasOwn(suites,args[1])) selected = [args[1]];
-else if (args[0] === '--changed' && args.length === 1) {
-  selected = selectSuites(changedPaths(root));
-} else if (args.length) throw new Error('Usage: node scripts/verify-harness.mjs [--suite NAME | --changed]');
-
-let failed = false;
-const results = [];
-for (const name of selected) {
-  const start = Date.now();
-  const result = spawnSync(process.execPath, [suites[name]], {
-    cwd: root, stdio: 'inherit', windowsHide: true, timeout: 180_000,
-  });
-  console.log(`${name}: ${result.status === 0 ? 'PASS' : 'FAIL'} (${((Date.now()-start)/1000).toFixed(1)}s)`);
-  if (result.status !== 0) failed = true;
-  results.push({ name, status: result.status === 0 ? 'passed' : 'failed' });
+if (args.length && (args.length !== 2 || args[0] !== '--suite' || !Object.hasOwn(suites, args[1]))) {
+  console.error('Use --suite ' + Object.keys(suites).join('|') + '. Legacy Pi suites are not active Mastra parity tests.');
+  process.exit(2);
 }
-if (incremental) {
-  const after = await captureWorktree(root);
-  const stable = after?.fingerprint === before.fingerprint;
-  if (!stable) {
-    failed = true;
-    console.error('Worktree changed during incremental verification; evidence marked unavailable.');
-  }
-  const directory = path.join(before.root, '.proofofwork');
-  await fs.mkdir(directory, {recursive:true});
-  if ((await fs.lstat(directory)).isSymbolicLink() || await fs.realpath(directory) !== directory) throw new Error('Linked evidence directory refused.');
-  const temporary = path.join(directory, `neura-checks-${randomUUID()}.tmp`);
-  try {
-    await fs.writeFile(temporary, JSON.stringify({schemaVersion:1,fingerprint:before.fingerprint,
-      completedAt:new Date().toISOString(),status:stable ? (failed ? 'failed' : 'passed') : 'unavailable',suites:results}), {flag:'wx'});
-    await fs.rename(temporary,path.join(directory,'neura-checks.json'));
-  } finally { await fs.rm(temporary,{force:true}); }
+if (Number(process.versions.node.split('.')[0]) < 24) { console.error('Native Node 24.15+ required. WSL Node18 cannot run this harness.'); process.exit(1); }
+const chosen = args.length ? [[args[1], suites[args[1]]]] : Object.entries(suites);
+let failures = 0;
+for (const [name, command] of chosen) {
+  console.log(`\n=== ${name} ===`);
+  const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env });
+  if (result.error || result.status !== 0) { failures++; console.error(`${name}: FAILED (exit ${result.status ?? 'unavailable'})`); }
+  else console.log(`${name}: PASS`);
 }
-console.log(`Neura verify: ${selected.length} independent suites; ${failed ? 'FAILED' : 'passed'}.`);
-process.exitCode = failed ? 1 : 0;
+console.log(`\nMastra v1 suites: ${chosen.length - failures}/${chosen.length} passed. This is not full legacy-feature/production parity.`);
+process.exitCode = failures ? 1 : 0;

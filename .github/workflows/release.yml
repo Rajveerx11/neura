@@ -61,20 +61,22 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Install locked learning document runtime
         run: npm ci --prefix agent/neura --ignore-scripts
-      - name: Check latest stable Pi target
-        run: npm run check:pi-latest
+      - name: Check active Mastra dependency boundary
+        run: npm run check:pi-free
       - name: Verify release policy
         env:
           TAG: ${{ github.ref_name }}
         run: npm run verify:release -- --tag "$env:TAG"
       - name: Audit dependency vulnerabilities and registry signatures
         run: npm run audit:all
-      - name: Verify repository
+      - name: Verify deterministic repository contracts
         run: npm run verify
+      - name: Require configured-host Work sandbox acceptance
+        run: npm run test:v1:work-sandbox
       - name: Verify browser contracts
         shell: pwsh
         env:
-          NEURA_A11Y_OUTPUT: ${{ runner.temp }}\neura-release-a11y
+          NEURA_LEARN_BROWSER_OUTPUT: ${{ runner.temp }}\neura-release-learn
         run: npm run test:browser
       - name: Verify complete history secret scan
         shell: pwsh
@@ -85,10 +87,10 @@ jobs:
       - name: Verify installer on ephemeral runner
         shell: pwsh
         run: |
-          $env:PATH = "$PWD\node_modules\.bin;$env:PATH"
-          powershell -File .\install.ps1
+          $bin = Join-Path $env:RUNNER_TEMP 'neura-mastra-bin'
+          powershell -NoProfile -File .\install.ps1 -Development -BinDirectory $bin
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          powershell -File .\install.ps1 -Check
+          powershell -NoProfile -File .\install.ps1 -Check -BinDirectory $bin
 
   package:
     name: Release assets

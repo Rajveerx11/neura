@@ -138,7 +138,7 @@ export function redactPlanContextMessages(messages: any[]): any[] {
   // and its paired results as ordinary historical user context: no fabricated
   // signatures, dangling tool results, or thinking-less signed tool continuations.
   const rebased = new Set(messages.filter(message => message.role === "assistant" && Array.isArray(message.content)
-    && message.content.some(block => block.type === "thinking" || block.type === "redacted_thinking"
+    && message.content.some((block: any) => block.type === "thinking" || block.type === "redacted_thinking"
       || block.thinkingSignature !== undefined || block.thoughtSignature !== undefined || block.textSignature !== undefined)));
   const rebasedCalls = new Set<string>();
   for (const message of rebased) {
@@ -164,7 +164,7 @@ export function redactPlanContextMessages(messages: any[]): any[] {
     return {
       ...message,
       content: Array.isArray(message.content)
-        ? message.content.map(block => redactContextBlock(block, message.role === "assistant"))
+        ? message.content.map((block: any) => redactContextBlock(block, message.role === "assistant"))
         : redactSensitiveValue(message.content),
       ...(message.sections ? { sections: redactSensitiveValue(message.sections) } : {}),
       ...(message.details ? { details: redactSensitiveValue(message.details) } : {}),
