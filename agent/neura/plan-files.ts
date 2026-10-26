@@ -1,6 +1,7 @@
 // Plan's local inspection service. Never execute a model-supplied shell command.
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { setImmediate } from "node:timers/promises";
 import { SECRET_PATH, findProjectRoot, isPathInside } from "./plan-policy.ts";
@@ -9,7 +10,7 @@ import { redactSensitiveText } from "./redaction.ts";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const PRIVATE_COMPONENT = /^(?:\.git|\.pi|\.neura|\.claude|\.ssh|\.aws|\.azure|\.config|\.kube|\.docker|node_modules|sessions|approvals|memory|private|secrets)$/i;
-const PRIVATE_FILE = /^(?:memory\.(?:md|json|txt)|(?:auth|models|settings|mcp|keybindings|tokens|credentials|secrets)\.json)$/i;
+const PRIVATE_FILE = /^(?:memory\.(?:md|json|txt)|(?:auth|codex-auth|models|settings|mcp|keybindings|tokens|credentials|secrets)\.json)$/i;
 
 function gitMetadata(cwd: string, args: string[], input?: string): string {
   const executable = resolveExecutable("git", cwd);
@@ -58,7 +59,7 @@ function concreteIdentity(root: string, requested: string): PlanPath {
   if (!requested || requested.length > 4096 || /[\x00-\x1f\x7f]/.test(requested)) throw new Error("Unsupported Plan filesystem identity.");
   const lexical = path.resolve(root, requested);
   if (!isPathInside(root, lexical) || privatePath(root, lexical)) throw new Error("Plan path is outside the workspace or confidential.");
-  const canonical = fs.realpathSync(lexical);
+  const canonical = fs.realpathSync.native(lexical);
   if (!isPathInside(root, canonical) || privatePath(root, canonical)) throw new Error("Plan link resolves outside the workspace or to confidential data.");
   const stat = fs.statSync(canonical);
   if (!stat.isFile() && !stat.isDirectory()) throw new Error("Plan supports only regular files and directories.");
@@ -87,7 +88,7 @@ function authorizeConcretePath(root: string, requested: string): PlanPath {
 
 export function authorizePlanPath(cwd: string, requested: string): PlanPath {
   validateModelPath(requested);
-  return authorizeConcretePath(fs.realpathSync(cwd), requested);
+  return authorizeConcretePath(fs.realpathSync.native(cwd), requested);
 }
 
 function sameFile(a: fs.Stats, b: fs.Stats): boolean {
@@ -95,11 +96,20 @@ function sameFile(a: fs.Stats, b: fs.Stats): boolean {
 }
 
 export function readPlanFile(cwd: string, requested: string, checkBudget?: () => void): Buffer {
+  return readPlanFileSnapshot(cwd, requested, checkBudget).content;
+}
+
+// Redacted delivery and original-byte identity are separate. Raw bytes never leave this reader.
+export function readPlanFileSnapshot(cwd: string, requested: string, checkBudget?: () => void): { content: Buffer; sha256: string; redacted: boolean; byteLength: number } {
   validateModelPath(requested);
-  return readConcreteFile(fs.realpathSync(cwd), requested, checkBudget);
+  return readConcreteSnapshot(fs.realpathSync.native(cwd), requested, checkBudget);
 }
 
 function readConcreteFile(root: string, requested: string, checkBudget?: () => void): Buffer {
+  return readConcreteSnapshot(root, requested, checkBudget).content;
+}
+
+function readConcreteSnapshot(root: string, requested: string, checkBudget?: () => void): { content: Buffer; sha256: string; redacted: boolean; byteLength: number } {
   checkBudget?.();
   const before = authorizeConcretePath(root, requested);
   checkBudget?.();
@@ -126,7 +136,8 @@ function readConcreteFile(root: string, requested: string, checkBudget?: () => v
     // Opaque/binary payloads cannot be text-redacted before model delivery.
     const text = buffer.toString("utf8");
     if (buffer.includes(0) || text.includes("\uFFFD")) throw new Error("Plan inspection supports UTF-8 text only.");
-    return Buffer.from(redactSensitiveText(text, Number.POSITIVE_INFINITY, checkBudget));
+    const delivered = redactSensitiveText(text, Number.POSITIVE_INFINITY, checkBudget);
+    return { content: Buffer.from(delivered), sha256: createHash('sha256').update(buffer).digest('hex'), redacted: delivered !== text, byteLength: buffer.length };
   } finally { fs.closeSync(fd); }
 }
 
@@ -326,5 +337,5 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
 }
 
 export function planMetadata(cwd: string, command: "pwd" | "head"): string {
-  return command === "pwd" ? fs.realpathSync(cwd) : gitMetadata(cwd, ["rev-parse", "--short", "HEAD"]).trim();
+  return command === "pwd" ? fs.realpathSync.native(cwd) : gitMetadata(cwd, ["rev-parse", "--short", "HEAD"]).trim();
 }

@@ -118,12 +118,17 @@ await test('ignore edits during enumeration, across directories and across calls
   const initial = fs.readFileSync(rules, 'utf8');
   for (const tool of ['find', 'ls', 'grep']) {
     fs.writeFileSync(rules, initial);
+    let changedDuringEnumeration = false;
     await patch(fs, 'readdirSync', original => (...args) => {
       const names = original(...args);
-      if (String(args[0]) === path.join(cwd, 'changes')) fs.appendFileSync(rules, 'changes/victim.ts\n');
+      if (String(args[0]) === path.join(cwd, 'changes')) {
+        changedDuringEnumeration = true;
+        fs.appendFileSync(rules, 'changes/victim.ts\n');
+      }
       return names;
     }, async () => {
       const value = await inspectPlanFiles(cwd, tool, { path: 'changes', pattern: tool === 'find' ? '**/*' : 'IGNORE_RACE_CANARY', literal: true });
+      assert.ok(changedDuringEnumeration, 'the fixture must inject its ignore edit during enumeration');
       assert.doesNotMatch(value, /victim|IGNORE_RACE_CANARY/);
     });
     fs.writeFileSync(rules, initial);
@@ -132,11 +137,19 @@ await test('ignore edits during enumeration, across directories and across calls
   }
   write('across/a/first.ts', 'ordinary traversal needle\n');
   write('across/b/victim.ts', 'IGNORE_RACE_CANARY\n');
+  let changedAcrossDirectories = false;
   await patch(fs, 'readdirSync', original => (...args) => {
     const names = original(...args);
-    if (String(args[0]) === path.join(cwd, 'across/a')) fs.appendFileSync(rules, 'across/b/victim.ts\n');
+    if (String(args[0]) === path.join(cwd, 'across/a')) {
+      changedAcrossDirectories = true;
+      fs.appendFileSync(rules, 'across/b/victim.ts\n');
+    }
     return names;
-  }, async () => assert.doesNotMatch(await inspectPlanFiles(cwd, 'find', { path: 'across', pattern: '**/*' }), /victim/));
+  }, async () => {
+    const value = await inspectPlanFiles(cwd, 'find', { path: 'across', pattern: '**/*' });
+    assert.ok(changedAcrossDirectories, 'the fixture must inject its cross-directory ignore edit');
+    assert.doesNotMatch(value, /victim/);
+  });
   fs.writeFileSync(rules, initial);
 });
 

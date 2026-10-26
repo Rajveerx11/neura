@@ -1,4 +1,5 @@
-import { executeProcess } from "./process.ts";
+import { runProcess, type ProcessResult } from "./process.ts";
+export { runProcess, type ProcessResult } from "./process.ts";
 import * as path from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable, scopedProcessEnvironment } from "./process-security.ts";
@@ -30,23 +31,6 @@ export function truncateText(value: string, width: number): string {
 
 export function padAnsi(value: string, width: number): string {
   return value + " ".repeat(Math.max(0, width - visibleLength(value)));
-}
-
-export type ProcessResult = {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-};
-
-export async function runProcess(
-  file: string,
-  args: string[],
-  options: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv; signal?: AbortSignal; maxBuffer?: number } = {},
-): Promise<ProcessResult> {
-  const result = await executeProcess(file, args, {
-    ...options, timeoutMs: options.timeoutMs ?? 3_000, maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
-  });
-  return { ok: result.ok, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
 }
 
 export async function commandVersion(command: string, args = ["--version"], cwd = process.cwd()): Promise<string | null> {

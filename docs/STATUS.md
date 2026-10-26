@@ -1,5 +1,27 @@
 # Neura status
 
+## Active source: Mastra v1 development migration (2026-10-24)
+
+The owner authorized Pi-free implementation with a usable core and Learn first.
+The active entry point is `src/cli.ts`, not the retained Pi extensions. Work and
+Learn are the only exposed modes. Root dependencies, launcher and v1 verification
+are being migrated together. Legacy provider/profile data is not imported.
+
+**Development/testing only. Not a release, full feature parity or production-ready.**
+Mastra's bundled EE license scope and distribution approval remain unresolved;
+`verify:release` must stay blocked. Existing metadata stays `2.6.0-rc.1`; no new
+release or semantic-version decision is implied. Latest published remains `2.5.1`.
+
+Current implementation, exact test evidence and operational limitations are in
+[Mastra v1](MASTRA_V1.md), [dependency review](MASTRA_V1_DEPENDENCIES.md), and
+[subscription authentication](CODEX_AUTH.md). Subscription login/refresh/transport
+have synthetic tests; no real-account login or provider entitlement is claimed.
+The original Pi audit below is historical baseline evidence, not current Mastra
+verification or permission to install/downgrade Pi. Original hardening issues stay
+open; a framework change does not close them. Human Away is unavailable in v1.
+
+## Historical Pi candidate baseline
+
 Last documentation audit: 2026-10-20
 
 Current candidate: [`2.6.0-rc.1`](releases/v2.6.0-rc.1.md). Latest published
