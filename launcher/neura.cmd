@@ -1,14 +1,7 @@
 @echo off
-title neura
-rem Only Neura launch is guarded; invoking pi directly remains unchanged.
-set "NEURA_AGENT_DIR=%USERPROFILE%\.pi\agent"
-if defined PI_CODING_AGENT_DIR set "NEURA_AGENT_DIR=%PI_CODING_AGENT_DIR%"
-call node "%NEURA_AGENT_DIR%\neura\runtime-install.mjs" check || exit /b 1
-set "NEURA=1"
-
-where pi >nul 2>&1 || (
-  echo Neura requires Pi. Run: npm install -g @earendil-works/pi-coding-agent 1>&2
-  exit /b 1
-)
-rem Preserve regular-terminal launch and disable eager native MCP for Neura only.
-pi --no-mcp --tui-mode regular %*
+setlocal
+rem Neura owns its runtime. Never resolve or launch Pi or read its profile.
+if defined NEURA_SOURCE (set "NEURA_ROOT=%NEURA_SOURCE%") else (set "NEURA_ROOT=%~dp0..")
+set "MASTRA_TELEMETRY_DISABLED=1"
+node "%NEURA_ROOT%\src\cli.ts" %*
+exit /b %ERRORLEVEL%

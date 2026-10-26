@@ -1,5 +1,19 @@
 # Repository instructions
 
+## Active Mastra v1 migration (owner-authorized 2026-10-24)
+
+- The active application is `src/cli.ts` using Mastra, with Work and Learn only.
+- The owner explicitly selected full Pi removal. Do not reintroduce Pi packages,
+  the Pi TUI, acquired Pi extensions, or implicit reads from the legacy Pi profile.
+- The latest-Pi policy below applies only to retained historical Pi source, not
+  the new application. Legacy extension/release fixtures do not establish v1 parity.
+- Reuse the Neura-owned Learn/policy/sandbox modules; test the active import graph.
+- Preserve legacy credentials, memory, approvals, sessions, vaults and other agents'
+  worktrees. Retire only receipt-matched managed files, reversibly, after Pi exits.
+- Source-linked installation is development-only while dependency licensing and
+  distribution approval remain unresolved. Never imply production readiness.
+- No release/version bump, commit, push or remote mutation is authorized by migration.
+
 ## Source and scope
 
 - Repository checkout is source of truth. `~/.pi/agent/` is a generated live install.

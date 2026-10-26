@@ -6,7 +6,7 @@ import { git } from './git-fixture.mjs';
 // Preprocessing/non-repository probes must be siblings of the isolated Git root,
 // not descendants. This does not change Pi's real-Git discovery boundary.
 export function nonGitFixture() {
-  const fixture = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-nongit-'));
+  const fixture = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'neura-nongit-'));
   const cleanup = () => fs.rmSync(fixture, { recursive: true, force: true });
   try {
     for (let directory = fixture; ; directory = path.dirname(directory)) {
@@ -22,7 +22,7 @@ export function nonGitFixture() {
 export function isolate() {
   // Windows CI may spell TEMP through an 8.3 alias. Synthetic workspaces use
   // the actual directory spelling, just like an ordinary canonical checkout.
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'neura-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'neura-test-'));
   // CI may inject a downloaded Git candidate; production code still verifies
   // its location, pinned hash, and version before use.
   const keep = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext', 'temp', 'tmp', 'neura_git_executable', 'neura_learn_browser_output']);

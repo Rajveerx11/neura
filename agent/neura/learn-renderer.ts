@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { PALETTE } from "./ui-tokens.ts";
+import { PALETTE } from "./palette.ts";
 import { assertLearnExercise, learnArray, learnText, type LearnExercise } from "./learn-exercises.ts";
 
 export type LearnReference = { sourceId: string; filename: string; unit: "page" | "slide"; number: number; excerpt: string };

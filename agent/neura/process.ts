@@ -24,6 +24,20 @@ export type ProcessOutcome = {
   durationMs: number;
 };
 
+export type ProcessResult = { ok: boolean; stdout: string; stderr: string };
+
+// Presentation wrapper shared by CLI/version probes; no terminal framework import.
+export async function runProcess(
+  file: string,
+  args: string[],
+  options: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv; signal?: AbortSignal; maxBuffer?: number } = {},
+): Promise<ProcessResult> {
+  const result = await executeProcess(file, args, {
+    ...options, timeoutMs: options.timeoutMs ?? 3_000, maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
+  });
+  return { ok: result.ok, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
+}
+
 // Mechanics only: callers retain executable identity, environment, leases,
 // authorization, redaction and output presentation. This does not use a shell.
 export function executeProcess(file: string, args: string[], options: ProcessOptions): Promise<ProcessOutcome> {

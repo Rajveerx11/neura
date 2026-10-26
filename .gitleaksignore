@@ -7,3 +7,7 @@ cac09d6c0b496b2738ba6fae1cda9d0329ca1bb6:agent/neura/release-manifest.json:gener
 # Reviewed synthetic failed-PEM-match source fixture: no usable key material.
 # Exact squash commit/path/rule/line only; future commits remain scanned.
 96ad5c37ada8f899e1dde9dafaf23759f2b958b3:scripts/tests/plan-confidentiality.mjs:private-key:28
+
+# Reviewed ordinary redaction-description prose, not a credential (PR #130).
+# Exact historical commit/path/rule/line only; new commits remain scanned.
+de328f3b28b431aad083219495e2cf8fab0f6db6:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484

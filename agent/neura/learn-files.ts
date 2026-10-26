@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import * as path from "node:path";
+import { assertUnlinkedDirectoryAncestors } from "./directory-path.ts";
 
 export function learnPathInside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
@@ -9,12 +10,8 @@ export function learnPathInside(root: string, target: string): boolean {
 
 export async function realLearnDirectory(directory: string): Promise<string> {
   const resolved = path.resolve(directory);
-  const stat = await fs.lstat(resolved);
-  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Learning storage requires a real directory, not a link or junction.");
-  const real = await fs.realpath(resolved);
-  const compare = (value: string) => process.platform === "win32" ? value.toLowerCase() : value;
-  if (compare(resolved) !== compare(real)) throw new Error("Learning storage path contains a linked ancestor.");
-  return real;
+  await assertUnlinkedDirectoryAncestors(resolved, "Learning storage requires a real directory without a link, junction or linked ancestor.");
+  return fs.realpath(resolved);
 }
 
 // Validate the opened file before writing any content, then write through that

@@ -1,363 +1,221 @@
-<p align="center">
-  <img src="agent/neura/launch-artwork.png" width="190" alt="Neura logo">
-</p>
+<p align="center"><img src="agent/neura/launch-artwork.png" width="190" alt="Neura logo"></p>
 
-<h1 align="center">Neura</h1>
+# Neura: Mastra development build
 
-<p align="center">
-  <a href="https://github.com/Rajveerx11/neura/actions/workflows/verify.yml"><img src="https://github.com/Rajveerx11/neura/actions/workflows/verify.yml/badge.svg" alt="Neura CI"></a>
-  <a href="https://github.com/Rajveerx11/neura/actions/workflows/codeql.yml"><img src="https://github.com/Rajveerx11/neura/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"></a>
-  <a href="docs/STATUS.md"><img src="https://img.shields.io/badge/status-experimental-f59e0b.svg" alt="Experimental status"></a>
-</p>
+Windows-first engineering and learning assistant. The active source uses
+**Mastra, not Pi**, with two modes:
 
-Neura is a Windows-first engineering-agent harness built on
-[`@earendil-works/pi-coding-agent`](https://pi.dev). It adds a focused terminal
-interface, explicit operating modes, verification, recovery, local memory,
-model presets, and policy guardrails around stock Pi.
+- **Work:** workspace reads, hash-bound writes/edits and explicitly confirmed,
+  network-disabled WSL2/bubblewrap commands. Missing isolation fails closed.
+- **Learn:** lessons, local PDF/PPTX imports, English OCR, cited HTML boards,
+  exercises, hints and explicit save/resume. Obsidian capture is opt-in.
 
-Current candidate: **[2.6.0-rc.1](docs/releases/v2.6.0-rc.1.md)**, targeting exact
-Pi `1.3.0`. It includes Work, Learn, modular verification, Plan confidentiality
-hardening, and installer-readiness changes. Latest published release remains
-**2.5.1** until this candidate passes the release gates and is published.
-Older checkouts and live installations may differ. Neura is
-Apache-2.0-licensed experimental software in a public repository. It is **not
-production-ready**. Human Away remains preview-only and is not approved for
-unattended high-impact work. Public source availability is not a production or
-security guarantee. Read
-[current status](docs/STATUS.md), [security policy](SECURITY.md), and
-[known production blockers](docs/PRODUCTION_READINESS.md) before use.
+**Development/testing only, not a production release.** Use synthetic,
+non-sensitive test projects and materials, not end-user, customer or
+business-operational data. Mastra's EE scope and distribution permission remain
+unresolved. Local installation does not clear those restrictions or establish
+production readiness.
 
-## Highlights
+The package metadata remains `2.6.0-rc.1`. Mastra core is pinned to `1.79.0`.
+“v1” names this implementation slice, not a published Neura version. Latest
+published Neura `2.5.1` is the older Pi product, not this application. The
+source-linked launcher runs the current checkout, including uncommitted edits.
+It is not a sealed or automatically updated release. See [status](docs/STATUS.md),
+[implementation and evidence](docs/MASTRA_V1.md) and
+[dependency review](docs/MASTRA_V1_DEPENDENCIES.md).
 
-- Five modes: Plan, Work (default), YOLO, Human Away Preview, and Learn.
-- Practical learning with short bullets, flow/ER/sequence diagrams, exercises,
-  and page/slide references from local PDFs and PPTX decks.
-- Image-backed centred launch in a dedicated Windows Terminal profile, with a
-  logo-only fallback and responsive logo-blue terminal interface.
-- Local HTML plan publication with escaping, content security policy, stable
-  hashes, and machine-readable lifecycle events.
-- WSL2 and bubblewrap isolation for Work execution and Human Away commands.
-- Git-backed in-session checkpoints and `/undo` in YOLO.
-- Proof-of-work verification, health diagnostics, responsive terminal UI, local
-  memory, model presets, and optional MCP integrations.
-- Exact dependency pins, Windows CI, accessibility checks, complete-history
-  secret scanning, and documentation validation.
-- Optional global [Herdr usage plugin](integrations/herdr-usage/README.md) for
-  read-only Claude Code, Codex, and Cursor CLI quota tokens in every session.
+## Prerequisites
 
-Presence of a control does not establish a complete security boundary. See
-[Security](#security-and-limitations) for limits that matter.
+- Native Windows with Node `24.15+` and npm. Tested locally with Node `24.19.0`.
+  First Learn-store creation requires native Windows, not a Node process in WSL.
+- An ASCII-only checkout path for the development launcher. The installer
+  refuses non-ASCII paths and unsupported command-shell characters before writes.
+- Both locked dependency graphs, installed with lifecycle scripts disabled.
+- For Work commands: WSL2 and bubblewrap in the selected distribution. Work
+  commands have no host fallback and no network. `--check` does not test WSL or
+  sandbox execution. `NEURA_WSL_DISTRO` can select a nondefault distribution.
+- A browser for Learn's generated HTML boards and optional subscription sign-in.
+- A private Neura home outside the test workspace. Windows DACL privacy must be
+  checked before signing in. See [authentication](docs/CODEX_AUTH.md).
 
-## Screenshots
+No Pi installation, global npm update or legacy-profile import is needed.
+The installer does not bootstrap Node, WSL, bubblewrap or a model server.
 
-These are generated from Neura's real offline Plan and Learn renderers and are
-recreated by the browser verification suites. They contain synthetic fixture
-data only.
+## Prepare the source checkout
 
-| Plan review | Learn workshop |
-|---|---|
-| [![Generated Neura plan review](assets/screenshots/plan-review.png)](assets/screenshots/plan-review.png) | [![Generated Neura Learn workshop](assets/screenshots/learn-workshop.png)](assets/screenshots/learn-workshop.png) |
-| Structured evidence, implementation steps, risks, proof, and an explicit approval gate. | Interactive concept map, exercise feedback, references, and terminal handoff. |
-
-## Modes
-
-| Mode | Intended use | Boundary |
-|---|---|---|
-| Plan | Research and design before implementation | Workspace-contained reads, bounded web search, restricted Git inspection, and writes only through `publish_plan` under `plans/`. |
-| Work (default) | Supervised implementation | Contained workspace reads/edits/writes; `work_exec` runs commands through WSL2 bubblewrap without network. Protected and remote actions require explicit interactive approval; headless requests fail closed. |
-| YOLO | Deliberate full-access work | Requires interactive confirmation. Neura application approvals and tool blocking are disabled. Native Windows gives the process the signed-in user's authority. |
-| Human Away Preview | Low-risk work while the operator is unavailable | Exposes only `human_away_exec` through WSL2 bubblewrap. Host user paths and network are hidden; only the active workspace is writable. Deterministic policy and an isolated reviewer still apply. |
-| Learn | Practical technical or nontechnical learning | Bounded reads, web search, questions, and four learning tools. Local lessons and progress use controlled storage; an opt-in Obsidian vault receives minimized learning events automatically through a dedicated writer. Arbitrary shell, generic writes, and MCP tools remain unavailable. |
-
-Shift+Tab cycles Plan, Work, YOLO, Human Away, and Learn.
-`/mode plan|work|yolo|human-away|learn` selects one directly.
-Every transition into YOLO requires confirmation. Ctrl+Shift+T owns Pi's
-thinking-level shortcut.
-
-Plan publication works in TUI, print, JSON, and RPC runs. Each active request
-gets at most one automatic publication retry. Consumers receive a versioned
-`neura-plan-contract` session event for either a published artifact or a final
-`PLAN_ARTIFACT_MISSING` failure.
-
-## Learn by doing
-
-1. Enter `/mode learn` and name a practical goal, such as designing a shop database.
-2. Ask for one concept, 3-5 key bullets, an ER diagram, and a small exercise.
-3. Give a local PDF or PPTX path inside the workspace to ground lessons in your material.
-4. Open the generated local learning board. Use hints, then submit with
-   `/learn answer <text or SQL>` or the board's copy-to-terminal control.
-5. Use `/learn save` to keep progress; `/learn saved` and `/learn resume <filename>`
-   restore it explicitly.
-
-An optional machine-local Obsidian connection can be supplied through the
-`NEURA_LEARN_VAULT` environment variable or private
-`~/.pi/agent/neura/learn-vault.json` file (`{"version":1,"vault":"<absolute non-UNC path>"}`).
-UNC paths are rejected. Mapped or otherwise network-backed volumes cannot be
-identified reliably and are unsupported. Once configured, Learn automatically records privacy-minimized concepts, practice
-evidence, findings, and structured teaching preferences under an owned `Neura/`
-subtree. No recurring vault command is required. The vault projection is separate
-from `/learn save`; it never modifies `.obsidian/`, unrelated notes, original
-materials, or stores raw exercise answers.
-
-PDFs include page previews and offline English OCR. PPTX supports text, notes,
-and embedded image previews; export slides to PDF for full layouts and charts.
-Browser progress does not automatically sync. Saved images are omitted, and
-resumed sources must be reimported before new verified citations. See the
-[Learn guide](docs/LEARN_MODE.md) for commands, limits, and worked-answer behavior.
-
-## Requirements
-
-- Windows 11 or a current supported Windows release.
-- PowerShell, Git, Node.js **24.15+** with npm, and the latest stable Pi.
-  This checkout's exact reviewed Pi pin is `1.3.0`. CI exercises Node `24.16.0`.
-  Newer Pi releases require a coordinated Neura update, never a Pi downgrade.
-- uv/`uvx` `0.12.11`, hash-pinned WSL CPython `3.12.3`, and the five reviewed
-  proof wheels in a dedicated wheelhouse configured by `NEURA_WSL_UV_DIR` and
-  `NEURA_WSL_PROOF_WHEELHOUSE`.
-- WSL2 plus `bubblewrap` for Work execution/proof and Human Away Preview.
-  Work and YOLO proof require the exact runner and packages already available
-  offline inside WSL; unavailable isolation never falls back to host execution.
-- Provider credentials for whichever models or optional integrations you enable.
-
-The complete application workflow is supported on Windows. Linux CI covers
-selected portable contracts, not a supported Linux installation. Learn store
-creation requires native Windows; existing validated stores can be used on POSIX.
-
-Both npm package manifests remain `"private": true`; this repository does not
-publish packages to npm. Package privacy does not determine GitHub repository
-visibility or software license.
-
-## Pi update compatibility
-
-Neura must work with the latest stable Pi after every upstream update. Fix Neura
-when Pi changes; do not downgrade Pi to satisfy an outdated Neura requirement.
-Keep exact reviewed pins for reproducibility, advancing them together with API
-adaptations, regression tests, and CI. See the
-[Pi update policy](docs/DEPENDENCIES.md#pi-compatibility-policy) and
-[current evidence](docs/STATUS.md).
-
-As of 2026-10-19, npm's latest stable Pi is `1.3.0`; this checkout's runtime
-contract and development graph now pin that version. `npm run check:pi-latest`
-checks the public registry without installing anything and fails on target drift
-or unavailable evidence. CI/release gates and a proposed daily workflow use it;
-the daily workflow becomes active only after publication to the default branch.
-Version agreement is not a substitute for compatibility tests or live rehearsal.
-
-The Neura launcher combines `--no-mcp` with `--tui-mode regular` so Pi's native background connections
-cannot bypass Neura's YOLO-only MCP wrapper. Pi's `codemode` and `tool_search`
-are denied outside YOLO, including real tool-modifier activation, reload, and nested
-calls. Aborted runs do not start automatic quick proof. Plain Pi invocation is unchanged.
-See [installer readiness](docs/INSTALLER_READINESS.md) for completed source work
-and the remaining one-step bootstrap, recovery, and clean-host gates.
-
-## Install from source
-
-Review [security limits](SECURITY.md) and installer before running it.
-The following commands reproduce the currently pinned checkout on a clean profile;
-they are not instructions to downgrade an existing newer Pi installation. The
-installer checks Node, npm, Pi, and Git before staging, rejecting failed/malformed
-version probes. It does not yet provision missing prerequisites automatically.
+Run these commands in the Neura checkout:
 
 ```powershell
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
-git clone https://github.com/Rajveerx11/neura.git
-Set-Location .\neura
+node --version
 npm ci --ignore-scripts
 npm ci --prefix agent/neura --ignore-scripts
-npm run verify
-powershell -File .\install.ps1
-pi update --extensions --approve
-neura
+node src/cli.ts --help
+node src/cli.ts --check
 ```
 
-`install.ps1` stages repository-controlled extensions, theme, policy modules,
-MCP configuration, and launcher, validates SHA-256 release hashes and the staged
-locked Learn runtime, then activates only those managed files with a recovery
-journal. Neura launch checks every installed byte against the receipt; `/health`
-uses a bounded managed-file check and leaves full Learn-runtime hashing to launch
-and `install.ps1 -Check`. Plain `pi` is unchanged.
-Stop running Pi before upgrading: individual file replacement is not atomic.
-Existing model and credential choices in `settings.json` are preserved unless
-`-ForceSettings` is supplied. The installer also provisions Learn's separate
-locked runtime with lifecycle scripts disabled and records the runtime lock receipt.
-When Windows Terminal is available, it adds an isolated current-user `Neura`
-profile fragment and a `Neura` Start-menu shortcut without editing `settings.json`.
-Open that shortcut for the single-window image-backed launch. Running `neura`
-inside an existing terminal stays in that window and uses the logo-only fallback.
-
-Do not run installer against an important profile until you have reviewed
-source and current blockers. A failed activation restores previous managed
-files; the next installer run recovers an interrupted activation. The launcher
-refuses an incomplete installation. User settings, credentials, sessions, and
-other Pi files are never staged or restored. Unknown extensions block install
-and Neura launch: explicitly allow user-owned extensions in
-`~/.pi/neura-user-extensions.json` as
-`{"schemaVersion":1,"extensions":{"my-extension.ts":"<64-digit SHA-256>"}}`.
-Their contents remain user-owned and are not included in the Neura release.
-An edited managed file or older unreceipted release that differs from this
-manifest is refused rather than overwritten. There is no supported in-place
-migration for an unreceipted Pi profile: back up the existing profile, install
-into a separate clean Windows user profile, and migrate only reviewed user
-settings. Keep the original profile and Learn runtime intact until its data has
-been verified. Removing only `node_modules` does not establish ownership of
-other legacy files or make an in-place upgrade safe.
-Install still is **not atomic** across Pi's extension directory, launcher,
-settings, and Windows Terminal profile. Stop Pi before installing; the terminal
-profile and user configuration remain outside rollback. Full #21 closure and
-production readiness remain blocked. See [#21](https://github.com/Rajveerx11/neura/issues/21).
-
-## Configure
-
-Credentials belong in user environment variables or provider-managed stores,
-never in this repository. The default MCP configuration uses reviewed HTTP(S)
-endpoints only. Add a local MCP command only after pinning and manifesting its
-absolute executable and dependency closure; project configuration is not a
-trusted source of automatic executables.
-
-The default MCP configuration has no enabled local command or personal provider
-endpoint. Gmail is a disabled template: replace `YOUR_COMPOSIO_TOOL_ROUTER` with
-your own Composio MCP route, set `COMPOSIO_API_KEY`, and add that variable to
-`MY_PI_MCP_ENV_ALLOWLIST` before enabling it. Other optional servers remain
-disabled until configured. Review [dependency policy](docs/DEPENDENCIES.md)
-before enabling any server or extension.
-
-## Verify
+An optional development launcher points to this checkout:
 
 ```powershell
-npm ci --ignore-scripts
-npm ci --prefix agent/neura --ignore-scripts
-npm run typecheck
-npm run audit:dependencies
-npm run audit:signatures
-npm run test:release
-powershell -NoProfile -File .\scripts\verify-secrets.ps1
-powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
-npm run test:accessibility
-node scripts\tests\learn-browser.mjs
-node scripts\verify-harness.mjs
-node scripts\verify-sandbox.mjs
-node scripts\check-docs.mjs
-git diff --check
-powershell -File .\install.ps1 -Check
+powershell -NoProfile -File .\install.ps1 -Development
+powershell -NoProfile -File .\install.ps1 -Check
+Get-Command neura -All
+neura --help
+neura --check
 ```
 
-`verify-harness.mjs` runs 18 isolated suites and loads all 19 extensions through
-the checkout's Pi loader, including Learn's six nonbrowser suites. Browser
-checks need Edge; sandbox replay needs WSL2/bubblewrap. `install.ps1 -Check`
-checks live drift and Learn runtime provisioning without installing anything.
-For focused commands, Linux coverage, and proof limits, see
-[Verification](docs/VERIFICATION.md). Passing checks prove covered behavior only.
+Review command discovery before using `neura`. `-Check` does not install or repair
+anything. The development installer preserves unknown or modified launchers.
+Replacement of a receipt-owned legacy launcher keeps a backup. It does not alter
+standalone Pi. Do not overwrite a launcher that the installer refuses.
 
-Pull requests to `main`, pushes to `main`, merge queues, and manual runs execute
-pinned Windows and Ubuntu CI. The existing required checks remain `harness` and
-`portable-proof`; `Required CI` is a stable aggregate, and pull requests also
-receive dependency review. CodeQL analyzes JavaScript/TypeScript on those branch
-events, weekly, and on demand.
+If you skip the launcher, replace `neura` below with `node` followed by the
+absolute path to this checkout's `src/cli.ts`. Keep the explicit `--cwd` workspace.
 
-Tags do not publish npm packages. An annotated `v*` tag contained in `origin/main`
-can only produce a **draft prerelease** after version, release-note, status,
-verification, audit, browser, secret-scan, and installer gates pass. The workflow
-builds a deterministic source archive, SPDX SBOM snapshots for both lockfiles, and checksums.
-Stable automation is blocked while status says Neura is not production-ready;
-maintainers must inspect and approve any draft manually. See
-[Releasing](docs/RELEASING.md).
+## Manual test in a disposable workspace
 
-## Commands
+Keep the test project outside the Neura checkout and its parents/descendants,
+outside the Neura private home and outside any Pi profile. Neura protects its own
+runtime against writes and refuses commands from overlapping workspaces.
 
-| Command | Purpose |
-|---|---|
-| `/mode [plan|work|yolo|human-away|learn|next|status]` | Select or inspect operating mode |
-| `/learn [status|hint|reveal|explain|deeper|example]` | Inspect or continue a Learn lesson |
-| `/learn answer <text or SQL>` | Submit an exercise attempt; use `answer-helped` after assistance |
-| `/learn [save|saved|resume <filename>|reset]` | Explicitly save, restore, or clear learning state |
-| `/approvals` | Review Human Away requests |
-| `/approvals audit` | Show recent approval decisions |
-| `/health` | Inspect required readiness, optional integrations, runtime identity, and Pi drift in YOLO |
-| `/ship` | Request full proof in Work or YOLO; legacy PASS is unavailable pending trusted suite/candidate evidence; never commits, pushes, or merges |
-| `/undo` | Restore previous in-session checkpoint in YOLO |
-| `/undo list` | List YOLO checkpoints |
-| `/clip [answer|code]` | Copy latest answer or a code block |
-| `/preset gpt|opus|qwen` | Switch model preset |
-| `/remember <fact>` | Save one local memory fact in YOLO |
-| `/memory` | Show local memory in YOLO |
-| `/skill-doctor` | Read-only supported skill registry and runtime identity validation in Work/Plan/YOLO |
-| `/launcher` or Ctrl+Shift+K | Search public commands, modes, descriptions, and relevant shortcuts |
-| `/dash` | Toggle Neura wordmark |
-| `/notices` | Show persistent degraded-state notices |
+In a fresh PowerShell terminal:
 
-The terminal-native launcher uses Pi's public command registry (extensions,
-prompt templates, and skills). Pi 1.0.4 does not expose built-in commands through
-that API, so built-ins are excluded; use Pi's slash completion and `/hotkeys` for
-those. Mode choices use the existing `/mode` path, including YOLO confirmation.
-Prompt/skill selections are explicitly staged in an empty editor for normal user
-submission; an unsent draft is never replaced.
+```powershell
+$workspace = Join-Path $env:TEMP ("neura-smoke-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $workspace | Out-Null
+Set-Location $workspace
+'alpha' | Set-Content -Encoding utf8 -Path sample.txt
+neura --cwd $workspace --help
+neura --cwd $workspace --check
+```
 
-Availability is a conservative hint, not authorization: known mode restrictions,
-active turns, host operations, and session drain disable selections; existing
-handlers remain authoritative for all other prerequisites and policy checks.
-Shift+Tab is shown with mode choices; Ctrl+Shift+X appears with `/clip` only when
-code blocks are available. The launcher has no animation and restores editor
-focus on selection or cancellation. Plain Pi and the logo-only launch stay unchanged.
+These two checks need no credentials or model requests. They do not prove
+subscription entitlement, sandbox readiness or a successful Learn lesson.
 
-## Repository map
+### Choose a provider deliberately
+
+For an already running, non-production local OpenAI-compatible model on loopback:
+
+```powershell
+neura --cwd $workspace --provider local --model qwen3-coder --base-url http://127.0.0.1:8080/v1 --no-history
+```
+
+Use the model name exposed by your server. Neura does not start or download it.
+This example explicitly selects local transport and needs no subscription login.
+
+For ChatGPT subscription testing, first verify the home DACL as described in
+[authentication](docs/CODEX_AUTH.md). Then start an interactive terminal:
+
+```powershell
+neura --cwd $workspace --provider openai-codex --model gpt-5.5 --no-history
+```
+
+Enter `/login` only when you intend to authorize Neura, and open the displayed
+URL yourself. Real login, reduced-scope acceptance and model entitlement remain
+manual gates. A ChatGPT subscription is not proof that this adapter or model is
+available to your account. Do not share the authorization URL, callbacks, tokens
+or credential files in an issue. `--no-history` disables conversation persistence.
+It does not prevent credential or Learn-artifact writes.
+
+OpenAI API and Anthropic API are separate, explicitly selected providers using
+`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Those calls can incur API charges. A
+ChatGPT subscription does not pay for them. Subscription failure never falls back
+to API billing. Don't put keys in prompts or command arguments.
+
+### Work and Learn checks after provider access is confirmed
+
+In Work, ask: `Read sample.txt and report its contents without changing it.`
+Then ask: `Create result.txt containing only beta.` Inspect the actual file.
+For a command test, ask to run `printf sandbox-ok` and inspect the proposed
+command before typing `yes`. First reject a command to check denial. A missing
+WSL/bubblewrap runtime must refuse execution, not fall back to the host.
+
+Switch to Learn and try a lesson using only synthetic material:
 
 ```text
-agent/extensions/   Pi lifecycle hooks, commands, tools, and UI
-agent/neura/        Shared policy, learning, rendering, and locked document runtime
-agent/themes/       Neura terminal theme
-launcher/           Windows neura command
-scripts/            Deterministic verification and security checks
-scripts/tests/      Independent suites with temporary homes and synthetic state
-docs/               Architecture, status, development, and release guidance
-plans/              Historical design evidence, not current requirements
+/mode learn
+Teach one concept about database joins. Show a diagram and a short example, then give me one exercise.
+/learn answer <your actual answer>
+/learn hint
+/learn save
+/learn saved
+/learn resume <progress-filename>
 ```
 
-## Security and limitations
+For document import, add a synthetic PDF or PPTX to this workspace, then ask to
+learn from that relative path. Open the returned HTML board. Its copy controls
+send revision-bound commands back through the terminal. There is **no automatic browser synchronization**. Saved excerpts are historical until sources are
+reimported. Correct practice is not proof of mastery.
 
-- YOLO is intentionally unsandboxed and can cause local or remote side effects.
-- Plan containment is application-level, not an OS sandbox.
-- Work combines application policy with isolated command execution; it is not
-  a complete confidentiality boundary for all workspace searches.
-- Learn's document parser has time/heap limits, not OS isolation. Native parser
-  dependencies remain trusted; source-location checks do not prove a tutor's claim.
-- Human Away Preview has unresolved transactional and resource-boundary work.
-- Redaction is pattern-based and cannot guarantee detection of every secret.
-- Optional providers, MCP servers, skills, and local tools expand trust
-  boundary.
-- Current production blockers are tracked in
-  [Production readiness milestone](https://github.com/Rajveerx11/neura/milestone/1).
+`/help`, `/mode work|learn`, `/model`, `/new`, `/sessions` and `/resume <id>`
+control the harness. Ctrl+C cancels a running turn. `/quit` exits. Headless
+`--prompt` cannot approve commands. History is workspace-scoped under `~/.neura`
+or explicit `NEURA_HOME`. Crash locks fail closed. Learn artifacts use the
+workspace's owned `.neura-learning` store.
 
-Report vulnerabilities through a private GitHub security advisory as described
-in [SECURITY.md](SECURITY.md). Do not open a public exploit report.
+## Rollback and limits
 
-## Documentation
+Exit Neura before changing its launcher or source. A source-linked install can
+be bypassed by invoking an explicitly chosen checkout's `node src/cli.ts` with
+`--cwd` pointing to the test workspace.
+If installation created a legacy-launcher backup, restore only that known backup
+after confirming the destination is still the installer-owned launcher. There is
+no automatic rollback command. Do not reset a dirty checkout or delete private
+homes, Pi profiles, vaults or recovery backups to undo a launcher change.
 
-- [Documentation index](docs/README.md)
-- [Learn Mode](docs/LEARN_MODE.md)
-- [Current status](docs/STATUS.md)
-- [Open-source publication checklist](docs/OPEN_SOURCE.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Development workflow](docs/DEVELOPMENT.md)
-- [Verification suites and proof](docs/VERIFICATION.md)
-- [Dependency policy](docs/DEPENDENCIES.md)
-- [Learn document runtime and limits](docs/LEARN_DEPENDENCIES.md)
-- [Production-readiness gates](docs/PRODUCTION_READINESS.md)
-- [Release process](docs/RELEASING.md)
-- [Changelog](docs/CHANGELOG.md)
-- [Design system](DESIGN.md)
-- [Historical plan index](plans/README.md)
-- [Contributing](CONTRIBUTING.md)
-- [Support](SUPPORT.md)
-- [Governance](GOVERNANCE.md)
+Plan, YOLO, Human Away, delegation, LSP/MCP, full proof/ship and the old cockpit
+are not implemented in this slice. Legacy source and tests are porting evidence,
+not active features. Managed Pi retirement is a separate, explicit operation.
+It is not needed for these tests and must not run while Pi agents are active.
 
-## Contributing
+## Verify the source
 
-Issues and focused pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
-and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first. Security reports follow
-[SECURITY.md](SECURITY.md), not public issue tracker.
+```powershell
+npm run verify
+npm run test:browser:learn
+node scripts/check-docs.mjs
+git diff --check
+```
 
-## License
+Default `npm run verify` checks deterministic Work approval/current-authority
+boundaries and unavailable-sandbox refusal without requiring a successful WSL
+command. Sandbox argument, link and integrity contracts remain mandatory. Hosted
+PR CI does not establish real Work sandbox execution.
 
-Neura is licensed under [Apache License 2.0](LICENSE). Copyright and attribution
-information lives in [NOTICE](NOTICE).
+On a configured native Windows host with WSL2, a selected/default distro and
+working bubblewrap, run the separate acceptance check:
+
+```powershell
+npm run test:v1:work-sandbox
+```
+
+This checks an approved Work command's code 0 and exact workspace file content.
+It fails, rather than skips, when the required host prerequisites are missing.
+The release workflow requires it in addition to default verification, after the
+unchanged license gate. A release host still needs reviewed sandbox provisioning.
+The separate `npm run verify:sandbox` primitive isolation replay is not replaced
+by this Work acceptance check.
+
+Automated checks use synthetic models, materials and stores. They do not perform
+real login or establish provider entitlement. See [dated evidence and remaining
+gates](docs/MASTRA_V1.md#evidence-and-remaining-gates). `verify:release` remains
+blocked by dependency licensing and distribution review.
+
+## CI and release automation
+
+PR and merge-queue checks retain the required `harness` and `portable-proof`
+names. Windows runs the full development suite, secret-scan regressions, registry
+signature audits and Learn browser checks. Ubuntu runs the portable contracts.
+`Required CI` rejects failed prerequisites, and CodeQL scans JavaScript/TypeScript.
+Both Windows workflows verify the downloaded Git identity and select that same
+binary through the explicit executable setting and child-process PATH.
+
+The daily dependency workflow checks both active dependency graphs and their
+registry signatures. Mandatory workflow-contract tests reject weakened gates.
+These are focused source contracts, not a general YAML validation service.
+
+Tag-triggered release automation remains blocked by Mastra licensing review.
+It cannot reach asset publication without the release gate and configured-host
+Work acceptance. A production release host is not provisioned or approved by
+these changes. No tag, release or deployment is part of this update.
+
+Apache-2.0 applies to Neura source. Third-party packages retain their own terms.
