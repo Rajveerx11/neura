@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readPlanFile } from '../agent/neura/plan-files.ts';
+import { inspectAction } from '../agent/neura/action-policy.ts';
+import { windowsShortPath } from './windows-short-path.ts';
 import path from 'node:path';
 import { createLearnWorkshop } from '../src/learn.ts';
 import { createWorkspaceTools, assertWorkspaceOutsideNeuraHome } from '../src/work.ts';
@@ -106,6 +108,35 @@ test('Work v1: contained writes preserve stale/user bytes; Learn cannot use a st
     await assert.rejects(() => tool('write').execute({ path: 'another.txt', content: 'blocked', expectedHash: null }, {}), /stale/);
     const learnTools = createWorkspaceTools(scratch, () => mode, () => generation);
     assert.deepEqual(learnTools.map(item => item.name).sort(), ['ls', 'read']);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('Windows short aliases cannot hide protected Git or credential targets', { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'protected-alias-')));
+  try {
+    const ordinary = path.join(scratch, 'ordinary-long-directory'); await fs.mkdir(ordinary);
+    const ordinaryAlias = path.basename(await windowsShortPath(ordinary));
+    const tools = createWorkspaceTools(scratch, () => 'work', () => 0);
+    const write = tools.find(tool => tool.name === 'write')!;
+    const read = tools.find(tool => tool.name === 'read')!;
+    const ordinaryPath = path.join(ordinaryAlias, 'safe.txt');
+    await write.execute({ path: ordinaryPath, content: 'synthetic ordinary file', expectedHash: null }, {});
+    assert.equal(decode(await read.execute({ path: ordinaryPath }, {})).text, 'synthetic ordinary file');
+    await fs.mkdir(path.join(scratch, '.git', 'hooks'), { recursive: true });
+    await fs.writeFile(path.join(scratch, '.git', 'config'), 'synthetic private config');
+    const gitAlias = path.basename(await windowsShortPath(path.join(scratch, '.git')));
+    assert.notEqual(gitAlias.toLowerCase(), '.git');
+    const hook = path.join(gitAlias, 'hooks', 'pre-commit');
+    await assert.rejects(write.execute({ path: hook, content: 'synthetic inert hook', expectedHash: null }, {}), /Protected|control-plane|unavailable/i);
+    await assert.rejects(fs.stat(path.join(scratch, '.git', 'hooks', 'pre-commit')), { code: 'ENOENT' });
+    await assert.rejects(read.execute({ path: path.join(gitAlias, 'config') }, {}), /confidential|protected/i);
+    assert.notEqual(inspectAction({ toolName: 'write', input: { path: hook, content: 'synthetic' } }, scratch).route, 'allow');
+    const credentials = path.join(scratch, 'credentials'); await fs.mkdir(credentials);
+    const credential = path.join(credentials, 'token.txt'); await fs.writeFile(credential, 'synthetic reserved bytes');
+    const credentialAlias = path.join(path.basename(await windowsShortPath(credentials)), 'token.txt');
+    await assert.rejects(read.execute({ path: credentialAlias }, {}), /confidential|protected/i);
+    await assert.rejects(write.execute({ path: credentialAlias, content: 'changed', expectedHash: null }, {}), /confidential|protected/i);
+    assert.equal(await fs.readFile(credential, 'utf8'), 'synthetic reserved bytes');
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 

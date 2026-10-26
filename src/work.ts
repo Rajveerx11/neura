@@ -56,20 +56,26 @@ export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'le
     const parts = requested.split(/[\\/]/);
     if (parts.some(part => !part || part === '..' || part.startsWith('.') || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$)/i.test(part) || /^(?:node_modules|sessions|approvals|memory|private|secrets)$/i.test(part))) throw new Error('Private, ambiguous or dependency path denied.');
     const file = path.resolve(root, requested);
-    if (!inside(root, file) || SECRET_PATH.test('/' + requested) || PROTECTED_CONTROL.test(requested)) throw new Error('Protected or outside-workspace file denied.');
-    // The new harness control plane is protected too; the legacy pattern knows only old paths.
-    if (inside(applicationRoot, file) && /^(?:(?:src|scripts|agent|launcher)[\\/]|package(?:-lock)?\.json$|tsconfig(?:\.v1)?\.json$|AGENTS\.md$|SECURITY\.md$)/i.test(path.relative(applicationRoot, file))) throw new Error('Neura control-plane edits require manual review outside the agent.');
+    function authorizeTarget(target: string) {
+      const relative = path.relative(root, target);
+      if (!inside(root, target) || SECRET_PATH.test('/' + relative) || PROTECTED_CONTROL.test(relative)) throw new Error('Protected or outside-workspace file denied.');
+      // Apply the same control-plane policy to lexical and native canonical identities.
+      if (inside(applicationRoot, target) && /^(?:(?:src|scripts|agent|launcher)[\\/]|package(?:-lock)?\.json$|tsconfig(?:\.v1)?\.json$|AGENTS\.md$|SECURITY\.md$)/i.test(path.relative(applicationRoot, target))) throw new Error('Neura control-plane edits require manual review outside the agent.');
+    }
+    authorizeTarget(file);
     let current = root;
     for (const part of parts.slice(0, -1)) {
       current = path.join(current, part);
       const stat = fs.lstatSync(current);
-      if (stat.isSymbolicLink() || !stat.isDirectory() || fs.realpathSync(current).toLowerCase() !== current.toLowerCase()) throw new Error('Linked parent denied.');
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Linked parent denied.');
     }
     try {
       const stat = fs.lstatSync(file);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !inside(root, fs.realpathSync(file))) throw new Error('Target must be an unlinked regular file.');
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !inside(root, fs.realpathSync.native(file))) throw new Error('Target must be an unlinked regular file.');
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    return file;
+    const canonical = fs.existsSync(file) ? fs.realpathSync.native(file) : path.join(fs.realpathSync.native(path.dirname(file)), path.basename(file));
+    authorizeTarget(canonical);
+    return canonical;
   }
   function commit(requested: string, content: string, expectedHash: string | null, signal?: AbortSignal) {
     check(signal, true);

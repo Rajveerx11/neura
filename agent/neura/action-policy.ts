@@ -144,7 +144,7 @@ function captureWorkspaceState(cwd: string): WorkspaceState {
 
 function normalizedWorkspace(cwd: string): string {
   cwd = typeof cwd === "string" && cwd.trim() ? cwd : process.cwd();
-  try { return fs.realpathSync(cwd); } catch { return path.resolve(cwd); }
+  try { return fs.realpathSync.native(cwd); } catch { return path.resolve(cwd); }
 }
 
 export function workspaceFingerprint(cwd: string): string {
@@ -273,7 +273,7 @@ function canonicalTarget(target: string): string | null {
 
   while (true) {
     try {
-      return path.resolve(fs.realpathSync(candidate), ...unresolved);
+      return path.resolve(fs.realpathSync.native(candidate), ...unresolved);
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
       if (code !== "ENOENT" && code !== "ENOTDIR") return null;
@@ -675,7 +675,7 @@ export function isBoundedResearchReadAllowed(event: ToolEvent, cwd: string): boo
       current = path.join(current, component);
       if (fs.lstatSync(current).isSymbolicLink()) return false;
     }
-    const canonical = fs.realpathSync(lexical);
+    const canonical = fs.realpathSync.native(lexical);
     if (!insideWorkspace(canonical, workspace) || sensitive(canonical)) return false;
     const stat = fs.lstatSync(canonical);
     if (toolName === "read") return stat.isFile() && stat.nlink === 1 && stat.size <= 8 * 1024 * 1024;

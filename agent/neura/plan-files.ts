@@ -59,7 +59,7 @@ function concreteIdentity(root: string, requested: string): PlanPath {
   if (!requested || requested.length > 4096 || /[\x00-\x1f\x7f]/.test(requested)) throw new Error("Unsupported Plan filesystem identity.");
   const lexical = path.resolve(root, requested);
   if (!isPathInside(root, lexical) || privatePath(root, lexical)) throw new Error("Plan path is outside the workspace or confidential.");
-  const canonical = fs.realpathSync(lexical);
+  const canonical = fs.realpathSync.native(lexical);
   if (!isPathInside(root, canonical) || privatePath(root, canonical)) throw new Error("Plan link resolves outside the workspace or to confidential data.");
   const stat = fs.statSync(canonical);
   if (!stat.isFile() && !stat.isDirectory()) throw new Error("Plan supports only regular files and directories.");
@@ -88,7 +88,7 @@ function authorizeConcretePath(root: string, requested: string): PlanPath {
 
 export function authorizePlanPath(cwd: string, requested: string): PlanPath {
   validateModelPath(requested);
-  return authorizeConcretePath(fs.realpathSync(cwd), requested);
+  return authorizeConcretePath(fs.realpathSync.native(cwd), requested);
 }
 
 function sameFile(a: fs.Stats, b: fs.Stats): boolean {
@@ -102,7 +102,7 @@ export function readPlanFile(cwd: string, requested: string, checkBudget?: () =>
 // Redacted delivery and original-byte identity are separate. Raw bytes never leave this reader.
 export function readPlanFileSnapshot(cwd: string, requested: string, checkBudget?: () => void): { content: Buffer; sha256: string; redacted: boolean; byteLength: number } {
   validateModelPath(requested);
-  return readConcreteSnapshot(fs.realpathSync(cwd), requested, checkBudget);
+  return readConcreteSnapshot(fs.realpathSync.native(cwd), requested, checkBudget);
 }
 
 function readConcreteFile(root: string, requested: string, checkBudget?: () => void): Buffer {
@@ -337,5 +337,5 @@ export async function inspectPlanFiles(cwd: string, tool: "grep" | "find" | "ls"
 }
 
 export function planMetadata(cwd: string, command: "pwd" | "head"): string {
-  return command === "pwd" ? fs.realpathSync(cwd) : gitMetadata(cwd, ["rev-parse", "--short", "HEAD"]).trim();
+  return command === "pwd" ? fs.realpathSync.native(cwd) : gitMetadata(cwd, ["rev-parse", "--short", "HEAD"]).trim();
 }
