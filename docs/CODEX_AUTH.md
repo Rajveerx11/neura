@@ -209,7 +209,7 @@ node --test tests/v1-auth.test.ts
 npm run typecheck:v1
 ```
 
-On 2026-10-26 both exit 0: 19 auth tests and strict TypeScript. Tests create temporary Neura
+On 2026-10-27 both exit 0: 19 auth tests and strict TypeScript. Tests create temporary Neura
 homes, intercept every provider/token request, and use only synthetic loopback
 callbacks. Coverage includes PKCE, callback host/path/state/duplicates/replay,
 browser denial, abort/logout cleanup, malformed/expired tokens, refresh rotation
