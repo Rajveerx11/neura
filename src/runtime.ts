@@ -1,3 +1,4 @@
+import { types as utilTypes } from "node:util";
 import { Check } from "typebox/value";
 import type { TSchema } from "typebox";
 import type { AgentConfig } from "@mastra/core/agent";
@@ -64,7 +65,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
     try {
       const observed: unknown = onToolEvent?.(event);
       if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
-        void Promise.resolve(observed).catch(() => undefined);
+        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, undefined, () => undefined);
         throw new Error("Tool observers must be synchronous");
       }
       return true;

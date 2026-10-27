@@ -148,6 +148,17 @@ test("Promise-returning tool observers fail closed without waiting or leaking re
   await new Promise<void>(resolve => setImmediate(resolve));
 });
 
+test("unsupported observer thenables are not assimilated", async () => {
+  let assimilations = 0; let effects = 0;
+  const recursive = { then(resolve: (value: unknown) => void) { assimilations++; resolve(assimilations < 4 ? recursive : undefined); } };
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, () => recursive);
+  await turn.tools.action.execute!({ count: 1 }, {} as any);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(turn.reportingFailed(), true);
+  assert.equal(effects, 0);
+  assert.equal(assimilations, 0);
+});
+
 test("cancellation triggered by a started observer prevents the effect", async () => {
   const controller = new AbortController(); let effects = 0;
   const events: string[] = [];
