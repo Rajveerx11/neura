@@ -338,6 +338,85 @@ test("truncated/error/malformed SSE and unauthorized backend responses fail clos
   }
 });
 
+test("backend rejection hints recognize only safe model, field and quota categories", async () => {
+  await fresh(); await login();
+  const privateText = "synthetic-private-value";
+  const cases: Array<[unknown, RegExp]> = [
+    [{ error: { code: "model_not_found", message: privateText } }, /selected model is unavailable/],
+    [{ detail: "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account." }, /selected model is unavailable/],
+    [{ error: { code: "unsupported_parameter", param: "max_output_tokens", message: privateText } }, /rejected request field: max_output_tokens/],
+    [{ detail: "Unsupported parameter: max_output_tokens" }, /rejected request field: max_output_tokens/],
+    [{ error: { type: "invalid_request_error", param: "reasoning.effort", message: privateText } }, /rejected request field: reasoning\.effort/],
+    [{ error: { code: "insufficient_quota", message: privateText } }, /subscription quota or usage limit/],
+    [{ error: { code: privateText, param: privateText, message: privateText } }, /No recognized safe backend reason/],
+    [{ detail: "Unsupported parameter: temperature2" }, /No recognized safe backend reason/],
+    [{ detail: "Unsupported parameter: model-private" }, /No recognized safe backend reason/],
+    [{ detail: "Unrecognized parameter: input[0].private" }, /No recognized safe backend reason/],
+    [{ detail: "The model is available; the requested resource was not found" }, /No recognized safe backend reason/],
+    [{ error: { code: ["model_not_found"] } }, /No recognized safe backend reason/],
+    [{ error: { code: { toString: "model_not_found" } } }, /No recognized safe backend reason/],
+  ];
+  for (const [body, expected] of cases) {
+    globalThis.fetch = async (url) => { assert.equal(String(url), CODEX_URL); return json(body, 400); };
+    for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+      await assert.rejects(invoke, (error: Error) => expected.test(error.message) && /no API billing fallback/.test(error.message) && !error.message.includes(privateText));
+    }
+  }
+});
+
+test("backend error hints bound body size and time without disclosing raw errors", async () => {
+  await fresh(); await login();
+  for (const response of [
+    () => json({ error: { code: "model_not_found", message: "synthetic-private-value".repeat(500) } }, 400),
+    () => new Response("synthetic-private-value", { status: 400, headers: { "Content-Type": "text/html" } }),
+    () => new Response("invalid synthetic-private-value", { status: 400, headers: { "Content-Type": "application/json" } }),
+    () => new Response(null, { status: 400 }),
+  ]) {
+    globalThis.fetch = async () => response();
+    await assert.rejects(async () => model().doGenerate({ prompt }), (error: Error) => /No recognized safe backend reason/.test(error.message) && !error.message.includes("synthetic-private-value"));
+  }
+  let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({ cancel() { cancelled = true; } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  const started = Date.now();
+  await assert.rejects(async () => model().doGenerate({ prompt }), /No recognized safe backend reason/);
+  assert.ok(Date.now() - started < 6000, "A stalled error body must not hang the CLI");
+  assert.equal(cancelled, true);
+});
+
+test("continuously fulfilled empty error reads cannot bypass the monotonic deadline", async (context) => {
+  await fresh(); await login();
+  const now = performance.now.bind(performance);
+  let expired = false;
+  context.mock.method(performance, "now", () => now() + (expired ? 2000 : 0));
+  for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+    expired = false;
+    let reads = 0; let cancelled = false;
+    globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++reads <= 10) {
+          if (reads === 8) expired = true;
+          controller.enqueue(new Uint8Array(0));
+        } else {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ error: { code: "model_not_found" } })));
+          controller.close();
+        }
+      },
+      cancel() { cancelled = true; },
+    }), { status: 400, headers: { "Content-Type": "application/json" } });
+    await assert.rejects(invoke, /No recognized safe backend reason/);
+    assert.ok(reads < 11, "The reader must stop before consuming the late recognized error");
+    assert.equal(cancelled, true);
+  }
+});
+
+test("aborting a backend error read preserves cancellation rather than classifying a failure", async () => {
+  await fresh(); await login();
+  const controller = new AbortController(); let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({ pull() { controller.abort(); }, cancel() { cancelled = true; } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  await assert.rejects(async () => model().doGenerate({ prompt, abortSignal: controller.signal }), { name: "AbortError" });
+  assert.equal(cancelled, true);
+});
+
 test("auth rejects .pi spellings, linked ancestors/files, hardlinks, and concurrent-process lock claims", async () => {
   await fresh();
   for (const component of [".pi", ".PI", ".pi.", ".pi "]) {

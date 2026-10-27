@@ -1,7 +1,9 @@
 # ChatGPT subscription adapter
 
-Development/testing only. Real login and provider compatibility have not been
-exercised. Mastra's existing EE/distribution gate remains open. See
+Development/testing only. On 2026-10-26 the owner reported that `/login` completed,
+but the first model request returned HTTP 400. This is not successful end-to-end
+subscription or entitlement evidence. Automated checks remain synthetic.
+Mastra's existing EE/distribution gate remains open. See
 [dependency review](MASTRA_V1_DEPENDENCIES.md) and [status](STATUS.md).
 
 ## Before a manual subscription test
@@ -40,6 +42,32 @@ charges. Subscription errors never trigger API fallback. To test without
 subscription credentials, explicitly select an already running loopback local
 model and use synthetic data. No agent should initiate login, logout, refresh,
 provider calls or changes to OAuth grants as part of installation checks.
+
+## Safe rejection diagnostics
+
+Unsuccessful model responses are read only as JSON, with an 8 KiB limit and a
+one-second read deadline. Recognized model, request-field and quota categories
+produce fixed hints. A request field is shown only if it matches the built-in
+public field allowlist. Raw messages, arbitrary codes, prompts, account IDs,
+headers and tokens are never printed. Unknown, malformed, oversized and stalled
+errors keep only the status and an explicit unknown-reason notice. Cancellation
+still aborts the request. Classification never retries, changes a model, starts
+login or enables API billing.
+
+We inspected the default Work request with synthetic credentials and an
+intercepted fetch. It had nonempty instructions, `stream:true`, `store:false`,
+non-strict tools and no `max_output_tokens` field. That rules out this field in
+the captured default request. It does not rule out other backend rejections.
+The actual cause of the owner's 400 remains unconfirmed. A recognized safe hint
+from a manual retry may narrow the investigation, but does not prove the cause
+or establish provider access.
+
+Regression coverage includes structured and detail-string hints, both generation
+paths and suppressed private markers. Negative cases cover exact field tokens,
+untyped codes, unrelated model text, byte/time limits, continuously fulfilled
+empty reads, malformed or non-JSON bodies, and abort during an error read.
+Empty chunks are not retained, and a monotonic deadline supplements the timer.
+No real credentials or model calls are used.
 
 ## CLI integration
 
@@ -181,7 +209,7 @@ node --test tests/v1-auth.test.ts
 npm run typecheck:v1
 ```
 
-Both exit 0: twelve auth tests and strict TypeScript. Tests create temporary Neura
+On 2026-10-26 both exit 0: 19 auth tests and strict TypeScript. Tests create temporary Neura
 homes, intercept every provider/token request, and use only synthetic loopback
 callbacks. Coverage includes PKCE, callback host/path/state/duplicates/replay,
 browser denial, abort/logout cleanup, malformed/expired tokens, refresh rotation
@@ -190,10 +218,10 @@ actual Agent tool dispatch, native images and encrypted reasoning history. Path
 checks cover linked ancestors/files and hardlinks. Lock contention is also tested. No real login, private profile read,
 provider call, approval grant, commit, or remote mutation ran.
 
-The specialist's combined auth/runtime checkpoint passed 26/26, exit 0. CLI
-login/logout and provider selection are now integrated. The active aggregate is
-13 suites; see [current combined verification](MASTRA_V1.md#evidence-and-remaining-gates)
-for final counts and exits rather than the earlier specialist's 12-suite snapshot.
+The historical specialist checkpoint passed 26/26 combined auth/runtime tests
+with a 13-suite aggregate. The current active aggregate contains 14 suites.
+See [combined verification records](MASTRA_V1.md#evidence-and-remaining-gates)
+and current CI for their exact scope. Historical counts are not current evidence.
 LSP diagnostics were unavailable (`typescript-language-server` missing); strict
 `tsc` is the available type evidence.
 

@@ -84,6 +84,59 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
   }
 }
 
+/** Read a bounded error, but expose only fixed hints and allowlisted public field names. */
+async function codexDenialHint(response: Response, signal?: AbortSignal): Promise<string> {
+  const unknown = "No recognized safe backend reason; raw details withheld";
+  if (!response.body) { signal?.throwIfAborted(); return unknown; }
+  const reader = response.body.getReader();
+  let stopped = false;
+  const stop = () => { stopped = true; void reader.cancel().catch(() => undefined); };
+  const deadline = performance.now() + 1000;
+  const timer = setTimeout(stop, 1000);
+  signal?.addEventListener("abort", stop, { once: true });
+  try {
+    signal?.throwIfAborted();
+    if (!/^application\/(?:json|problem\+json)(?:;|$)/i.test(response.headers.get("content-type") ?? "")) return unknown;
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { value, done } = await reader.read();
+      signal?.throwIfAborted();
+      if (stopped || performance.now() >= deadline) return unknown;
+      if (done) break;
+      if (!value.length) continue;
+      size += value.length;
+      if (size > 8192) return unknown;
+      chunks.push(value);
+    }
+    const payload = JSON.parse(Buffer.concat(chunks, size).toString("utf8")) as { error?: { code?: unknown; type?: unknown; param?: unknown; message?: unknown }; detail?: unknown } | null;
+    const error = payload?.error;
+    const rawCode = error?.code ?? error?.type;
+    const code = typeof rawCode === "string" ? rawCode : undefined;
+    const message = typeof error?.message === "string" ? error.message : typeof payload?.detail === "string" ? payload.detail : "";
+    if (["model_not_found", "unsupported_model", "model_not_available"].includes(code ?? "") || /^(?:the )?(?:['"][a-z0-9._-]{1,128}['"] )?model (?:is )?not (?:supported|available|found)(?: when using Codex with a ChatGPT account)?\.?$/i.test(message.trim())) {
+      return "The selected model is unavailable; verify the model name and subscription entitlement";
+    }
+    if (code === "insufficient_quota" || code === "rate_limit_exceeded") return "The backend reports a subscription quota or usage limit";
+    const unsupported = /^(?:unsupported|unrecognized|unknown) parameter:\s*(\S+)$/i.exec(message.trim());
+    const detailField = unsupported?.[1].replace(/^(['"])(.*)\1$/, "$2");
+    const field = typeof error?.param === "string" ? error.param : detailField;
+    const fields = ["model", "instructions", "stream", "store", "tools", "tool_choice", "input", "max_output_tokens", "reasoning", "reasoning.effort", "temperature", "top_p", "include"];
+    if (field && fields.includes(field) && (unsupported || ["invalid_request_error", "unsupported_parameter", "invalid_value"].includes(code ?? ""))) {
+      return `The backend rejected request field: ${field}`;
+    }
+    return unknown;
+  } catch {
+    signal?.throwIfAborted();
+    return unknown;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+    stop();
+    reader.releaseLock();
+  }
+}
+
 // Protocol reference: @mastra/code-sdk@1.15.0, Apache-2.0; see docs/CODEX_AUTH.md.
 async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> {
   const target = new URL(url instanceof Request ? url.url : url);
@@ -109,7 +162,10 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
   let response: Response;
   try { response = await fetch(CODEX_ENDPOINT, { method: "POST", headers, body: JSON.stringify(body), redirect: "error", signal }); }
   catch { signal?.throwIfAborted(); throw new Error("Codex subscription request failed"); }
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`Codex subscription request denied (${response.status}); no API billing fallback was used`); }
+  if (!response.ok) {
+    const hint = await codexDenialHint(response, signal);
+    throw new Error(`Codex subscription request denied (${response.status}); ${hint}; no API billing fallback was used`);
+  }
   if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/event-stream")) { await response.body?.cancel(); throw new Error("Codex subscription requires an event stream"); }
   return streaming ? response : codexSnapshot(response, signal);
 }

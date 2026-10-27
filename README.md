@@ -121,6 +121,17 @@ OpenAI API and Anthropic API are separate, explicitly selected providers using
 ChatGPT subscription does not pay for them. Subscription failure never falls back
 to API billing. Don't put keys in prompts or command arguments.
 
+### If sign-in succeeds but the first request fails
+
+An HTTP 400 after `/login` is a model-request rejection, not an installation
+check failure. Neura now reports fixed, token-safe hints for recognized model,
+request-field and quota errors. Unknown or oversized responses stay private.
+Do not paste authorization URLs, callbacks, tokens or raw provider responses.
+Do not reinstall, repeat login or switch to API billing as a speculative fix.
+Retry one synthetic request after updating and report only the sanitized error.
+The owner reported this failure on 2026-10-26. Real subscription compatibility
+and model entitlement remain unverified. Track [#118](https://github.com/Rajveerx11/neura/issues/118).
+
 ### Work and Learn checks after provider access is confirmed
 
 In Work, ask: `Read sample.txt and report its contents without changing it.`

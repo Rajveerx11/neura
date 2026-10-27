@@ -20,6 +20,24 @@ The original Pi audit below is historical baseline evidence, not current Mastra
 verification or permission to install/downgrade Pi. Original hardening issues stay
 open; a framework change does not close them. Human Away is unavailable in v1.
 
+## Current maintenance checkpoint (2026-10-26)
+
+The owner reported a completed subscription sign-in followed by HTTP 400 on the
+first model request. The adapter now classifies recognized backend rejections
+without exposing raw responses or credentials. The server-side cause and usable
+subscription access remain unverified. [#118](https://github.com/Rajveerx11/neura/issues/118)
+stays open. See [safe diagnostics and manual retry](CODEX_AUTH.md#safe-rejection-diagnostics).
+
+Cleanup distinguishes obsolete implementation work from unmet requirements.
+The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget
+render optimization (#60) no longer describe the active readline application.
+Retire those implementation-specific tasks as not planned, not completed.
+Terminal replacement work remains #124. Active-runtime evaluation remains #30.
+Keep original hardening and migration blockers open, including installation and
+recovery work. Historical source, plans and verification records are retained
+deliberately. Unreachable by the active app does not mean safe to delete. No private profiles,
+credentials, history, vaults, user drafts or other worktrees are cleanup targets.
+
 ## Historical Pi candidate baseline
 
 Last documentation audit: 2026-10-20
