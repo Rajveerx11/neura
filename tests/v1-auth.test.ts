@@ -8,8 +8,9 @@ import { mkdtemp, readFile, rm, writeFile, mkdir, symlink, link, stat } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { loginCodex, logoutCodex, codexAuthorization } from "../src/auth.ts";
-import { createConfiguredModel } from "../src/providers.ts";
+import { createConfiguredModel, listCodexModels } from "../src/providers.ts";
 import { runTurn } from "../src/runtime.ts";
+import { codexSse } from "./model-fixture.ts";
 
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
@@ -69,19 +70,7 @@ const prompt = [{ role: "system" as const, content: "Current Neura instructions"
 const output = [{ type: "message", id: "msg_synthetic", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Synthetic answer", annotations: [] }] }];
 const snapshot = (items: unknown[] = output) => ({ id: "resp_synthetic", created_at: 1, model: "gpt-5.5", status: "completed", output: items, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } });
 function sse(items: unknown[] = output, fragmented = false) {
-  const response = snapshot(items);
-  const first = items[0] as { type: string; id: string; arguments?: string };
-  const added = first.type === "function_call" ? { ...first, arguments: "" } : { ...output[0], content: [] };
-  const delta = first.type === "function_call"
-    ? { type: "response.function_call_arguments.delta", item_id: first.id, output_index: 0, delta: first.arguments }
-    : { type: "response.output_text.delta", item_id: "msg_synthetic", output_index: 0, content_index: 0, delta: "Synthetic answer" };
-  const events = [{ type: "response.created", response: { ...response, output: [] } }, { type: "response.output_item.added", output_index: 0, item: added }, delta, { type: "response.output_item.done", output_index: 0, item: items[0] }, { type: "response.completed", response }];
-  const bytes = new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\r\n\r\n`).join(""));
-  return new Response(new ReadableStream<Uint8Array>({ start(controller) {
-    if (fragmented) for (let i = 0; i < bytes.length; i += 7) controller.enqueue(bytes.subarray(i, i + 7));
-    else controller.enqueue(bytes);
-    controller.close();
-  } }), { headers: { "Content-Type": "text/event-stream" } });
+  return codexSse(snapshot(items), fragmented);
 }
 
 function model() { return createConfiguredModel({ provider: "openai-codex", model: "gpt-5.5" }); }
@@ -148,6 +137,86 @@ test("malformed/expired token responses and redirects never save credentials or 
   globalThis.fetch = async (_url, init) => { assert.equal(init?.redirect, "error"); return new Response("synthetic-private-response", { status: 302, headers: { Location: "https://evil.invalid" } }); };
   await assert.rejects(loginCodex({ onAuthorize: (url) => { pending = callback(new URL(url)); } }), (error: Error) => /denied/.test(error.message) && !error.message.includes("synthetic-private-response"));
   await pending;
+});
+
+test("subscription model discovery uses only the fixed authenticated catalog and ignores remote instructions", async () => {
+  await fresh(); await login();
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    calls++;
+    const target = new URL(String(url));
+    assert.equal(target.origin + target.pathname, "https://chatgpt.com/backend-api/codex/models");
+    assert.deepEqual([...target.searchParams.keys()], ["client_version"]);
+    assert.ok(target.searchParams.get("client_version"));
+    assert.equal(init?.method, "GET"); assert.equal(init?.redirect, "error"); assert.equal(init?.body, undefined);
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("ChatGPT-Account-ID"), "synthetic-account");
+    assert.match(headers.get("Authorization")!, /^Bearer /);
+    assert.equal(headers.get("x-api-key"), null);
+    return json({ models: [
+      { slug: "fixture-second", visibility: "list", priority: 20, base_instructions: "synthetic-private-value", guardian: { allow_everything: true } },
+      { slug: "fixture-first", visibility: "list", priority: 10, supported_in_api: false },
+      { slug: "fixture-first", visibility: "list", priority: 99 },
+      { slug: "fixture-hidden", visibility: "hide", priority: -1 },
+      { slug: "bad\nmodel", visibility: "list", priority: -2 },
+      { slug: "sk-proj-" + "s".repeat(60), visibility: "list", priority: -3 },
+    ] });
+  };
+  assert.deepEqual(await listCodexModels(), [{ id: "fixture-first" }, { id: "fixture-second" }]);
+  assert.equal(calls, 1);
+  await assert.rejects(listCodexModels({ baseURL: "https://api.openai.com/v1" }), /fixed Codex/);
+  assert.equal(calls, 1);
+});
+
+test("catalog denial, malformed or oversized data never leaks, guesses a model or falls back", async () => {
+  await fresh(); await login();
+  for (const response of [
+    () => json({ error: { code: "model_not_found", message: "synthetic-private-value" } }, 403),
+    () => json({ models: [] }),
+    () => json({ models: "synthetic-private-value" }),
+    () => json({ models: Array.from({ length: 257 }, () => ({ slug: "fixture", visibility: "list" })) }),
+    () => new Response("synthetic-private-value", { headers: { "Content-Type": "text/html" } }),
+    () => json({ models: [], ignored: "synthetic-private-value".repeat(500000) }),
+    () => new Response(null, { status: 302, headers: { Location: "https://evil.invalid" } }),
+  ]) {
+    let calls = 0;
+    globalThis.fetch = async (url) => { calls++; assert.equal(new URL(String(url)).hostname, "chatgpt.com"); return response(); };
+    await assert.rejects(listCodexModels(), (error: Error) => !error.message.includes("synthetic-private-value") && /catalog|discovery/.test(error.message));
+    assert.equal(calls, 1);
+  }
+});
+
+test("catalog cancellation stops stalled reads and never constructs a model request", async () => {
+  await fresh(); await login();
+  const controller = new AbortController(); let cancelled = false;
+  globalThis.fetch = async (url) => {
+    assert.equal(new URL(String(url)).pathname, "/backend-api/codex/models");
+    return new Response(new ReadableStream({ pull() { controller.abort(); }, cancel() { cancelled = true; } }), { headers: { "Content-Type": "application/json" } });
+  };
+  await assert.rejects(listCodexModels({ signal: controller.signal }), { name: "AbortError" });
+  assert.equal(cancelled, true);
+  globalThis.fetch = async () => { throw new Error("Must not fetch"); };
+  await assert.rejects(listCodexModels({ signal: controller.signal }), { name: "AbortError" });
+});
+
+test("catalog deadline includes header latency and continuously fulfilled reads", async (context) => {
+  await fresh(); await login();
+  const now = performance.now.bind(performance);
+  let advanced = 0; let reads = 0; let cancelled = false;
+  context.mock.method(performance, "now", () => now() + advanced);
+  globalThis.fetch = async () => {
+    advanced = 4000;
+    return new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++reads <= 10) { advanced += 400; controller.enqueue(new Uint8Array(0)); }
+        else { controller.enqueue(new TextEncoder().encode(JSON.stringify({ models: [{ slug: "fixture", visibility: "list" }] }))); controller.close(); }
+      },
+      cancel() { cancelled = true; },
+    }), { headers: { "Content-Type": "application/json" } });
+  };
+  await assert.rejects(listCodexModels(), /catalog was invalid, oversized or stalled/);
+  assert.ok(reads < 6, "Header time must not create a second full body-read budget");
+  assert.equal(cancelled, true);
 });
 
 test("subscription requests carry only OAuth/account headers, current instructions, forced stream/store flags", async (context) => {

@@ -18,6 +18,69 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
+async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown }) {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
+  try {
+    const workspace = path.join(scratch, 'workspace'); const home = path.join(scratch, 'home'); const profile = path.join(scratch, 'profile');
+    await fs.mkdir(workspace); await fs.mkdir(profile);
+    await fs.writeFile(path.join(workspace, 'sample.txt'), 'synthetic-private-value');
+    const config = path.join(scratch, 'fixture.json');
+    await fs.writeFile(config, JSON.stringify({ ...options, workspace }));
+    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 });
+    const match = /NEURA_FIXTURE_REQUESTS=(.+)/.exec(reply.stdout);
+    assert.ok(match, 'The real CLI must consume all synthetic interactive input');
+    assert.ok(!reply.stdout.includes('synthetic-private-value'));
+    assert.ok(!reply.stderr.includes('synthetic-private-value'));
+    await assert.rejects(fs.stat(path.join(home, 'sessions')), { code: 'ENOENT' });
+    return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string }> };
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+}
+
+test('bare /model lists advertised subscription choices, reprompts bad input and selects a real request model', async () => {
+  const reply = await interactiveFixture({ inputs: ['/model', 'invalid', '2', 'hi', '/quit'] });
+  assert.match(reply.stdout, /Current model: \(not selected\)/);
+  assert.match(reply.stdout, /1\. fixture-first \(catalog default\)/);
+  assert.match(reply.stdout, /2\. fixture-second/);
+  assert.match(reply.stdout, /Choose one of the listed models/);
+  assert.match(reply.stdout, /Model: fixture-second/);
+  assert.match(reply.stdout, /Hello from selected model/);
+  assert.ok(!reply.stdout.includes('fixture-hidden'));
+  assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-second' }]);
+  const byId = await interactiveFixture({ inputs: ['/model', 'fixture-second', 'hi', '/quit'] });
+  assert.deepEqual(byId.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-second' }]);
+});
+
+test('first request uses the catalog default and real Agent tool calls are visible without payloads', async () => {
+  const reply = await interactiveFixture({ inputs: ['hi', '/quit'], tool: true });
+  assert.match(reply.stdout, /Model: fixture-first \(subscription catalog default\)/);
+  for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
+  assert.match(reply.stdout, /Hello from selected model/);
+  assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+});
+
+test('headless /model lists current subscription choices without inference or a selection prompt', async () => {
+  const reply = await interactiveFixture({ inputs: [], args: ['--prompt', '/model'] });
+  assert.match(reply.stdout, /Current model: \(not selected\)/);
+  assert.match(reply.stdout, /fixture-first/);
+  assert.ok(!reply.stdout.includes('Choose a number'));
+  assert.deepEqual(reply.requests, [{ type: 'catalog' }]);
+});
+
+test('model cancellation, catalog denial and explicit rejected models never trigger hidden retries', async () => {
+  const cancelled = await interactiveFixture({ inputs: ['/model', '', 'hi', '/quit'], args: ['--model', 'fixture-explicit'] });
+  assert.match(cancelled.stdout, /Model unchanged/);
+  assert.deepEqual(cancelled.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-explicit' }]);
+  const interrupted = await interactiveFixture({ inputs: ['/model', '[CTRL_C]', '/quit'], args: ['--model', 'fixture-explicit'] });
+  assert.match(interrupted.stderr, /aborted/i);
+  assert.deepEqual(interrupted.requests, [{ type: 'catalog' }]);
+  const denied = await interactiveFixture({ inputs: ['hi', '/quit'], args: ['--model', 'fixture-explicit'], denyModel: true });
+  assert.match(denied.stdout, /Use \/model to choose a subscription model/);
+  assert.deepEqual(denied.requests, [{ type: 'model', model: 'fixture-explicit' }]);
+  const failedCatalog = await interactiveFixture({ inputs: ['/model', '/quit'], catalogError: { error: { code: 'unknown', message: 'synthetic-private-value' } } });
+  assert.match(failedCatalog.stderr, /model discovery denied \(403\)/);
+  assert.deepEqual(failedCatalog.requests, [{ type: 'catalog' }]);
+});
+
 test('CLI uses real Mastra/local transport for a Learn board, exposes no Work tools and stops at the lesson', { skip: process.platform !== 'win32' }, async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-learn-')));
   const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);

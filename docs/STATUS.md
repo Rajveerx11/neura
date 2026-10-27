@@ -26,7 +26,12 @@ The owner reported a completed subscription sign-in followed by HTTP 400 on the
 first model request. The adapter now classifies recognized backend rejections
 without exposing raw responses or credentials. The server-side cause and usable
 subscription access remain unverified. [#118](https://github.com/Rajveerx11/neura/issues/118)
-stays open. See [safe diagnostics and manual retry](CODEX_AUTH.md#safe-rejection-diagnostics).
+stays open. The owner's next retry reported the selected model as unavailable.
+The CLI now opens a numbered subscription picker with bare `/model` and discovers
+a provider-advertised default instead of assuming `gpt-5.5`. Tool-call starts and
+outcomes are visible without raw payloads. Real account catalog/inference access
+still needs manual verification. See [model selection](CODEX_AUTH.md#subscription-model-discovery-and-selection)
+and [safe diagnostics](CODEX_AUTH.md#safe-rejection-diagnostics).
 
 Cleanup distinguishes obsolete implementation work from unmet requirements.
 The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget

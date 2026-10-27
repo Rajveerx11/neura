@@ -28,7 +28,7 @@ An explicit `NEURA_HOME` must be absolute, nonlinked and disjoint from the
 workspace in both directions. Keep it outside Pi profiles. Keep test workspaces
 outside the Neura runtime checkout and its ancestor/descendant directories.
 
-Start `neura --provider openai-codex --model gpt-5.5 --no-history` in a disposable
+Start `neura --provider openai-codex --no-history` in a disposable
 workspace, then enter `/login` explicitly. The authorization URL and callback
 are sensitive: do not paste them into bug reports. No real-account login,
 reduced-scope acceptance, refresh or model entitlement is claimed by the
@@ -42,6 +42,36 @@ charges. Subscription errors never trigger API fallback. To test without
 subscription credentials, explicitly select an already running loopback local
 model and use synthetic data. No agent should initiate login, logout, refresh,
 provider calls or changes to OAuth grants as part of installation checks.
+
+## Subscription model discovery and selection
+
+Bare `/model` displays the current provider/model and opens the subscription
+picker. Enter cancels, invalid choices are reprompted, and only a listed number
+or ID is accepted. Noninteractive `/model` lists without invoking inference.
+The existing `/model PROVIDER MODEL [URL]` form remains explicit manual selection.
+Other providers require an explicit model and do not trigger subscription discovery.
+
+The CLI no longer assumes `gpt-5.5`. If no model was configured, the first task
+requests the authenticated subscription catalog and selects its first visible
+model by priority, matching the upstream picker convention. Explicit flags or
+`NEURA_MODEL` are never replaced. A rejected model is not silently substituted,
+and no failed task is automatically replayed. Manual model changes start a fresh
+conversation and invalidate old tool authority.
+
+Discovery uses only `GET https://chatgpt.com/backend-api/codex/models` with
+`client_version` set to Neura's version, its OAuth bearer and account header.
+No API key or alternative endpoint is used. Redirects are refused. Catalog fetch
+and reading share a five-second budget after authorization, with an 8 MiB body
+limit and at most 256 entries. Only picker-visible, valid model IDs and sorting
+priority are retained. Catalog instructions, policies, tools and arbitrary labels
+are ignored. This metadata does not grant any capability or prove model entitlement.
+
+The protocol shape and ChatGPT visibility rule were checked against official
+[Codex models endpoint](https://github.com/openai/codex/blob/155dde7ff60b178ec4ba7154b2e48c6071eb5001/codex-rs/codex-api/src/endpoint/models.rs)
+and [model metadata](https://github.com/openai/codex/blob/155dde7ff60b178ec4ba7154b2e48c6071eb5001/codex-rs/protocol/src/openai_models.rs).
+No upstream runtime or dependency was added. Tests intercept every request and
+exercise the real CLI command loop, selection, catalog failure and actual Agent
+turns. Live catalog and inference acceptance still require the owner's manual test.
 
 ## Safe rejection diagnostics
 
@@ -87,13 +117,14 @@ server. Logout cancels pending authentication operations before deleting the
 local credential. Logout does not remotely revoke the OAuth grant or cancel an
 already-dispatched inference request.
 
-`createConfiguredModel({ provider: 'openai-codex', model: 'gpt-5.5' })` remains
+`createConfiguredModel({ provider: 'openai-codex', model: selectedModel })` remains
 synchronous. Construction performs no credential reads, login, or network calls.
 Each actual request loads Neura credentials and refreshes them if they expire
 within a minute. The existing local, OpenAI API, and Anthropic API transports
 remain separate. Subscription authentication never uses `OPENAI_API_KEY`, an
 ambient OpenAI base URL, or the API-billed endpoint. A custom subscription
-`baseURL` is rejected. The parent retains the `gpt-5.5` model default.
+`baseURL` is rejected. The CLI discovers a subscription default rather than
+assuming a model name. Discovery is separate from inert model construction.
 
 The parent owns CLI integration for `openai-codex`, `/login`, and `/logout`.
 The synthetic missing-credential test proves request-time denial without API
@@ -209,7 +240,7 @@ node --test tests/v1-auth.test.ts
 npm run typecheck:v1
 ```
 
-On 2026-10-27 both exit 0: 19 auth tests and strict TypeScript. Tests create temporary Neura
+On 2026-10-27 both exit 0: 23 auth tests and strict TypeScript. Tests create temporary Neura
 homes, intercept every provider/token request, and use only synthetic loopback
 callbacks. Coverage includes PKCE, callback host/path/state/duplicates/replay,
 browser denial, abort/logout cleanup, malformed/expired tokens, refresh rotation
