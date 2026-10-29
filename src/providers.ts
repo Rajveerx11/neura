@@ -1,6 +1,8 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { codexAuthorization } from "./auth.ts";
+import { readFile } from "node:fs/promises";
+import { redactSensitiveText } from "../agent/neura/redaction.ts";
 
 export type ProviderConfig = { provider: "local" | "openai" | "anthropic" | "openai-codex"; model: string; baseURL?: string };
 
@@ -41,6 +43,11 @@ function endpoint(value: string, local: boolean): string {
 
 const CODEX_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const CODEX_MODELS_ENDPOINT = "https://chatgpt.com/backend-api/codex/models";
+
+function codexHeaders(access: string, accountId: string, accept: string): Headers {
+  return new Headers({ "Content-Type": "application/json", Accept: accept, Authorization: `Bearer ${access}`, "ChatGPT-Account-ID": accountId, originator: "neura", "User-Agent": "neura" });
+}
 
 /** The terminal completed snapshot is authoritative; truncated streams must not become successful turns. */
 async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<Response> {
@@ -84,6 +91,67 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
   }
 }
 
+/** Shared bounded reader: no provider-controlled error text escapes this helper. */
+async function readJsonResponse(response: Response, maxBytes: number, timeoutMs: number, signal?: AbortSignal, absoluteDeadline?: number): Promise<unknown> {
+  if (!response.body) { signal?.throwIfAborted(); throw new Error("Provider JSON body missing"); }
+  const reader = response.body.getReader();
+  let stopped = false;
+  const stop = () => { stopped = true; void reader.cancel().catch(() => undefined); };
+  const deadline = Math.min(performance.now() + timeoutMs, absoluteDeadline ?? Infinity);
+  const timer = setTimeout(stop, Math.max(0, deadline - performance.now()));
+  signal?.addEventListener("abort", stop, { once: true });
+  try {
+    signal?.throwIfAborted();
+    if (!/^application\/(?:json|problem\+json)(?:;|$)/i.test(response.headers.get("content-type") ?? "")) throw new Error("Provider JSON content type required");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { value, done } = await reader.read();
+      signal?.throwIfAborted();
+      if (stopped || performance.now() >= deadline) throw new Error("Provider JSON read deadline exceeded");
+      if (done) break;
+      if (!value.length) continue;
+      size += value.length;
+      if (size > maxBytes) throw new Error("Provider JSON body too large");
+      chunks.push(value);
+    }
+    try { return JSON.parse(Buffer.concat(chunks, size).toString("utf8")); }
+    catch { throw new Error("Provider JSON body invalid"); }
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+    stop();
+    reader.releaseLock();
+  }
+}
+
+/** Expose fixed hints and allowlisted public field names, never raw error data. */
+async function codexDenialHint(response: Response, signal?: AbortSignal, deadline?: number, requestSignal = signal): Promise<string> {
+  const unknown = "No recognized safe backend reason; raw details withheld";
+  try {
+    const payload = await readJsonResponse(response, 8192, 1000, requestSignal, deadline) as { error?: { code?: unknown; type?: unknown; param?: unknown; message?: unknown }; detail?: unknown } | null;
+    const error = payload?.error;
+    const rawCode = error?.code ?? error?.type;
+    const code = typeof rawCode === "string" ? rawCode : undefined;
+    const message = typeof error?.message === "string" ? error.message : typeof payload?.detail === "string" ? payload.detail : "";
+    if (["model_not_found", "unsupported_model", "model_not_available"].includes(code ?? "") || /^(?:the )?(?:['"][a-z0-9._-]{1,128}['"] )?model (?:is )?not (?:supported|available|found)(?: when using Codex with a ChatGPT account)?\.?$/i.test(message.trim())) {
+      return "The selected model is unavailable; verify the model name and subscription entitlement";
+    }
+    if (code === "insufficient_quota" || code === "rate_limit_exceeded") return "The backend reports a subscription quota or usage limit";
+    const unsupported = /^(?:unsupported|unrecognized|unknown) parameter:\s*(\S+)$/i.exec(message.trim());
+    const detailField = unsupported?.[1].replace(/^(['"])(.*)\1$/, "$2");
+    const field = typeof error?.param === "string" ? error.param : detailField;
+    const fields = ["model", "instructions", "stream", "store", "tools", "tool_choice", "input", "max_output_tokens", "reasoning", "reasoning.effort", "temperature", "top_p", "include"];
+    if (field && fields.includes(field) && (unsupported || ["invalid_request_error", "unsupported_parameter", "invalid_value"].includes(code ?? ""))) {
+      return `The backend rejected request field: ${field}`;
+    }
+    return unknown;
+  } catch {
+    signal?.throwIfAborted();
+    return unknown;
+  }
+}
+
 // Protocol reference: @mastra/code-sdk@1.15.0, Apache-2.0; see docs/CODEX_AUTH.md.
 async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> {
   const target = new URL(url instanceof Request ? url.url : url);
@@ -105,13 +173,52 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
   body.instructions = instructions.join("\n\n");
   body.store = false;
   body.stream = true;
-  const headers = new Headers({ "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${access}`, "ChatGPT-Account-ID": accountId, originator: "neura", "User-Agent": "neura" });
+  const headers = codexHeaders(access, accountId, "text/event-stream");
   let response: Response;
   try { response = await fetch(CODEX_ENDPOINT, { method: "POST", headers, body: JSON.stringify(body), redirect: "error", signal }); }
   catch { signal?.throwIfAborted(); throw new Error("Codex subscription request failed"); }
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`Codex subscription request denied (${response.status}); no API billing fallback was used`); }
+  if (!response.ok) {
+    const hint = await codexDenialHint(response, signal);
+    throw new Error(`Codex subscription request denied (${response.status}); ${hint}; no API billing fallback was used`);
+  }
   if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/event-stream")) { await response.body?.cancel(); throw new Error("Codex subscription requires an event stream"); }
   return streaming ? response : codexSnapshot(response, signal);
+}
+
+export type SubscriptionModel = { id: string };
+
+/** Explicit metadata discovery only; never import catalog instructions, policies or tools. */
+export async function listCodexModels({ signal, baseURL }: { signal?: AbortSignal; baseURL?: string } = {}): Promise<SubscriptionModel[]> {
+  if (baseURL) throw new Error("ChatGPT subscription uses only the fixed Codex endpoint");
+  signal?.throwIfAborted();
+  const { version } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  if (typeof version !== "string" || version.length > 80) throw new Error("Neura client version is invalid");
+  const { access, accountId } = await codexAuthorization(signal);
+  const deadline = performance.now() + 5000;
+  const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000);
+  const url = new URL(CODEX_MODELS_ENDPOINT);
+  url.searchParams.set("client_version", version);
+  let response: Response;
+  try { response = await fetch(url.href, { method: "GET", headers: codexHeaders(access, accountId, "application/json"), redirect: "error", signal: requestSignal }); }
+  catch { signal?.throwIfAborted(); throw new Error("Subscription model discovery failed; no API billing fallback was used"); }
+  if (!response.ok) {
+    const hint = await codexDenialHint(response, signal, deadline, requestSignal);
+    throw new Error(`Subscription model discovery denied (${response.status}); ${hint}; no API billing fallback was used`);
+  }
+  let payload: unknown;
+  try { payload = await readJsonResponse(response, MAX_RESPONSE_BYTES, 5000, requestSignal, deadline); }
+  catch { signal?.throwIfAborted(); throw new Error("Subscription model catalog was invalid, oversized or stalled; raw details withheld"); }
+  const models = (payload as { models?: unknown } | null)?.models;
+  if (!Array.isArray(models) || models.length > 256) throw new Error("Subscription model catalog has an invalid shape; raw details withheld");
+  const choices = new Map<string, number>();
+  for (const [index, model] of models.entries()) {
+    if (!model || typeof model !== "object" || model.visibility !== "list" || typeof model.slug !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(model.slug)) continue;
+    if (redactSensitiveText(model.slug, 256) !== model.slug) continue;
+    if (!choices.has(model.slug)) choices.set(model.slug, Number.isSafeInteger(model.priority) ? model.priority : index);
+  }
+  const result = [...choices].sort((a, b) => a[1] - b[1]).map(([id]) => ({ id }));
+  if (!result.length) throw new Error("The subscription catalog advertised no picker-visible models; no default was guessed");
+  return result;
 }
 
 /** API keys come only from the named environment variables; subscription login is separate. */
