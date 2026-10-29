@@ -40,6 +40,149 @@ test("real Agent dispatch executes owned action and returns neutral history/text
   assert.ok(result.messages.some((message) => message.role === "tool"));
 });
 
+test("tool events are live before effects and reveal no arguments, results or exception details", async () => {
+  const privateValue = "synthetic-private-value";
+  const order: string[] = [];
+  const events: unknown[] = [];
+  const { model } = fixture([[call("action", { value: privateValue })], done]);
+  await runTurn({ model, messages: [user], instructions: "Test", tools: [{ name: "action", description: "Synthetic", parameters: Type.Object({ value: Type.String() }), execute: async () => { order.push("effect"); return { content: [text(privateValue)] }; } }], onToolEvent: event => { events.push(event); order.push(event.phase); } });
+  assert.ok(order.includes("requested"));
+  assert.ok(order.indexOf("started") >= 0);
+  assert.ok(order.indexOf("effect") >= 0);
+  assert.ok(order.indexOf("started") < order.indexOf("effect"));
+  assert.ok(order.indexOf("returned") > order.indexOf("effect"));
+  assert.ok(!JSON.stringify(events).includes(privateValue));
+  assert.ok(events.every(event => Object.keys(event as object).sort().join(',') === 'phase,toolName'));
+});
+
+test("invalid and denied tool calls remain visible without effects or raw error disclosure", async () => {
+  for (const input of [{ count: 0 }, { count: 1 }]) {
+    let entered = 0;
+    const events: Array<{ toolName: string; phase: string }> = [];
+    const { model } = fixture([[call("action", input)], done]);
+    await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => { entered++; throw new Error("synthetic-private-value"); })], onToolEvent: event => events.push(event) });
+    assert.equal(entered, input.count === 0 ? 0 : 1);
+    assert.ok(events.some(event => event.phase === "requested"));
+    assert.ok(events.some(event => event.phase === "failed" || event.phase === "blocked"));
+    assert.ok(!JSON.stringify(events).includes("synthetic-private-value"));
+  }
+  let effects = 0;
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, () => { throw new Error("Observer unavailable"); });
+  const blocked = await turn.tools.action.execute!({ count: 1 }, {} as any);
+  assert.ok(!JSON.stringify(blocked).includes('Observer unavailable'));
+  assert.equal(effects, 0, "A hidden action must not run when its start cannot be reported");
+  assert.equal(turn.isTerminated(), true);
+});
+
+test("unknown tool calls are visible but do not expose model-provided tool names", async () => {
+  const events: Array<{ toolName: string; phase: string }> = [];
+  const { model } = fixture([[call("synthetic-private-value", {})], done]);
+  try { await runTurn({ model, messages: [user], instructions: "Test", tools: [], onToolEvent: event => events.push(event) }); } catch { /* Provider rejection may end the turn. */ }
+  assert.ok(events.some(event => event.toolName === "unknown"));
+  assert.ok(!JSON.stringify(events).includes("synthetic-private-value"));
+});
+
+test("cancelled and closed tool callbacks are visibly fenced", async () => {
+  const controller = new AbortController();
+  const events: Array<{ toolName: string; phase: string }> = [];
+  const { model } = fixture([[call("action", { count: 1 })]]);
+  await assert.rejects(runTurn({ model, messages: [user], instructions: "Test", signal: controller.signal, onToolEvent: event => events.push(event), tools: [action(async (_, context) => { controller.abort(); context.signal?.throwIfAborted(); return { content: [] }; })] }), { name: "AbortError" });
+  assert.ok(events.some(event => event.phase === "started"));
+  assert.ok(events.some(event => event.phase === "cancelled"));
+  let effects = 0;
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, event => events.push(event));
+  turn.close();
+  await turn.tools.action.execute!({ count: 1 }, {} as any);
+  assert.equal(effects, 0);
+  assert.ok(events.some(event => event.phase === "blocked"));
+});
+
+test("post-effect observer failures preserve outcomes and cannot bypass termination or leak into model history", async () => {
+  const marker = "synthetic-observer-private";
+  const { model, requests } = fixture([[call("lesson", { count: 1 }), call("mutate", { count: 1 })], done]);
+  let lessons = 0; let mutations = 0;
+  await assert.rejects(runTurn({ model, messages: [user], instructions: "Test", tools: [
+    action(async () => { lessons++; return { content: [text("Exercise")], terminate: true }; }, "lesson"),
+    action(async () => { mutations++; return { content: [] }; }, "mutate"),
+  ], onToolEvent: event => { if (event.phase === 'returned') throw new Error(marker); } }), (error: Error) => /Tool status output failed/.test(error.message) && !error.message.includes(marker));
+  assert.equal(lessons, 1);
+  assert.equal(mutations, 0);
+  assert.equal(requests.length, 1);
+  assert.ok(!JSON.stringify(requests).includes(marker));
+  const expected = { content: [text('Recorded result')], terminate: true };
+  const turn = createTurnTools([action(async () => expected)], undefined, event => { if (event.phase === 'returned') throw new Error(marker); });
+  assert.deepEqual(await turn.tools.action.execute!({ count: 1 }, {} as any), expected);
+  assert.deepEqual(turn.results, [expected]);
+  assert.equal(turn.isTerminated(), true);
+});
+
+test("observer exceptions on request or failure remain private and stop queued callbacks", async () => {
+  for (const phase of ['requested', 'failed']) {
+    const marker = 'synthetic-observer-private';
+    let mutations = 0;
+    const { model, requests } = fixture([[call('action', { count: 1 }), call('mutate', { count: 1 })], done]);
+    await assert.rejects(runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { throw new Error('Denied'); }), action(async () => { mutations++; return { content: [] }; }, 'mutate')], onToolEvent: event => { if (event.phase === phase) throw new Error(marker); } }), (error: Error) => /Tool status output failed/.test(error.message) && !error.message.includes(marker));
+    assert.equal(mutations, 0);
+    assert.equal(requests.length, 1);
+    assert.ok(!JSON.stringify(requests).includes(marker));
+  }
+});
+
+test("Promise-returning tool observers fail closed without waiting or leaking rejections", async () => {
+  const marker = 'synthetic-observer-private';
+  for (const observer of [async () => { throw new Error(marker); }, () => new Promise<void>(() => {})]) {
+    let effects = 0;
+    const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, observer);
+    const reply = await turn.tools.action.execute!({ count: 1 }, {} as any);
+    assert.equal(effects, 0);
+    assert.equal(turn.reportingFailed(), true);
+    assert.ok(!JSON.stringify(reply).includes(marker));
+  }
+  let effects = 0; let later = 0;
+  const { model, requests } = fixture([[call('action', { count: 1 }), call('mutate', { count: 1 })], done]);
+  await assert.rejects(runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [text('Actual result')] }; }), action(async () => { later++; return { content: [] }; }, 'mutate')], onToolEvent: event => { if (event.phase === 'returned') return Promise.reject(new Error(marker)); } }), (error: Error) => /Tool status output failed/.test(error.message) && !error.message.includes(marker));
+  assert.equal(effects, 1);
+  assert.equal(later, 0);
+  assert.equal(requests.length, 1);
+  assert.ok(!JSON.stringify(requests).includes(marker));
+  await new Promise<void>(resolve => setImmediate(resolve));
+});
+
+test("unsupported observer thenables are not assimilated", async () => {
+  let assimilations = 0; let effects = 0;
+  const recursive = { then(resolve: (value: unknown) => void) { assimilations++; resolve(assimilations < 4 ? recursive : undefined); } };
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, () => recursive);
+  await turn.tools.action.execute!({ count: 1 }, {} as any);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(turn.reportingFailed(), true);
+  assert.equal(effects, 0);
+  assert.equal(assimilations, 0);
+});
+
+test("fulfilled observer Promises do not assimilate values that become thenable", async () => {
+  let assimilations = 0; let effects = 0;
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, () => {
+    const value: Record<string, unknown> = {};
+    const observed = Promise.resolve(value);
+    value.then = (resolve: (value: unknown) => void) => { assimilations++; resolve(assimilations < 4 ? value : undefined); };
+    return observed;
+  });
+  await turn.tools.action.execute!({ count: 1 }, {} as Parameters<NonNullable<typeof turn.tools.action.execute>>[1]);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(turn.reportingFailed(), true);
+  assert.equal(effects, 0);
+  assert.equal(assimilations, 0);
+});
+
+test("cancellation triggered by a started observer prevents the effect", async () => {
+  const controller = new AbortController(); let effects = 0;
+  const events: string[] = [];
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], controller.signal, event => { events.push(event.phase); if (event.phase === 'started') controller.abort(); });
+  await assert.rejects(async () => turn.tools.action.execute!({ count: 1 }, {} as any), { name: 'AbortError' });
+  assert.equal(effects, 0);
+  assert.ok(events.includes('cancelled'));
+});
+
 test("real Agent rejects extra fields, wrong types, and bounds before effects", async () => {
   for (const input of [{ count: 1, extra: "deny" }, { count: 0 }, { count: 4 }, { count: "1" }, {}, { count: 1.5 }]) {
     let effects = 0;
@@ -64,6 +207,79 @@ test("direct/resumed tool paths enforce validation, closure, and current callbac
   turn.close();
   await execute({ count: 1 }, { resumeData: {} } as any);
   assert.equal(effects, 1);
+});
+
+test("nested schema closure rejects extras without coercion on Agent and resumed paths", async () => {
+  const parameters = Type.Object({
+    entries: Type.Array(Type.Union([
+      Type.Object({ count: Type.Integer({ minimum: 1, maximum: 3 }) }),
+      Type.Object({ label: Type.String({ minLength: 1 }) }),
+    ]), { minItems: 1 }),
+    options: Type.Object({ note: Type.Optional(Type.String()) }),
+    labels: Type.Object({}, { additionalProperties: Type.String() }),
+  });
+  const originalSchema = JSON.stringify(parameters);
+  const valid = { entries: [{ count: 2 }, { label: "ok" }], options: {}, labels: { custom: "allowed" } };
+  const invalid = [
+    { ...valid, extra: true },
+    { ...valid, entries: [{ count: 2, extra: true }] },
+    { ...valid, entries: [{ label: "ok", extra: true }] },
+    { ...valid, entries: [{ count: "2" }] },
+    { ...valid, entries: [] },
+    { ...valid, options: { extra: true } },
+    { ...valid, labels: { custom: 2 } },
+  ];
+  for (const input of [valid, ...invalid]) {
+    const originalInput = JSON.stringify(input);
+    const accepted: unknown[] = [];
+    const definition: ToolDefinition = {
+      name: "nested", description: "Synthetic nested schema", parameters,
+      execute: async (value) => { accepted.push(value); return { content: [text("ok")] }; },
+    };
+    const { model, requests } = fixture([[call("nested", input)], done]);
+    await runTurn({ model, messages: [user], instructions: "Test", tools: [definition] });
+    const turn = createTurnTools([definition]);
+    try { await turn.tools.nested.execute!(input, { resumeData: {} } as any); }
+    finally { turn.close(); }
+    assert.deepEqual(accepted, input === valid ? [valid, valid] : []);
+    assert.equal(JSON.stringify(input), originalInput);
+    const sent = requests[0].tools[0].inputSchema;
+    assert.equal(sent.additionalProperties, false);
+    assert.equal(sent.properties.options.additionalProperties, false);
+    assert.ok(sent.properties.entries.items.anyOf.every((branch: { additionalProperties: boolean }) => branch.additionalProperties === false));
+    assert.deepEqual(sent.properties.labels.additionalProperties, { type: "string" });
+  }
+  assert.equal(JSON.stringify(parameters), originalSchema, "closing the tool schema must not mutate its definition");
+});
+
+test("concurrent resumed calls serialize effects and cancellation denies queued work", async () => {
+  for (const cancel of [false, true]) {
+    const controller = new AbortController();
+    const events: string[] = [];
+    let started!: () => void;
+    let release!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const turn = createTurnTools([action(async (input, { signal }) => {
+      events.push(`start:${input.count}`);
+      if (input.count === 1) { started(); await gate; }
+      signal?.throwIfAborted();
+      events.push(`effect:${input.count}`);
+      return { content: [text("ok")] };
+    })], controller.signal);
+    const first = turn.tools.action.execute!({ count: 1 }, { resumeData: {} } as any);
+    const second = turn.tools.action.execute!({ count: 2 }, { resumeData: {} } as any);
+    const results = Promise.allSettled([first, second]);
+    try {
+      await firstStarted;
+      assert.deepEqual(events, ["start:1"]);
+      if (cancel) controller.abort();
+      release();
+      const settled = await results;
+      assert.deepEqual(settled.map((result) => result.status), cancel ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"]);
+      assert.deepEqual(events, cancel ? ["start:1"] : ["start:1", "effect:1", "start:2", "effect:2"]);
+    } finally { release(); turn.close(); }
+  }
 });
 
 test("real Agent denied callback prevents mutation", async () => {

@@ -8,8 +8,9 @@ import { mkdtemp, readFile, rm, writeFile, mkdir, symlink, link, stat } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { loginCodex, logoutCodex, codexAuthorization } from "../src/auth.ts";
-import { createConfiguredModel } from "../src/providers.ts";
+import { createConfiguredModel, listCodexModels } from "../src/providers.ts";
 import { runTurn } from "../src/runtime.ts";
+import { codexSse } from "./model-fixture.ts";
 
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CODEX_URL = "https://chatgpt.com/backend-api/codex/responses";
@@ -69,19 +70,7 @@ const prompt = [{ role: "system" as const, content: "Current Neura instructions"
 const output = [{ type: "message", id: "msg_synthetic", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Synthetic answer", annotations: [] }] }];
 const snapshot = (items: unknown[] = output) => ({ id: "resp_synthetic", created_at: 1, model: "gpt-5.5", status: "completed", output: items, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } });
 function sse(items: unknown[] = output, fragmented = false) {
-  const response = snapshot(items);
-  const first = items[0] as { type: string; id: string; arguments?: string };
-  const added = first.type === "function_call" ? { ...first, arguments: "" } : { ...output[0], content: [] };
-  const delta = first.type === "function_call"
-    ? { type: "response.function_call_arguments.delta", item_id: first.id, output_index: 0, delta: first.arguments }
-    : { type: "response.output_text.delta", item_id: "msg_synthetic", output_index: 0, content_index: 0, delta: "Synthetic answer" };
-  const events = [{ type: "response.created", response: { ...response, output: [] } }, { type: "response.output_item.added", output_index: 0, item: added }, delta, { type: "response.output_item.done", output_index: 0, item: items[0] }, { type: "response.completed", response }];
-  const bytes = new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\r\n\r\n`).join(""));
-  return new Response(new ReadableStream<Uint8Array>({ start(controller) {
-    if (fragmented) for (let i = 0; i < bytes.length; i += 7) controller.enqueue(bytes.subarray(i, i + 7));
-    else controller.enqueue(bytes);
-    controller.close();
-  } }), { headers: { "Content-Type": "text/event-stream" } });
+  return codexSse(snapshot(items), fragmented);
 }
 
 function model() { return createConfiguredModel({ provider: "openai-codex", model: "gpt-5.5" }); }
@@ -148,6 +137,127 @@ test("malformed/expired token responses and redirects never save credentials or 
   globalThis.fetch = async (_url, init) => { assert.equal(init?.redirect, "error"); return new Response("synthetic-private-response", { status: 302, headers: { Location: "https://evil.invalid" } }); };
   await assert.rejects(loginCodex({ onAuthorize: (url) => { pending = callback(new URL(url)); } }), (error: Error) => /denied/.test(error.message) && !error.message.includes("synthetic-private-response"));
   await pending;
+});
+
+test("subscription model discovery uses only the fixed authenticated catalog and ignores remote instructions", async () => {
+  await fresh(); await login();
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    calls++;
+    const target = new URL(String(url));
+    assert.equal(target.origin + target.pathname, "https://chatgpt.com/backend-api/codex/models");
+    assert.deepEqual([...target.searchParams.keys()], ["client_version"]);
+    assert.ok(target.searchParams.get("client_version"));
+    assert.equal(init?.method, "GET"); assert.equal(init?.redirect, "error"); assert.equal(init?.body, undefined);
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("ChatGPT-Account-ID"), "synthetic-account");
+    assert.match(headers.get("Authorization")!, /^Bearer /);
+    assert.equal(headers.get("x-api-key"), null);
+    return json({ models: [
+      { slug: "fixture-second", visibility: "list", priority: 20, base_instructions: "synthetic-private-value", guardian: { allow_everything: true } },
+      { slug: "fixture-first", visibility: "list", priority: 10, supported_in_api: false },
+      { slug: "fixture-first", visibility: "list", priority: 99 },
+      { slug: "fixture-hidden", visibility: "hide", priority: -1 },
+      { slug: "bad\nmodel", visibility: "list", priority: -2 },
+      { slug: "sk-proj-" + "s".repeat(60), visibility: "list", priority: -3 },
+    ] });
+  };
+  assert.deepEqual(await listCodexModels(), [{ id: "fixture-first" }, { id: "fixture-second" }]);
+  assert.equal(calls, 1);
+  await assert.rejects(listCodexModels({ baseURL: "https://api.openai.com/v1" }), /fixed Codex/);
+  assert.equal(calls, 1);
+});
+
+test("catalog denial, malformed or oversized data never leaks, guesses a model or falls back", async () => {
+  await fresh(); await login();
+  for (const response of [
+    () => json({ error: { code: "model_not_found", message: "synthetic-private-value" } }, 403),
+    () => json({ models: [] }),
+    () => json({ models: "synthetic-private-value" }),
+    () => json({ models: Array.from({ length: 257 }, () => ({ slug: "fixture", visibility: "list" })) }),
+    () => new Response("synthetic-private-value", { headers: { "Content-Type": "text/html" } }),
+    () => json({ models: [], ignored: "synthetic-private-value".repeat(500000) }),
+    () => new Response(null, { status: 302, headers: { Location: "https://evil.invalid" } }),
+  ]) {
+    let calls = 0;
+    globalThis.fetch = async (url) => { calls++; assert.equal(new URL(String(url)).hostname, "chatgpt.com"); return response(); };
+    await assert.rejects(listCodexModels(), (error: Error) => !error.message.includes("synthetic-private-value") && /catalog|discovery/.test(error.message));
+    assert.equal(calls, 1);
+  }
+});
+
+test("catalog cancellation stops stalled reads and never constructs a model request", async () => {
+  await fresh(); await login();
+  const controller = new AbortController(); let cancelled = false;
+  globalThis.fetch = async (url) => {
+    assert.equal(new URL(String(url)).pathname, "/backend-api/codex/models");
+    return new Response(new ReadableStream({ pull() { controller.abort(); }, cancel() { cancelled = true; } }), { headers: { "Content-Type": "application/json" } });
+  };
+  await assert.rejects(listCodexModels({ signal: controller.signal }), { name: "AbortError" });
+  assert.equal(cancelled, true);
+  globalThis.fetch = async () => { throw new Error("Must not fetch"); };
+  await assert.rejects(listCodexModels({ signal: controller.signal }), { name: "AbortError" });
+});
+
+for (const phase of ["headers", "catalog body", "denial body"] as const) for (const cause of ["timeout", "caller"]) {
+  test(`catalog ${cause} during ${phase} preserves safe diagnostics and cancellation`, async (context) => {
+    await fresh(); await login();
+    const caller = new AbortController(); const timeout = new AbortController();
+    const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const budgets: number[] = [];
+    context.mock.method(AbortSignal, "timeout", (ms: number) => {
+      if (ms !== 5000) return nativeTimeout(ms);
+      budgets.push(ms);
+      return timeout.signal;
+    });
+    let calls = 0; let cancelled = false; let requestSignal: AbortSignal | undefined;
+    const abort = () => {
+      if (cause === "caller") caller.abort();
+      else timeout.abort(new DOMException("Synthetic catalog deadline", "TimeoutError"));
+    };
+    globalThis.fetch = async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).pathname, "/backend-api/codex/models");
+      requestSignal = init?.signal ?? undefined;
+      assert.ok(requestSignal);
+      assert.notEqual(requestSignal, caller.signal);
+      if (phase === "headers") { abort(); requestSignal.throwIfAborted(); throw new Error("Unreachable"); }
+      return new Response(new ReadableStream({ pull() { abort(); }, cancel() { cancelled = true; } }, { highWaterMark: 0 }), {
+        status: phase === "denial body" ? 403 : 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const message = {
+      headers: "Subscription model discovery failed; no API billing fallback was used",
+      "catalog body": "Subscription model catalog was invalid, oversized or stalled; raw details withheld",
+      "denial body": "Subscription model discovery denied (403); No recognized safe backend reason; raw details withheld; no API billing fallback was used",
+    }[phase];
+    await assert.rejects(listCodexModels({ signal: caller.signal }), cause === "caller" ? { name: "AbortError" } : { name: "Error", message });
+    assert.deepEqual(budgets, [5000]);
+    assert.equal(requestSignal?.aborted, true);
+    assert.equal(cancelled, phase !== "headers");
+    assert.equal(calls, 1);
+  });
+}
+
+test("catalog deadline includes header latency and continuously fulfilled reads", async (context) => {
+  await fresh(); await login();
+  const now = performance.now.bind(performance);
+  let advanced = 0; let reads = 0; let cancelled = false;
+  context.mock.method(performance, "now", () => now() + advanced);
+  globalThis.fetch = async () => {
+    advanced = 4000;
+    return new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++reads <= 10) { advanced += 400; controller.enqueue(new Uint8Array(0)); }
+        else { controller.enqueue(new TextEncoder().encode(JSON.stringify({ models: [{ slug: "fixture", visibility: "list" }] }))); controller.close(); }
+      },
+      cancel() { cancelled = true; },
+    }), { headers: { "Content-Type": "application/json" } });
+  };
+  await assert.rejects(listCodexModels(), /catalog was invalid, oversized or stalled/);
+  assert.ok(reads < 6, "Header time must not create a second full body-read budget");
+  assert.equal(cancelled, true);
 });
 
 test("subscription requests carry only OAuth/account headers, current instructions, forced stream/store flags", async (context) => {
@@ -336,6 +446,85 @@ test("truncated/error/malformed SSE and unauthorized backend responses fail clos
     globalThis.fetch = async () => response();
     await assert.rejects(async () => model().doGenerate({ prompt }), (error: Error) => /Codex/.test(error.message) && !error.message.includes("synthetic-private-value"));
   }
+});
+
+test("backend rejection hints recognize only safe model, field and quota categories", async () => {
+  await fresh(); await login();
+  const privateText = "synthetic-private-value";
+  const cases: Array<[unknown, RegExp]> = [
+    [{ error: { code: "model_not_found", message: privateText } }, /selected model is unavailable/],
+    [{ detail: "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account." }, /selected model is unavailable/],
+    [{ error: { code: "unsupported_parameter", param: "max_output_tokens", message: privateText } }, /rejected request field: max_output_tokens/],
+    [{ detail: "Unsupported parameter: max_output_tokens" }, /rejected request field: max_output_tokens/],
+    [{ error: { type: "invalid_request_error", param: "reasoning.effort", message: privateText } }, /rejected request field: reasoning\.effort/],
+    [{ error: { code: "insufficient_quota", message: privateText } }, /subscription quota or usage limit/],
+    [{ error: { code: privateText, param: privateText, message: privateText } }, /No recognized safe backend reason/],
+    [{ detail: "Unsupported parameter: temperature2" }, /No recognized safe backend reason/],
+    [{ detail: "Unsupported parameter: model-private" }, /No recognized safe backend reason/],
+    [{ detail: "Unrecognized parameter: input[0].private" }, /No recognized safe backend reason/],
+    [{ detail: "The model is available; the requested resource was not found" }, /No recognized safe backend reason/],
+    [{ error: { code: ["model_not_found"] } }, /No recognized safe backend reason/],
+    [{ error: { code: { toString: "model_not_found" } } }, /No recognized safe backend reason/],
+  ];
+  for (const [body, expected] of cases) {
+    globalThis.fetch = async (url) => { assert.equal(String(url), CODEX_URL); return json(body, 400); };
+    for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+      await assert.rejects(invoke, (error: Error) => expected.test(error.message) && /no API billing fallback/.test(error.message) && !error.message.includes(privateText));
+    }
+  }
+});
+
+test("backend error hints bound body size and time without disclosing raw errors", async () => {
+  await fresh(); await login();
+  for (const response of [
+    () => json({ error: { code: "model_not_found", message: "synthetic-private-value".repeat(500) } }, 400),
+    () => new Response("synthetic-private-value", { status: 400, headers: { "Content-Type": "text/html" } }),
+    () => new Response("invalid synthetic-private-value", { status: 400, headers: { "Content-Type": "application/json" } }),
+    () => new Response(null, { status: 400 }),
+  ]) {
+    globalThis.fetch = async () => response();
+    await assert.rejects(async () => model().doGenerate({ prompt }), (error: Error) => /No recognized safe backend reason/.test(error.message) && !error.message.includes("synthetic-private-value"));
+  }
+  let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({ cancel() { cancelled = true; } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  const started = Date.now();
+  await assert.rejects(async () => model().doGenerate({ prompt }), /No recognized safe backend reason/);
+  assert.ok(Date.now() - started < 6000, "A stalled error body must not hang the CLI");
+  assert.equal(cancelled, true);
+});
+
+test("continuously fulfilled empty error reads cannot bypass the monotonic deadline", async (context) => {
+  await fresh(); await login();
+  const now = performance.now.bind(performance);
+  let expired = false;
+  context.mock.method(performance, "now", () => now() + (expired ? 2000 : 0));
+  for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+    expired = false;
+    let reads = 0; let cancelled = false;
+    globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++reads <= 10) {
+          if (reads === 8) expired = true;
+          controller.enqueue(new Uint8Array(0));
+        } else {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ error: { code: "model_not_found" } })));
+          controller.close();
+        }
+      },
+      cancel() { cancelled = true; },
+    }), { status: 400, headers: { "Content-Type": "application/json" } });
+    await assert.rejects(invoke, /No recognized safe backend reason/);
+    assert.ok(reads < 11, "The reader must stop before consuming the late recognized error");
+    assert.equal(cancelled, true);
+  }
+});
+
+test("aborting a backend error read preserves cancellation rather than classifying a failure", async () => {
+  await fresh(); await login();
+  const controller = new AbortController(); let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({ pull() { controller.abort(); }, cancel() { cancelled = true; } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  await assert.rejects(async () => model().doGenerate({ prompt, abortSignal: controller.signal }), { name: "AbortError" });
+  assert.equal(cancelled, true);
 });
 
 test("auth rejects .pi spellings, linked ancestors/files, hardlinks, and concurrent-process lock claims", async () => {

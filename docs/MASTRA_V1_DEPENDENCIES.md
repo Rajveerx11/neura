@@ -17,7 +17,7 @@ Pi source and parent-owned migration work are outside this slice.
 | `@mastra/core` | `1.79.0` | Real Agent execution and tool dispatch |
 | `@ai-sdk/openai` | `4.0.96` | Explicit OpenAI Responses API and local Chat Completions |
 | `@ai-sdk/anthropic` | `4.0.82` | Explicit Anthropic Messages API |
-| `typebox` | `1.3.36` | Existing Learn schemas and final callback validation |
+| `typebox` | `1.4.3` | Existing Learn schemas and final callback validation; updated in PR #134 |
 | `zod` | `4.6.7` | Mastra peer and reused Learn validation |
 
 Development pins remain `@types/node@26.6.5`, `typescript@7.0.2`,
@@ -36,6 +36,47 @@ Installation used `npm install --ignore-scripts --no-fund`. Lock inspection foun
 no `hasInstallScript` packages. This does not establish absence of WASM or other
 executable content. Runtime core still has a sizable transitive graph; no claim of
 exhaustive transitive source review is made.
+
+## TypeBox 1.4.3 dependency update (PR #134)
+
+The root pin advances from `1.3.36` to exact `1.4.3`. No other package identity
+changes. Both npm tarballs were downloaded for inspection, not executed. Their
+SHA-512 hashes matched registry metadata. The new hash also matched the lock:
+
+```text
+typebox@1.4.3
+sha512-u3nyf7ZciAv1GOijVpI0TDt9At5wmEi7lSHSlRrnjuThv1DcB7fgGBqqrz+fGZ54jAfTpOOX0JXwxSIg3pnxQA==
+```
+
+The published manifests retain identical exports and `typesVersions`, including
+`typebox` and `typebox/value`. Neither artifact declares dependencies or lifecycle
+scripts. The MIT license is byte-identical, with Haydn Paterson's 2017-2026
+copyright notice. Root and Learn installation used `npm ci --ignore-scripts`.
+
+Source review compared the published artifacts and inspected upstream tag
+[`1.4.3`, commit `ed9d84abeaec53af8da0bdc45c107e0eb5189de8`](https://github.com/sinclairzx81/typebox/tree/ed9d84abeaec53af8da0bdc45c107e0eb5189de8).
+The tag's [changelog](https://github.com/sinclairzx81/typebox/blob/ed9d84abeaec53af8da0bdc45c107e0eb5189de8/changelog/1.4.0.md)
+documents shared subschema references in 1.4.0, faster hashing in 1.4.1,
+Pick/Omit modifier retention in 1.4.2, and RFC 9557 date-time suffix support in
+1.4.3. GitHub's release endpoints returned 404 for both `1.4.3` and `v1.4.3`.
+The tag and source changelog, rather than a release object, supply release evidence.
+
+`Value.Check`, schema Check and its dispatch module are byte-identical between
+artifacts. The changed additional-properties fast-path guard belongs to compiled
+validation. Neura uses interpreted Check, not Compile, coercion or repair.
+The adapter already JSON-copies schemas before recursive closure, avoiding the
+new shared-reference mutation risk. Added runtime regressions exercise nested
+objects, arrays and union branches through real Mastra dispatch and direct/resumed
+execution. They check rejected extras, unchanged inputs and schema definitions,
+and explicitly schema-valued additional properties. Concurrent resumed calls
+also check ordered effects and cancellation of queued callbacks. Existing runtime
+and Learn tests retain callback-authority checks and cover termination as well
+as cancellation.
+No runtime schema or accepted-input policy changed.
+
+This is a targeted compatibility review, not a reproducible-build attestation or
+an exhaustive upstream audit. No real provider/subscription calls or live install
+were used. Mastra licensing and distribution remain blocked as described below.
 
 ## Source and artifact review
 

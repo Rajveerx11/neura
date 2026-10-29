@@ -1,3 +1,4 @@
+import { types as utilTypes } from "node:util";
 import { Check } from "typebox/value";
 import type { TSchema } from "typebox";
 import type { AgentConfig } from "@mastra/core/agent";
@@ -21,6 +22,8 @@ export type ToolDefinition = {
   execute: (input: any, context: { signal?: AbortSignal }) => Promise<ToolResult>;
 };
 
+export type ToolEvent = { toolName: string; phase: "requested" | "started" | "returned" | "failed" | "blocked" | "cancelled" };
+
 export type RunTurnOptions = {
   model: AgentConfig["model"];
   messages: any[];
@@ -28,6 +31,8 @@ export type RunTurnOptions = {
   tools: ToolDefinition[];
   signal?: AbortSignal;
   onText?: (text: string) => void;
+  /** Synchronous, payload-free sink. Thenables are rejected without permitting hidden effects. */
+  onToolEvent?: (event: ToolEvent) => void;
 };
 
 export const MAX_TURN_STEPS = 8;
@@ -51,10 +56,22 @@ function closedSchema(schema: any): any {
 const feedback = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 
 /** One invocation owns its queue and authority; never persist or reuse this object. */
-export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal) {
+export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal, onToolEvent?: (event: ToolEvent) => void) {
   let queue = Promise.resolve();
   let terminated = false;
   let closed = false;
+  let reportingFailed = false;
+  const report = (event: ToolEvent): boolean => {
+    try {
+      const observed: unknown = onToolEvent?.(event);
+      if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
+        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
+        throw new Error("Tool observers must be synchronous");
+      }
+      return true;
+    }
+    catch { reportingFailed = true; terminated = true; closed = true; return false; }
+  };
   const results: ToolResult[] = [];
   const tools: Record<string, ReturnType<typeof createTool>> = Object.create(null);
   for (const definition of definitions) {
@@ -77,26 +94,37 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
       inputSchema,
       toModelOutput: (output: unknown) => {
         const result = (output as ToolResult).content ? output as ToolResult : feedback("Invalid tool input; action rejected.");
-        if (result !== output) results.push(result);
+        if (result !== output) { results.push(result); report({ toolName: definition.name, phase: "blocked" }); }
         return { type: "content", value: result.content.map((part) => part.type === "image"
           ? { type: "media", mediaType: part.mimeType, data: part.data }
           : part) };
       },
       execute: (input) => {
         const pending = queue.then(async () => {
-          signal?.throwIfAborted();
-          if (closed || terminated) return feedback("Turn closed; no further actions allowed.");
+          const emit = (phase: ToolEvent["phase"]) => report({ toolName: definition.name, phase });
+          if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
+          if (closed || terminated) { emit("blocked"); return feedback("Turn closed; no further actions allowed."); }
           // Resume/direct execution can bypass framework validation; enforce it at the effect boundary.
-          if (!validate(input)) return feedback("Invalid tool input; action rejected.");
+          if (!validate(input)) { emit("blocked"); return feedback("Invalid tool input; action rejected."); }
+          if (!emit("started")) {
+            const blocked = feedback("Tool not run: status output was unavailable.");
+            results.push(blocked);
+            return blocked;
+          }
           let result: ToolResult;
+          let failed = false;
           try {
+            signal?.throwIfAborted();
             result = await definition.execute(input, { signal });
           } catch {
-            signal?.throwIfAborted();
+            if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
+            failed = true;
             result = feedback("Tool callback rejected or failed. Check current state before retrying.");
           }
+          // Record effect/termination state before any fallible post-action notification.
           if (result.terminate) terminated = true;
           results.push(result);
+          emit(failed ? "failed" : "returned");
           return result;
         });
         queue = pending.then(() => undefined, () => undefined);
@@ -104,12 +132,13 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
       },
     });
   }
-  return { tools, results, isTerminated: () => terminated, close: () => { closed = true; } };
+  return { tools, results, report, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
 }
 
-export async function runTurn({ model, messages, instructions, tools, signal, onText }: RunTurnOptions): Promise<{ text: string; messages: any[] }> {
+export async function runTurn({ model, messages, instructions, tools, signal, onText, onToolEvent }: RunTurnOptions): Promise<{ text: string; messages: any[] }> {
   signal?.throwIfAborted();
-  const turn = createTurnTools(tools, signal);
+  const names = new Set(tools.map(tool => tool.name));
+  const turn = createTurnTools(tools, signal, onToolEvent);
   const agent = new Agent({ id: "neura", name: "Neura", instructions, model, tools: turn.tools });
   agent.__setLogger(noopLogger);
   let streamed = "";
@@ -124,10 +153,13 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
         if (chunk.type === "text-delta") {
           streamed += chunk.payload.text;
           onText?.(chunk.payload.text);
+        } else if (chunk.type === "tool-call" || chunk.type === "tool-error") {
+          turn.report({ toolName: names.has(chunk.payload.toolName) ? chunk.payload.toolName : "unknown", phase: chunk.type === "tool-call" ? "requested" : "failed" });
         }
       },
     });
     signal?.throwIfAborted();
+    if (turn.reportingFailed()) throw new Error("Tool status output failed. Some actions may already have completed; inspect current state before retrying.");
     const toolText = turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
     const text = result.text || toolText || "Turn ended without assistant text.";
     if (!streamed) onText?.(text);

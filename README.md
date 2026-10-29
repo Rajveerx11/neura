@@ -106,7 +106,7 @@ For ChatGPT subscription testing, first verify the home DACL as described in
 [authentication](docs/CODEX_AUTH.md). Then start an interactive terminal:
 
 ```powershell
-neura --cwd $workspace --provider openai-codex --model gpt-5.5 --no-history
+neura --cwd $workspace --provider openai-codex --no-history
 ```
 
 Enter `/login` only when you intend to authorize Neura, and open the displayed
@@ -116,10 +116,30 @@ available to your account. Do not share the authorization URL, callbacks, tokens
 or credential files in an issue. `--no-history` disables conversation persistence.
 It does not prevent credential or Learn-artifact writes.
 
+With an existing login, type `/model` to open the numbered subscription picker.
+Choose a number or listed model ID. Enter cancels without changing the selection.
+Without `--model` or `NEURA_MODEL`, the first task fetches the subscription catalog
+and selects its first picker-visible model by provider priority. There is no
+hard-coded subscription model default. Catalog discovery is metadata-only, not
+an inference request, and does not query API-billed providers. Explicit models
+are respected. `/model PROVIDER MODEL [URL]` remains available for manual selection.
+Selections apply to the running conversation, not a persistent model preference.
+
 OpenAI API and Anthropic API are separate, explicitly selected providers using
 `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Those calls can incur API charges. A
 ChatGPT subscription does not pay for them. Subscription failure never falls back
 to API billing. Don't put keys in prompts or command arguments.
+
+### If sign-in succeeds but the first request fails
+
+An HTTP 400 after `/login` is a model-request rejection, not an installation
+check failure. Neura now reports fixed, token-safe hints for recognized model,
+request-field and quota errors. Unknown or oversized responses stay private.
+Do not paste authorization URLs, callbacks, tokens or raw provider responses.
+Do not reinstall, repeat login or switch to API billing as a speculative fix.
+Retry one synthetic request after updating and report only the sanitized error.
+The owner reported this failure on 2026-10-26. Real subscription compatibility
+and model entitlement remain unverified. Track [#118](https://github.com/Rajveerx11/neura/issues/118).
 
 ### Work and Learn checks after provider access is confirmed
 
@@ -128,6 +148,23 @@ Then ask: `Create result.txt containing only beta.` Inspect the actual file.
 For a command test, ask to run `printf sandbox-ok` and inspect the proposed
 command before typing `yes`. First reject a command to check denial. A missing
 WSL/bubblewrap runtime must refuse execution, not fall back to the host.
+
+Model tool calls are visible in interactive and one-shot output:
+
+```text
+[tool] read: requested
+[tool] read: started
+[tool] read: returned
+```
+
+Failures, blocked callbacks and cancellation get their own status. `returned`
+means the callback returned, not that its result proves success or full PASS.
+The trace omits arguments, commands, file contents and raw results. Exact command
+approval stays separate. A greeting may use no tools; use the `sample.txt` read
+above to exercise visibility. Tracing does not grant execution permission.
+If reporting fails, completed results stay recorded in the running turn and
+later tools are stopped. The turn fails with a fixed notice. This does not
+guarantee durable history after failure. Inspect state before retrying.
 
 Switch to Learn and try a lesson using only synthetic material:
 

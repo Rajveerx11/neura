@@ -55,10 +55,38 @@ image limits and disabled font discovery remain required. The combined PDF.js
 and canvas graph requires fresh document tests, audits/signatures and CI.
 Rollback restores both nested dependency files and their release hashes together.
 
+The 1.0.13 canvas refresh was reviewed on 2026-10-26 at published upstream
+commit `00a115d9903647f116daf86eccd2c6ba36128371`, using the official
+[`v1.0.11...v1.0.13` comparison](https://github.com/Brooooooklyn/canvas/compare/v1.0.11...v1.0.13)
+and published wrapper packages. The review covers the substantial 1.0.12 changes to
+WebIDL argument handling, color, text, image decoding/encoding and SVG support,
+plus 1.0.13's native-method wrapping fix on module re-evaluation. So native changes
+matter here. `js-binding.js` is unchanged. `index.js` and `load-image.js`
+changed. Byte-only image inputs, dimension limits and suppressed font discovery
+remain required. The wrapper and installed Windows x64 package have no consumer
+install hooks. All eleven optional native packages remain exact-pinned at 1.0.13.
+
+The wrapper declares MIT, but its published `LICENSE` now also contains Chromium's
+BSD-style notice for the embedded broken-image icon. Preserve that notice for
+redistribution. The Skia submodule advances from `95ee33d7ec7791ab9c071675710a14fe6408ae4f`
+to `b94213a11b3a2edadfae89f0c57a7f4ab72772c9`. Text/font and native build changes
+are part of this upgrade. The installed Windows x64 artifact contains the native
+binding, `icudtl.dat` and `sbom.cdx.json`. Retain the complete locked package
+with its data and notices. This scoped source/license review does not clear every
+bundled native component or establish reproducible builds. Source-linked use
+remains development-only. Licensing and distribution approval remain blocked.
+
+On Windows x64 with Node 24.19.0, scripts-disabled locked installs, all 43 synthetic
+document assertions (real PDF rasterization, offline OCR and PPTX), Learn browser
+checks and the full Mastra v1 verification passed. The nested graph reported zero
+known vulnerabilities, 21 verified registry signatures and three attestations.
+Other native platforms were not exercised locally. Rollback restores the nested
+manifest and lockfile together before a scripts-disabled reinstall.
+
 | Package | Version | License | Purpose and reviewed surface |
 |---|---|---|---|
 | `pdfjs-dist` | `6.4.299` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `isEvalSupported:false`, `useWorkerFetch:false`, and disabled system fonts. Never invoke document JavaScript, actions, attachments, or links. |
-| `@napi-rs/canvas` | `1.0.11` | MIT | Skia-backed raster canvas. Reviewed `index.js`, `js-binding.js`, `load-image.js`, and platform package selection. Pass PNG/JPEG bytes, never paths or URLs. Filter image dimensions before decoding; disable automatic system/user font discovery in parser processes. Native bindings are still trusted executable dependencies. |
+| `@napi-rs/canvas` | `1.0.13` | MIT plus Chromium icon notice | Skia-backed raster canvas. Reviewed `index.js`, `js-binding.js`, `load-image.js`, and platform package selection. Pass PNG/JPEG bytes, never paths or URLs. Filter image dimensions before decoding; disable automatic system/user font discovery in parser processes. Native bindings are still trusted executable dependencies. |
 | `yauzl` | `3.4.0` | MIT | ZIP directory and streaming inflate. Reviewed `index.js` `fromBuffer`, lazy entry dispatch, filename validation, local entry reads, and size validation. Add aggregate/per-entry limits, CRC checks, duplicate/link/encryption rejection. Never extract ZIP entries to disk. |
 | `saxes` | `6.0.0` | ISC | Namespace-aware XML. Reviewed `saxes.js` entry imports, SAX events, namespace handling, and entity errors. Its runtime dependency is `xmlchars`; no external entity resolver or network transport. Explicitly reject DTD/entity declarations before parsing; cap depth, nodes, XML bytes, and text. |
 | `tesseract.js` | `7.0.0` | Apache-2.0 | Offline OCR. Reviewed `src/createWorker.js`, Node worker spawning, worker language loading, image input, and `worker-script/node/getCore.js`. Node loads the locked local `tesseract.js-core` WASM. Always supply an absolute installed language directory, `cacheMethod:'none'`, and image bytes. Default CDN and filesystem cache branches are not used. |
