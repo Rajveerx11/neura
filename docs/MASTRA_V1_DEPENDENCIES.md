@@ -21,7 +21,7 @@ Pi source and parent-owned migration work are outside this slice.
 | `zod` | `4.6.7` | Mastra peer and reused Learn validation |
 
 Development pins remain `@types/node@26.6.5`, `typescript@7.0.2`,
-`playwright-core@1.64.0`, and `axe-core@4.14.0`. Browser pins are retained for
+`playwright-core@1.64.1`, and `axe-core@4.14.0`. Browser pins are retained for
 parent-owned Learn verification. Existing test scripts remain for parent migration;
 this slice adds `test:v1:runtime` and `typecheck:v1` only.
 
@@ -81,6 +81,35 @@ license validation. No database, observability service, workspace, discovery,
 native tools, or Mastra Code TUI is configured. A clean-environment child test
 injects a synthetic license setting and rejects fetch, HTTP, TCP/TLS, and subprocess
 calls during import and an actual deterministic Agent turn.
+
+### PR #133 Playwright Core patch review
+
+Only the exact development pin and its root lock identity advance from
+`1.64.0` to `1.64.1`. The Learn dependency graph is unchanged. The official
+[release](https://github.com/microsoft/playwright/releases/tag/v1.64.1) and
+[source comparison](https://github.com/microsoft/playwright/compare/v1.64.0...v1.64.1)
+fix Electron first-window detection and Chromium 155 intercepted CORS redirects.
+The published core bundle and Electron loader contain those fixes. The other
+published changes are the package version and trace-viewer version string/asset
+hash. Browser revisions and API declarations are unchanged, as are LICENSE and
+NOTICE.
+The package remains Apache-2.0, Node `>=20`, with no dependencies or lifecycle
+scripts. No browser is bundled or downloaded by this update.
+
+The downloaded `1.64.1` tarball matches registry metadata and the root lock:
+`sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==`.
+Registry `gitHead` is `cfe490d941f992655948eee8fd4fd94e1c4234bf`.
+Fresh scripts-disabled root/Learn installs reported zero known vulnerabilities.
+Root signature verification passed for 156 packages, with 42 attestations.
+The existing Learn browser suite passed against installed Microsoft Edge at
+390px and 1280px. It checked keyboard focus and axe accessibility, exercised
+grading/error feedback with hints/reveal, and verified diagrams and terminal
+handoff. Its negative checks rejected
+injected script/markup and observed no network requests. Strict types and the
+14-suite active harness passed. These checks do not certify distribution,
+production readiness, Electron, or Chromium 155 CORS behavior. Parent review
+and required CI remain pending. Rollback restores both root pins/lock identity
+and this review record. No runtime or live-install change is involved.
 
 ## Public contracts
 
