@@ -66,6 +66,79 @@ test("direct/resumed tool paths enforce validation, closure, and current callbac
   assert.equal(effects, 1);
 });
 
+test("nested schema closure rejects extras without coercion on Agent and resumed paths", async () => {
+  const parameters = Type.Object({
+    entries: Type.Array(Type.Union([
+      Type.Object({ count: Type.Integer({ minimum: 1, maximum: 3 }) }),
+      Type.Object({ label: Type.String({ minLength: 1 }) }),
+    ]), { minItems: 1 }),
+    options: Type.Object({ note: Type.Optional(Type.String()) }),
+    labels: Type.Object({}, { additionalProperties: Type.String() }),
+  });
+  const originalSchema = JSON.stringify(parameters);
+  const valid = { entries: [{ count: 2 }, { label: "ok" }], options: {}, labels: { custom: "allowed" } };
+  const invalid = [
+    { ...valid, extra: true },
+    { ...valid, entries: [{ count: 2, extra: true }] },
+    { ...valid, entries: [{ label: "ok", extra: true }] },
+    { ...valid, entries: [{ count: "2" }] },
+    { ...valid, entries: [] },
+    { ...valid, options: { extra: true } },
+    { ...valid, labels: { custom: 2 } },
+  ];
+  for (const input of [valid, ...invalid]) {
+    const originalInput = JSON.stringify(input);
+    const accepted: unknown[] = [];
+    const definition: ToolDefinition = {
+      name: "nested", description: "Synthetic nested schema", parameters,
+      execute: async (value) => { accepted.push(value); return { content: [text("ok")] }; },
+    };
+    const { model, requests } = fixture([[call("nested", input)], done]);
+    await runTurn({ model, messages: [user], instructions: "Test", tools: [definition] });
+    const turn = createTurnTools([definition]);
+    try { await turn.tools.nested.execute!(input, { resumeData: {} } as any); }
+    finally { turn.close(); }
+    assert.deepEqual(accepted, input === valid ? [valid, valid] : []);
+    assert.equal(JSON.stringify(input), originalInput);
+    const sent = requests[0].tools[0].inputSchema;
+    assert.equal(sent.additionalProperties, false);
+    assert.equal(sent.properties.options.additionalProperties, false);
+    assert.ok(sent.properties.entries.items.anyOf.every((branch: { additionalProperties: boolean }) => branch.additionalProperties === false));
+    assert.deepEqual(sent.properties.labels.additionalProperties, { type: "string" });
+  }
+  assert.equal(JSON.stringify(parameters), originalSchema, "closing the tool schema must not mutate its definition");
+});
+
+test("concurrent resumed calls serialize effects and cancellation denies queued work", async () => {
+  for (const cancel of [false, true]) {
+    const controller = new AbortController();
+    const events: string[] = [];
+    let started!: () => void;
+    let release!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const turn = createTurnTools([action(async (input, { signal }) => {
+      events.push(`start:${input.count}`);
+      if (input.count === 1) { started(); await gate; }
+      signal?.throwIfAborted();
+      events.push(`effect:${input.count}`);
+      return { content: [text("ok")] };
+    })], controller.signal);
+    const first = turn.tools.action.execute!({ count: 1 }, { resumeData: {} } as any);
+    const second = turn.tools.action.execute!({ count: 2 }, { resumeData: {} } as any);
+    const results = Promise.allSettled([first, second]);
+    try {
+      await firstStarted;
+      assert.deepEqual(events, ["start:1"]);
+      if (cancel) controller.abort();
+      release();
+      const settled = await results;
+      assert.deepEqual(settled.map((result) => result.status), cancel ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"]);
+      assert.deepEqual(events, cancel ? ["start:1"] : ["start:1", "effect:1", "start:2", "effect:2"]);
+    } finally { release(); turn.close(); }
+  }
+});
+
 test("real Agent denied callback prevents mutation", async () => {
   let effects = 0;
   const { model } = fixture([[call("action", { count: 1 })], done]);
