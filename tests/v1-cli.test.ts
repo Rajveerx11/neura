@@ -81,6 +81,48 @@ test('model cancellation, catalog denial and explicit rejected models never trig
   assert.deepEqual(failedCatalog.requests, [{ type: 'catalog' }]);
 });
 
+test('invalid startup model/provider opens no readline or interrupt handler; valid commands clean up', async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-invalid-model-')));
+  const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);
+  const source = String.raw`
+    import assert from 'node:assert/strict';
+    import { createRequire, syncBuiltinESMExports } from 'node:module';
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    let readlineCalls = 0;
+    createRequire(import.meta.url)('node:readline/promises').createInterface = () => {
+      readlineCalls++; throw new Error('Readline must not open for invalid configuration');
+    };
+    syncBuiltinESMExports();
+    const { main } = await import('./src/cli.ts');
+    const listeners = process.listenerCount('SIGINT');
+    const base = ['--cwd', process.argv[1], '--no-history'];
+    for (const [args, expected] of [
+      [['--model', ''], /Model name is required/],
+      [['--model', '   '], /Model name is required/],
+      [['--provider', 'invalid'], /Unsupported provider/],
+    ]) {
+      await assert.rejects(main([...base, ...args]), expected);
+      assert.equal(process.listenerCount('SIGINT'), listeners);
+      assert.equal(readlineCalls, 0);
+    }
+    process.env.NEURA_MODEL = ' ';
+    await assert.rejects(main(base), /Model name is required/);
+    assert.equal(process.listenerCount('SIGINT'), listeners);
+    assert.equal(readlineCalls, 0);
+    await main([...base, '--model', 'fixture-explicit', '--prompt', '/help']);
+    assert.equal(process.listenerCount('SIGINT'), listeners);
+    assert.equal(readlineCalls, 0);
+    console.log('startup validation and cleanup passed');
+  `;
+  try {
+    const reply = await exec(process.execPath, ['--input-type=module', '-e', source, workspace], { cwd: root, env: syntheticEnvironment(path.join(scratch, 'home')), timeout: 20000 });
+    assert.match(reply.stdout, /startup validation and cleanup passed/);
+    assert.equal(reply.stderr, '');
+    assert.deepEqual(await fs.readdir(scratch), ['workspace']);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
 test('CLI uses real Mastra/local transport for a Learn board, exposes no Work tools and stops at the lesson', { skip: process.platform !== 'win32' }, async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-learn-')));
   const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);

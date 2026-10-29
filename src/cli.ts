@@ -62,6 +62,13 @@ Real account login remains a manual personal-use gate; distribution is not clear
   const prompt = values.prompt ?? (positionals.length ? positionals.join(' ') : undefined);
   if (prompt === undefined && !stdin.isTTY) throw new Error('Noninteractive input requires an explicit --prompt.');
   if (values.prompt !== undefined && positionals.length) throw new Error('Use either --prompt or a positional task, not both.');
+  const providerKind = (values.provider ?? process.env.NEURA_PROVIDER ?? 'openai-codex') as ProviderConfig['provider'];
+  if (!['openai-codex', 'local', 'openai', 'anthropic'].includes(providerKind)) throw new Error('Unsupported provider.');
+  const configuredModel = values.model ?? process.env.NEURA_MODEL;
+  if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
+  let modelExplicit = configuredModel !== undefined;
+  let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? (providerKind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined) };
+  const modelLabel = (value: string) => redactSensitiveText(value || '(not selected)', 200);
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
   const rl = interactive ? createInterface({ input: stdin, output: stdout }) : undefined;
   let abort: AbortController | undefined;
@@ -81,13 +88,6 @@ Real account login remains a manual personal-use gate; distribution is not clear
       session = next; memory = next.messages;
     } catch (error) { await release(); throw error; }
   }
-  const providerKind = (values.provider ?? process.env.NEURA_PROVIDER ?? 'openai-codex') as ProviderConfig['provider'];
-  if (!['openai-codex', 'local', 'openai', 'anthropic'].includes(providerKind)) throw new Error('Unsupported provider.');
-  const configuredModel = values.model ?? process.env.NEURA_MODEL;
-  if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
-  let modelExplicit = configuredModel !== undefined;
-  let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? (providerKind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined) };
-  const modelLabel = (value: string) => redactSensitiveText(value || '(not selected)', 200);
   const approve = async (description: string) => {
     if (!rl) return false;
     const response = await rl.question(terminalText(description) + '\nType yes to approve (default: no): ', { signal: abort?.signal });
