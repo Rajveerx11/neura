@@ -23,3 +23,23 @@ export function fixture(steps: any[][]) {
   };
   return { model, requests };
 }
+
+/** Wire fixture shared by direct-provider and interactive-CLI tests. No network calls. */
+export function codexSse(response: { output: any[]; [key: string]: any }, fragmented = false): Response {
+  const first = response.output[0];
+  const events: any[] = [{ type: "response.created", response: { ...response, output: [] } }];
+  if (first) {
+    const added = first.type === "function_call" ? { ...first, arguments: "" } : { ...first, content: [] };
+    const delta = first.type === "function_call"
+      ? { type: "response.function_call_arguments.delta", item_id: first.id, output_index: 0, delta: first.arguments }
+      : { type: "response.output_text.delta", item_id: first.id, output_index: 0, content_index: 0, delta: first.content[0]?.text ?? "" };
+    events.push({ type: "response.output_item.added", output_index: 0, item: added }, delta, { type: "response.output_item.done", output_index: 0, item: first });
+  }
+  events.push({ type: "response.completed", response });
+  const bytes = new TextEncoder().encode(events.map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join(""));
+  return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+    if (fragmented) for (let i = 0; i < bytes.length; i += 7) controller.enqueue(bytes.subarray(i, i + 7));
+    else controller.enqueue(bytes);
+    controller.close();
+  } }), { headers: { "Content-Type": "text/event-stream" } });
+}
