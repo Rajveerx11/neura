@@ -65,7 +65,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
     try {
       const observed: unknown = onToolEvent?.(event);
       if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
-        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, undefined, () => undefined);
+        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
         throw new Error("Tool observers must be synchronous");
       }
       return true;

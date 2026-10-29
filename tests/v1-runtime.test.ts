@@ -159,6 +159,21 @@ test("unsupported observer thenables are not assimilated", async () => {
   assert.equal(assimilations, 0);
 });
 
+test("fulfilled observer Promises do not assimilate values that become thenable", async () => {
+  let assimilations = 0; let effects = 0;
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, () => {
+    const value: Record<string, unknown> = {};
+    const observed = Promise.resolve(value);
+    value.then = (resolve: (value: unknown) => void) => { assimilations++; resolve(assimilations < 4 ? value : undefined); };
+    return observed;
+  });
+  await turn.tools.action.execute!({ count: 1 }, {} as Parameters<NonNullable<typeof turn.tools.action.execute>>[1]);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(turn.reportingFailed(), true);
+  assert.equal(effects, 0);
+  assert.equal(assimilations, 0);
+});
+
 test("cancellation triggered by a started observer prevents the effect", async () => {
   const controller = new AbortController(); let effects = 0;
   const events: string[] = [];
