@@ -95,18 +95,47 @@ and workspace-contained overrides are rejected.
 ## Development graph
 
 `package.json` pins Pi `1.3.0`, Pi API/TUI types `1.3.0`, Playwright Core
-`1.64.0`, axe-core `4.14.0`, Typebox `1.3.36`, TypeScript `7.0.2`, and Node types
+`1.64.1`, axe-core `4.14.0`, Typebox `1.3.36`, TypeScript `7.0.2`, and Node types
 `26.6.5`; it also pins `@spences10/pi-mcp` `0.0.58` so the owned lifecycle
 wrapper runs against the reviewed package in tests. Installation uses
 `npm ci --ignore-scripts` in CI. Playwright Core has
 no install hook or bundled browser; verification launches the Microsoft Edge
-already present on the Windows runner. Version `1.64.0` retains Node 20+
+already present on the Windows runner. Version `1.64.1` retains Node 20+
 support; rollback restores the prior manifest and lockfile together. axe-core
 has no consumer install hook and runs only against generated local Plan and
 Learn HTML. Browser contexts receive no
 credentials or network capability. The exact-pinned official upload-artifact
 action stores generated Plan screenshots and structured results for seven days.
 Learn browser assertions also run in CI; the current artifact step is Plan-specific.
+
+### PR #133 Playwright Core patch review
+
+Only the exact development pin and its root lock identity advance from
+`1.64.0` to `1.64.1`. The Learn dependency graph is unchanged. The official
+[release](https://github.com/microsoft/playwright/releases/tag/v1.64.1) and
+[source comparison](https://github.com/microsoft/playwright/compare/v1.64.0...v1.64.1)
+fix Electron first-window detection and Chromium 155 intercepted CORS redirects.
+The published core bundle and Electron loader contain those fixes. The other
+published changes are the package version and trace-viewer version string/asset
+hash. Browser revisions and API declarations are unchanged, as are LICENSE and
+NOTICE.
+The package remains Apache-2.0, Node `>=20`, with no dependencies or lifecycle
+scripts. No browser is bundled or downloaded by this update.
+
+The downloaded `1.64.1` tarball matches registry metadata and the root lock:
+`sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==`.
+Registry `gitHead` is `cfe490d941f992655948eee8fd4fd94e1c4234bf`.
+Fresh scripts-disabled root/Learn installs reported zero known vulnerabilities.
+Root signature verification passed for 156 packages, with 42 attestations.
+The existing Learn browser suite passed against installed Microsoft Edge at
+390px and 1280px. It checked keyboard focus and axe accessibility, exercised
+grading/error feedback with hints/reveal, and verified diagrams and terminal
+handoff. Its negative checks rejected
+injected script/markup and observed no network requests. Strict types and the
+14-suite active harness passed. These checks do not certify distribution,
+production readiness, Electron, or Chromium 155 CORS behavior. Parent review
+and required CI remain pending. Rollback restores both root pins/lock identity
+and this review record. No runtime or live-install change is involved.
 
 Typebox `1.3.36` was reviewed on 2026-10-15 against the published `1.3.34`
 package. Only two executable modules changed: object cleaning now checks that a
