@@ -126,10 +126,10 @@ async function readJsonResponse(response: Response, maxBytes: number, timeoutMs:
 }
 
 /** Expose fixed hints and allowlisted public field names, never raw error data. */
-async function codexDenialHint(response: Response, signal?: AbortSignal, deadline?: number): Promise<string> {
+async function codexDenialHint(response: Response, signal?: AbortSignal, deadline?: number, requestSignal = signal): Promise<string> {
   const unknown = "No recognized safe backend reason; raw details withheld";
   try {
-    const payload = await readJsonResponse(response, 8192, 1000, signal, deadline) as { error?: { code?: unknown; type?: unknown; param?: unknown; message?: unknown }; detail?: unknown } | null;
+    const payload = await readJsonResponse(response, 8192, 1000, requestSignal, deadline) as { error?: { code?: unknown; type?: unknown; param?: unknown; message?: unknown }; detail?: unknown } | null;
     const error = payload?.error;
     const rawCode = error?.code ?? error?.type;
     const code = typeof rawCode === "string" ? rawCode : undefined;
@@ -200,14 +200,14 @@ export async function listCodexModels({ signal, baseURL }: { signal?: AbortSigna
   url.searchParams.set("client_version", version);
   let response: Response;
   try { response = await fetch(url.href, { method: "GET", headers: codexHeaders(access, accountId, "application/json"), redirect: "error", signal: requestSignal }); }
-  catch { requestSignal.throwIfAborted(); throw new Error("Subscription model discovery failed; no API billing fallback was used"); }
+  catch { signal?.throwIfAborted(); throw new Error("Subscription model discovery failed; no API billing fallback was used"); }
   if (!response.ok) {
-    const hint = await codexDenialHint(response, requestSignal, deadline);
+    const hint = await codexDenialHint(response, signal, deadline, requestSignal);
     throw new Error(`Subscription model discovery denied (${response.status}); ${hint}; no API billing fallback was used`);
   }
   let payload: unknown;
   try { payload = await readJsonResponse(response, MAX_RESPONSE_BYTES, 5000, requestSignal, deadline); }
-  catch { requestSignal.throwIfAborted(); throw new Error("Subscription model catalog was invalid, oversized or stalled; raw details withheld"); }
+  catch { signal?.throwIfAborted(); throw new Error("Subscription model catalog was invalid, oversized or stalled; raw details withheld"); }
   const models = (payload as { models?: unknown } | null)?.models;
   if (!Array.isArray(models) || models.length > 256) throw new Error("Subscription model catalog has an invalid shape; raw details withheld");
   const choices = new Map<string, number>();

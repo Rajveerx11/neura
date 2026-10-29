@@ -199,6 +199,47 @@ test("catalog cancellation stops stalled reads and never constructs a model requ
   await assert.rejects(listCodexModels({ signal: controller.signal }), { name: "AbortError" });
 });
 
+for (const phase of ["headers", "catalog body", "denial body"] as const) for (const cause of ["timeout", "caller"]) {
+  test(`catalog ${cause} during ${phase} preserves safe diagnostics and cancellation`, async (context) => {
+    await fresh(); await login();
+    const caller = new AbortController(); const timeout = new AbortController();
+    const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const budgets: number[] = [];
+    context.mock.method(AbortSignal, "timeout", (ms: number) => {
+      if (ms !== 5000) return nativeTimeout(ms);
+      budgets.push(ms);
+      return timeout.signal;
+    });
+    let calls = 0; let cancelled = false; let requestSignal: AbortSignal | undefined;
+    const abort = () => {
+      if (cause === "caller") caller.abort();
+      else timeout.abort(new DOMException("Synthetic catalog deadline", "TimeoutError"));
+    };
+    globalThis.fetch = async (url, init) => {
+      calls++;
+      assert.equal(new URL(String(url)).pathname, "/backend-api/codex/models");
+      requestSignal = init?.signal ?? undefined;
+      assert.ok(requestSignal);
+      assert.notEqual(requestSignal, caller.signal);
+      if (phase === "headers") { abort(); requestSignal.throwIfAborted(); throw new Error("Unreachable"); }
+      return new Response(new ReadableStream({ pull() { abort(); }, cancel() { cancelled = true; } }, { highWaterMark: 0 }), {
+        status: phase === "denial body" ? 403 : 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const message = {
+      headers: "Subscription model discovery failed; no API billing fallback was used",
+      "catalog body": "Subscription model catalog was invalid, oversized or stalled; raw details withheld",
+      "denial body": "Subscription model discovery denied (403); No recognized safe backend reason; raw details withheld; no API billing fallback was used",
+    }[phase];
+    await assert.rejects(listCodexModels({ signal: caller.signal }), cause === "caller" ? { name: "AbortError" } : { name: "Error", message });
+    assert.deepEqual(budgets, [5000]);
+    assert.equal(requestSignal?.aborted, true);
+    assert.equal(cancelled, phase !== "headers");
+    assert.equal(calls, 1);
+  });
+}
+
 test("catalog deadline includes header latency and continuously fulfilled reads", async (context) => {
   await fresh(); await login();
   const now = performance.now.bind(performance);
