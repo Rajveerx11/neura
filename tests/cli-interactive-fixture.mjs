@@ -60,7 +60,10 @@ globalThis.fetch = async (url, init) => {
     : [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hello from selected model', annotations: [] }] }];
   const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
   if (config.jsonResponse) return new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
-  return codexSse(snapshot);
+  const response = codexSse(snapshot);
+  if (config.sseContentType === null) response.headers.delete('Content-Type');
+  else if (config.sseContentType !== undefined) response.headers.set('Content-Type', config.sseContentType);
+  return response;
 };
 const { main } = await import('../src/cli.ts');
 process.chdir(config.launchFromHome ? process.env.USERPROFILE : config.workspace);

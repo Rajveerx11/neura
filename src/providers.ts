@@ -43,6 +43,8 @@ function endpoint(value: string, local: boolean): string {
 
 const CODEX_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+// Match the official Codex transport's default stream-idle budget, without its retries.
+const STREAM_IDLE_TIMEOUT_MS = 300_000;
 const CODEX_MODELS_ENDPOINT = "https://chatgpt.com/backend-api/codex/models";
 
 function codexHeaders(access: string, accountId: string, accept: string): Headers {
@@ -59,25 +61,25 @@ function completedCodexResponse(value: unknown): CodexResponse {
   return response;
 }
 
-/** Replay an already completed JSON response through the SDK's existing SSE decoder. */
-function codexJsonStream(response: CodexResponse): Response {
+/** Replay an already completed response through the SDK's existing SSE decoder. */
+function codexCompletedStream(response: CodexResponse): Response {
   const events: Record<string, unknown>[] = [{ type: "response.created", response: { ...response, output: [] } }];
   for (const [output_index, item] of response.output.entries()) {
-    if (!["message", "function_call", "reasoning"].includes(String(item.type))) throw new Error("Unsupported Codex JSON output; raw details withheld");
+    if (typeof item.type !== "string" || !["message", "function_call", "reasoning"].includes(item.type)) throw new Error("Unsupported completed Codex output; raw details withheld");
     events.push({ type: "response.output_item.added", output_index, item: { ...item, content: [], arguments: "", summary: [] } });
     if (item.type === "message") {
-      if (!Array.isArray(item.content)) throw new Error("Invalid Codex JSON message; raw details withheld");
+      if (!Array.isArray(item.content)) throw new Error("Invalid completed Codex message; raw details withheld");
       for (const [content_index, part] of item.content.entries()) {
-        if (part?.type !== "output_text" || typeof part.text !== "string") throw new Error("Unsupported Codex JSON content; raw details withheld");
+        if (part?.type !== "output_text" || typeof part.text !== "string") throw new Error("Unsupported completed Codex content; raw details withheld");
         events.push({ type: "response.output_text.delta", item_id: item.id, output_index, content_index, delta: part.text });
         if (Array.isArray(part.annotations)) for (const annotation of part.annotations) events.push({ type: "response.output_text.annotation.added", item_id: item.id, output_index, content_index, annotation });
       }
     } else if (item.type === "function_call") {
-      if (typeof item.arguments !== "string") throw new Error("Invalid Codex JSON tool call; raw details withheld");
+      if (typeof item.arguments !== "string") throw new Error("Invalid completed Codex tool call; raw details withheld");
       events.push({ type: "response.function_call_arguments.delta", item_id: item.id, output_index, delta: item.arguments });
     } else if (Array.isArray(item.summary)) {
       for (const [summary_index, part] of item.summary.entries()) {
-        if (part?.type !== "summary_text" || typeof part.text !== "string") throw new Error("Invalid Codex JSON reasoning; raw details withheld");
+        if (part?.type !== "summary_text" || typeof part.text !== "string") throw new Error("Invalid completed Codex reasoning; raw details withheld");
         events.push({ type: "response.reasoning_summary_part.added", item_id: item.id, output_index, summary_index, part: { type: "summary_text", text: "" } }, { type: "response.reasoning_summary_text.delta", item_id: item.id, output_index, summary_index, delta: part.text }, { type: "response.reasoning_summary_part.done", item_id: item.id, output_index, summary_index, part });
       }
     }
@@ -96,14 +98,19 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
   const decoder = new TextDecoder();
   let buffer = "";
   let size = 0;
+  let expired = false;
+  let idleDeadline = performance.now() + STREAM_IDLE_TIMEOUT_MS;
+  const expire = () => { expired = true; abort(); };
+  let idleTimer = setTimeout(expire, STREAM_IDLE_TIMEOUT_MS);
   try {
     while (true) {
       signal?.throwIfAborted();
       const { value, done } = await reader.read();
       signal?.throwIfAborted();
-      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      if (expired || performance.now() >= idleDeadline) throw new Error("Codex response exceeded its stream idle deadline");
       size += value?.length ?? 0;
       if (size > MAX_RESPONSE_BYTES) throw new Error("Codex response exceeds size limit");
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let boundary: RegExpExecArray | null;
       while ((boundary = /\r?\n\r?\n/.exec(buffer))) {
         const event = buffer.slice(0, boundary.index);
@@ -114,6 +121,9 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
         try { payload = JSON.parse(data); }
         catch { throw new Error("Invalid Codex stream event"); }
         if (!payload || typeof payload !== "object") throw new Error("Invalid Codex stream event");
+        idleDeadline = performance.now() + STREAM_IDLE_TIMEOUT_MS;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expire, STREAM_IDLE_TIMEOUT_MS);
         if (["error", "response.error", "response.failed", "response.incomplete"].includes(payload.type ?? "")) throw new Error("Codex response did not complete");
         if (payload.type === "response.completed") {
           return new Response(JSON.stringify(completedCodexResponse(payload.response)), { headers: { "Content-Type": "application/json" } });
@@ -122,6 +132,7 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
       if (done) throw new Error("Codex stream ended without a completed response");
     }
   } finally {
+    clearTimeout(idleTimer);
     signal?.removeEventListener("abort", abort);
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
@@ -225,10 +236,19 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
     try { value = await readJsonResponse(response, MAX_RESPONSE_BYTES, 30_000, signal); }
     catch { signal?.throwIfAborted(); throw new Error("Codex JSON response was invalid, oversized or stalled; raw details withheld"); }
     const completed = completedCodexResponse(value);
-    return streaming ? codexJsonStream(completed) : new Response(JSON.stringify(completed), { headers: { "Content-Type": "application/json" } });
+    return streaming ? codexCompletedStream(completed) : new Response(JSON.stringify(completed), { headers: { "Content-Type": "application/json" } });
   }
-  await response.body?.cancel();
-  throw new Error("Codex subscription returned an unsupported response format; expected SSE or completed JSON; raw details withheld");
+  // The official Codex HTTP transport parses successful response bytes as SSE without a MIME gate.
+  // Buffer mismatched/missing MIME until completion so HTML and partial streams cannot become success.
+  try {
+    const snapshot = await codexSnapshot(response, signal);
+    return streaming ? codexCompletedStream(completedCodexResponse(await snapshot.json())) : snapshot;
+  } catch {
+    signal?.throwIfAborted();
+    const publicTypes = ["text/plain", "text/html", "application/octet-stream", "application/x-ndjson", "application/json-seq", "text/x-component"];
+    const label = publicTypes.find(type => type === contentType) ?? (contentType ? "other" : "missing");
+    throw new Error(`Codex subscription did not return completed Responses SSE (HTTP ${response.status}; content-type ${label}); raw details withheld; no API billing fallback was used`);
+  }
 }
 
 export type SubscriptionModel = { id: string };

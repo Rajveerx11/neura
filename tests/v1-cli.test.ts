@@ -19,7 +19,7 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean }) {
+async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
@@ -99,6 +99,16 @@ test('subscription picker followed by a JSON model response completes text and t
     assert.equal(reply.stderr, '');
     assert.deepEqual(reply.requests, [{ type: 'catalog' }, ...Array.from({ length: tool ? 2 : 1 }, () => ({ type: 'model', model: 'fixture-first' }))]);
     if (tool) for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
+  }
+});
+
+test('CLI accepts completed Responses SSE with generic or missing MIME without retrying the task', async () => {
+  for (const sseContentType of ['text/plain; charset=utf-8', 'application/octet-stream', null]) {
+    const reply = await interactiveFixture({ launchFromHome: true, inputs: ['hi', '/quit'], sseContentType, writeTool: true });
+    assert.match(reply.stdout, /Hello from selected model/);
+    assert.match(reply.stdout, /\[tool\] write: returned/);
+    assert.equal(reply.stderr, '');
+    assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
   }
 });
 

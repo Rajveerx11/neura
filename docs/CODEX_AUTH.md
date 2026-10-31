@@ -200,8 +200,8 @@ SSE streaming calls use the SDK parser. Non-streaming calls collect a bounded
 8 MiB SSE response and require an authoritative `response.completed` snapshot.
 A malformed or truncated stream cannot become a successful non-streaming turn.
 
-The backend may instead return a completed JSON response. Both generation paths
-accept `application/json` only after a bounded read (8 MiB, 30 seconds) and an
+For compatibility, both generation paths also accept a completed
+`application/json` response after a bounded read (8 MiB, 30 seconds) and an
 explicit `status:completed` envelope with an output array and no error. Generation
 uses the SDK's response decoder. Streaming replays supported message, function-call
 and reasoning items through its SSE decoder, preserving output order and usage.
@@ -221,6 +221,38 @@ acceptance; manual testing remains subject to the credential DACL gate.
 
 Failed and incomplete responses are also rejected. Stream cancellation propagates to the reader. This is a
 protocol adapter, not evidence of live subscription entitlement or model access.
+
+### Official OpenAI transport contract and MIME handling
+
+OpenAI's [authentication documentation](https://developers.openai.com/codex/auth)
+distinguishes ChatGPT subscription access from API-key billing. Its
+[Responses streaming guide](https://developers.openai.com/api/docs/guides/streaming-responses)
+specifies SSE for `stream:true`. It does not establish the completed-JSON
+compatibility path above as a subscription-backend guarantee.
+
+We also inspected OpenAI's own Codex implementation at immutable commit
+`67f0994b532b8740f14b5b738af7b7b2a915b1d6`. The
+[HTTP transport](https://github.com/openai/codex/blob/67f0994b532b8740f14b5b738af7b7b2a915b1d6/codex-rs/http-client/src/transport.rs#L215)
+passes successful response bytes without a MIME gate; the
+[Responses parser](https://github.com/openai/codex/blob/67f0994b532b8740f14b5b738af7b7b2a915b1d6/codex-rs/codex-api/src/sse/responses.rs#L582)
+decodes those bytes as SSE. Neura previously imposed an extra Content-Type gate.
+
+A later owner retry still failed with `unsupported response format`. Neura now
+tries the SSE contract when a successful response has generic, missing or other
+MIME metadata. That path buffers until an authoritative completed snapshot, then
+uses the existing decoder. HTML bodies and incomplete streams do not become
+successful turns. Buffered SSE retains its 8 MiB limit and now has a five-minute
+idle deadline, matching the official Codex
+[default idle budget](https://github.com/openai/codex/blob/67f0994b532b8740f14b5b738af7b7b2a915b1d6/codex-rs/model-provider-info/src/lib.rs#L72),
+without adopting automatic retries. Empty reads cannot reset that deadline.
+
+If decoding fails, diagnostics show only HTTP status and an allowlisted MIME
+label; missing and unknown values become fixed labels. No response bodies,
+arbitrary headers, credentials or proxy configuration are printed. Synthetic
+real-CLI tests cover generic/missing MIME with a tool round trip. Direct-provider
+tests cover both generation paths, HTML/error rejection, idle expiry and abort.
+The owner's actual MIME/body remain uninspected and live acceptance is unverified.
+No OAuth, billing, endpoint or Windows DACL permissions were changed.
 
 ## Source and license evidence
 

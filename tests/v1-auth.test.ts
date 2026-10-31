@@ -291,6 +291,114 @@ test("subscription requests carry only OAuth/account headers, current instructio
   assert.equal(calls, 2);
 });
 
+test("official Responses SSE is decoded from bytes with generic or missing MIME for generation and streaming", async () => {
+  await fresh(); await login();
+  for (const contentType of ['text/plain; charset=utf-8', 'application/octet-stream', 'text/html', null]) {
+    let calls = 0;
+    globalThis.fetch = async (url, init) => {
+      assert.equal(String(url), CODEX_URL); calls++;
+      assert.equal(new Headers(init?.headers).get('Accept'), 'text/event-stream');
+      const response = sse(output, true);
+      if (contentType === null) response.headers.delete('Content-Type'); else response.headers.set('Content-Type', contentType);
+      return response;
+    };
+    const generated = await model().doGenerate({ prompt });
+    assert.equal(generated.content.find(part => part.type === 'text')?.text, 'Synthetic answer');
+    const result = await model().doStream({ prompt });
+    const chunks = [];
+    for await (const chunk of result.stream) chunks.push(chunk);
+    assert.ok(chunks.some(chunk => chunk.type === 'text-delta' && chunk.delta === 'Synthetic answer'));
+    assert.ok(chunks.some(chunk => chunk.type === 'finish'));
+    assert.ok(!chunks.some(chunk => chunk.type === 'error'));
+    assert.equal(calls, 2, 'No automatic request replay or API fallback');
+  }
+  globalThis.fetch = async () => {
+    const response = sse([{ type: 'function_call', id: 'fc_generic', call_id: 'generic_call', name: 'probe', arguments: '{}', status: 'completed' }], true);
+    response.headers.delete('Content-Type'); return response;
+  };
+  const result = await model().doStream({ prompt });
+  const chunks = [];
+  for await (const chunk of result.stream) chunks.push(chunk);
+  assert.ok(chunks.some(chunk => chunk.type === 'tool-call' && chunk.toolCallId === 'generic_call' && chunk.input === '{}'));
+});
+
+test("unsupported response diagnostics expose only HTTP status and allowlisted MIME, never HTML, headers or event details", async () => {
+  await fresh(); await login();
+  const marker = 'synthetic-private-value';
+  for (const [contentType, body, label] of [
+    ['text/html', '<html>' + marker + '</html>', 'text/html'],
+    ['text/plain', marker, 'text/plain'],
+    [null, marker, 'missing'],
+    [marker, marker, 'other'],
+    ['application/octet-stream', 'data: {"type":"response.created"}\n\n', 'application/octet-stream'],
+    ['text/plain', 'data: {"type":"error","message":"' + marker + '"}\n\n', 'text/plain'],
+  ]) {
+    let calls = 0;
+    globalThis.fetch = async (url) => {
+      assert.equal(String(url), CODEX_URL); calls++;
+      const response = new Response(body, { headers: { ...(contentType ? { 'Content-Type': contentType } : {}), 'X-Private-Header': marker } });
+      if (contentType === null) response.headers.delete('Content-Type');
+      return response;
+    };
+    for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+      await assert.rejects(invoke, (error: Error) => error.message.includes('HTTP 200') && error.message.includes('content-type ' + label) && !error.message.includes(marker));
+    }
+    assert.equal(calls, 2);
+  }
+  for (const contentType of ['text/plain', null]) {
+    const controller = new AbortController(); let cancelled = false;
+    globalThis.fetch = async () => new Response(new ReadableStream({ pull() { controller.abort(); }, cancel() { cancelled = true; } }), { headers: contentType ? { 'Content-Type': contentType } : {} });
+    await assert.rejects(async () => model().doGenerate({ prompt, abortSignal: controller.signal }), { name: 'AbortError' });
+    assert.equal(cancelled, true);
+  }
+});
+
+test("SSE idle deadline stops both stalled and continuously fulfilled empty reads", async (context) => {
+  await fresh(); await login();
+  const now = performance.now.bind(performance);
+  let elapsed = 0;
+  context.mock.method(performance, 'now', () => now() + elapsed);
+  for (const contentType of ['text/event-stream', 'application/octet-stream']) {
+    for (const bytes of [new Uint8Array(0), new TextEncoder().encode(': keepalive\n')]) {
+      elapsed = 0;
+      let reads = 0; let cancelled = false;
+      globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+        pull(controller) {
+          elapsed += 40_000;
+          if (++reads <= 10) controller.enqueue(bytes); else controller.close();
+        }, cancel() { cancelled = true; },
+      }, { highWaterMark: 0 }), { headers: { 'Content-Type': contentType } });
+      await assert.rejects(async () => model().doGenerate({ prompt }), /idle deadline|did not return completed Responses SSE/);
+      assert.ok(reads < 11);
+      assert.equal(cancelled, true);
+    }
+  }
+  elapsed = 0;
+  const frames = (await sse().text()).split('\r\n\r\n').filter(Boolean);
+  let frame = 0;
+  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      elapsed += 200_000;
+      if (frame < frames.length) controller.enqueue(new TextEncoder().encode(frames[frame++] + '\r\n\r\n')); else controller.close();
+    },
+  }, { highWaterMark: 0 }), { headers: { 'Content-Type': 'text/plain' } });
+  const active = await model().doGenerate({ prompt });
+  assert.equal(active.content.find(part => part.type === 'text')?.text, 'Synthetic answer');
+  assert.ok(elapsed > 300_000, 'Real SSE progress resets idle time, not a fixed total deadline');
+  context.mock.restoreAll();
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let reading!: () => void;
+  const started = new Promise<void>(resolve => { reading = resolve; });
+  let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({ pull() { reading(); }, cancel() { cancelled = true; } }, { highWaterMark: 0 }), { headers: { 'Content-Type': 'text/plain' } });
+  const pending = (async () => model().doGenerate({ prompt }))();
+  const rejected = assert.rejects(pending, /did not return completed Responses SSE/);
+  await started;
+  context.mock.timers.tick(300_001);
+  await rejected;
+  assert.equal(cancelled, true);
+});
+
 test("completed JSON subscription responses support generation, streaming, multiple items and real Agent tools", async () => {
   await fresh(); await login();
   const items = [

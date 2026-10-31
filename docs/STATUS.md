@@ -41,6 +41,15 @@ malformed responses still fail, with no provider substitution or task replay.
 The actual backend response was not inspected. Live inference remains unverified
 and subject to the credential DACL gate in [subscription authentication](CODEX_AUTH.md).
 
+The owner's next retry still reported `unsupported response format`. After reading
+OpenAI's official authentication/streaming docs and inspecting its Codex transport,
+Neura removed the extra MIME-only rejection for successful Responses SSE. Generic
+or missing MIME must still decode to a completed snapshot; HTML and partial streams
+fail. Failures now include bounded HTTP/MIME facts without raw bodies or headers.
+Buffered SSE has a five-minute idle limit with cancellation. See the
+[official transport evidence](CODEX_AUTH.md#official-openai-transport-contract-and-mime-handling).
+These source and synthetic checks do not establish live subscription access.
+
 Cleanup distinguishes obsolete implementation work from unmet requirements.
 The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget
 render optimization (#60) no longer describe the active readline application.
