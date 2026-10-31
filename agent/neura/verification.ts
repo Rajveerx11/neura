@@ -35,7 +35,7 @@ export async function execute(file: string, args: string[], options: {
 // Hash bytes, never Git diff output: no filters, textconv, external diff, or
 // directory-collapsed untracked listings. File contents never leave this function.
 export async function captureWorktree(cwd: string, options: {
-  signal?: AbortSignal; maxBytes?: number; maxFiles?: number; timeoutMs?: number;
+  signal?: AbortSignal; maxBytes?: number; maxFiles?: number; timeoutMs?: number; requireRoot?: boolean;
 } = {}): Promise<TreeSnapshot | null> {
   const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? 10_000),
     ...(options.signal ? [options.signal] : [])]);
@@ -48,6 +48,7 @@ export async function captureWorktree(cwd: string, options: {
     const top = await git(["rev-parse", "--show-toplevel"]);
     if (!top.ok) return null;
     const root = await fs.realpath(top.stdout.trim());
+    if (options.requireRoot && path.relative(await fs.realpath(cwd), root) !== '') return null;
     // Enumeration is rooted at the repository, even when a session starts below it.
     const run = (args: string[]) => execute(executable, [...AUTOMATIC_GIT_ARGUMENTS, ...args], {
       cwd: root, signal, timeoutMs: 10_000, maxBuffer: 8 * 1024 * 1024, env: automaticGitEnvironment(),
@@ -86,7 +87,7 @@ export async function captureWorktree(cwd: string, options: {
         const handle = await fs.open(canonical, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
         try {
           const stat = await handle.stat();
-          if (!stat.isFile()) return null;
+          if (!stat.isFile() || (options.requireRoot && stat.nlink !== 1)) return null;
           const identity = await fs.stat(canonical);
           if (identity.dev !== stat.dev || identity.ino !== stat.ino || await fs.realpath(absolute) !== canonical) return null;
           if (bytes + stat.size > (options.maxBytes ?? 64 * 1024 * 1024)) return null;

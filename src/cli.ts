@@ -13,6 +13,7 @@ import { createLearnWorkshop } from './learn.ts';
 import { createWorkspaceTools, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
 import { runTurn } from './runtime.ts';
+import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { createSession, saveSession, resumeSession, listSessions, type Session } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 
@@ -23,7 +24,7 @@ const warning = (text: string) => stderr.write(terminalText(redactSensitiveText(
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
-    help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' },
+    help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
   } });
   if (values.help) {
     say(`Neura · Mastra v1 development build
@@ -32,8 +33,9 @@ Usage: neura [task] [--mode work|learn] [--provider openai-codex|local|openai|an
   --cwd PATH        Project directory (bare interactive launch from ~ opens a scratch workspace)
   --resume UUID     Explicitly resume Neura history (never imports Pi)
   --no-history      Do not persist conversation history
+  --no-thinking     Hide provider reasoning summaries (never exposes hidden internal reasoning)
   --check           Check source prerequisites without credentials or model calls
-Commands: /help, /login, /logout, /mode work|learn, /learn, /new, /sessions, /resume UUID, /model [PROVIDER MODEL [URL]], /quit
+Commands: /help, /login, /logout, /mode work|learn, /learn, /new, /sessions, /resume UUID, /model [PROVIDER MODEL [URL]], /thinking [on|off], /verify [quick|full|status], /quit
 /model opens the subscription model picker. Without --model, subscription requests use the catalog default, never a guessed model.
 /login starts an interactive ChatGPT subscription sign-in. API billing is never a fallback.
 Real account login remains a manual personal-use gate; distribution is not cleared.`);
@@ -64,6 +66,7 @@ Real account login remains a manual personal-use gate; distribution is not clear
   const configuredModel = values.model ?? process.env.NEURA_MODEL;
   if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
   let modelExplicit = configuredModel !== undefined;
+  let showReasoning = !values['no-thinking'];
   let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? (providerKind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined) };
   const modelLabel = (value: string) => redactSensitiveText(value || '(not selected)', 200);
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
@@ -81,6 +84,8 @@ Real account login remains a manual personal-use gate; distribution is not clear
   const learn = createLearnWorkshop(workspace, () => mode === 'learn', warning);
   let session: Session | undefined;
   let memory: any[] = [];
+  let lastVerification: WorkspaceReceipt | undefined;
+  let verificationGeneration = -1;
   let releaseSession: (() => Promise<void>) | undefined;
   async function selectSession(id?: string) {
     const fresh = id ? undefined : await createSession(sessions);
@@ -150,10 +155,15 @@ Real account login remains a manual personal-use gate; distribution is not clear
         const expected = generation;
         const userMessage = { role: 'user', content: text };
         learn.input(learnerInput);
-        const model = createConfiguredModel(provider);
+        const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
         const tools = [...createWorkspaceTools(workspace, () => mode, () => generation, approve), ...(mode === 'learn' ? learn.tools() : [])];
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal) : WORK_INSTRUCTIONS;
-        const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal, onText: chunk => stdout.write(terminalText(chunk)), onToolEvent: event => say(`\n[tool] ${redactSensitiveText(event.toolName, 128)}: ${event.phase}`) });
+        if (interactive) say('[thinking] Waiting for model response...');
+        let summaryVisible = false;
+        const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal,
+          onReasoning: showReasoning ? summary => { say(`\n[reasoning summary]\n${redactSensitiveText(summary, 8000)}`); summaryVisible = true; } : undefined,
+          onText: chunk => { if (summaryVisible) { say('\n[answer]'); summaryVisible = false; } stdout.write(terminalText(chunk)); },
+          onToolEvent: event => say(`\n[tool] ${redactSensitiveText(event.toolName, 128)}: ${event.phase}`) });
         stdout.write('\n');
         if (generation !== expected) throw new Error('Session changed; result discarded.');
         memory = outcome.messages;
@@ -167,8 +177,36 @@ Real account login remains a manual personal-use gate; distribution is not clear
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
       if (command === 'quit' || command === 'exit') return false;
-      if (command === 'help') say('/login · /logout · /mode work|learn · /learn status|answer <text>|hint|reveal|save|saved|resume <file>|reset|explain|deeper|example\n/new · /sessions · /resume <id> · /model (subscription picker) · /model <provider> <model> [URL] · /quit\nOnly Work and Learn are implemented. API billing is never a subscription fallback.');
-      else if (command === 'login') {
+      if (command === 'help') say('/login · /logout · /mode work|learn · /learn status|answer <text>|hint|reveal|save|saved|resume <file>|reset|explain|deeper|example\n/new · /sessions · /resume <id> · /thinking on|off · /verify quick|full|status · /model (subscription picker) · /model <provider> <model> [URL] · /quit\nOnly Work and Learn are implemented. API billing is never a subscription fallback.');
+      else if (command === 'verify') {
+        if (mode !== 'work') throw new Error('Verification is available only in Work. Learn cannot execute proof.');
+        if (!['', 'quick', 'full', 'status'].includes(rest)) throw new Error('Use /verify quick, /verify full or /verify status.');
+        abort = new AbortController();
+        const expected = generation;
+        try {
+          if (rest === 'status') {
+            if (!lastVerification || verificationGeneration !== generation) { say('No verification receipt in this session. Run /verify quick or /verify full.'); return true; }
+            const status = await workspaceReceiptStatus(workspace, lastVerification, abort.signal);
+            if (generation !== expected || mode !== 'work') throw new Error('Verification mode/session changed; result discarded.');
+            say(JSON.stringify(status, null, 2));
+          } else {
+            lastVerification = await verifyWorkspace(workspace, rest === 'quick' ? 'detector-only' : 'full', {
+              signal: abort.signal, current: () => generation === expected && mode === 'work', approve,
+            });
+            verificationGeneration = expected;
+            say(JSON.stringify(lastVerification, null, 2));
+            if (!rl && lastVerification.status !== 'detector-only') process.exitCode = 1;
+            if (lastVerification.reason === 'full_evidence_unavailable') say('Full verification is blocked: PoW 0.2.0 lacks trusted suite/candidate evidence. No tests were run.');
+            else if (lastVerification.reason === 'snapshot_unavailable') say('Use a committed Git repository root within the snapshot limits. No proof command was run.');
+            else if (lastVerification.reason === 'runner_unavailable') say('Pinned offline PoW/WSL sandbox unavailable. No host fallback was used.');
+            say('This receipt is session-local metadata, not signed attestation or task completion. Detector-only is never verified.');
+          }
+        } finally { abort = undefined; }
+      } else if (command === 'thinking') {
+        if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /thinking on or /thinking off.');
+        if (rest) showReasoning = rest === 'on';
+        say(`Provider reasoning summaries: ${showReasoning ? 'on' : 'off'}. Hidden internal reasoning is not available.`);
+      } else if (command === 'login') {
         if (!rl || rest.trim()) throw new Error('Use /login without arguments in an interactive Neura terminal.');
         abort = new AbortController();
         try {
@@ -218,6 +256,7 @@ Real account login remains a manual personal-use gate; distribution is not clear
         const message = error instanceof Error ? error.message : 'Request failed.';
         warning(message);
         if (provider.provider === 'openai-codex' && message.includes('selected model is unavailable')) say('Use /model to choose a subscription model. No task was replayed; inspect current state before retrying.');
+        if (provider.provider === 'openai-codex' && message.includes('rejected request field: reasoning.summary')) say('This model rejected summaries. Use /thinking off before a manual retry. No task was replayed.');
       }
     }
   } finally { generation++; learn.invalidate(true); process.off('SIGINT', onInterrupt); rl?.close(); await releaseSession?.(); }

@@ -6,6 +6,7 @@ const SUITE_TIMEOUT_MS = 300_000;
 const suites = {
   runtime: ['--test', 'tests/v1-runtime.test.ts'],
   auth: ['--test', 'tests/v1-auth.test.ts'],
+  verification: ['--test', 'tests/v1-verification.test.ts'],
   learn: ['--test', 'tests/v1-learn.test.ts'],
   'agent-learn': ['--test', 'tests/v1-agent-learn.test.ts'],
   installer: ['--test', 'tests/v1-install.test.ts'],

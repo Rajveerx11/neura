@@ -31,6 +31,8 @@ export type RunTurnOptions = {
   tools: ToolDefinition[];
   signal?: AbortSignal;
   onText?: (text: string) => void;
+  /** Provider-exposed summary text only; never signatures, encrypted content or inferred thoughts. */
+  onReasoning?: (summary: string) => void;
   /** Synchronous, payload-free sink. Thenables are rejected without permitting hidden effects. */
   onToolEvent?: (event: ToolEvent) => void;
 };
@@ -135,30 +137,57 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
   return { tools, results, report, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
 }
 
-export async function runTurn({ model, messages, instructions, tools, signal, onText, onToolEvent }: RunTurnOptions): Promise<{ text: string; messages: any[] }> {
+export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent }: RunTurnOptions): Promise<{ text: string; messages: any[] }> {
   signal?.throwIfAborted();
   const names = new Set(tools.map(tool => tool.name));
   const turn = createTurnTools(tools, signal, onToolEvent);
   const agent = new Agent({ id: "neura", name: "Neura", instructions, model, tools: turn.tools });
   agent.__setLogger(noopLogger);
   let streamed = "";
+  let reasoning = "";
+  let reasoningSeen = false;
+  let reasoningFailed = false;
+  const flushReasoning = () => {
+    const summary = reasoning.trim(); reasoning = "";
+    if (!summary) return;
+    reasoningSeen = true;
+    try {
+      const observed: unknown = onReasoning?.(summary);
+      if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
+        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
+        throw new Error("Reasoning observers must be synchronous");
+      }
+    } catch { reasoningFailed = true; turn.close(); }
+  };
   try {
     const result = await agent.generate(messages, {
       maxSteps: MAX_TURN_STEPS,
       toolCallConcurrency: 1,
       abortSignal: signal,
       modelSettings: { maxRetries: 0 },
-      stopWhen: () => turn.isTerminated(),
+      stopWhen: () => turn.isTerminated() || reasoningFailed,
       onChunk: (chunk) => {
-        if (chunk.type === "text-delta") {
+        if (signal?.aborted || reasoningFailed) return;
+        if (chunk.type === "reasoning-delta") {
+          reasoning = (reasoning + chunk.payload.text).slice(0, 32000);
+        } else if (chunk.type === "reasoning-end") {
+          flushReasoning();
+        } else if (chunk.type === "text-delta") {
+          flushReasoning();
+          if (reasoningFailed) return;
           streamed += chunk.payload.text;
           onText?.(chunk.payload.text);
         } else if (chunk.type === "tool-call" || chunk.type === "tool-error") {
+          flushReasoning();
+          if (reasoningFailed) return;
           turn.report({ toolName: names.has(chunk.payload.toolName) ? chunk.payload.toolName : "unknown", phase: chunk.type === "tool-call" ? "requested" : "failed" });
         }
       },
     });
     signal?.throwIfAborted();
+    if (!reasoningSeen && result.reasoningText) reasoning = result.reasoningText.slice(0, 32000);
+    flushReasoning();
+    if (reasoningFailed) throw new Error("Reasoning display failed. Some actions may already have completed; inspect current state before retrying.");
     if (turn.reportingFailed()) throw new Error("Tool status output failed. Some actions may already have completed; inspect current state before retrying.");
     const toolText = turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
     const text = result.text || toolText || "Turn ended without assistant text.";

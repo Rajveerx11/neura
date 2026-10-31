@@ -173,6 +173,43 @@ If reporting fails, completed results stay recorded in the running turn and
 later tools are stopped. The turn fails with a fixed notice. This does not
 guarantee durable history after failure. Inspect state before retrying.
 
+### Thinking status and provider summaries
+
+Interactive turns show a waiting status before the model request. OpenAI Codex
+reasoning models are asked for `reasoning.summary:auto`. Only provider-supplied
+summary text is shown, separately from the answer. Hidden reasoning tokens,
+signatures and encrypted content are not displayed. Some models return no summary.
+The subscription generation path still buffers until a completed response, so a
+summary may arrive with the answer rather than token by token.
+
+Use `/thinking off` or start with `--no-thinking` to disable summaries.
+`/thinking on` enables them again. This setting lasts for the current process.
+It does not change model effort, permissions or billing provider. A model that
+rejects `reasoning.summary` is not retried automatically.
+
+### Manual verification: first integration slice
+
+In Work, `/verify quick` requests the existing pinned PoW 0.2.0 detector through
+the network-disabled WSL proof sandbox. It requires interactive approval and an
+exact Git repository root with a committed HEAD. Private roots and Neura runtime
+roots remain forbidden. There is no host fallback or automatic download. Missing
+trusted proof paths or offline artifacts produce `unavailable`.
+
+The receipt binds before/after fingerprints of HEAD/index, tracked file bytes and
+modes, and nonignored untracked files. Ignored files are outside this fingerprint.
+`/verify status` rechecks the current candidate. Later edits invalidate its
+currency. These are session-local metadata receipts with `verified:false`, not
+signed attestations or durable recovery records. They are not imported from
+workspace reports, saved in conversation history or used to authorize delivery.
+PoW's audit files use disposable sandbox `/tmp`, not the candidate workspace.
+
+Detector-only results do not establish test success or task completion. Bare
+`/verify` and `/verify full` report `unavailable` without running legacy full proof:
+PoW 0.2.0 lacks trusted required-suite/candidate evidence. Full evidence and the
+reviewed upstream release remain [#91](https://github.com/Rajveerx11/neura/issues/91).
+Headless requests cannot approve quick execution and return a failing exit code
+when verification is unavailable. Learn cannot run verification.
+
 Switch to Learn and try a lesson using only synthetic material:
 
 ```text
@@ -190,7 +227,7 @@ learn from that relative path. Open the returned HTML board. Its copy controls
 send revision-bound commands back through the terminal. There is **no automatic browser synchronization**. Saved excerpts are historical until sources are
 reimported. Correct practice is not proof of mastery.
 
-`/help`, `/mode work|learn`, `/model`, `/new`, `/sessions` and `/resume <id>`
+`/help`, `/mode work|learn`, `/model`, `/thinking`, `/verify`, `/new`, `/sessions` and `/resume <id>`
 control the harness. Ctrl+C cancels a running turn. `/quit` exits. Headless
 `--prompt` cannot approve commands. History is workspace-scoped under `~/.neura`
 or explicit `NEURA_HOME`. Crash locks fail closed. Learn artifacts use the

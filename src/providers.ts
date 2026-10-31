@@ -4,7 +4,7 @@ import { codexAuthorization } from "./auth.ts";
 import { readFile } from "node:fs/promises";
 import { redactSensitiveText } from "../agent/neura/redaction.ts";
 
-export type ProviderConfig = { provider: "local" | "openai" | "anthropic" | "openai-codex"; model: string; baseURL?: string };
+export type ProviderConfig = { provider: "local" | "openai" | "anthropic" | "openai-codex"; model: string; baseURL?: string; reasoningSummary?: boolean };
 
 type ChatModel = ReturnType<ReturnType<typeof createOpenAI>["chat"]>;
 type ModelPrompt = Parameters<ChatModel["doGenerate"]>[0]["prompt"];
@@ -188,7 +188,7 @@ function codexDenialReason(value: unknown): string {
   const unsupported = /^(?:unsupported|unrecognized|unknown) parameter:\s*(\S+)$/i.exec(message.trim());
   const detailField = unsupported?.[1].replace(/^(['"])(.*)\1$/, "$2");
   const field = typeof error?.param === "string" ? error.param : detailField;
-  const fields = ["model", "instructions", "stream", "store", "tools", "tool_choice", "input", "max_output_tokens", "reasoning", "reasoning.effort", "temperature", "top_p", "include"];
+  const fields = ["model", "instructions", "stream", "store", "tools", "tool_choice", "input", "max_output_tokens", "reasoning", "reasoning.effort", "reasoning.summary", "temperature", "top_p", "include"];
   if (field && fields.includes(field) && (unsupported || ["invalid_request_error", "unsupported_parameter", "invalid_value"].includes(code ?? ""))) {
     return `The backend rejected request field: ${field}`;
   }
@@ -288,13 +288,13 @@ export async function listCodexModels({ signal, baseURL }: { signal?: AbortSigna
 }
 
 /** API keys come only from the named environment variables; subscription login is separate. */
-export function createConfiguredModel({ provider, model, baseURL }: ProviderConfig) {
+export function createConfiguredModel({ provider, model, baseURL, reasoningSummary = true }: ProviderConfig) {
   if (!model.trim()) throw new Error("Model name is required");
   if (provider === "openai-codex") {
     if (baseURL) throw new Error("ChatGPT subscription uses only the fixed Codex endpoint");
     // The placeholder is never sent: codexFetch replaces all headers with subscription credentials.
     const configured = createOpenAI({ apiKey: "unused-subscription-placeholder", baseURL: "https://chatgpt.com/backend-api/codex", fetch: codexFetch }).responses(model);
-    const optionsForCodex = (options: Parameters<ChatModel["doGenerate"]>[0]) => ({ ...options, providerOptions: { ...options.providerOptions, openai: { ...options.providerOptions?.openai, store: false } } });
+    const optionsForCodex = (options: Parameters<ChatModel["doGenerate"]>[0]) => ({ ...options, providerOptions: { ...options.providerOptions, openai: { ...options.providerOptions?.openai, store: false, reasoningSummary: reasoningSummary ? "auto" : null } } });
     // Disable storage before SDK prompt conversion too, so history is inline rather than item references.
     const generate = configured.doGenerate.bind(configured);
     const stream = configured.doStream.bind(configured);

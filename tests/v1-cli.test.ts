@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { workshopFixture } from '../scripts/learn-workshop-fixture.mjs';
 import { windowsShortPath } from './windows-short-path.ts';
+import { automaticGitEnvironment, AUTOMATIC_GIT_ARGUMENTS, resolveExecutable } from '../agent/neura/process-security.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -19,13 +20,20 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null }) {
+async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
     const home = options.launchFromHome ? path.join(profile, '.neura') : path.join(scratch, 'home');
     await fs.mkdir(workspace); await fs.mkdir(profile);
     await fs.writeFile(path.join(workspace, 'sample.txt'), 'synthetic-private-value');
+    if (options.gitWorkspace) {
+      const git = resolveExecutable('git', workspace); assert.ok(git);
+      const run = (args: string[]) => exec(git, [...AUTOMATIC_GIT_ARGUMENTS, ...args], { cwd: workspace, env: automaticGitEnvironment(), timeout: 10000 });
+      await run(['init', '--initial-branch=main']);
+      await run(['add', 'sample.txt']);
+      await run(['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid', 'commit', '-m', 'fixture']);
+    }
     const config = path.join(scratch, 'fixture.json');
     await fs.writeFile(config, JSON.stringify({ ...options, workspace }));
     const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), TEMP: scratch, TMP: scratch, NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 });
@@ -51,7 +59,7 @@ async function interactiveFixture(options: { inputs: string[]; args?: string[]; 
         assert.ok(!files.some(name => name.endsWith('.lock')), 'The session writer lease must be released');
       }
     }
-    return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string }> };
+    return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string; summary?: string | null }> };
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 }
 
@@ -110,6 +118,43 @@ test('CLI accepts completed Responses SSE with generic or missing MIME without r
     assert.equal(reply.stderr, '');
     assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
   }
+});
+
+test('thinking status and provider summaries are separate from the answer and can be disabled', async () => {
+  const args = ['--model', 'gpt-6.1-sol'];
+  for (const jsonResponse of [false, true]) {
+    const shown = await interactiveFixture({ inputs: ['hi', '/quit'], args, reasoning: true, jsonResponse });
+    assert.match(shown.stdout, /\[thinking\] Waiting for model response/);
+    assert.match(shown.stdout, /\[reasoning summary\][\s\S]*I will inspect the workspace before answering/);
+    assert.match(shown.stdout, /\[answer\][\s\S]*Hello from selected model/);
+    assert.ok(shown.stdout.indexOf('[thinking]') < shown.stdout.indexOf('[reasoning summary]'));
+    assert.ok(shown.stdout.indexOf('[reasoning summary]') < shown.stdout.indexOf('[answer]'));
+    assert.deepEqual(shown.requests, [{ type: 'model', model: 'gpt-6.1-sol', summary: 'auto' }]);
+  }
+  const toggled = await interactiveFixture({ inputs: ['/thinking off', 'hi', '/thinking on', 'hi', '/quit'], args, reasoning: true, jsonResponse: true });
+  assert.equal(toggled.stdout.split('[reasoning summary]').length - 1, 1);
+  assert.deepEqual(toggled.requests.map(request => request.summary), [null, 'auto']);
+  const hidden = await interactiveFixture({ inputs: ['hi', '/quit'], args: [...args, '--no-thinking'], reasoning: true, jsonResponse: true });
+  assert.ok(!hidden.stdout.includes('[reasoning summary]'));
+  assert.deepEqual(hidden.requests.map(request => request.summary), [null]);
+});
+
+test('manual /verify is provider-free, full proof fails closed, and denied quick checks never execute', async () => {
+  const full = await interactiveFixture({ inputs: ['/verify full', '/quit'], gitWorkspace: true });
+  assert.match(full.stdout, /full_evidence_unavailable/);
+  assert.match(full.stdout, /"verified": false/);
+  assert.match(full.stdout, /No tests were run/);
+  assert.deepEqual(full.requests, []);
+  const denied = await interactiveFixture({ inputs: ['/verify quick', 'no', '/verify status', '/new', '/verify status', '/quit'], gitWorkspace: true });
+  assert.match(denied.stdout, /approval_denied/);
+  assert.match(denied.stdout, /"current": false/);
+  assert.match(denied.stdout, /No verification receipt in this session/);
+  assert.deepEqual(denied.requests, []);
+  const learn = await interactiveFixture({ inputs: ['/mode learn', '/verify quick', '/quit'], gitWorkspace: true });
+  assert.match(learn.stderr, /Verification is available only in Work/);
+  assert.ok(!learn.stdout.includes('Type yes to approve'));
+  assert.deepEqual(learn.requests, []);
+  await assert.rejects(interactiveFixture({ inputs: [], args: ['--prompt', '/verify full'], gitWorkspace: true }), (error: Error & { stdout?: string }) => /full_evidence_unavailable/.test(error.stdout ?? ''));
 });
 
 test('headless /model lists current subscription choices without inference or a selection prompt', async () => {

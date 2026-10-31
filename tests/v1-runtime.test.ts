@@ -40,6 +40,31 @@ test("real Agent dispatch executes owned action and returns neutral history/text
   assert.ok(result.messages.some((message) => message.role === "tool"));
 });
 
+test("provider reasoning summaries are visible separately from answers without exposing encrypted metadata", async () => {
+  const summaries: string[] = []; const answers: string[] = [];
+  const { model } = fixture([[{ type: 'reasoning', text: 'Check the relevant files first.', providerMetadata: { openai: { reasoningEncryptedContent: 'synthetic-private-value' } } }, ...done]]);
+  const result = await runTurn({ model, messages: [user], instructions: 'Test', tools: [], onReasoning: summary => summaries.push(summary), onText: chunk => answers.push(chunk) });
+  assert.deepEqual(summaries, ['Check the relevant files first.']);
+  assert.equal(answers.join(''), 'Done');
+  assert.equal(result.text, 'Done');
+  assert.ok(!summaries.join('').includes('synthetic-private-value'));
+  const plain = fixture([done]);
+  await runTurn({ model: plain.model, messages: [user], instructions: 'Test', tools: [], onReasoning: summary => summaries.push(summary) });
+  assert.equal(summaries.length, 1, 'No invented reasoning when a provider returns none');
+});
+
+test("reasoning display failure stops later effects without exposing observer errors", async () => {
+  for (const asynchronous of [false, true]) {
+    let effects = 0;
+    const { model } = fixture([[{ type: 'reasoning', text: 'Synthetic summary' }, call('action', { count: 1 })], done]);
+    await assert.rejects(runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [text('Effect')] }; })], onReasoning: () => {
+      if (asynchronous) return Promise.reject(new Error('synthetic-private-value'));
+      throw new Error('synthetic-private-value');
+    } }), (error: Error) => /Reasoning display failed/.test(error.message) && !error.message.includes('synthetic-private-value'));
+    assert.equal(effects, 0);
+  }
+});
+
 test("tool events are live before effects and reveal no arguments, results or exception details", async () => {
   const privateValue = "synthetic-private-value";
   const order: string[] = [];

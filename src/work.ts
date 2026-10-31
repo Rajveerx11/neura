@@ -32,6 +32,15 @@ export function assertWorkspaceOutsideNeuraHome(workspace: string, home = proces
   }
   if (path.relative(root, privateRoot) === '' || inside(root, privateRoot) || inside(privateRoot, root)) throw new Error('Workspace must not overlap the private Neura home. Choose a separate project directory and NEURA_HOME.');
 }
+export function assertWorkspaceExecutionAllowed(workspace: string): void {
+  const root = fs.realpathSync.native(workspace);
+  assertWorkspaceOutsideNeuraHome(root);
+  const applicationRoot = fs.realpathSync.native(new URL('..', import.meta.url));
+  if (path.relative(applicationRoot, root) === '' || inside(applicationRoot, root) || inside(root, applicationRoot)) {
+    throw new Error('Sandbox commands against Neura itself are unavailable: opaque commands could rewrite its running control plane. Use an external manual terminal.');
+  }
+}
+
 export const WORK_INSTRUCTIONS = `You are Neura, a practical engineering assistant. Work is supervised. Inspect before editing; preserve unrelated user changes. Read returns a SHA-256 hash: write requires that exact hash for an existing file, or null for a new file. Edits must replace one exact occurrence. If read reports editable:false, hidden/redacted bytes require an external manual edit; do not rewrite placeholders. Commands require interactive confirmation and run only in network-disabled WSL2/bubblewrap, with no host fallback. Never claim verification without actual passing evidence; /ship is not implemented in this v1. Protected/private/control files and remote operations are unavailable. Neura cannot rewrite its own runtime or execute commands against its own checkout; request an external manual terminal for that. Explain unavailable tools honestly. Do not invent Plan, YOLO, Human Away, integration or delegation support.`;
 
 export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'learn', generation: () => number, approve: WorkApproval = async () => false): ToolDefinition[] {
@@ -39,7 +48,6 @@ export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'le
   const root = fs.realpathSync.native(workspace);
   assertWorkspaceOutsideNeuraHome(root);
   const applicationRoot = fs.realpathSync.native(new URL('..', import.meta.url));
-  const ownsControlPlane = path.relative(applicationRoot, root) === '' || inside(applicationRoot, root) || inside(root, applicationRoot);
   function check(signal?: AbortSignal, workOnly = false) {
     signal?.throwIfAborted();
     if (generation() !== exposed || (workOnly && mode() !== 'work')) throw new Error('Mode/session changed; stale tool authority rejected.');
@@ -125,7 +133,7 @@ export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'le
       return commit(params.path, content.slice(0, start) + params.new_string + content.slice(start + params.old_string.length), params.expectedHash, signal);
     }),
     tool('work_exec', 'Run a confirmed command inside network-disabled WSL2/bubblewrap only. No host fallback. Protected, private and remote actions are unavailable.', Type.Object({ command: Type.String({ minLength: 1, maxLength: 8000 }), timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 120000 })) }, { additionalProperties: false }), async (params, signal) => {
-      if (ownsControlPlane) throw new Error('Sandbox commands against Neura itself are unavailable: opaque commands could rewrite its running control plane. Use an external manual terminal.');
+      assertWorkspaceExecutionAllowed(root);
       const action = inspectAction({ toolName: 'work_exec', input: params }, root);
       if (action.route === 'deny' || ['protected-data', 'protected-control', 'remote-mutation', 'broad-destruction'].includes(action.category)) throw new Error(`Command unavailable in v1: ${action.reason}`);
       if (!await approve(`Run in network-disabled WSL sandbox?\n${redactSensitiveText(params.command, 8000)}\nTimeout: ${params.timeoutMs ?? 120000} ms\nApproval applies once to this exact action.`)) throw new Error('Command denied; no execution.');

@@ -50,7 +50,7 @@ globalThis.fetch = async (url, init) => {
   assert.equal(init.method, 'POST');
   const body = JSON.parse(init.body);
   assert.ok(!body.instructions.includes('synthetic-private-value'));
-  requests.push({ type: 'model', model: body.model });
+  requests.push({ type: 'model', model: body.model, ...(config.reasoning ? { summary: body.reasoning?.summary ?? null } : {}) });
   modelRequests++;
   if (config.denyModel) return new Response(JSON.stringify({ error: { code: 'model_not_found', message: 'synthetic-private-value' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   const toolName = config.writeTool ? 'write' : 'read';
@@ -58,7 +58,8 @@ globalThis.fetch = async (url, init) => {
   const output = (config.tool || config.writeTool) && modelRequests === 1
     ? [{ type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: toolName, arguments: JSON.stringify(toolInput), status: 'completed' }]
     : [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hello from selected model', annotations: [] }] }];
-  const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
+  const reasoning = config.reasoning ? [{ type: 'reasoning', id: 'rs_fixture', summary: [{ type: 'summary_text', text: 'I will inspect the workspace before answering.' }], encrypted_content: 'synthetic-private-value' }] : [];
+  const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output: [...reasoning, ...output], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
   if (config.jsonResponse) return new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
   const response = codexSse(snapshot);
   if (config.sseContentType === null) response.headers.delete('Content-Type');

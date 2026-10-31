@@ -26,14 +26,21 @@ export function fixture(steps: any[][]) {
 
 /** Wire fixture shared by direct-provider and interactive-CLI tests. No network calls. */
 export function codexSse(response: { output: any[]; [key: string]: any }, fragmented = false): Response {
-  const first = response.output[0];
-  const events: any[] = [{ type: "response.created", response: { ...response, output: [] } }];
-  if (first) {
-    const added = first.type === "function_call" ? { ...first, arguments: "" } : { ...first, content: [] };
-    const delta = first.type === "function_call"
-      ? { type: "response.function_call_arguments.delta", item_id: first.id, output_index: 0, delta: first.arguments }
-      : { type: "response.output_text.delta", item_id: first.id, output_index: 0, content_index: 0, delta: first.content[0]?.text ?? "" };
-    events.push({ type: "response.output_item.added", output_index: 0, item: added }, delta, { type: "response.output_item.done", output_index: 0, item: first });
+  const events: any[] = [{ type: "response.created", response: { ...response, status: "in_progress", output: [] } }];
+  for (const [output_index, item] of response.output.entries()) {
+    events.push({ type: "response.output_item.added", output_index, item: { ...item, arguments: "", content: [], summary: [] } });
+    if (item.type === "function_call") {
+      events.push({ type: "response.function_call_arguments.delta", item_id: item.id, output_index, delta: item.arguments });
+    } else if (item.type === "message") {
+      for (const [content_index, part] of item.content.entries()) events.push({ type: "response.output_text.delta", item_id: item.id, output_index, content_index, delta: part.text });
+    } else if (item.type === "reasoning") {
+      for (const [summary_index, part] of item.summary.entries()) events.push(
+        { type: "response.reasoning_summary_part.added", item_id: item.id, output_index, summary_index },
+        { type: "response.reasoning_summary_text.delta", item_id: item.id, output_index, summary_index, delta: part.text },
+        { type: "response.reasoning_summary_part.done", item_id: item.id, output_index, summary_index },
+      );
+    } else throw new Error("Unsupported synthetic output item");
+    events.push({ type: "response.output_item.done", output_index, item });
   }
   events.push({ type: "response.completed", response });
   const bytes = new TextEncoder().encode(events.map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join(""));

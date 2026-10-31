@@ -2,7 +2,9 @@
 
 Development/testing only. On 2026-10-26 the owner reported that `/login` completed,
 but the first model request returned HTTP 400. This is not successful end-to-end
-subscription or entitlement evidence. Automated checks remain synthetic.
+subscription or entitlement evidence. The owner later reported working responses
+after the transport repair. That manual report does not establish exhaustive
+login/refresh/restart coverage. Automated checks remain synthetic.
 Mastra's existing EE/distribution gate remains open. See
 [dependency review](MASTRA_V1_DEPENDENCIES.md) and [status](STATUS.md).
 
@@ -130,6 +132,28 @@ The parent owns CLI integration for `openai-codex`, `/login`, and `/logout`.
 The synthetic missing-credential test proves request-time denial without API
 fallback. The parent updated the runtime test to assert inert construction and
 reject custom subscription endpoints.
+
+## Provider reasoning summaries
+
+OpenAI's [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning#reasoning-summaries)
+distinguishes summaries from raw reasoning tokens, which are not exposed. Neura
+requests `reasoning.summary:auto` through the pinned SDK's `reasoningSummary`
+option for supported Codex reasoning models. It does not set a new reasoning
+effort or change credentials, scopes, model entitlement or billing provider.
+Unknown/unsupported models may return no summary.
+
+The runtime forwards only text from reasoning deltas or the completed reasoning
+text. Signatures, redacted reasoning and encrypted metadata are not delivered to
+the display callback. The CLI redacts and labels each summary separately from
+answer text. `/thinking off` and `--no-thinking` disable requests/display.
+`/thinking on` restores them for the current process. Observer failures close tool
+authority and produce a fixed error rather than leaking callback exceptions.
+
+Interactive turns also show a waiting status, including when no summary is
+available. This is activity information, not invented model reasoning. The current
+subscription generation path buffers SSE until completion, so summary text need
+not arrive live. Tests cover actual Mastra callback ordering and CLI toggles with
+synthetic summaries. No new live-account request was made.
 
 ## Credential and callback boundaries
 

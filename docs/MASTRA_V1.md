@@ -20,7 +20,8 @@ unsupported paths before prerequisite checks or launcher writes.
 |---|---|---|
 | Actual agent loop | `src/runtime.ts`, real Mastra Agent, final schema validation, serialized effects, bounded steps, cancellation, learner-facing turn termination | Not durable effect recovery or autonomous shipping |
 | Providers | `src/providers.ts`/`src/auth.ts`, separate ChatGPT subscription/local/OpenAI API/Anthropic API transports, native image parts, explicit login/logout | Synthetic subscription tests are not real-account entitlement or live protocol evidence; see auth status below |
-| Terminal | `src/cli.ts`, Node readline, logo-only launch, Work/Learn, explicit commands, one-shot prompts | Not old Pi cockpit/editor/IME parity; no full-screen TUI dependency |
+| Terminal | `src/cli.ts`, Node readline, logo launch, Work/Learn, scratch-home startup, explicit commands, waiting status and optional provider reasoning summaries | No old Pi cockpit/editor/IME parity. Summaries may arrive only after completion, never hidden reasoning |
+| Manual verification | `src/verification.ts`, reused PoW 0.2.0, Git snapshots and offline WSL sandbox, Work-only approval, session-local receipts and currency checks | Detector-only is never verified. Full proof is unavailable. No durable/signed receipt, original task-base or ignored-file coverage. Configured-host PoW acceptance remains blocked by missing trusted proof paths |
 | Work | `src/work.ts`, reused canonical policy/read/sandbox services, original-byte hash binding with redacted delivery and refusal of redacted mutations, exact interactive command approval with fresh binding | No remote/protected actions, no headless approval or trusted full-proof PASS. Neura runtime writes are blocked even from nested/parent roots; commands on overlapping Neura checkouts require an external manual terminal. Existing workspace/same-user and descendant-cancellation limits remain |
 | Learn | `src/learn.ts`, session-local service using existing Neura parsers, renderer, schemas, exercise/store/vault modules | Native Windows first-store creation, explicit snapshots, historical source restore, no automatic browser sync |
 | History | `src/session.ts`, workspace-scoped CLI directories and `src/session-lock.ts` writer leases, fresh tool authority per turn | Crash locks fail closed; no automatic legacy import or durable reconciliation of uncertain effects |
@@ -37,7 +38,9 @@ ChatGPT subscription is the CLI default. Only an explicit interactive `/login`
 starts the PKCE browser flow; `/logout` deletes Neura's local credential without
 claiming remote revocation. Tokens, refreshes and locks live only in Neura's home.
 See [the protocol, storage boundaries and synthetic evidence](CODEX_AUTH.md).
-Real-account login, reduced-scope acceptance and model entitlement remain unverified.
+The owner reported working responses after the transport repair. Coverage of
+reduced scopes, refresh/restart and model entitlement remains incomplete. Automated
+checks do not establish live-account acceptance.
 Before real credentials are used, inspect the actual Windows home DACL and any
 existing credential-file DACL. Profile inheritance alone is not verification,
 and the runtime does not independently enforce Windows DACL privacy.

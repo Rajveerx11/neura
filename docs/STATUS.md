@@ -50,6 +50,22 @@ Buffered SSE has a five-minute idle limit with cancellation. See the
 [official transport evidence](CODEX_AUTH.md#official-openai-transport-contract-and-mime-handling).
 These source and synthetic checks do not establish live subscription access.
 
+The owner subsequently reported working responses. This is manual acceptance of
+the repaired path, not an independent entitlement/refresh/restart audit. The
+terminal now has a waiting status and optional provider reasoning summaries.
+OpenAI's hidden reasoning and encrypted metadata remain unavailable. See
+[reasoning visibility](CODEX_AUTH.md#provider-reasoning-summaries).
+
+The first verification slice adds manual `/verify quick|full|status` in Work.
+Its detector receipts bind to candidate fingerprints and stay in session memory. It reuses PoW and the existing
+isolated runner, not a new verification engine. Every receipt retains
+`verified:false`. PoW 0.2.0 still blocks full trusted evidence. Durable receipts,
+original-task-base binding, ignored-file coverage and delivery enforcement remain
+open under #91/#28. A read-only local readiness probe reported that trusted WSL
+proof paths are not configured. No proof tooling was installed or run on the host.
+The offline PoW execution path remains unverified on this machine. Synthetic
+bridge checks are not real-artifact acceptance. See the [manual command](../README.md#manual-verification-first-integration-slice).
+
 Cleanup distinguishes obsolete implementation work from unmet requirements.
 The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget
 render optimization (#60) no longer describe the active readline application.

@@ -550,6 +550,20 @@ test("store:false is enforced before SDK history conversion, including encrypted
   await model().doGenerate({ prompt: [...prompt, { role: "assistant", content: [{ type: "reasoning", text: "Synthetic reasoning", providerOptions: { openai: { itemId: "rs_synthetic", reasoningEncryptedContent: "synthetic-encrypted" } } }] }, prompt[1]], providerOptions: { openai: { store: true } } });
 });
 
+test("disabled reasoning summaries stay off even when SDK reasoning effort would default to a summary", async () => {
+  await fresh(); await login();
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), CODEX_URL);
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.reasoning.effort, 'low');
+    assert.equal(body.reasoning.summary, undefined);
+    assert.equal(body.store, false);
+    return sse();
+  };
+  const hidden = createConfiguredModel({ provider: 'openai-codex', model: 'gpt-5.5', reasoningSummary: false });
+  await hidden.doGenerate({ prompt, providerOptions: { openai: { reasoningEffort: 'low', reasoningSummary: 'detailed' } } });
+});
+
 test("expired credentials refresh once under concurrency and atomically retain rotated refresh tokens", async () => {
   await fresh(); await login();
   const stored = JSON.parse(await readFile(filename(), "utf8")); stored.expires = 1;
@@ -683,6 +697,7 @@ test("backend rejection hints recognize only safe model, field and quota categor
     [{ error: { code: "unsupported_parameter", param: "max_output_tokens", message: privateText } }, /rejected request field: max_output_tokens/],
     [{ detail: "Unsupported parameter: max_output_tokens" }, /rejected request field: max_output_tokens/],
     [{ error: { type: "invalid_request_error", param: "reasoning.effort", message: privateText } }, /rejected request field: reasoning\.effort/],
+    [{ error: { type: "unsupported_parameter", param: "reasoning.summary", message: privateText } }, /rejected request field: reasoning\.summary/],
     [{ error: { code: "insufficient_quota", message: privateText } }, /subscription quota or usage limit/],
     [{ error: { code: privateText, param: privateText, message: privateText } }, /No recognized safe backend reason/],
     [{ detail: "Unsupported parameter: temperature2" }, /No recognized safe backend reason/],
