@@ -56,7 +56,9 @@ globalThis.fetch = async (url, init) => {
   const output = config.tool && modelRequests === 1
     ? [{ type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: 'read', arguments: JSON.stringify({ path: 'sample.txt' }), status: 'completed' }]
     : [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hello from selected model', annotations: [] }] }];
-  return codexSse({ id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } });
+  const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
+  if (config.jsonResponse) return new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+  return codexSse(snapshot);
 };
 const { main } = await import('../src/cli.ts');
 await main(['--cwd', config.workspace, '--no-history', ...(config.args ?? [])]);

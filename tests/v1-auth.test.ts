@@ -291,6 +291,124 @@ test("subscription requests carry only OAuth/account headers, current instructio
   assert.equal(calls, 2);
 });
 
+test("completed JSON subscription responses support generation, streaming, multiple items and real Agent tools", async () => {
+  await fresh(); await login();
+  const items = [
+    { type: "reasoning", id: "rs_json", summary: [{ type: "summary_text", text: "Synthetic reasoning" }], encrypted_content: "synthetic-encrypted" },
+    ...output,
+    { ...output[0], id: "msg_second", content: [{ type: "output_text", text: "Second answer", annotations: [] }] },
+  ];
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), CODEX_URL); calls++;
+    assert.equal(JSON.parse(String(init?.body)).stream, true);
+    return json(snapshot(items));
+  };
+  const generated = await model().doGenerate({ prompt });
+  assert.deepEqual(generated.content.filter(part => part.type === "text").map(part => part.text), ["Synthetic answer", "Second answer"]);
+  const streamed = await model().doStream({ prompt });
+  const chunks = [];
+  for await (const chunk of streamed.stream) chunks.push(chunk);
+  assert.ok(!chunks.some(chunk => chunk.type === "error"));
+  assert.deepEqual(chunks.filter(chunk => chunk.type === "text-delta").map(chunk => chunk.delta), ["Synthetic answer", "Second answer"]);
+  assert.ok(chunks.some(chunk => chunk.type === "reasoning-delta" && chunk.delta === "Synthetic reasoning"));
+  assert.ok(chunks.some(chunk => chunk.type === "finish"));
+  assert.equal(calls, 2);
+  globalThis.fetch = async () => json(snapshot([{ type: "function_call", id: "fc_json", call_id: "json_call", name: "probe", arguments: "{}", status: "completed" }]));
+  const toolStream = await model().doStream({ prompt });
+  const toolChunks = [];
+  for await (const chunk of toolStream.stream) toolChunks.push(chunk);
+  assert.ok(toolChunks.some(chunk => chunk.type === "tool-call" && chunk.toolCallId === "json_call" && chunk.toolName === "probe" && chunk.input === "{}"));
+  assert.ok(!toolChunks.some(chunk => chunk.type === "error"));
+  const aborted = new AbortController();
+  const cancelledStream = await model().doStream({ prompt, abortSignal: aborted.signal });
+  aborted.abort();
+  await assert.rejects(async () => { for await (const _chunk of cancelledStream.stream) { /* Drain until cancellation. */ } }, { name: "AbortError" });
+  const requests: Record<string, unknown>[] = [];
+  let executed = 0;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), CODEX_URL);
+    requests.push(JSON.parse(String(init?.body)));
+    return requests.length === 1 ? json(snapshot([{ type: "function_call", id: "fc_json", call_id: "json_call", name: "probe", arguments: "{}", status: "completed" }])) : json(snapshot());
+  };
+  const result = await runTurn({ model: model(), instructions: "Synthetic instructions", messages: [{ role: "user", content: "Run the synthetic tool" }], tools: [{ name: "probe", description: "Synthetic tool", parameters: { type: "object", properties: {}, additionalProperties: false }, execute: async () => { executed++; return { content: [{ type: "text", text: "Synthetic result" }] }; } }] });
+  assert.equal(result.text, "Synthetic answer");
+  assert.equal(executed, 1);
+  assert.equal(requests.length, 2);
+  assert.ok((requests[1].input as Array<{ type: string; call_id?: string }>).some(item => item.type === "function_call_output" && item.call_id === "json_call"));
+});
+
+test("JSON errors, incomplete snapshots and unexpected media types fail without retries or body disclosure", async () => {
+  await fresh(); await login();
+  const marker = "synthetic-private-value";
+  const cases = [
+    () => json({ error: { message: marker } }),
+    () => json({ ...snapshot(), status: "incomplete", output: [{ secret: marker }] }),
+    () => json({ ...snapshot(), status: "failed", error: { message: marker } }),
+    () => json({ ...snapshot(), error: { message: marker } }),
+    () => json({ ...snapshot(), output: null }),
+    () => json({ ...snapshot(), output: [null] }),
+    () => json({ ...snapshot(), output: [{ type: "message", id: marker, content: "invalid" }] }),
+    () => new Response(`invalid ${marker}`, { headers: { "Content-Type": "application/json" } }),
+    () => new Response(marker, { headers: { "Content-Type": "text/html" } }),
+    () => new Response(marker, { headers: { "Content-Type": "text/event-stream-invalid" } }),
+    () => new Response(null, { headers: { "Content-Type": "application/json" } }),
+    () => json({ secret: marker.repeat(400_000) }),
+  ];
+  for (const response of cases) {
+    let calls = 0;
+    globalThis.fetch = async (url) => { assert.equal(String(url), CODEX_URL); calls++; return response(); };
+    for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+      await assert.rejects(invoke, (error: Error) => /Codex/.test(error.message) && !error.message.includes(marker));
+    }
+    assert.equal(calls, 2, "Neither invocation retries or changes billing provider");
+  }
+  const controller = new AbortController(); let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({ pull() { controller.abort(); }, cancel() { cancelled = true; } }), { headers: { "Content-Type": "application/json" } });
+  await assert.rejects(async () => model().doGenerate({ prompt, abortSignal: controller.signal }), { name: "AbortError" });
+  assert.equal(cancelled, true);
+});
+
+test("successful HTTP JSON errors retain safe hints and SDK decoding errors do not expose payloads", async () => {
+  await fresh(); await login();
+  globalThis.fetch = async () => json({ error: { code: "model_not_found", message: "synthetic-private-value" } });
+  await assert.rejects(async () => model().doGenerate({ prompt }), (error: Error) => /selected model is unavailable/.test(error.message) && !error.message.includes("synthetic-private-value"));
+  globalThis.fetch = async () => json({ ...snapshot(), id: { secret: "synthetic-private-value" } });
+  await assert.rejects(async () => model().doGenerate({ prompt }), (error: Error) => /could not be decoded/.test(error.message) && !error.message.includes("synthetic-private-value"));
+  const result = await model().doStream({ prompt });
+  const chunks = [];
+  for await (const chunk of result.stream) chunks.push(chunk);
+  const errors = chunks.filter(chunk => chunk.type === "error");
+  assert.ok(errors.length > 0);
+  for (const chunk of errors) {
+    assert.match(String(chunk.error), /could not be decoded/);
+    assert.ok(!String(chunk.error).includes("synthetic-private-value"));
+  }
+});
+
+test("completed JSON reads enforce their deadline even when empty reads never yield to timers", async (context) => {
+  await fresh(); await login();
+  const now = performance.now.bind(performance);
+  let expired = false;
+  context.mock.method(performance, "now", () => now() + (expired ? 31_000 : 0));
+  for (const invoke of [async () => model().doGenerate({ prompt }), async () => model().doStream({ prompt })]) {
+    expired = false;
+    let reads = 0; let cancelled = false;
+    globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++reads <= 10) {
+          if (reads === 8) expired = true;
+          controller.enqueue(new Uint8Array(0));
+        } else { controller.enqueue(new TextEncoder().encode(JSON.stringify(snapshot()))); controller.close(); }
+      },
+      cancel() { cancelled = true; },
+    }), { headers: { "Content-Type": "application/json" } });
+    await assert.rejects(invoke, /Codex JSON response was invalid, oversized or stalled/);
+    assert.ok(reads < 11);
+    assert.equal(cancelled, true);
+  }
+});
+
 test("actual Agent subscription tool calls/results and native user/tool images survive the wire conversion", async () => {
   await fresh(); await login();
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
@@ -442,7 +560,7 @@ test("abort before request, during refresh, and during SSE prevents completion; 
 
 test("truncated/error/malformed SSE and unauthorized backend responses fail closed without body diagnostics", async () => {
   await fresh(); await login();
-  for (const response of [() => new Response('data: {"type":"response.created"}\n\n', { headers: { "Content-Type": "text/event-stream" } }), () => new Response('data: {"type":"error","error":"synthetic-private-value"}\n\n', { headers: { "Content-Type": "text/event-stream" } }), () => new Response("data: invalid\n\n", { headers: { "Content-Type": "text/event-stream" } }), () => json({ secret: "synthetic-private-value" }, 401), () => json(snapshot())]) {
+  for (const response of [() => new Response('data: {"type":"response.created"}\n\n', { headers: { "Content-Type": "text/event-stream" } }), () => new Response('data: {"type":"error","error":"synthetic-private-value"}\n\n', { headers: { "Content-Type": "text/event-stream" } }), () => new Response("data: invalid\n\n", { headers: { "Content-Type": "text/event-stream" } }), () => json({ secret: "synthetic-private-value" }, 401)]) {
     globalThis.fetch = async () => response();
     await assert.rejects(async () => model().doGenerate({ prompt }), (error: Error) => /Codex/.test(error.message) && !error.message.includes("synthetic-private-value"));
   }

@@ -33,6 +33,14 @@ outcomes are visible without raw payloads. Real account catalog/inference access
 still needs manual verification. See [model selection](CODEX_AUTH.md#subscription-model-discovery-and-selection)
 and [safe diagnostics](CODEX_AUTH.md#safe-rejection-diagnostics).
 
+A later owner retry selected a catalog model but failed with
+`Codex subscription requires an event stream`. The transport now accepts bounded,
+explicitly completed JSON responses as well as SSE. Synthetic real-CLI text/tool
+regressions reproduce the old rejection and exercise the repair. Incomplete or
+malformed responses still fail, with no provider substitution or task replay.
+The actual backend response was not inspected. Live inference remains unverified
+and subject to the credential DACL gate in [subscription authentication](CODEX_AUTH.md).
+
 Cleanup distinguishes obsolete implementation work from unmet requirements.
 The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget
 render optimization (#60) no longer describe the active readline application.

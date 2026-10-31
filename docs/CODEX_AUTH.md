@@ -196,9 +196,29 @@ messages become the backend `instructions` field. Tool calls/results and native
 user/tool image parts stay in the input. Requests always set `stream:true` and
 subscription-only headers. The internal placeholder API key is never sent.
 
-Streaming calls use the SDK SSE parser. Non-streaming calls collect a bounded
+SSE streaming calls use the SDK parser. Non-streaming calls collect a bounded
 8 MiB SSE response and require an authoritative `response.completed` snapshot.
 A malformed or truncated stream cannot become a successful non-streaming turn.
+
+The backend may instead return a completed JSON response. Both generation paths
+accept `application/json` only after a bounded read (8 MiB, 30 seconds) and an
+explicit `status:completed` envelope with an output array and no error. Generation
+uses the SDK's response decoder. Streaming replays supported message, function-call
+and reasoning items through its SSE decoder, preserving output order and usage.
+Unknown JSON output kinds fail rather than disappear. This is replay of a complete
+response, not incremental server streaming. Invalid SDK decoding errors use fixed
+diagnostics instead of exposing payloads.
+
+The owner reported `Codex subscription requires an event stream` after choosing
+a catalog model. A synthetic real-CLI regression reproduced that failure with a
+completed JSON response before the fix. It now covers text and a tool round trip,
+with no hidden retry or provider substitution. Direct-provider tests also cover
+streamed JSON tool calls, multiple output items, reasoning, body bounds and
+cancellation. JSON error envelopes, even with HTTP 200, remain failures and use
+only the safe rejection categories above. The owner's actual response body and
+MIME type were not inspected. This repair does not establish live subscription
+acceptance; manual testing remains subject to the credential DACL gate.
+
 Failed and incomplete responses are also rejected. Stream cancellation propagates to the reader. This is a
 protocol adapter, not evidence of live subscription entitlement or model access.
 

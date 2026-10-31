@@ -18,7 +18,7 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown }) {
+async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const home = path.join(scratch, 'home'); const profile = path.join(scratch, 'profile');
@@ -56,6 +56,17 @@ test('first request uses the catalog default and real Agent tool calls are visib
   for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
   assert.match(reply.stdout, /Hello from selected model/);
   assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+});
+
+test('subscription picker followed by a JSON model response completes text and tool turns without retries', async () => {
+  for (const tool of [false, true]) {
+    const reply = await interactiveFixture({ inputs: ['/model', '1', 'hi', '/quit'], tool, jsonResponse: true });
+    assert.match(reply.stdout, /Model: fixture-first/);
+    assert.match(reply.stdout, /Hello from selected model/);
+    assert.equal(reply.stderr, '');
+    assert.deepEqual(reply.requests, [{ type: 'catalog' }, ...Array.from({ length: tool ? 2 : 1 }, () => ({ type: 'model', model: 'fixture-first' }))]);
+    if (tool) for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
+  }
 });
 
 test('headless /model lists current subscription choices without inference or a selection prompt', async () => {

@@ -49,6 +49,44 @@ function codexHeaders(access: string, accountId: string, accept: string): Header
   return new Headers({ "Content-Type": "application/json", Accept: accept, Authorization: `Bearer ${access}`, "ChatGPT-Account-ID": accountId, originator: "neura", "User-Agent": "neura" });
 }
 
+type CodexResponse = { status: "completed"; output: Record<string, unknown>[]; [key: string]: unknown };
+
+function completedCodexResponse(value: unknown): CodexResponse {
+  const response = value as CodexResponse | null;
+  if (!response || response.status !== "completed" || (response.error !== undefined && response.error !== null) || !Array.isArray(response.output) || response.output.some(item => !item || typeof item !== "object" || Array.isArray(item))) {
+    throw new Error(`Codex response did not complete; ${codexDenialReason(value)}; no API billing fallback was used`);
+  }
+  return response;
+}
+
+/** Replay an already completed JSON response through the SDK's existing SSE decoder. */
+function codexJsonStream(response: CodexResponse): Response {
+  const events: Record<string, unknown>[] = [{ type: "response.created", response: { ...response, output: [] } }];
+  for (const [output_index, item] of response.output.entries()) {
+    if (!["message", "function_call", "reasoning"].includes(String(item.type))) throw new Error("Unsupported Codex JSON output; raw details withheld");
+    events.push({ type: "response.output_item.added", output_index, item: { ...item, content: [], arguments: "", summary: [] } });
+    if (item.type === "message") {
+      if (!Array.isArray(item.content)) throw new Error("Invalid Codex JSON message; raw details withheld");
+      for (const [content_index, part] of item.content.entries()) {
+        if (part?.type !== "output_text" || typeof part.text !== "string") throw new Error("Unsupported Codex JSON content; raw details withheld");
+        events.push({ type: "response.output_text.delta", item_id: item.id, output_index, content_index, delta: part.text });
+        if (Array.isArray(part.annotations)) for (const annotation of part.annotations) events.push({ type: "response.output_text.annotation.added", item_id: item.id, output_index, content_index, annotation });
+      }
+    } else if (item.type === "function_call") {
+      if (typeof item.arguments !== "string") throw new Error("Invalid Codex JSON tool call; raw details withheld");
+      events.push({ type: "response.function_call_arguments.delta", item_id: item.id, output_index, delta: item.arguments });
+    } else if (Array.isArray(item.summary)) {
+      for (const [summary_index, part] of item.summary.entries()) {
+        if (part?.type !== "summary_text" || typeof part.text !== "string") throw new Error("Invalid Codex JSON reasoning; raw details withheld");
+        events.push({ type: "response.reasoning_summary_part.added", item_id: item.id, output_index, summary_index, part: { type: "summary_text", text: "" } }, { type: "response.reasoning_summary_text.delta", item_id: item.id, output_index, summary_index, delta: part.text }, { type: "response.reasoning_summary_part.done", item_id: item.id, output_index, summary_index, part });
+      }
+    }
+    events.push({ type: "response.output_item.done", output_index, item });
+  }
+  events.push({ type: "response.completed", response });
+  return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
+}
+
 /** The terminal completed snapshot is authoritative; truncated streams must not become successful turns. */
 async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<Response> {
   if (!response.body) throw new Error("Codex response has no stream");
@@ -78,8 +116,7 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
         if (!payload || typeof payload !== "object") throw new Error("Invalid Codex stream event");
         if (["error", "response.error", "response.failed", "response.incomplete"].includes(payload.type ?? "")) throw new Error("Codex response did not complete");
         if (payload.type === "response.completed") {
-          if (payload.response?.status !== "completed" || !Array.isArray(payload.response.output)) throw new Error("Invalid completed Codex response");
-          return new Response(JSON.stringify(payload.response), { headers: { "Content-Type": "application/json" } });
+          return new Response(JSON.stringify(completedCodexResponse(payload.response)), { headers: { "Content-Type": "application/json" } });
         }
       }
       if (done) throw new Error("Codex stream ended without a completed response");
@@ -126,30 +163,30 @@ async function readJsonResponse(response: Response, maxBytes: number, timeoutMs:
 }
 
 /** Expose fixed hints and allowlisted public field names, never raw error data. */
-async function codexDenialHint(response: Response, signal?: AbortSignal, deadline?: number, requestSignal = signal): Promise<string> {
+function codexDenialReason(value: unknown): string {
   const unknown = "No recognized safe backend reason; raw details withheld";
-  try {
-    const payload = await readJsonResponse(response, 8192, 1000, requestSignal, deadline) as { error?: { code?: unknown; type?: unknown; param?: unknown; message?: unknown }; detail?: unknown } | null;
-    const error = payload?.error;
-    const rawCode = error?.code ?? error?.type;
-    const code = typeof rawCode === "string" ? rawCode : undefined;
-    const message = typeof error?.message === "string" ? error.message : typeof payload?.detail === "string" ? payload.detail : "";
-    if (["model_not_found", "unsupported_model", "model_not_available"].includes(code ?? "") || /^(?:the )?(?:['"][a-z0-9._-]{1,128}['"] )?model (?:is )?not (?:supported|available|found)(?: when using Codex with a ChatGPT account)?\.?$/i.test(message.trim())) {
-      return "The selected model is unavailable; verify the model name and subscription entitlement";
-    }
-    if (code === "insufficient_quota" || code === "rate_limit_exceeded") return "The backend reports a subscription quota or usage limit";
-    const unsupported = /^(?:unsupported|unrecognized|unknown) parameter:\s*(\S+)$/i.exec(message.trim());
-    const detailField = unsupported?.[1].replace(/^(['"])(.*)\1$/, "$2");
-    const field = typeof error?.param === "string" ? error.param : detailField;
-    const fields = ["model", "instructions", "stream", "store", "tools", "tool_choice", "input", "max_output_tokens", "reasoning", "reasoning.effort", "temperature", "top_p", "include"];
-    if (field && fields.includes(field) && (unsupported || ["invalid_request_error", "unsupported_parameter", "invalid_value"].includes(code ?? ""))) {
-      return `The backend rejected request field: ${field}`;
-    }
-    return unknown;
-  } catch {
-    signal?.throwIfAborted();
-    return unknown;
+  const payload = value as { error?: { code?: unknown; type?: unknown; param?: unknown; message?: unknown }; detail?: unknown } | null;
+  const error = payload?.error;
+  const rawCode = error?.code ?? error?.type;
+  const code = typeof rawCode === "string" ? rawCode : undefined;
+  const message = typeof error?.message === "string" ? error.message : typeof payload?.detail === "string" ? payload.detail : "";
+  if (["model_not_found", "unsupported_model", "model_not_available"].includes(code ?? "") || /^(?:the )?(?:['"][a-z0-9._-]{1,128}['"] )?model (?:is )?not (?:supported|available|found)(?: when using Codex with a ChatGPT account)?\.?$/i.test(message.trim())) {
+    return "The selected model is unavailable; verify the model name and subscription entitlement";
   }
+  if (code === "insufficient_quota" || code === "rate_limit_exceeded") return "The backend reports a subscription quota or usage limit";
+  const unsupported = /^(?:unsupported|unrecognized|unknown) parameter:\s*(\S+)$/i.exec(message.trim());
+  const detailField = unsupported?.[1].replace(/^(['"])(.*)\1$/, "$2");
+  const field = typeof error?.param === "string" ? error.param : detailField;
+  const fields = ["model", "instructions", "stream", "store", "tools", "tool_choice", "input", "max_output_tokens", "reasoning", "reasoning.effort", "temperature", "top_p", "include"];
+  if (field && fields.includes(field) && (unsupported || ["invalid_request_error", "unsupported_parameter", "invalid_value"].includes(code ?? ""))) {
+    return `The backend rejected request field: ${field}`;
+  }
+  return unknown;
+}
+
+async function codexDenialHint(response: Response, signal?: AbortSignal, deadline?: number, requestSignal = signal): Promise<string> {
+  try { return codexDenialReason(await readJsonResponse(response, 8192, 1000, requestSignal, deadline)); }
+  catch { signal?.throwIfAborted(); return codexDenialReason(null); }
 }
 
 // Protocol reference: @mastra/code-sdk@1.15.0, Apache-2.0; see docs/CODEX_AUTH.md.
@@ -181,8 +218,17 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
     const hint = await codexDenialHint(response, signal);
     throw new Error(`Codex subscription request denied (${response.status}); ${hint}; no API billing fallback was used`);
   }
-  if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/event-stream")) { await response.body?.cancel(); throw new Error("Codex subscription requires an event stream"); }
-  return streaming ? response : codexSnapshot(response, signal);
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType === "text/event-stream") return streaming ? response : codexSnapshot(response, signal);
+  if (contentType === "application/json") {
+    let value: unknown;
+    try { value = await readJsonResponse(response, MAX_RESPONSE_BYTES, 30_000, signal); }
+    catch { signal?.throwIfAborted(); throw new Error("Codex JSON response was invalid, oversized or stalled; raw details withheld"); }
+    const completed = completedCodexResponse(value);
+    return streaming ? codexJsonStream(completed) : new Response(JSON.stringify(completed), { headers: { "Content-Type": "application/json" } });
+  }
+  await response.body?.cancel();
+  throw new Error("Codex subscription returned an unsupported response format; expected SSE or completed JSON; raw details withheld");
 }
 
 export type SubscriptionModel = { id: string };
@@ -232,8 +278,26 @@ export function createConfiguredModel({ provider, model, baseURL }: ProviderConf
     // Disable storage before SDK prompt conversion too, so history is inline rather than item references.
     const generate = configured.doGenerate.bind(configured);
     const stream = configured.doStream.bind(configured);
-    configured.doGenerate = (options) => generate(optionsForCodex(options));
-    configured.doStream = (options) => stream(optionsForCodex(options));
+    configured.doGenerate = async (options) => {
+      try {
+        const result = await generate(optionsForCodex(options));
+        options.abortSignal?.throwIfAborted();
+        return result;
+      }
+      catch (error) {
+        options.abortSignal?.throwIfAborted();
+        if (error instanceof Error && error.name.startsWith("AI_")) throw new Error("Codex subscription response could not be decoded; raw details withheld");
+        throw error;
+      }
+    };
+    configured.doStream = async (options) => {
+      const result = await stream(optionsForCodex(options));
+      return { ...result, stream: result.stream.pipeThrough(new TransformStream({
+        transform(chunk, controller) {
+          controller.enqueue(chunk.type === "error" ? { ...chunk, error: new Error("Codex subscription stream could not be decoded; raw details withheld") } : chunk);
+        },
+      }), { signal: options.abortSignal }) };
+    };
     return configured;
   }
   if (provider === "local") {
