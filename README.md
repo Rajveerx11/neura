@@ -77,6 +77,13 @@ Keep the test project outside the Neura checkout and its parents/descendants,
 outside the Neura private home and outside any Pi profile. Neura protects its own
 runtime against writes and refuses commands from overlapping workspaces.
 
+Running bare `neura` interactively from your user home (`~`) opens a new scratch
+workspace instead of exposing your profile. Neura prints its path. Files remain
+after exit, but OS temporary-file cleanup may remove them. For work you want to
+keep, start in your project directory or use `neura --cwd C:\Projects\demo`.
+Explicit `--cwd`, headless tasks and `--resume` never switch workspaces silently.
+The private Neura home and Pi profiles remain forbidden workspace roots.
+
 In a fresh PowerShell terminal:
 
 ```powershell

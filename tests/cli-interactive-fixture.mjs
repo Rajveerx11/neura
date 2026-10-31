@@ -53,14 +53,17 @@ globalThis.fetch = async (url, init) => {
   requests.push({ type: 'model', model: body.model });
   modelRequests++;
   if (config.denyModel) return new Response(JSON.stringify({ error: { code: 'model_not_found', message: 'synthetic-private-value' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-  const output = config.tool && modelRequests === 1
-    ? [{ type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: 'read', arguments: JSON.stringify({ path: 'sample.txt' }), status: 'completed' }]
+  const toolName = config.writeTool ? 'write' : 'read';
+  const toolInput = config.writeTool ? { path: 'smoke.txt', content: 'scratch-only', expectedHash: null } : { path: 'sample.txt' };
+  const output = (config.tool || config.writeTool) && modelRequests === 1
+    ? [{ type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: toolName, arguments: JSON.stringify(toolInput), status: 'completed' }]
     : [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hello from selected model', annotations: [] }] }];
   const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
   if (config.jsonResponse) return new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
   return codexSse(snapshot);
 };
 const { main } = await import('../src/cli.ts');
-await main(['--cwd', config.workspace, '--no-history', ...(config.args ?? [])]);
+process.chdir(config.launchFromHome ? process.env.USERPROFILE : config.workspace);
+await main([...(config.launchFromHome || config.omitCwd ? [] : ['--cwd', config.workspace]), ...(config.history ? [] : ['--no-history']), ...(config.args ?? [])]);
 assert.equal(answers.length, 0, 'All intended interactive inputs must be consumed');
 process.stdout.write('\nNEURA_FIXTURE_REQUESTS=' + JSON.stringify(requests) + '\n');

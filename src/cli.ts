@@ -29,7 +29,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     say(`Neura · Mastra v1 development build
 Usage: neura [task] [--mode work|learn] [--provider openai-codex|local|openai|anthropic] [--model NAME] [--base-url URL]
   -p, --prompt TEXT  Run one user request; commands fail closed without interactive approval
-  --cwd PATH        Workspace (default: current directory)
+  --cwd PATH        Project directory (bare interactive launch from ~ opens a scratch workspace)
   --resume UUID     Explicitly resume Neura history (never imports Pi)
   --no-history      Do not persist conversation history
   --check           Check source prerequisites without credentials or model calls
@@ -48,7 +48,7 @@ Real account login remains a manual personal-use gate; distribution is not clear
     say(JSON.stringify({ framework: 'Mastra', version: runtime.dependencies['@mastra/core'], modes: ['work', 'learn'], node: process.version, platform: process.platform, learnFirstCreation: process.platform === 'win32' ? 'supported' : 'requires native Windows', history: 'Neura-owned; no Pi imports', status: 'development; license/distribution and real-auth gates remain' }, null, 2));
     return;
   }
-  const workspace = fs.realpathSync.native(path.resolve(values.cwd ?? process.cwd()));
+  let workspace = fs.realpathSync.native(path.resolve(values.cwd ?? process.cwd()));
   if (!fs.statSync(workspace).isDirectory()) throw new Error('Workspace must be a directory.');
   let mode: 'work' | 'learn' = 'work';
   if (values.mode !== undefined && !['work', 'learn'].includes(values.mode)) throw new Error('Only Work and Learn are implemented in this v1.');
@@ -56,9 +56,6 @@ Real account login remains a manual personal-use gate; distribution is not clear
   let generation = 0;
   const home = path.resolve(process.env.NEURA_HOME || path.join(os.homedir(), '.neura'));
   if (home.split(/[\\/]/).some(part => part.replace(/[. ]+$/, '').toLowerCase() === '.pi')) throw new Error('NEURA_HOME must be outside the legacy Pi profile.');
-  assertWorkspaceOutsideNeuraHome(workspace, home);
-  const workspaceKey = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
-  const sessions = path.join(home, 'sessions', workspaceKey);
   const prompt = values.prompt ?? (positionals.length ? positionals.join(' ') : undefined);
   if (prompt === undefined && !stdin.isTTY) throw new Error('Noninteractive input requires an explicit --prompt.');
   if (values.prompt !== undefined && positionals.length) throw new Error('Use either --prompt or a positional task, not both.');
@@ -70,6 +67,12 @@ Real account login remains a manual personal-use gate; distribution is not clear
   let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? (providerKind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined) };
   const modelLabel = (value: string) => redactSensitiveText(value || '(not selected)', 200);
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
+  const scratchWorkspace = values.cwd === undefined && interactive && !values.resume && path.relative(fs.realpathSync.native(os.homedir()), workspace) === '';
+  if (scratchWorkspace) workspace = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'neura-workspace-')));
+  try { assertWorkspaceOutsideNeuraHome(workspace, home); }
+  catch (error) { if (scratchWorkspace) fs.rmdirSync(workspace); throw error; }
+  const workspaceKey = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
+  const sessions = path.join(home, 'sessions', workspaceKey);
   const rl = interactive ? createInterface({ input: stdin, output: stdout }) : undefined;
   let abort: AbortController | undefined;
   const onInterrupt = () => { if (abort) abort.abort(); else rl?.close(); };
@@ -97,7 +100,11 @@ Real account login remains a manual personal-use gate; distribution is not clear
     if (!values['no-history']) {
       await selectSession(values.resume);
     } else if (values.resume) throw new Error('--resume cannot be combined with --no-history.');
-    if (interactive) for (const line of wordmark) say(line); // Logo-only launch; no false READY banner.
+    if (interactive) for (const line of wordmark) say(line); // No false READY banner.
+    if (scratchWorkspace) {
+      say(`Scratch workspace: ${workspace}`);
+      say('Files remain here after exit, but OS temp cleanup may remove them. Use --cwd PATH for a project.');
+    }
     async function changeModel(next: ProviderConfig) {
       createConfiguredModel(next);
       abort?.signal.throwIfAborted();

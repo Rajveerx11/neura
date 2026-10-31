@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -18,23 +19,55 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean }) {
+async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
-    const workspace = path.join(scratch, 'workspace'); const home = path.join(scratch, 'home'); const profile = path.join(scratch, 'profile');
+    const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
+    const home = options.launchFromHome ? path.join(profile, '.neura') : path.join(scratch, 'home');
     await fs.mkdir(workspace); await fs.mkdir(profile);
     await fs.writeFile(path.join(workspace, 'sample.txt'), 'synthetic-private-value');
     const config = path.join(scratch, 'fixture.json');
     await fs.writeFile(config, JSON.stringify({ ...options, workspace }));
-    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 });
+    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), TEMP: scratch, TMP: scratch, NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 });
     const match = /NEURA_FIXTURE_REQUESTS=(.+)/.exec(reply.stdout);
     assert.ok(match, 'The real CLI must consume all synthetic interactive input');
     assert.ok(!reply.stdout.includes('synthetic-private-value'));
     assert.ok(!reply.stderr.includes('synthetic-private-value'));
-    await assert.rejects(fs.stat(path.join(home, 'sessions')), { code: 'ENOENT' });
+    if (!options.history) await assert.rejects(fs.stat(path.join(home, 'sessions')), { code: 'ENOENT' });
+    if (options.launchFromHome) {
+      const opened = /^Scratch workspace: (.+)$/m.exec(reply.stdout)?.[1];
+      assert.ok(opened, 'Home launches must show the selected scratch directory');
+      assert.equal(path.dirname(opened), scratch);
+      assert.match(path.basename(opened), /^neura-workspace-/);
+      await assert.rejects(fs.stat(path.join(opened, 'sample.txt')), { code: 'ENOENT' });
+      if (options.writeTool) assert.equal(await fs.readFile(path.join(opened, 'smoke.txt'), 'utf8'), 'scratch-only');
+      await assert.rejects(fs.stat(path.join(profile, 'smoke.txt')), { code: 'ENOENT' });
+      assert.deepEqual(await fs.readdir(home), options.history ? ['codex-auth.json', 'sessions'] : ['codex-auth.json']);
+      if (options.history) {
+        const key = createHash('sha256').update(process.platform === 'win32' ? opened.toLowerCase() : opened).digest('hex');
+        assert.deepEqual(await fs.readdir(path.join(home, 'sessions')), [key], 'History must be scoped to the new workspace, not the user profile');
+        const files = await fs.readdir(path.join(home, 'sessions', key));
+        assert.equal(files.filter(name => name.endsWith('.json')).length, 1);
+        assert.ok(!files.some(name => name.endsWith('.lock')), 'The session writer lease must be released');
+      }
+    }
     return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string }> };
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 }
+
+test('bare interactive launch from the user home uses a separate scratch workspace, including actual Work writes', async () => {
+  const idle = await interactiveFixture({ launchFromHome: true, history: true, inputs: ['/help', '/quit'] });
+  assert.match(idle.stdout, /work > /);
+  assert.equal(idle.stderr, '');
+  assert.deepEqual(idle.requests, [], 'Startup must not authenticate or call a provider');
+  const written = await interactiveFixture({ launchFromHome: true, writeTool: true, inputs: ['Create a synthetic file', '/quit'] });
+  assert.match(written.stdout, /\[tool\] write: returned/);
+  assert.equal(written.stderr, '');
+  assert.deepEqual(written.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+  const project = await interactiveFixture({ omitCwd: true, inputs: ['/help', '/quit'] });
+  assert.ok(!project.stdout.includes('Scratch workspace:'));
+  assert.deepEqual(project.requests, []);
+});
 
 test('bare /model lists advertised subscription choices, reprompts bad input and selects a real request model', async () => {
   const reply = await interactiveFixture({ inputs: ['/model', 'invalid', '2', 'hi', '/quit'] });
@@ -90,6 +123,52 @@ test('model cancellation, catalog denial and explicit rejected models never trig
   const failedCatalog = await interactiveFixture({ inputs: ['/model', '/quit'], catalogError: { error: { code: 'unknown', message: 'synthetic-private-value' } } });
   assert.match(failedCatalog.stderr, /model discovery denied \(403\)/);
   assert.deepEqual(failedCatalog.requests, [{ type: 'catalog' }]);
+});
+
+test('home scratch fallback never retargets explicit, headless or resume requests and retains private-root denial', async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-home-boundary-')));
+  const profile = path.join(scratch, 'profile'); const home = path.join(profile, '.neura');
+  await fs.mkdir(home, { recursive: true });
+  const source = String.raw`
+    import assert from 'node:assert/strict'; import fs from 'node:fs'; import path from 'node:path';
+    import { createRequire, syncBuiltinESMExports } from 'node:module';
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    process.chdir(process.env.USERPROFILE);
+    let readlineCalls = 0; let allocations = 0;
+    createRequire(import.meta.url)('node:readline/promises').createInterface = () => { readlineCalls++; throw new Error('Must not open readline'); };
+    const mkdtemp = fs.mkdtempSync;
+    fs.mkdtempSync = (...args) => { allocations++; return mkdtemp(...args); };
+    syncBuiltinESMExports();
+    globalThis.fetch = async () => { throw new Error('No provider or credential requests allowed'); };
+    const { main } = await import('./src/cli.ts');
+    const listeners = process.listenerCount('SIGINT');
+    for (const args of [
+      ['--cwd', process.env.USERPROFILE, '--no-history'],
+      ['--cwd', process.env.NEURA_HOME, '--no-history'],
+      ['--prompt', '/help', '--no-history'],
+      ['--resume', '00000000-0000-4000-8000-000000000000'],
+    ]) await assert.rejects(main(args), /private Neura home/);
+    await assert.rejects(main(['--provider', 'invalid', '--no-history']), /Unsupported provider/);
+    assert.equal(allocations, 0, 'Explicit or noninteractive requests must not allocate scratch workspaces');
+    process.env.TEMP = process.env.NEURA_HOME; process.env.TMP = process.env.NEURA_HOME;
+    await assert.rejects(main(['--no-history']), /private Neura home/);
+    assert.equal(allocations, 1);
+    assert.deepEqual(fs.readdirSync(process.env.NEURA_HOME), [], 'Rejected scratch allocation must be removed');
+    const pi = path.join(process.env.USERPROFILE, '.pi'); fs.mkdirSync(pi);
+    process.env.TEMP = pi; process.env.TMP = pi;
+    await assert.rejects(main(['--no-history']), /legacy Pi profile/);
+    assert.deepEqual(fs.readdirSync(pi), []);
+    assert.equal(readlineCalls, 0);
+    assert.equal(process.listenerCount('SIGINT'), listeners);
+    console.log('home fallback boundaries passed');
+  `;
+  try {
+    const reply = await exec(process.execPath, ['--input-type=module', '-e', source], { cwd: root, env: { ...syntheticEnvironment(profile), NEURA_HOME: home }, timeout: 20000 });
+    assert.match(reply.stdout, /home fallback boundaries passed/);
+    assert.equal(reply.stderr, '');
+    await assert.rejects(fs.stat(path.join(home, 'sessions')), { code: 'ENOENT' });
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 
 test('invalid startup model/provider opens no readline or interrupt handler; valid commands clean up', async () => {
