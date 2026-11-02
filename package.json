@@ -49,7 +49,7 @@
     "audit:all": "npm run audit:dependencies && npm run audit:signatures"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.82",
+    "@ai-sdk/anthropic": "4.0.92",
     "@ai-sdk/openai": "4.0.96",
     "@mastra/core": "1.79.0",
     "typebox": "1.4.3",
