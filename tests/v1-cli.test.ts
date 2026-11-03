@@ -246,6 +246,10 @@ test('invalid startup model/provider opens no readline or interrupt handler; val
       [['--model', ''], /Model name is required/],
       [['--model', '   '], /Model name is required/],
       [['--provider', 'invalid'], /Unsupported provider/],
+      [['--reviewer-provider', 'invalid', '--reviewer-model', 'm'], /Unsupported reviewer provider/],
+      [['--reviewer-provider', 'anthropic'], /Reviewer model is required/],
+      [['--reviewer-base-url', 'http://127.0.0.1:1/v1'], /Reviewer model is required/],
+      [['--reviewer-model', ' '], /Reviewer model name is required/],
     ]) {
       await assert.rejects(main([...base, ...args]), expected);
       assert.equal(process.listenerCount('SIGINT'), listeners);

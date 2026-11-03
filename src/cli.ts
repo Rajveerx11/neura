@@ -16,6 +16,9 @@ import { runTurn } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { createSession, saveSession, resumeSession, listSessions, type Session } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
+import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.ts';
+import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
+import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 
 const wordmark = ['█  █ █▀▀▀ █  █ █▀▀▄ ▄▀▀▄', '██ █ █▀▀  █  █ █  █ █  █', '█ ██ ██▀▀ █  █ █▀▀  █▀▀█', '█  █ █▀▀  █  █ █ ▀▄ █  █', '▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀'];
 export function terminalText(text: string): string { return stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ''); }
@@ -25,6 +28,7 @@ const warning = (text: string) => stderr.write(terminalText(redactSensitiveText(
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
     help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
+    'reviewer-provider': { type: 'string' }, 'reviewer-model': { type: 'string' }, 'reviewer-base-url': { type: 'string' },
   } });
   if (values.help) {
     say(`Neura · Mastra v1 development build
@@ -35,7 +39,10 @@ Usage: neura [task] [--mode work|learn] [--provider openai-codex|local|openai|an
   --no-history      Do not persist conversation history
   --no-thinking     Hide provider reasoning summaries (never exposes hidden internal reasoning)
   --check           Check source prerequisites without credentials or model calls
-Commands: /help, /login, /logout, /mode work|learn, /learn, /new, /sessions, /resume UUID, /model [PROVIDER MODEL [URL]], /thinking [on|off], /verify [quick|full|status], /quit
+  --reviewer-provider P, --reviewer-model M, --reviewer-base-url URL
+                    Independent Work reviewer (env NEURA_REVIEWER_*; default: builder model, labelled same-family)
+Commands: /help, /login, /logout, /mode work|learn, /learn, /new, /sessions, /resume UUID, /model [PROVIDER MODEL [URL]], /reviewer [PROVIDER MODEL [URL]|default], /review [status], /workflow [on|off], /thinking [on|off], /verify [quick|full|status], /quit
+Work reviews each change read-only (up to 3 rounds, must-fix findings auto-fixed) and ends with READY FOR YOUR APPROVAL, BLOCKED or Review skipped. It never commits, pushes or merges.
 /model opens the subscription model picker. Without --model, subscription requests use the catalog default, never a guessed model.
 /login starts an interactive ChatGPT subscription sign-in. API billing is never a fallback.
 Real account login remains a manual personal-use gate; distribution is not cleared.`);
@@ -61,14 +68,34 @@ Real account login remains a manual personal-use gate; distribution is not clear
   const prompt = values.prompt ?? (positionals.length ? positionals.join(' ') : undefined);
   if (prompt === undefined && !stdin.isTTY) throw new Error('Noninteractive input requires an explicit --prompt.');
   if (values.prompt !== undefined && positionals.length) throw new Error('Use either --prompt or a positional task, not both.');
+  const providerKinds = ['openai-codex', 'local', 'openai', 'anthropic'];
+  const defaultBaseURL = (kind: string) => kind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined;
   const providerKind = (values.provider ?? process.env.NEURA_PROVIDER ?? 'openai-codex') as ProviderConfig['provider'];
-  if (!['openai-codex', 'local', 'openai', 'anthropic'].includes(providerKind)) throw new Error('Unsupported provider.');
+  if (!providerKinds.includes(providerKind)) throw new Error('Unsupported provider.');
+  const reviewerKind = values['reviewer-provider'] ?? process.env.NEURA_REVIEWER_PROVIDER;
+  const reviewerModel = values['reviewer-model'] ?? process.env.NEURA_REVIEWER_MODEL;
+  const reviewerURL = values['reviewer-base-url'] ?? process.env.NEURA_REVIEWER_BASE_URL;
+  if (reviewerKind !== undefined && !providerKinds.includes(reviewerKind)) throw new Error('Unsupported reviewer provider.');
+  if (reviewerModel !== undefined && !reviewerModel.trim()) throw new Error('Reviewer model name is required.');
+  if ((reviewerKind !== undefined || reviewerURL !== undefined) && reviewerModel === undefined) throw new Error('Reviewer model is required with a reviewer provider or base URL.');
   const configuredModel = values.model ?? process.env.NEURA_MODEL;
   if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
   let modelExplicit = configuredModel !== undefined;
   let showReasoning = !values['no-thinking'];
-  let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? (providerKind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined) };
+  let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? defaultBaseURL(providerKind) };
   const modelLabel = (value: string) => redactSensitiveText(value || '(not selected)', 200);
+  // Explicit reviewer only; otherwise the reviewer follows the current builder model (same-family, labelled weaker).
+  let reviewerOverride: ProviderConfig | undefined = reviewerModel === undefined ? undefined : { provider: (reviewerKind ?? providerKind) as ProviderConfig['provider'], model: reviewerModel, baseURL: reviewerURL ?? defaultBaseURL(reviewerKind ?? providerKind) };
+  const reviewer = (): ProviderConfig => reviewerOverride ?? { provider: provider.provider, model: provider.model, baseURL: provider.baseURL };
+  const parseProvider = (rest: string, command: string): ProviderConfig => {
+    const [kind, model, url, ...extra] = rest.split(/\s+/);
+    if (!providerKinds.includes(kind) || !model || extra.length) throw new Error(`Use /${command} openai-codex|local|openai|anthropic MODEL [URL].`);
+    return { provider: kind as ProviderConfig['provider'], model, baseURL: url ?? defaultBaseURL(kind) };
+  };
+  let workflowOn = true;
+  let sessionBaseline: { generation: number; snapshot: TreeSnapshot | null } | undefined;
+  let lastReview: { generation: number; receipt: ReviewReceipt } | undefined;
+  let baselineWarned = false;
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
   const scratchWorkspace = values.cwd === undefined && interactive && !values.resume && path.relative(fs.realpathSync.native(os.homedir()), workspace) === '';
   if (scratchWorkspace) workspace = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'neura-workspace-')));
@@ -141,9 +168,10 @@ Real account login remains a manual personal-use gate; distribution is not clear
         }
       } finally { abort = undefined; }
     }
-    async function turn(text: string, learnerInput = text) {
+    async function turn(text: string, learnerInput = text, reviewTurn = true) {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
-      abort = new AbortController();
+      const owned = !abort; // workflow fix turns reuse the outer request's cancellation
+      abort ??= new AbortController();
       try {
         if (!provider.model) {
           if (provider.provider !== 'openai-codex') throw new Error('Choose a model with --model or /model PROVIDER MODEL [URL].');
@@ -157,7 +185,11 @@ Real account login remains a manual personal-use gate; distribution is not clear
         learn.input(learnerInput);
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
         const tools = [...createWorkspaceTools(workspace, () => mode, () => generation, approve), ...(mode === 'learn' ? learn.tools() : [])];
-        const instructions = mode === 'learn' ? await learn.instructions(abort.signal) : WORK_INSTRUCTIONS;
+        const instructions = mode === 'learn' ? await learn.instructions(abort.signal) : workflowOn ? `${WORK_INSTRUCTIONS}\n\n${WORKFLOW_INSTRUCTIONS}` : WORK_INSTRUCTIONS;
+        const review = reviewTurn && mode === 'work' && workflowOn;
+        const needSessionBaseline = mode === 'work' && sessionBaseline?.generation !== expected;
+        const baseline = review || needSessionBaseline ? await captureWorktree(workspace, { signal: abort.signal }) : null;
+        if (needSessionBaseline) sessionBaseline = { generation: expected, snapshot: baseline };
         if (interactive) say('[thinking] Waiting for model response...');
         let summaryVisible = false;
         const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal,
@@ -171,13 +203,25 @@ Real account login remains a manual personal-use gate; distribution is not clear
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; }
           catch { warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
-      } finally { abort = undefined; }
+        if (review && (baseline || !baselineWarned)) { baselineWarned ||= !baseline; await workflow(text, baseline, false); }
+      } finally { if (owned) abort = undefined; }
+    }
+    async function workflow(task: string, baseline: TreeSnapshot | null, manual: boolean) {
+      const expected = generation;
+      const outcome = await runReviewLoop({ workspace, task, baseline, reviewer: reviewer(), builder: provider, signal: abort?.signal, manual }, {
+        capture: (root, signal) => captureWorktree(root, { signal }),
+        review: input => reviewCandidate(input), assessRisk,
+        fixTurn: prompt => turn(prompt, prompt, false),
+        current: () => generation === expected && mode === 'work',
+        report: line => say(line),
+      });
+      if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
     }
     async function input(text: string): Promise<boolean> {
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
       if (command === 'quit' || command === 'exit') return false;
-      if (command === 'help') say('/login · /logout · /mode work|learn · /learn status|answer <text>|hint|reveal|save|saved|resume <file>|reset|explain|deeper|example\n/new · /sessions · /resume <id> · /thinking on|off · /verify quick|full|status · /model (subscription picker) · /model <provider> <model> [URL] · /quit\nOnly Work and Learn are implemented. API billing is never a subscription fallback.');
+      if (command === 'help') say('/login · /logout · /mode work|learn · /learn status|answer <text>|hint|reveal|save|saved|resume <file>|reset|explain|deeper|example\n/new · /sessions · /resume <id> · /thinking on|off · /verify quick|full|status · /model (subscription picker) · /model <provider> <model> [URL]\n/workflow on|off · /review · /review status · /reviewer · /reviewer <provider> <model> [URL] · /reviewer default · /quit\nOnly Work and Learn are implemented. API billing is never a subscription fallback.');
       else if (command === 'verify') {
         if (mode !== 'work') throw new Error('Verification is available only in Work. Learn cannot execute proof.');
         if (!['', 'quick', 'full', 'status'].includes(rest)) throw new Error('Use /verify quick, /verify full or /verify status.');
@@ -200,6 +244,34 @@ Real account login remains a manual personal-use gate; distribution is not clear
             else if (lastVerification.reason === 'snapshot_unavailable') say('Use a committed Git repository root within the snapshot limits. No proof command was run.');
             else if (lastVerification.reason === 'runner_unavailable') say('Pinned offline PoW/WSL sandbox unavailable. No host fallback was used.');
             say('This receipt is session-local metadata, not signed attestation or task completion. Detector-only is never verified.');
+          }
+        } finally { abort = undefined; }
+      } else if (command === 'workflow') {
+        if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /workflow on or /workflow off.');
+        if (rest) workflowOn = rest === 'on';
+        say(`Review workflow: ${workflowOn ? 'on (Work changes get an independent read-only review)' : 'off (no automatic review)'}.`);
+      } else if (command === 'reviewer') {
+        if (rest === 'default') reviewerOverride = undefined;
+        else if (rest) { const next = parseProvider(rest, 'reviewer'); createConfiguredModel(next); reviewerOverride = next; }
+        const current = reviewer();
+        say(`Reviewer: ${modelLabel(current.model)} (${current.provider}${reviewerOverride ? '' : ', follows builder'}); ${reviewerIndependence(current, provider) === 'cross-family' ? 'cross-family' : 'same-family, weaker independence'}.`);
+      } else if (command === 'review') {
+        if (mode !== 'work') throw new Error('Review is available only in Work.');
+        if (!['', 'status'].includes(rest)) throw new Error('Use /review or /review status.');
+        abort = new AbortController();
+        const expected = generation;
+        try {
+          if (rest === 'status') {
+            if (!lastReview || lastReview.generation !== generation) { say('No review receipt in this session. Run /review.'); return true; }
+            const current = await reviewReceiptCurrent(workspace, lastReview.receipt, abort.signal);
+            if (generation !== expected || mode !== 'work') throw new Error('Review mode/session changed; result discarded.');
+            say(`Last review (${lastReview.receipt.status}) is ${current ? 'current for the workspace' : 'stale: the workspace changed since it was reviewed'}.`);
+          } else {
+            if (sessionBaseline?.generation !== generation) {
+              say('No session baseline yet; capturing one now, so only later changes can be reviewed.');
+              sessionBaseline = { generation, snapshot: await captureWorktree(workspace, { signal: abort.signal }) };
+            }
+            await workflow('Manual /review of all workspace changes since the session baseline.', sessionBaseline.snapshot, true);
           }
         } finally { abort = undefined; }
       } else if (command === 'thinking') {
@@ -241,10 +313,7 @@ Real account login remains a manual personal-use gate; distribution is not clear
         generation++; learn.invalidate(true); mode = 'work'; say('Workspace history resumed in Work. Use /mode learn and explicitly /learn resume to restore a lesson.');
       } else if (command === 'model') {
         if (!rest.trim()) { await pickModel(); return true; }
-        const [kind, model, url, ...extra] = rest.split(/\s+/);
-        if (!['openai-codex', 'local', 'openai', 'anthropic'].includes(kind) || !model || extra.length) throw new Error('Use /model openai-codex|local|openai|anthropic MODEL [URL].');
-        const next = { provider: kind as ProviderConfig['provider'], model, baseURL: url ?? (kind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined) };
-        await changeModel(next);
+        await changeModel(parseProvider(rest, 'model'));
       } else throw new Error('Unknown command. Use /help.');
       return true;
     }

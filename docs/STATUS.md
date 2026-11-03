@@ -66,6 +66,19 @@ proof paths are not configured. No proof tooling was installed or run on the hos
 The offline PoW execution path remains unverified on this machine. Synthetic
 bridge checks are not real-artifact acceptance. See the [manual command](../README.md#manual-verification-first-integration-slice).
 
+Work now runs an engineering review workflow by default (`/workflow on|off`).
+After a Work turn changes the Git workspace, path-based risk routing skips
+docs-only changes; otherwise one fresh reviewer with code-enforced `read`/`ls`
+tools reviews the candidate diff. Receipts bind to the candidate fingerprint and
+go `stale` on any later edit. The controller, not the model, marks must-fix
+findings (blocker, or major with non-low confidence). The builder fixes them
+automatically for up to 3 review rounds. Every run ends `READY FOR YOUR APPROVAL`,
+`BLOCKED` or `Review skipped`, and never commits, pushes or merges. The reviewer
+defaults to the builder model and is labelled same-family. Set a different
+provider with `--reviewer-provider/--reviewer-model` or `/reviewer` for
+cross-family independence. Receipts are session-local. Tests use fake and
+mock-model reviewers; no live reviewer run is recorded yet.
+
 Cleanup distinguishes obsolete implementation work from unmet requirements.
 The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget
 render optimization (#60) no longer describe the active readline application.
