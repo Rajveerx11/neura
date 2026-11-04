@@ -261,7 +261,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         if (review && baseline) await workflow(text, baseline, false);
         else if (review && !baselineWarned) {
           baselineWarned = true; // once per session: without a Git baseline no change can be reviewed
-          stdout.write(terminal().feedback('Review unavailable: no workspace baseline. This folder is not a committed Git repository, so changes here are not reviewed. /workflow off hides this note.') + '\n');
+          stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');
         }
         if (owned && interactive) stdout.write('\n');
       } catch (error) {

@@ -82,7 +82,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
         ['/verify [quick|full|status]', 'Manual verification in Work. Detector-only is never verified.'],
       ]),
       group('Review workflow', [
-        ['/workflow [on|off]', 'Work reviews each change read-only (up to 3 rounds, must-fix findings auto-fixed) and ends with READY FOR YOUR APPROVAL, BLOCKED or Review skipped. It never commits, pushes or merges.'],
+        ['/workflow [on|off]', 'Work reviews each change read-only (up to 3 rounds, must-fix findings auto-fixed) and ends with READY FOR YOUR APPROVAL, BLOCKED or Review skipped; a turn that changed nothing ends silently. It never commits, pushes or merges.'],
         ['/review [status]', 'Review all changes since the session baseline, or check whether the last review is still current.'],
         ['/reviewer PROVIDER MODEL [URL]', 'Choose an independent reviewer. Use a different provider for cross-family review.'],
         ['/reviewer [default]', 'Show the reviewer, or reset it to follow the builder model (labelled same-family).'],
@@ -148,8 +148,14 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     /** One quiet line between turns; the full status block is shown only when mode, model or session state changes. */
     footer(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);
-      const fields = [state.model || '(not selected)', `${state.messageCount} msgs`, ...(usage ? [`${usage.inputTokens} in · ${usage.outputTokens} out tokens`] : []), '/status'];
-      return paint(shortLabel(fields.join(' · '), width), 'dim');
+      const model = state.model || '(not selected)';
+      const tokens = usage ? [`${usage.inputTokens} in · ${usage.outputTokens} out tokens`] : [];
+      // Shorten the model first; on narrow terminals drop /status, then tokens, before the message count.
+      for (const rest of [[`${state.messageCount} msgs`, ...tokens, '/status'], [`${state.messageCount} msgs`, ...tokens], [`${state.messageCount} msgs`]]) {
+        const room = width - cells(rest.join(' · ')) - 3;
+        if (room >= Math.min(8, cells(model))) return paint(shortLabel(model, room) + ' · ' + rest.join(' · '), 'dim');
+      }
+      return paint(shortLabel(`${model} · ${state.messageCount} msgs`, width), 'dim');
     },
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);
@@ -177,7 +183,8 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     },
     boundary(kind: 'waiting' | 'reasoning' | 'answer') {
       const labels = { waiting: '[thinking] Waiting for model response...', reasoning: '[reasoning summary]', answer: '[answer]' };
-      return paint(labels[kind], kind === 'answer' ? 'bone' : 'dim');
+      // One row only, so the transient waiting line can be erased with a single line clear.
+      return paint(shortLabel(labels[kind], width - 1), kind === 'answer' ? 'bone' : 'dim');
     },
     tool(name: string, phase: Phase) {
       const tone = phase === 'failed' || phase === 'blocked' ? 'error' : phase === 'cancelled' ? 'warning' : 'dim';
