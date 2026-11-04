@@ -1,0 +1,17 @@
+We're moving Neura off Pi and onto a new harness we're building on Mastra.
+
+Two modes come first: Work and Learn.
+
+Work handles workspace files and runs explicitly approved commands inside a network-disabled sandbox.
+
+Learn builds cited lessons and exercises from local PDF/PPTX material, with explicit save and resume.
+
+Mastra runs the agent loop. We're writing our own CLI and keeping permissions in application code. The policy and sandbox modules we already wrote come with us.
+
+Some features won't make the trip yet. The old full-screen cockpit and modes like Plan and Human Away aren't in this build. We're rebuilding around a smaller scope first.
+
+The active app no longer depends on Pi packages or imports Pi profiles. Existing credentials and history stay separate.
+
+This is still development work, not a production release. Licensing and distribution review remain open, and real subscription access hasn't been validated yet. Changing frameworks doesn't make those problems disappear.
+
+If you're building an agent, which parts of the harness do you keep under your own control?

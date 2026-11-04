@@ -1,0 +1,83 @@
+---
+title: "Neura: logo + model-stack CI shipped to main — next steps"
+brief: "3 commits on main, CI green. Dependabot grouping already proved itself: #145 passes where #141/#142 failed."
+version: 2
+---
+
+# Neura: shipped to main
+
+## What I did
+
+- **Pushed 3 commits to `main`** (`36d243e..a2a5e1d`) using your owner bypass of the PR rule:
+  - `b4e1422` **feat(cli):** approved logo, `--ascii`, `TERM=dumb`, narrow fallback, brand assets, tests.
+  - `6d2a378` **ci(deps):** Dependabot `model-stack` group (`@mastra/*` + `@ai-sdk/*`). Removed the dead `pi-runtime` group.
+  - `a2a5e1d` **fix(brand):** pin brand text/SVG to LF. Without it, Windows CI (`autocrlf=true`) would have broken the exact `terminal.txt` check.
+- **Docs updated:** `docs/STATUS.md` (new checkpoint), `README.md`, `AGENTS.md`, `docs/DEVELOPMENT.md`, `docs/MASTRA_V1.md`, `docs/MASTRA_V1_DEPENDENCIES.md`, `docs/DEPENDENCIES.md`, `assets/brand/README.txt`.
+- **CI:** first run failed on a runner flake (`npm audit signatures` hit `EBUSY` in the npm cache). I reran it and harness, portable-proof and Required CI all passed. CodeQL passed.
+- **Secret scan** of the pushed history found no leaks.
+
+<Diagram id="ci-proof" caption="Grouping fix already validated by Dependabot's next run." frame="show">
+
+```html
+<div class="diagram-panel" data-rough style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
+  <div class="diagram-box" style="display:flex;flex-direction:column;gap:8px">
+    <strong>Before</strong>
+    <div class="diagram-node">#141 @ai-sdk/anthropic alone — FAIL</div>
+    <div class="diagram-node">#142 @ai-sdk/openai alone — FAIL</div>
+    <div class="diagram-node">#143 @mastra/core alone</div>
+    <div class="diagram-muted">Duplicate LanguageModelV4 types</div>
+  </div>
+  <div class="diagram-box" style="display:flex;flex-direction:column;gap:8px">
+    <strong>After</strong>
+    <div class="diagram-node">#145 model-stack: core 1.80 + both SDKs — PASS</div>
+    <div class="diagram-node">#141, #142, #143 auto-closed as superseded</div>
+    <div class="diagram-muted">One provider type, one PR to review</div>
+  </div>
+</div>
+```
+
+</Diagram>
+
+## Why
+
+- **Logo:** you approved it. Only the delta was ported, so newer main features stay intact.
+- **Grouping:** the SDKs and Mastra share one provider type. Separate bumps can never pass typecheck.
+- **LF pin:** byte-exact snapshot tests and Windows line-ending conversion don't mix.
+
+## Open PRs right now
+
+<Table
+  id="prs"
+  columns={["PR", "CI", "Call"]}
+  rows={[
+    ["#140 @types/node 26.6.6", "pass", "Merge. Dev-only"],
+    ["#144 @napi-rs/canvas 1.1.0", "pass", "Merge. Brand raster test passed on it, so the tolerance works"],
+    ["#145 model-stack (core 1.80, openai 4.0.105, anthropic 4.0.92)", "pass", "Review first. Core is a deliberate pin, so update the MASTRA_V1_DEPENDENCIES graph table in the same PR"],
+  ]}
+/>
+
+## Next steps
+
+<Checklist
+  id="next"
+  items={[
+    { id: "n1", label: "1. Merge #140 and #144", note: "Green, low risk. I can do it on your say-so." },
+    { id: "n2", label: "2. Review + merge #145 with a doc update", note: "Check the Mastra 1.80 changelog for EE/license changes before merging." },
+    { id: "n3", label: "3. Live review-workflow run (cross-family reviewer)", note: "The independent review feature has only run against mocks. One real run proves it." },
+    { id: "n4", label: "4. Durable proof receipts (#121/#28)", note: "Next real feature slice. It turns /verify from detector-only into evidence." },
+    { id: "n5", label: "5. Document artwork redistribution terms", note: "STATUS now flags this as an open item before any release." },
+    { id: "n6", label: "Optional: retry npm audit signatures on EBUSY", note: "Only if the flake recurs. It needs ci-contract updates because the script strings are pinned." },
+  ]}
+/>
+
+## Do this now
+
+1. `git pull` is not needed: local `main` = `origin/main` = `a2a5e1d`. Just launch `neura` and see the logo.
+2. Reply **"merge 140 and 144"**.
+3. Decide on #145: **"review 145"** has me check the Mastra 1.80 diff and update the docs in that PR.
+
+<Callout id="takeaway" tone="decision">
+
+**Key takeaway:** when packages share types, Dependabot should bump them in one PR. Fail-on-their-own PRs aren't evidence the update is bad. They're evidence your update unit is wrong. Fix the unit (the group), and the bot's next run proves it, as #145 did here.
+
+</Callout>

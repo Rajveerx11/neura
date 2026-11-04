@@ -1,0 +1,47 @@
+---
+title: "Neura: latest install + stale cleanup"
+brief: "Neura on this PC now runs main f00944b with fresh locked dependencies and a green verify. Stale branches, the old task clone, temp folders and repo caches are gone; backups and user files are kept."
+version: 1
+---
+
+# Neura is installed at latest; the clutter is gone
+
+## What I did
+
+<Table
+  id="done"
+  columns={["Area", "Action", "Result"]}
+  rows={[
+    ["Install", "Reinstalled locked deps (root + agent/neura), re-ran install.ps1 -Development, then -Check", "`neura` runs main f00944b; full `npm run verify` green"],
+    ["Branches", "Deleted local `recover/neura-terminal-ui` and `recover/neura-cli-ux-audit`; pruned remote refs", "Only `main` left locally"],
+    ["Worktrees", "Pruned Git metadata; removed empty `.pi-subagents/worktrees`", "One worktree: C:/Neura"],
+    ["Old task clone", "Deleted `Temp/neura-dependency-pr-fixes-20261026` (362 MB)", "Checked first: brand files identical on main; its 3 local commits already landed via #137"],
+    ["Temp", "Deleted 12 other Neura temp dirs/logs (test fixtures, PR scratch, neuratile QA) + session scratchpad", "Temp has only the gitleaks cache left"],
+    ["Repo junk", "Removed `.codegraph`, `.omo`, `.pytest_cache`, `.ruff_cache`, `.tmp-hermes-agent`, stray `nul`, stale `.plan-url` tokens", "Untracked user files untouched"],
+  ]}
+/>
+
+## Why
+
+- **Checked before deleting:** the old clone looked like unpushed work, so I confirmed every commit was already on main before removing it.
+- **Kept the gitleaks cache:** `verify-secrets.ps1` uses it, so it stays.
+- **Dependabot branches stay:** they belong to open PRs #140, #144 and #145. Deleting them would close those PRs.
+
+## Kept on purpose (your call)
+
+- `.pi-subagents/dependency-backups` (344 MB), `artifacts` (28 MB), `missions`, `reports`: old Pi-era backups and records, not temp files.
+- 4 old Git stashes (Sept–Oct "preserve local work" backups).
+- T3 checkpoint refs. T3 Code uses them for undo.
+- ZIP backup in `C:/Users/rajve/Neura-backups/`.
+- The Cloudroom worktree `thr_zf68hj97yi-1`. It belongs to CyberSecurityProject, not Neura.
+
+## Do this now
+
+1. Restart any open `neura` terminal to pick up the reinstall.
+2. Reply "delete Pi backups" if the 344 MB of `.pi-subagents` backups and the 4 stashes can go too.
+
+<Callout id="takeaway" tone="decision">
+
+**Key takeaway:** "stale" is a claim, not a fact. Prove it first: compare against main, check for unpushed commits, and look at the dates. Then delete. Running `rm -rf` without checking is how real work gets lost.
+
+</Callout>

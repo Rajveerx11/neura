@@ -1,0 +1,82 @@
+---
+title: "Neura: terminal UI redesign merged + CI flake fixed"
+brief: "The recovered Cloudroom UI work is on main (#146), conflicts resolved and reviewed. The recurring Windows CI flake is fixed (#147) and proved itself on its own run."
+version: 1
+---
+
+# Terminal UI redesign is on main
+
+## What I did
+
+- **Rebuilt the lost UI work onto current main** from the recovered snapshot (`recover/neura-terminal-ui`) and resolved conflicts in `src/cli.ts` and `scripts/verify-harness.mjs`.
+- **Kept everything newer on main:** the review workflow (`/workflow`, `/review`, `/reviewer`, reviewer flags), `--ascii`, and your **approved logo**, which replaces the interim `o--o` mark.
+- **Fixed your screenshot issue:** chatting in a non-Git folder shows one "Review unavailable" note instead of `BLOCKED`.
+- **Independent review:** a fresh reviewer agent said **SAFE TO MERGE** with 0 blockers. I fixed 4 of its 5 small findings plus CodeRabbit's one comment.
+- **Merged #146** as `428133c` (squash, owner bypass, all required checks green).
+- **Fixed the recurring CI flake:** `npm audit signatures` kept failing with `EBUSY` on Windows runners. **Merged #147** as `f00944b`.
+- **Docs updated:** `TERMINAL_UX`, `STATUS`, `README`, `AGENTS`, `DEVELOPMENT`, `MASTRA_V1`, brand guide.
+
+<Diagram id="launch" caption="What `neura` now shows at launch (80 columns)." frame="show">
+
+```html
+<div class="diagram-panel" data-rough style="padding:14px"><pre style="margin:0;line-height:1.05">▄▄
+██
+▀██        ▄
+ ▀█▄       ██▄
+  ▀▀██▄▄▄▄▄▄███▄
+  ▄▄██▀▀▀▀▀▀███▀    neura
+ ▄█▀       ██▀
+▄█▀        ▀
+██
+▀▀
+
+Work · openai-codex/gpt-6.1-sol
+1.3.131 · history on/new · thinking on · 0 msgs · /status
+work &gt; </pre></div>
+```
+
+</Diagram>
+
+## What's new for you in the terminal
+
+<Table
+  id="features"
+  columns={["Feature", "How it works"]}
+  rows={[
+    ["Status line", "Mode, model, workspace, history, thinking and message count above every prompt"],
+    ["/status", "Full details plus real token usage of your last request (including auto-fix rounds). Context window stays 'unknown', never guessed"],
+    ["Help", "Grouped and width-aware: Work and Learn, Review workflow, Models, Conversation"],
+    ["Approvals", "Clear [approval required] block; only an exact 'yes' approves, once"],
+    ["Cancel / exit", "Ctrl+C cancels work with 'no task was replayed'; at the prompt it exits cleanly; empty Enter does nothing"],
+    ["Color", "Copper accents on real terminals; NO_COLOR and TERM=dumb give plain text. The logo itself is never colored"],
+  ]}
+/>
+
+## Why
+
+- **Conflict-by-hand, not overwrite:** the UI branch was 2 features behind main. A blind copy would have deleted the review workflow and your logo.
+- **Separate CI PR:** the flake wasn't caused by the UI change. Keeping it separate made #146's review clean and #147 easy to revert.
+- **Retry only on EBUSY:** a real bad signature or vulnerability still fails immediately. #147's own run hit EBUSY, retried, and passed.
+
+<Callout id="slip" tone="warning">
+
+**One slip, fixed:** a review-fix commit (`ee0f80a`) was pushed while one test was failing, because my command chain didn't stop on the failure. The next commit (`5e70527`) fixed it before merge, and every later push only went out after a green verify.
+
+</Callout>
+
+## Left out on purpose
+
+- LinkedIn captures and the first-pass preview PNG. They show the old `o--o` mark and stay in `C:/Users/rajve/Neura-backups/ui-cleanup-20261103T023529Z.zip`.
+- The audit worker's duplicate `TERMINAL_UX.md` and preview script. The implementation's versions won.
+
+## Do this now
+
+1. Run `neura` inside a **Git repo** (e.g. `neura --cwd C:\Neura`) to see the status line and the review workflow.
+2. Optional: delete the `recover/neura-terminal-ui` and `recover/neura-cli-ux-audit` local branches. Their work is now on main and the ZIP remains.
+3. Next ship candidates: merge Dependabot #140 and #144, then review #145 (Mastra 1.80).
+
+<Callout id="takeaway" tone="decision">
+
+**Key takeaway:** make "tests passed" the gate for committing, not just something you print. Chain `verify && commit && push` so a red run can't ship. One `;` instead of `&&` is all it takes to push a broken commit.
+
+</Callout>

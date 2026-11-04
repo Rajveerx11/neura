@@ -1,0 +1,78 @@
+---
+title: "Neura: screenshot check + where the UI/UX redesign went"
+brief: "Logo renders right. The UI redesign was finished and tested, then its worktrees were cleaned up on Nov 3. It survives in a ZIP and two recovered commits. Nothing is lost, and nothing is on main yet."
+version: 1
+---
+
+# Screenshots + UI/UX redesign recovery
+
+## Screenshots
+
+<Table
+  id="shots"
+  columns={["Shot", "Verdict", "Notes"]}
+  rows={[
+    ["1: launch", "Correct", "Ten-line mark, 'neura' label on the middle row, then 'work >'. No READY banner. Matches assets/brand/terminal.txt"],
+    ["2: first turn", "Works, one UX issue", "Catalog default gpt-6.1-sol was picked, the reply streamed, thinking status shown. Then 'BLOCKED: no workspace baseline' appeared after a plain 'hi'"],
+  ]}
+/>
+
+<Callout id="blocked" tone="warning">
+
+**Why BLOCKED appears:** you launched in a folder without Git (`1.3.131`), so Work's review workflow has no baseline to compare against. It is honest, because the folder can't be reviewed. But the message is labelled BLOCKED and fires once per session, even when nothing changed. **Fix:** make it a one-time `Review unavailable: not a Git repository` notice at launch instead of a BLOCKED verdict after the first turn. It's a small change in `src/cli.ts:207` / `src/workflow.ts:54`.
+
+</Callout>
+
+## Where the UI/UX work went
+
+<Diagram id="trail" caption="Cloudroom trail, Nov 2–3." frame="show">
+
+```html
+<div class="diagram-panel" data-rough style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px">
+  <div class="diagram-box"><strong>Nov 2</strong><div class="diagram-muted">Parent thr_qbzkppi4v3 (fx) spawns 2 Codex workers in Cloudroom worktrees off 5f53c11</div></div>
+  <div class="diagram-box"><strong>Nov 3 early</strong><div class="diagram-muted">Implementation done: 16 suites + 63 tests pass, real-terminal captures made</div></div>
+  <div class="diagram-box"><strong>Nov 3 08:05</strong><div class="diagram-muted">Owner-requested cleanup: verified ZIP saved, workers archived, worktrees + branches deleted</div></div>
+  <div class="diagram-box"><strong>Today</strong><div class="diagram-muted">Snapshot commits found still in C:/Neura objects. Pinned as recover/* branches</div></div>
+</div>
+```
+
+</Diagram>
+
+<FileTree
+  id="recovered"
+  title="What survives"
+  entries={[
+    { path: "C:/Users/rajve/Neura-backups/ui-cleanup-20261103T023529Z.zip", change: "added", note: "Verified archive: both workers' files, patches, captures, RESTORE.txt." },
+    { path: "branch recover/neura-terminal-ui (91a11ce)", change: "added", note: "Implementation: src/terminal-ui.ts, prompt status line, /status + token usage, cli/runtime edits, 22 files, +1468." },
+    { path: "branch recover/neura-cli-ux-audit (2e6d667)", change: "added", note: "Audit: docs/TERMINAL_UX.md, preview script + SVG. 3 files." },
+  ]}
+/>
+
+## Is it PR-ready?
+
+**Not as-is.** The redesign was finished on an older base, but it isn't mergeable yet:
+
+- **Merge conflicts:** `src/cli.ts` and `scripts/verify-harness.mjs` conflict with main's review workflow and branding.
+- **Logo clash:** it brings its own `o--o neura` identity. Your approved mark (now on main) should win.
+- **Overlap:** both workers wrote `docs/TERMINAL_UX.md` and `scripts/preview-terminal-ui.mjs`, so you have to pick one version.
+- **Visual QA:** the parent's last status said visual checks were still pending.
+
+<Checklist
+  id="plan"
+  items={[
+    { id: "p1", label: "Port onto a new branch from main", note: "Keep terminal-ui.ts status line, /status and token usage. Drop o--o logo; keep the approved mark." },
+    { id: "p2", label: "Resolve cli.ts with the review workflow", note: "Use the implementation's TERMINAL_UX.md and preview script; drop the audit duplicates." },
+    { id: "p3", label: "Full verify + real-terminal check, then open PR", note: "Include the BLOCKED-to-notice fix in the same PR." },
+  ]}
+/>
+
+## Do this now
+
+1. Say **"port the UI redesign and open a PR"**. I'll do the three steps above.
+2. Until then, don't delete the `recover/*` branches or the ZIP.
+
+<Callout id="takeaway" tone="decision">
+
+**Key takeaway:** "cleanup" quietly kills finished work when nothing was committed. Have agents commit to their branch before they report done. A commit survives worktree deletion, but uncommitted files only survive if someone remembers to zip them.
+
+</Callout>

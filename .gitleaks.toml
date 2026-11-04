@@ -10,3 +10,10 @@ id = "generic-api-key"
   regexTarget = "secret"
   regexes = ['''^acaf475c1f10da429b0aeb86b2dc848c96493b18af74814270dbe22cf20a776a$''']
   paths = ['''(^|/)agent/neura/release-manifest\.json$''']
+
+  [[rules.allowlists]]
+  description = "Reviewed prose false positive: the redactor description 'secret assignments, environment/header/CLI forms'"
+  condition = "AND"
+  regexTarget = "secret"
+  regexes = ['''^environment/header/CLI$''']
+  paths = ['''(^|/)docs/MASTRA_MIGRATION_REFERENCE\.md$''']
