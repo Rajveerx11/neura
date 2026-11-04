@@ -223,6 +223,27 @@ workflow and approved branding:
 - The first-pass preview PNG and the LinkedIn captures were not committed. They
   show the superseded identity. They remain in the recovery archive.
 
+## Quiet chat transcript (2026-11-04)
+
+Synthetic transcripts after the integration still repeated a three-line status
+block after every turn. They also showed `[answer]` on every reply, three lines
+per tool call, and `Review skipped: no workspace changes.` after plain chat.
+Changes:
+
+| Before | Now |
+| --- | --- |
+| Full status block before every prompt | Full block at launch and whenever mode, model, session, history or thinking changes; otherwise one dim footer: `model · N msgs · X in · Y out tokens · /status`. Empty Enter reprompts without reprinting it. Approvals and the `/model` picker no longer print status mid-flow. |
+| `[thinking] Waiting for model response...` stays in scrollback | On ANSI terminals the line is erased when output starts and shown again while the model works after a tool returns. `TERM=dumb` keeps it as a plain line. The catalog fetch on the first turn uses the same line in place of `Fetching the subscription model catalog...`. |
+| `[answer]` before every reply | Only after a labelled reasoning summary, the one place it separates two sections |
+| `[tool] read: requested`, `started`, `returned` | One line, `[tool] read`. `failed`, `blocked` and `cancelled` still print their own line |
+| `Review skipped: no workspace changes.` after each chat turn | Automatic review prints nothing when nothing changed. Explicit `/review` still reports the skip. Trivial-change reasons no longer end in doubled punctuation. |
+| Long `Review unavailable` sentence | Shorter, dim and wrapped, still once per session |
+| Typing `exit` sends it to the model | Bare `exit` or `quit` closes Neura interactively. `neura -p exit` remains a task. |
+
+Approval text, cancellation wording, error output and `/status` details are
+unchanged. Evidence is synthetic: the `v1-cli`, `v1-terminal-ui` and
+`v1-workflow` tests plus the full harness.
+
 ## Follow-up: identity, status and live captures (2026-11-02)
 
 [Research and design decisions](TERMINAL_STATUS_RESEARCH.md) cite the reviewed

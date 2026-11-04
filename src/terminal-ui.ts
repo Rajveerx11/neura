@@ -96,7 +96,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
       group('Conversation', [
         ['/status', 'Mode, model, workspace, history and last-turn usage. Context window stays unknown unless verified.'],
         ['/new · /sessions · /resume UUID', 'Start fresh, list workspace history or explicitly resume it. Never imports Pi.'],
-        ['/help · /quit', 'Show help or exit. Ctrl+C cancels active work; at the input prompt it exits.'],
+        ['/help · /quit', 'Show help or exit (bare exit or quit also works). Ctrl+C cancels active work; at the input prompt it exits.'],
       ]),
     ];
     if (options) groups.splice(1, 0,
@@ -145,6 +145,12 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
       }
       return lines.join('\n');
     },
+    /** One quiet line between turns; the full status block is shown only when mode, model or session state changes. */
+    footer(state: TerminalStatus) {
+      const usage = reportedUsage(state.lastTurnUsage);
+      const fields = [state.model || '(not selected)', `${state.messageCount} msgs`, ...(usage ? [`${usage.inputTokens} in · ${usage.outputTokens} out tokens`] : []), '/status'];
+      return paint(shortLabel(fields.join(' · '), width), 'dim');
+    },
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);
       return paint('Neura status', 'bone') + '\n' + [
@@ -175,7 +181,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     },
     tool(name: string, phase: Phase) {
       const tone = phase === 'failed' || phase === 'blocked' ? 'error' : phase === 'cancelled' ? 'warning' : 'dim';
-      return paint(`[tool] ${name}: ${phase}`, tone);
+      return paint(phase === 'requested' ? `[tool] ${name}` : `[tool] ${name}: ${phase}`, tone);
     },
     approval(description: string) { return paint('[approval required]', 'warning') + '\n' + terminalText(description); },
     approvalPrompt() { return paint('Type yes to approve (default: no): ', 'warning'); },

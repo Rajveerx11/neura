@@ -44,8 +44,8 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
   let receipt: ReviewReceipt | undefined;
   let rounds = 0;
   let task = args.task;
-  const finish = (state: WorkflowState, reason: string): WorkflowOutcome => {
-    deps.report(state === 'ready' ? `READY FOR YOUR APPROVAL: ${reason} Nothing was committed, pushed or merged.`
+  const finish = (state: WorkflowState, reason: string, quiet = false): WorkflowOutcome => {
+    if (!quiet) deps.report(state === 'ready' ? `READY FOR YOUR APPROVAL: ${reason} Nothing was committed, pushed or merged.`
       : state === 'blocked' ? `BLOCKED: ${reason}` : `Review skipped: ${reason}`);
     return { state, rounds, receipt, reason };
   };
@@ -58,9 +58,10 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
     if (fenced()) return finish('blocked', aborted);
     if (!candidate) return finish('blocked', 'candidate snapshot unavailable; changes were not reviewed.');
     const changed = changedFiles(args.baseline, candidate);
-    if (!changed.length) return finish('skipped', 'no workspace changes.');
+    // A chat turn that changed nothing needs no review line; an explicit /review still says so.
+    if (!changed.length) return finish('skipped', 'no workspace changes.', !args.manual);
     const risk = deps.assessRisk(changed);
-    if (risk.level === 'trivial' && !args.manual) return finish('skipped', `trivial change (${risk.reasons.join('; ') || 'documentation only'}).`);
+    if (risk.level === 'trivial' && !args.manual) return finish('skipped', `trivial change (${risk.reasons.map(reason => reason.replace(/\.$/, '')).join('; ') || 'documentation only'}).`);
     rounds++;
     deps.report(`Review round ${rounds}/${maxRounds}: ${changed.length} changed file(s), risk ${risk.level}${risk.reasons.length ? ` (${risk.reasons.join('; ')})` : ''}.`);
     receipt = await deps.review({ workspace: args.workspace, task, baseline: args.baseline, reviewer: args.reviewer, builder: args.builder, signal: args.signal });

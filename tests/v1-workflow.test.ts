@@ -76,7 +76,13 @@ test('stale receipt or receipt for a different fingerprint blocks', async () => 
 test('no change and trivial change skip review; manual review still reviews trivial', async () => {
   const none = harness({ snapshots: [baseline] });
   assert.deepEqual([(await none.run()).state, none.reviews.length], ['skipped', 0]);
-  assert.equal(none.last(), 'Review skipped: no workspace changes.');
+  assert.deepEqual(none.lines, [], 'A chat turn that changed nothing prints no review line');
+  const noneManual = harness({ snapshots: [baseline] });
+  assert.equal((await noneManual.run(true)).state, 'skipped');
+  assert.equal(noneManual.last(), 'Review skipped: no workspace changes.');
+  const sentence = harness({ risk: { level: 'trivial', reasons: ['Documentation/text only (1 file).'] } });
+  await sentence.run();
+  assert.equal(sentence.last(), 'Review skipped: trivial change (Documentation/text only (1 file)).');
   const docs = { level: 'trivial' as const, reasons: ['docs only'] };
   const trivial = harness({ risk: docs });
   assert.deepEqual([(await trivial.run()).state, trivial.reviews.length], ['skipped', 0]);

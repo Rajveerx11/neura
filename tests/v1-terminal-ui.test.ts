@@ -135,6 +135,10 @@ test('session presentation includes usable IDs, an explicit resume action, and a
   assert.ok(rendered.includes(id + '\n'));
   assert.match(rendered, /Use \/resume UUID/);
   for (const phase of ['requested', 'started', 'returned', 'failed', 'blocked', 'cancelled'] as const) {
-    assert.equal(ui.tool('read', phase), `[tool] read: ${phase}`);
+    assert.equal(ui.tool('read', phase), phase === 'requested' ? '[tool] read' : `[tool] read: ${phase}`);
   }
+  const state = { mode: 'work' as const, provider: 'openai-codex', model: 'fixture-first', workspace: 'C:/w', workspaceName: 'w', history: 'off' as const, sessionState: 'new' as const, thinking: true, messageCount: 2 };
+  assert.equal(ui.footer(state), 'fixture-first · 2 msgs · /status');
+  assert.equal(ui.footer({ ...state, lastTurnUsage: { inputTokens: 3, outputTokens: 4 } }), 'fixture-first · 2 msgs · 3 in · 4 out tokens · /status');
+  assert.ok(createTerminalUI({ columns: 20 }).footer({ ...state, lastTurnUsage: { inputTokens: 3, outputTokens: 4 } }).length <= 20);
 });
