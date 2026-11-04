@@ -11,6 +11,8 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { workshopFixture } from '../scripts/learn-workshop-fixture.mjs';
 import { windowsShortPath } from './windows-short-path.ts';
+import { createRequire } from 'node:module';
+import { renderLogo } from '../src/brand.ts';
 import { automaticGitEnvironment, AUTOMATIC_GIT_ARGUMENTS, resolveExecutable } from '../agent/neura/process-security.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -20,7 +22,7 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean }) {
+async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
@@ -62,6 +64,68 @@ async function interactiveFixture(options: { inputs: string[]; args?: string[]; 
     return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string; summary?: string | null }> };
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 }
+
+test('approved logo fits supported widths and preserves its ASCII fallback', () => {
+  for (const ascii of [false, true]) for (let columns = 1; columns <= 160; columns++) {
+    const lines = renderLogo(columns, ascii);
+    assert.ok(lines.length <= 10);
+    for (const line of lines) {
+      assert.ok(line.length <= Math.max(1, columns - 1));
+      assert.match(line, ascii ? /^[\x20-\x7e]+$/ : /^[\x20-\x7e▀▄█]+$/);
+    }
+  }
+  assert.equal(renderLogo(80).length, 10);
+  assert.deepEqual(renderLogo(80, true), ['>_ neura']);
+  assert.deepEqual(renderLogo(20), ['>_ neura']);
+  for (const columns of [NaN, Infinity, -1, 0, 1.5]) assert.ok(renderLogo(columns).length <= 10);
+  const changed = renderLogo(80); changed[0] = 'changed';
+  assert.notEqual(renderLogo(80)[0], 'changed');
+});
+
+test('runtime terminal artwork matches the approved vector and packaged text', async () => {
+  const { createCanvas, loadImage } = createRequire(new URL('../agent/neura/package.json', import.meta.url))('@napi-rs/canvas');
+  const svg = await fs.readFile(path.join(root, 'assets/brand/neura-mark.svg'));
+  assert.ok(!/<(?:script|image|foreignObject|text)\b|\bhref=/.test(svg.toString()));
+  const canvas = createCanvas(24, 24); const context = canvas.getContext('2d');
+  context.drawImage(await loadImage(svg), 0, 0, 24, 24);
+  const pixels = context.getImageData(0, 0, 24, 24).data;
+  const rows: string[] = [];
+  for (let y = 0; y < 24; y += 2) {
+    let row = '';
+    for (let x = 0; x < 24; x++) {
+      const top = pixels[(y * 24 + x) * 4 + 3] >= 110;
+      const bottom = pixels[((y + 1) * 24 + x) * 4 + 3] >= 110;
+      row += [' ', '▀', '▄', '█'][Number(top) + 2 * Number(bottom)];
+    }
+    rows.push(row.trimEnd());
+  }
+  assert.ok(rows.some(Boolean));
+  while (rows[0] === '') rows.shift();
+  while (rows.at(-1) === '') rows.pop();
+  const leading = Math.min(...rows.filter(Boolean).map(row => row.length - row.trimStart().length));
+  const cropped = rows.map(row => row.slice(leading));
+  const width = Math.max(...cropped.map(row => row.length));
+  const expected = cropped.map((row, index) => (row.padEnd(width) + (index === Math.floor(cropped.length / 2) ? '    neura' : '')).trimEnd());
+  // ponytail: anti-aliasing shifts between canvas releases (1.0.11 vs 1.0.13 flips 4 edge cells), so allow
+  // a few cells of edge noise; a redrawn or wrong mark differs by far more. Exact text is pinned by terminal.txt.
+  const actual = renderLogo(80);
+  assert.equal(actual.length, expected.length);
+  let differing = 0;
+  actual.forEach((row, index) => { const target = expected[index]; for (let x = 0; x < Math.max(row.length, target.length); x++) if ((row[x] ?? ' ') !== (target[x] ?? ' ')) differing++; });
+  assert.ok(differing <= 6, `terminal logo drifted from the approved vector by ${differing} cells`);
+  assert.equal(await fs.readFile(path.join(root, 'assets/brand/terminal.txt'), 'utf8'), actual.join('\n') + '\n');
+  assert.equal(await fs.readFile(path.join(root, 'assets/brand/terminal-ascii.txt'), 'utf8'), renderLogo(80, true).join('\n') + '\n');
+});
+
+test('interactive launch is logo-only with normal, narrow, ASCII and dumb-terminal layouts', async () => {
+  for (const options of [{ columns: 80 }, { columns: 40 }, { columns: 20 }, { columns: 80, args: ['--ascii'] }, { columns: 80, term: 'dumb' }]) {
+    const reply = await interactiveFixture({ inputs: ['/quit'], ...options });
+    const ascii = options.args?.includes('--ascii') || options.term === 'dumb';
+    assert.ok(reply.stdout.startsWith(renderLogo(options.columns, ascii).join('\n') + '\nwork > '));
+    assert.deepEqual(reply.requests, []);
+    assert.ok(!/READY|Mastra v1|Fetching/.test(reply.stdout));
+  }
+});
 
 test('bare interactive launch from the user home uses a separate scratch workspace, including actual Work writes', async () => {
   const idle = await interactiveFixture({ launchFromHome: true, history: true, inputs: ['/help', '/quit'] });
@@ -162,6 +226,7 @@ test('headless /model lists current subscription choices without inference or a 
   assert.match(reply.stdout, /Current model: \(not selected\)/);
   assert.match(reply.stdout, /fixture-first/);
   assert.ok(!reply.stdout.includes('Choose a number'));
+  assert.ok(!reply.stdout.startsWith(renderLogo(80).join('\n')));
   assert.deepEqual(reply.requests, [{ type: 'catalog' }]);
 });
 

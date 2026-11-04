@@ -19,7 +19,8 @@
 - Repository checkout is source of truth. `~/.pi/agent/` is a generated live install.
 - Read `docs/STATUS.md` before changing policy, modes, proof, autogit, Gmail, or approvals.
 - Keep current release status honest. Human Away is preview-only.
-- Preserve the logo-only launch in `agent/extensions/neura.ts`.
+- Preserve the logo-only launch (`src/brand.ts`, `src/cli.ts`) and its `--ascii`,
+  `TERM=dumb` and narrow-terminal fallbacks.
 
 ## Change rules
 

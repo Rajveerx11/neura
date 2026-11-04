@@ -1,4 +1,4 @@
-<p align="center"><img src="agent/neura/launch-artwork.png" width="190" alt="Neura logo"></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png"><img src="assets/brand/neura-logo-light.png" width="420" alt="Neura: context into action"></picture></p>
 
 # Neura: Mastra development build
 
@@ -23,6 +23,18 @@ source-linked launcher runs the current checkout, including uncommitted edits.
 It is not a sealed or automatically updated release. See [status](docs/STATUS.md),
 [implementation and evidence](docs/MASTRA_V1.md) and
 [dependency review](docs/MASTRA_V1_DEPENDENCIES.md).
+
+## Terminal branding
+
+The launch mark joins incoming context paths into a forward arrow. It uses
+standard half-block characters and a plain `neura` label, with no image rendering
+or special font at startup. Interactive launch remains logo-only, followed by the
+prompt. Headless requests and `--help`/`--check` do not print the launch artwork.
+
+Use `neura --ascii` for the `>_ neura` fallback. `TERM=dumb` selects it automatically.
+Narrow terminals also fall back to ASCII rather than wrapping the mark. The SVG
+and light/dark PNG assets are in [assets/brand](assets/brand/README.txt). Historical
+owner artwork is preserved in `agent/neura/launch-artwork.png`.
 
 ## Prerequisites
 

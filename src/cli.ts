@@ -19,15 +19,15 @@ import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.ts';
 import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
+import { renderLogo } from './brand.ts';
 
-const wordmark = ['█  █ █▀▀▀ █  █ █▀▀▄ ▄▀▀▄', '██ █ █▀▀  █  █ █  █ █  █', '█ ██ ██▀▀ █  █ █▀▀  █▀▀█', '█  █ █▀▀  █  █ █ ▀▄ █  █', '▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀ ▀  ▀'];
 export function terminalText(text: string): string { return stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ''); }
 const say = (text: string) => stdout.write(terminalText(text) + '\n');
 const warning = (text: string) => stderr.write(terminalText(redactSensitiveText(text, 8000)) + '\n');
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
-    help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
+    help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, ascii: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
     'reviewer-provider': { type: 'string' }, 'reviewer-model': { type: 'string' }, 'reviewer-base-url': { type: 'string' },
   } });
   if (values.help) {
@@ -39,6 +39,7 @@ Usage: neura [task] [--mode work|learn] [--provider openai-codex|local|openai|an
   --no-history      Do not persist conversation history
   --no-thinking     Hide provider reasoning summaries (never exposes hidden internal reasoning)
   --check           Check source prerequisites without credentials or model calls
+  --ascii           Use the ASCII launch logo for limited terminal fonts
   --reviewer-provider P, --reviewer-model M, --reviewer-base-url URL
                     Independent Work reviewer (env NEURA_REVIEWER_*; default: builder model, labelled same-family)
 Commands: /help, /login, /logout, /mode work|learn, /learn, /new, /sessions, /resume UUID, /model [PROVIDER MODEL [URL]], /reviewer [PROVIDER MODEL [URL]|default], /review [status], /workflow [on|off], /thinking [on|off], /verify [quick|full|status], /quit
@@ -132,7 +133,7 @@ Real account login remains a manual personal-use gate; distribution is not clear
     if (!values['no-history']) {
       await selectSession(values.resume);
     } else if (values.resume) throw new Error('--resume cannot be combined with --no-history.');
-    if (interactive) for (const line of wordmark) say(line); // No false READY banner.
+    if (interactive) for (const line of renderLogo(stdout.columns, values.ascii || process.env.TERM === 'dumb')) say(line); // Logo-only launch; no false READY banner.
     if (scratchWorkspace) {
       say(`Scratch workspace: ${workspace}`);
       say('Files remain here after exit, but OS temp cleanup may remove them. Use --cwd PATH for a project.');

@@ -12,6 +12,8 @@ await fs.writeFile(path.join(process.env.NEURA_HOME, 'codex-auth.json'), JSON.st
 const answers = [...config.inputs];
 Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
 Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+Object.defineProperty(process.stdout, 'columns', { configurable: true, value: config.columns ?? 80 });
+if (config.term !== undefined) process.env.TERM = config.term;
 class FixtureReadline extends EventEmitter {
   async question(prompt, options) {
     options?.signal?.throwIfAborted();
