@@ -144,9 +144,13 @@ try {
 
     # Documentation exceptions remain bound to the reviewed historical commit.
     # Use synthetic content: the preserved local reference draft is not a release input.
-    $documentationFingerprint = 'de328f3b28b431aad083219495e2cf8fab0f6db6:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484'
+    # Exactly the reviewed commits, in order; any other commit, path, rule or line stays scanned.
+    $documentationFingerprints = @(
+        'de328f3b28b431aad083219495e2cf8fab0f6db6:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484',
+        'a5f6a19aa5161abe6372e23564a768c943db10d0:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484'
+    )
     $documentationIgnores = @($ignoreSource -split '\r?\n' | Where-Object { $_ -match '^[^#].*:docs/MASTRA_MIGRATION_REFERENCE\.md:generic-api-key:' })
-    if ($documentationIgnores.Count -ne 1 -or $documentationIgnores[0] -cne $documentationFingerprint) {
+    if (($documentationIgnores -join "`n") -cne ($documentationFingerprints -join "`n")) {
         throw 'Documentation exception escaped its reviewed commit/path/rule/line binding.'
     }
     $documentationRepository = New-TestRepository 'documentation-fingerprint'
