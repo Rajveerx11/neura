@@ -11,3 +11,5 @@ cac09d6c0b496b2738ba6fae1cda9d0329ca1bb6:agent/neura/release-manifest.json:gener
 # Reviewed ordinary redaction-description prose, not a credential (PR #130).
 # Exact historical commit/path/rule/line only; new commits remain scanned.
 de328f3b28b431aad083219495e2cf8fab0f6db6:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484
+# Same reviewed prose when the reference document was committed to main (2026-11-04).
+a5f6a19aa5161abe6372e23564a768c943db10d0:docs/MASTRA_MIGRATION_REFERENCE.md:generic-api-key:484
