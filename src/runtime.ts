@@ -23,6 +23,7 @@ export type ToolDefinition = {
 };
 
 export type ToolEvent = { toolName: string; phase: "requested" | "started" | "returned" | "failed" | "blocked" | "cancelled" };
+export type TurnUsage = { inputTokens: number; outputTokens: number };
 
 export type RunTurnOptions = {
   model: AgentConfig["model"];
@@ -137,7 +138,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
   return { tools, results, report, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
 }
 
-export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent }: RunTurnOptions): Promise<{ text: string; messages: any[] }> {
+export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent }: RunTurnOptions): Promise<{ text: string; messages: any[]; usage?: TurnUsage }> {
   signal?.throwIfAborted();
   const names = new Set(tools.map(tool => tool.name));
   const turn = createTurnTools(tools, signal, onToolEvent);
@@ -192,7 +193,13 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
     const toolText = turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
     const text = result.text || toolText || "Turn ended without assistant text.";
     if (!streamed) onText?.(text);
-    return { text, messages: [...messages, ...(result.response.messages ?? [])] };
+    // Mastra FullOutput.totalUsage aggregates every model step in this invocation.
+    // Missing provider counts stay unknown; zero is a valid reported count.
+    const counts = result.totalUsage;
+    const usage = counts && Number.isSafeInteger(counts.inputTokens) && counts.inputTokens! >= 0 &&
+      Number.isSafeInteger(counts.outputTokens) && counts.outputTokens! >= 0
+      ? { inputTokens: counts.inputTokens!, outputTokens: counts.outputTokens! } : undefined;
+    return { text, messages: [...messages, ...(result.response.messages ?? [])], ...(usage ? { usage } : {}) };
   } finally {
     turn.close();
   }

@@ -19,7 +19,8 @@ terminal-ascii.txt        >_ neura fallback for limited terminals.
 TERMINAL INTEGRATION
 src/brand.ts contains the pre-rendered launch mark. Startup does not load images,
 discover fonts or add an image-rendering dependency. Normal interactive launch
-shows the logo and prompt, without a readiness banner. Headless output stays clean.
+shows the uncolored logo, then the status line and prompt, without a readiness
+banner. Headless output stays clean.
 
 Use --ascii for terminals with limited glyph support. TERM=dumb also selects ASCII.
 If the full mark will not fit, the CLI uses the ASCII name instead. The last column

@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { workshopFixture } from '../scripts/learn-workshop-fixture.mjs';
 import { windowsShortPath } from './windows-short-path.ts';
 import { createRequire } from 'node:module';
@@ -117,11 +118,15 @@ test('runtime terminal artwork matches the approved vector and packaged text', a
   assert.equal(await fs.readFile(path.join(root, 'assets/brand/terminal-ascii.txt'), 'utf8'), renderLogo(80, true).join('\n') + '\n');
 });
 
-test('interactive launch is logo-only with normal, narrow, ASCII and dumb-terminal layouts', async () => {
+test('interactive launch shows only the logo, then status and prompt, in normal, narrow, ASCII and dumb-terminal layouts', async () => {
   for (const options of [{ columns: 80 }, { columns: 40 }, { columns: 20 }, { columns: 80, args: ['--ascii'] }, { columns: 80, term: 'dumb' }]) {
     const reply = await interactiveFixture({ inputs: ['/quit'], ...options });
     const ascii = options.args?.includes('--ascii') || options.term === 'dumb';
-    assert.ok(reply.stdout.startsWith(renderLogo(options.columns, ascii).join('\n') + '\nwork > '));
+    const transcript = stripVTControlCharacters(reply.stdout);
+    const logo = renderLogo(options.columns, ascii).join('\n') + '\n\n';
+    assert.ok(transcript.startsWith(logo), transcript);
+    // Prompt-adjacent status, then the real prompt. No banner, readiness claim or provider call.
+    assert.match(transcript.slice(logo.length), /^Work · [^\n]+\n(?:[^\n]*\n){1,5}work > /);
     assert.deepEqual(reply.requests, []);
     assert.ok(!/READY|Mastra v1|Fetching/.test(reply.stdout));
   }
@@ -160,7 +165,178 @@ test('first request uses the catalog default and real Agent tool calls are visib
   assert.match(reply.stdout, /Model: fixture-first \(subscription catalog default\)/);
   for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
   assert.match(reply.stdout, /Hello from selected model/);
+  const transcript = stripVTControlCharacters(reply.stdout);
+  assert.match(transcript, /\[answer\]\nHello from selected model/);
+  assert.doesNotMatch(transcript, /\[tool\] read: requested\n\n\[tool\]/, 'Tool phases stay visible without extra blank rows');
   assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+});
+
+test('empty interactive input quietly reprompts; Learn, errors and empty sessions have explicit feedback', async () => {
+  const reply = await interactiveFixture({ inputs: ['', '   ', '/mode learn', '', '/sessions', '/unknown', '/help', '/quit'] });
+  const transcript = stripVTControlCharacters(reply.stdout);
+  assert.equal(transcript.split('work > ').length - 1, 3);
+  assert.equal(transcript.split('learn > ').length - 1, 5);
+  assert.match(transcript, /No saved sessions for this workspace/);
+  assert.match(transcript, /Work and Learn[\s\S]*Models and sign-in[\s\S]*Conversation/);
+  assert.match(transcript, /Neura closed/);
+  assert.match(reply.stderr, /Error: Unknown command\. Use \/help/);
+  assert.doesNotMatch(reply.stderr, /Task must contain/);
+  assert.deepEqual(reply.requests, []);
+  await assert.rejects(interactiveFixture({ inputs: [], args: ['--prompt', ''] }), (error: Error & { stderr?: string; stdout?: string }) => {
+    assert.match(error.stderr ?? '', /Task must contain 1-32000 characters/);
+    assert.doesNotMatch(error.stdout ?? '', /Fetching|Waiting/);
+    return true;
+  });
+});
+
+test('status tracks fresh, mode, thinking, new and model state with reported last-turn usage only', async () => {
+  const reply = await interactiveFixture({ inputs: ['/status', 'hi', '/status', '/mode learn', '/thinking off', '/status', '/new', '/status', '/mode work', 'hi', '/model openai-codex fixture-second', '/status', '/quit'] });
+  const transcript = stripVTControlCharacters(reply.stdout);
+  const states = transcript.split('Neura status\n').slice(1).map(part => part.split('Development/testing only.')[0]);
+  assert.equal(states.length, 5);
+  assert.ok(transcript.startsWith(renderLogo(80).join('\n') + '\n\n'));
+  // A non-Git workspace gets one honest notice per session, not a BLOCKED verdict after every chat turn.
+  assert.equal(transcript.split('Review unavailable: this workspace is not a Git repository').length - 1, 1);
+  assert.doesNotMatch(transcript, /BLOCKED: no workspace baseline/);
+  assert.match(states[0], /Mode: Work\nProvider: openai-codex\nModel: \(not selected\)/);
+  assert.match(states[0], /History: off/);
+  assert.match(states[0], /Conversation: 0 messages\nLast turn tokens: unavailable/);
+  assert.match(states[1], /Model: fixture-first/);
+  assert.match(states[1], /Conversation: 2 messages\nLast turn input tokens: 1\nLast turn output tokens: 1/);
+  assert.match(states[2], /Mode: Learn/);
+  assert.match(states[2], /Thinking: off/);
+  assert.match(states[2], /Conversation: 2 messages/);
+  assert.match(states[3], /Conversation: 0 messages\nLast turn tokens: unavailable/);
+  assert.match(states[4], /Model: fixture-second/);
+  assert.match(states[4], /Conversation: 0 messages\nLast turn tokens: unavailable/);
+  assert.ok(states.every(state => state.includes('Context window: unknown')));
+  assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+});
+
+test('status resets usage on resume and after failed or cancelled attempts, preserving actual history and shutdown', async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-status-')));
+  const workspace = path.join(scratch, 'workspace'); const home = path.join(scratch, 'home'); await fs.mkdir(workspace);
+  const source = String.raw`
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises'; import path from 'node:path';
+    import { EventEmitter } from 'node:events'; import { createRequire, syncBuiltinESMExports } from 'node:module';
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 80 });
+    const inputs = ['hi', '/status', '/new', '/status', '[RESUME]', '/status', '/model local fixture-next', '/status', 'hi', '/status', 'hi', '/status', 'hi', '/status', 'hi', '/status', '/quit'];
+    class Readline extends EventEmitter {
+      async question(prompt, options) {
+        options?.signal?.throwIfAborted(); process.stdout.write(prompt + '\n');
+        const answer = inputs.shift(); assert.notEqual(answer, undefined);
+        if (answer !== '[RESUME]') return answer;
+        const root = path.join(process.env.NEURA_HOME, 'sessions'); const [key] = await fs.readdir(root);
+        const dir = path.join(root, key); const files = (await fs.readdir(dir)).filter(name => name.endsWith('.json'));
+        const sessions = await Promise.all(files.map(async name => JSON.parse(await fs.readFile(path.join(dir, name), 'utf8'))));
+        const saved = sessions.find(session => session.messages.length === 2); assert.ok(saved);
+        return '/resume ' + saved.id;
+      }
+      close() { this.emit('close'); }
+    }
+    createRequire(import.meta.url)('node:readline/promises').createInterface = () => new Readline(); syncBuiltinESMExports();
+    let requests = 0;
+    globalThis.fetch = async (url, init) => {
+      assert.equal(new URL(String(url)).origin, 'http://127.0.0.1:8080'); requests++;
+      if (requests === 3) throw new Error('Synthetic request failure');
+      if (requests === 5) { process.emit('SIGINT'); init.signal?.throwIfAborted(); }
+      return new Response(JSON.stringify({ id: 'synthetic', object: 'chat.completion', created: 1, model: 'fixture',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'Synthetic answer' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 23, completion_tokens: 7, total_tokens: 30 } }), { headers: { 'Content-Type': 'application/json' } });
+    };
+    const { main } = await import('./src/cli.ts'); const before = process.listenerCount('SIGINT');
+    await main(['--cwd', process.argv[1], '--provider', 'local', '--model', 'fixture']);
+    assert.equal(inputs.length, 0); assert.equal(requests, 5); assert.equal(process.listenerCount('SIGINT'), before);
+    assert.ok(!(await fs.readdir(process.env.NEURA_HOME, { recursive: true })).some(name => name.endsWith('.lock')));
+  `;
+  try {
+    const reply = await exec(process.execPath, ['--input-type=module', '-e', source, workspace], { cwd: root, env: { ...syntheticEnvironment(home), NO_COLOR: '' }, timeout: 20000 });
+    const states = reply.stdout.split('Neura status\n').slice(1).map(part => part.split('Development/testing only.')[0]);
+    assert.equal(states.length, 8);
+    assert.match(states[0], /History: on/);
+    assert.match(states[0], /Last turn input tokens: 23\nLast turn output tokens: 7/);
+    assert.match(states[1], /Conversation: 0 messages\nLast turn tokens: unavailable/);
+    assert.match(states[2], /Session: resumed [0-9a-f-]{36}/);
+    assert.match(states[2], /Conversation: 2 messages\nLast turn tokens: unavailable/);
+    assert.match(states[3], /Model: fixture-next/);
+    assert.match(states[3], /Conversation: 0 messages\nLast turn tokens: unavailable/);
+    assert.match(states[4], /Last turn input tokens: 23/);
+    assert.match(states[5], /Last turn tokens: unavailable/);
+    assert.match(states[6], /Last turn input tokens: 23/);
+    assert.match(states[7], /Last turn tokens: unavailable/);
+    assert.match(reply.stderr, /Cancelled\. No task was replayed/);
+    assert.match(reply.stdout, /Neura closed/);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('one-shot commands emit no automatic status or identity; explicit status is plain and provider-free', async () => {
+  const reply = await interactiveFixture({ inputs: [], args: ['--prompt', '/status'] });
+  assert.equal(reply.stdout, stripVTControlCharacters(reply.stdout), 'Explicit one-shot status stays plain even on a capable synthetic TTY');
+  const transcript = stripVTControlCharacters(reply.stdout);
+  assert.doesNotMatch(transcript, /o--o|Work ·|history off|work > /);
+  assert.match(transcript, /Neura status\nMode: Work/);
+  assert.match(transcript, /Context window: unknown/);
+  assert.deepEqual(reply.requests, []);
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-status-pipe-')));
+  try {
+    const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);
+    const env = syntheticEnvironment(path.join(scratch, 'home'));
+    const run = (prompt: string) => exec(process.execPath, ['src/cli.ts', '--cwd', workspace, '--provider', 'local', '--model', 'fixture', '--no-history', '--prompt', prompt], { cwd: root, env });
+    const piped = await run('/status');
+    assert.equal(piped.stdout, stripVTControlCharacters(piped.stdout));
+    assert.match(piped.stdout, /Model: fixture/);
+    assert.doesNotMatch(piped.stdout, /o--o|Work ·|work > /);
+    assert.doesNotMatch((await run('/thinking')).stdout, /Neura status|history off|Work ·/);
+    assert.deepEqual(await fs.readdir(scratch), ['workspace']);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('approval display keeps exact scope and defaults to denial for empty, uppercase or negative answers', async () => {
+  const reply = await interactiveFixture({ inputs: ['/verify quick', '', '/verify quick', 'YES', '/verify quick', 'no', '/quit'], gitWorkspace: true });
+  const transcript = stripVTControlCharacters(reply.stdout);
+  assert.equal(transcript.split('[approval required]').length - 1, 3);
+  assert.equal(transcript.split('Type yes to approve (default: no): ').length - 1, 3);
+  assert.equal(transcript.split('Denied. No approval granted.').length - 1, 3);
+  assert.equal(transcript.split('approval_denied').length - 1, 3);
+  assert.match(transcript, /Candidate: [a-f0-9]{64}\nTests will not run\. This cannot mark the task verified\./);
+  assert.deepEqual(reply.requests, []);
+  assert.equal(reply.stderr, '');
+});
+
+test('CLI help honors terminal width/color settings; redirected interactive launch fails before readline', async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-presentation-')));
+  const source = String.raw`
+    import assert from 'node:assert/strict';
+    import { createRequire, syncBuiltinESMExports } from 'node:module';
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: process.env.CLI_TEST_TTY === '1' });
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 40 });
+    createRequire(import.meta.url)('node:readline/promises').createInterface = () => { throw new Error('Unexpected readline'); };
+    syncBuiltinESMExports();
+    globalThis.fetch = async () => { throw new Error('No provider calls allowed'); };
+    const { main } = await import('./src/cli.ts');
+    const listeners = process.listenerCount('SIGINT');
+    if (!process.stdout.isTTY) await assert.rejects(main(['--no-history']), /Noninteractive input requires an explicit --prompt/);
+    await main(['--help']);
+    assert.equal(process.listenerCount('SIGINT'), listeners);
+  `;
+  try {
+    for (const overrides of [
+      { CLI_TEST_TTY: '1' }, { CLI_TEST_TTY: '1', NO_COLOR: '' },
+      { CLI_TEST_TTY: '1', TERM: 'dumb' }, { CLI_TEST_TTY: '0' },
+    ]) {
+      const reply = await exec(process.execPath, ['--input-type=module', '-e', source], { cwd: root, env: { ...syntheticEnvironment(scratch), ...overrides } });
+      const colored = overrides.CLI_TEST_TTY === '1' && !Object.hasOwn(overrides, 'NO_COLOR') && !Object.hasOwn(overrides, 'TERM');
+      assert.equal(reply.stdout.includes('\x1b['), colored);
+      const transcript = stripVTControlCharacters(reply.stdout);
+      assert.match(transcript, /Usage: neura \[task\] \[options\]/);
+      for (const line of transcript.split('\n')) assert.ok(line.length <= 40, line);
+      assert.equal(reply.stderr, '');
+    }
+    assert.deepEqual(await fs.readdir(scratch), []);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 
 test('subscription picker followed by a JSON model response completes text and tool turns without retries', async () => {
@@ -235,7 +411,8 @@ test('model cancellation, catalog denial and explicit rejected models never trig
   assert.match(cancelled.stdout, /Model unchanged/);
   assert.deepEqual(cancelled.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-explicit' }]);
   const interrupted = await interactiveFixture({ inputs: ['/model', '[CTRL_C]', '/quit'], args: ['--model', 'fixture-explicit'] });
-  assert.match(interrupted.stderr, /aborted/i);
+  assert.match(interrupted.stderr, /Cancelled\. No task was replayed/);
+  assert.doesNotMatch(interrupted.stderr, /Error:/);
   assert.deepEqual(interrupted.requests, [{ type: 'catalog' }]);
   const denied = await interactiveFixture({ inputs: ['hi', '/quit'], args: ['--model', 'fixture-explicit'], denyModel: true });
   assert.match(denied.stdout, /Use \/model to choose a subscription model/);
@@ -334,6 +511,65 @@ test('invalid startup model/provider opens no readline or interrupt handler; val
     assert.match(reply.stdout, /startup validation and cleanup passed/);
     assert.equal(reply.stderr, '');
     assert.deepEqual(await fs.readdir(scratch), ['workspace']);
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('real readline settles idle interrupt, EOF and approval EOF and releases history leases', async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-close-')));
+  const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);
+  const git = resolveExecutable('git', workspace); assert.ok(git);
+  const run = (args: string[]) => exec(git, [...AUTOMATIC_GIT_ARGUMENTS, ...args], { cwd: workspace, env: automaticGitEnvironment(), timeout: 10000 });
+  await run(['init', '--initial-branch=main']);
+  await run(['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid', 'commit', '--allow-empty', '-m', 'fixture']);
+  const source = String.raw`
+    import assert from 'node:assert/strict';
+    import fs from 'node:fs/promises';
+    import { PassThrough } from 'node:stream';
+    import { createRequire, syncBuiltinESMExports } from 'node:module';
+    const readline = createRequire(import.meta.url)('node:readline/promises');
+    const realCreate = readline.createInterface;
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    globalThis.fetch = () => { throw new Error('No network permitted in close fixture'); };
+    for (const scenario of ['interrupt', 'eof', 'approval-eof']) {
+      let closed = false;
+      readline.createInterface = () => {
+        const input = new PassThrough(); const output = new PassThrough();
+        const rl = realCreate({ input, output, terminal: false });
+        rl.once('close', () => { closed = true; });
+        output.on('data', chunk => {
+          const prompt = chunk.toString();
+          process.stdout.write(prompt);
+          if (prompt.includes('work >')) setImmediate(() => {
+            if (scenario === 'interrupt') rl.emit('SIGINT');
+            else if (scenario === 'eof') input.end();
+            else input.write('/verify quick\n');
+          });
+          if (prompt.includes('Type yes to approve')) setImmediate(() => input.end());
+        });
+        return rl;
+      };
+      syncBuiltinESMExports();
+      const { main } = await import('./src/cli.ts');
+      const before = process.listenerCount('SIGINT');
+      const deadline = setTimeout(() => { throw new Error('Pending readline question did not settle: ' + scenario); }, 5000);
+      try { await main(['--cwd', process.argv[1], '--provider', 'local', '--model', 'fixture']); }
+      finally { clearTimeout(deadline); }
+      assert.equal(closed, true);
+      assert.equal(process.listenerCount('SIGINT'), before);
+      const files = await fs.readdir(process.env.NEURA_HOME, { recursive: true });
+      assert.ok(files.some(file => file.endsWith('.json')), 'Synthetic history must exist');
+      assert.ok(!files.some(file => file.endsWith('.lock')), 'Writer lease must be released');
+      console.log('CLOSE_PASS=' + scenario);
+    }
+  `;
+  try {
+    const reply = await exec(process.execPath, ['--input-type=module', '-e', source, workspace], { cwd: root, env: { ...syntheticEnvironment(path.join(scratch, 'home')), NO_COLOR: '1' }, timeout: 25000 });
+    for (const scenario of ['interrupt', 'eof', 'approval-eof']) assert.ok(reply.stdout.includes('CLOSE_PASS=' + scenario));
+    assert.equal(reply.stdout.split('Neura closed.').length - 1, 3);
+    assert.match(reply.stdout, /Type yes to approve \(default: no\)/);
+    assert.doesNotMatch(reply.stdout, /Approved once/);
+    assert.doesNotMatch(reply.stderr, /unsettled|Pending readline question/);
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 

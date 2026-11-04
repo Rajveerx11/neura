@@ -94,8 +94,8 @@ credentials, history, vaults, user drafts or other worktrees are cleanup targets
 The owner-approved context-into-action mark replaces the old block wordmark.
 `src/brand.ts` holds a static ten-line half-block rendering. Startup loads no
 image, font or new dependency. `--ascii`, `TERM=dumb` and terminals too narrow
-for the mark print `>_ neura`. Interactive launch stays logo-only; headless,
-`--help` and `--check` print no artwork. Assets and guide are in
+for the mark print `>_ neura`. Interactive launch prints only the logo, then
+status and the prompt; headless, `--help` and `--check` print no artwork. Assets and guide are in
 [assets/brand](../assets/brand/README.txt); the historical owner artwork is kept.
 Synthetic CLI tests cover widths 1–160, ASCII, dumb-terminal and narrow launch with
 zero model requests. Trademark clearance and redistribution terms for the new
@@ -103,6 +103,19 @@ artwork are not yet documented, so this is not a release clearance.
 
 Dependabot now groups `@mastra/*` with `@ai-sdk/*` (`model-stack`). The
 unused Pi group was removed because the active root graph is Pi-free.
+
+## Terminal UI integration (2026-11-04)
+
+The terminal redesign built in a Cloudroom worktree on 2026-11-02 is now on
+`main`. It was restored from the safety snapshot taken before that worktree was
+removed. `src/terminal-ui.ts` holds pure, width-aware presentation. It covers
+prompt-adjacent status, `/status`, Mastra-reported last-turn token usage, grouped
+help, explicit approval and cancellation states, and copper color that
+`NO_COLOR`/`TERM=dumb` disable. Context capacity stays unknown, so no percentage
+is shown. Non-Git workspaces get one `Review unavailable` notice instead of a
+`BLOCKED` verdict after every turn. Details and limits are in
+[terminal UX](TERMINAL_UX.md). Synthetic tests only: no new real-account or
+live-provider evidence is claimed.
 
 ## Historical Pi candidate baseline
 

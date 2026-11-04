@@ -28,8 +28,12 @@ It is not a sealed or automatically updated release. See [status](docs/STATUS.md
 
 The launch mark joins incoming context paths into a forward arrow. It uses
 standard half-block characters and a plain `neura` label, with no image rendering
-or special font at startup. Interactive launch remains logo-only, followed by the
-prompt. Headless requests and `--help`/`--check` do not print the launch artwork.
+or special font at startup. Interactive launch prints only the logo, then a compact
+status line (mode, model, workspace, history, thinking, message count) and the
+prompt. There is no banner or readiness claim. `/status` shows full details and
+last-turn token usage when the provider reports it. Color follows the terminal:
+`NO_COLOR` and `TERM=dumb` give plain text. Headless requests and
+`--help`/`--check` do not print the launch artwork. See [terminal UX](docs/TERMINAL_UX.md).
 
 Use `neura --ascii` for the `>_ neura` fallback. `TERM=dumb` selects it automatically.
 Narrow terminals also fall back to ASCII rather than wrapping the mark. The SVG
