@@ -89,6 +89,21 @@ recovery work. Historical source, plans and verification records are retained
 deliberately. Unreachable by the active app does not mean safe to delete. No private profiles,
 credentials, history, vaults, user drafts or other worktrees are cleanup targets.
 
+## Branding and dependency grouping (2026-11-04)
+
+The owner-approved context-into-action mark replaces the old block wordmark.
+`src/brand.ts` holds a static ten-line half-block rendering. Startup loads no
+image, font or new dependency. `--ascii`, `TERM=dumb` and terminals too narrow
+for the mark print `>_ neura`. Interactive launch stays logo-only; headless,
+`--help` and `--check` print no artwork. Assets and guide are in
+[assets/brand](../assets/brand/README.txt); the historical owner artwork is kept.
+Synthetic CLI tests cover widths 1–160, ASCII, dumb-terminal and narrow launch with
+zero model requests. Trademark clearance and redistribution terms for the new
+artwork are not yet documented, so this is not a release clearance.
+
+Dependabot now groups `@mastra/*` with `@ai-sdk/*` (`model-stack`). The
+unused Pi group was removed because the active root graph is Pi-free.
+
 ## Historical Pi candidate baseline
 
 Last documentation audit: 2026-10-20

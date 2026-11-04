@@ -10,9 +10,12 @@ updates:
     target-branch: main
     open-pull-requests-limit: 5
     groups:
-      pi-runtime:
+      # Mastra and the AI SDK providers share @ai-sdk/provider types. Bumping one
+      # alone duplicates LanguageModelV4 and fails strict typecheck (#141, #142).
+      model-stack:
         patterns:
-          - "@earendil-works/pi-*"
+          - "@mastra/*"
+          - "@ai-sdk/*"
         update-types:
           - major
           - minor

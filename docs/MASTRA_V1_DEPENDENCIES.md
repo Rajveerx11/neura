@@ -28,6 +28,10 @@ this slice adds `test:v1:runtime` and `typecheck:v1` only.
 Both provider versions depend on `@ai-sdk/provider@4.0.29` and
 `@ai-sdk/provider-utils@5.0.62`, matching Mastra's v7 aliases. Newer provider
 contracts are not interchangeable merely because their major versions match.
+Dependabot therefore proposes `@mastra/*` and `@ai-sdk/*` together as the
+`model-stack` group. Isolated provider bumps (#141, #142) duplicated
+`LanguageModelV4` and failed strict typecheck. A grouped proposal still needs
+this review and doc update before merge; the core pin is deliberate.
 `package-lock.json` contains resolved versions and SHA-512 integrities for the
 entire graph, including platform-specific optional packages. No floating direct
 pins, Pi namespaces, `pi-subagents`, `pi-mcp`, or `pi-tui` remain in that lock.

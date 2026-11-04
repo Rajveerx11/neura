@@ -415,8 +415,8 @@ branch. A successful target check alone does not establish runtime compatibility
 
 ## Update policy
 
-1. Change one independent direct pin at a time. Treat Pi runtime, AI, and TUI as
-   one coupled upgrade; Dependabot groups those proposals, but cannot update
+1. Change one independent direct pin at a time. Treat Mastra core and `@ai-sdk/*` providers as
+   one coupled upgrade; Dependabot groups them as `model-stack`, but cannot update
    Neura's contract, release hashes, migration documentation, or review evidence.
 2. Review repository ownership, published files, dependency changes, and every
    lifecycle script before installation.
