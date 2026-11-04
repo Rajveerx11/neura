@@ -138,7 +138,9 @@ test('bare interactive launch from the user home uses a separate scratch workspa
   assert.equal(idle.stderr, '');
   assert.deepEqual(idle.requests, [], 'Startup must not authenticate or call a provider');
   const written = await interactiveFixture({ launchFromHome: true, writeTool: true, inputs: ['Create a synthetic file', '/quit'] });
-  assert.match(written.stdout, /\[tool\] write: returned/);
+  // Success is quiet: one tool line, no failed/blocked/cancelled outcome.
+  assert.match(stripVTControlCharacters(written.stdout), /\[tool\] write\n/);
+  assert.doesNotMatch(written.stdout, /\[tool\] write: /);
   assert.equal(written.stderr, '');
   assert.deepEqual(written.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
   const project = await interactiveFixture({ omitCwd: true, inputs: ['/help', '/quit'] });
@@ -163,11 +165,13 @@ test('bare /model lists advertised subscription choices, reprompts bad input and
 test('first request uses the catalog default and real Agent tool calls are visible without payloads', async () => {
   const reply = await interactiveFixture({ inputs: ['hi', '/quit'], tool: true });
   assert.match(reply.stdout, /Model: fixture-first \(subscription catalog default\)/);
-  for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
   assert.match(reply.stdout, /Hello from selected model/);
-  const transcript = stripVTControlCharacters(reply.stdout);
-  assert.match(transcript, /\[answer\]\nHello from selected model/);
-  assert.doesNotMatch(transcript, /\[tool\] read: requested\n\n\[tool\]/, 'Tool phases stay visible without extra blank rows');
+  const transcript = stripVTControlCharacters(reply.stdout.replace(/[^\n]*\r\x1b\[2K/g, ''));
+  // One quiet line per tool call, the answer right after it, and no routine started/returned noise.
+  assert.match(transcript, /\[tool\] read\nHello from selected model\n/);
+  assert.doesNotMatch(transcript, /\[tool\] read: |\[answer\]|Review skipped: no workspace changes/);
+  // Status: full block once at launch and again only when the model became known; otherwise a one-line footer.
+  assert.equal(transcript.split('Work · ').length - 1, 2);
   assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
 });
 
@@ -346,7 +350,7 @@ test('subscription picker followed by a JSON model response completes text and t
     assert.match(reply.stdout, /Hello from selected model/);
     assert.equal(reply.stderr, '');
     assert.deepEqual(reply.requests, [{ type: 'catalog' }, ...Array.from({ length: tool ? 2 : 1 }, () => ({ type: 'model', model: 'fixture-first' }))]);
-    if (tool) for (const phase of ['requested', 'started', 'returned']) assert.match(reply.stdout, new RegExp('\\[tool\\] read: ' + phase));
+    if (tool) assert.match(stripVTControlCharacters(reply.stdout), /\[tool\] read\n/);
   }
 });
 
@@ -354,7 +358,7 @@ test('CLI accepts completed Responses SSE with generic or missing MIME without r
   for (const sseContentType of ['text/plain; charset=utf-8', 'application/octet-stream', null]) {
     const reply = await interactiveFixture({ launchFromHome: true, inputs: ['hi', '/quit'], sseContentType, writeTool: true });
     assert.match(reply.stdout, /Hello from selected model/);
-    assert.match(reply.stdout, /\[tool\] write: returned/);
+    assert.match(stripVTControlCharacters(reply.stdout), /\[tool\] write\n/);
     assert.equal(reply.stderr, '');
     assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
   }

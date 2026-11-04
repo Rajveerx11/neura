@@ -129,10 +129,19 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
   });
-  const showStatus = () => { if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n'); };
+  // Full status when mode/model/session/history/thinking changed; otherwise one quiet line, so chat isn't buried.
+  let statusKey = '';
+  const showStatus = () => {
+    if (!interactive) return;
+    const state = statusSnapshot();
+    const key = JSON.stringify({ ...state, messageCount: undefined, lastTurnUsage: undefined });
+    stdout.write((key === statusKey ? terminal().footer(state) : terminal().status(state)) + '\n');
+    statusKey = key;
+  };
+  // ANSI-capable terminals erase the transient waiting line; plain ones keep it as a record.
+  const erasable = interactive && process.env.TERM !== 'dumb';
   const approve = async (description: string) => {
     if (!rl) return false;
-    showStatus();
     stdout.write('\n' + terminal().approval(description) + '\n');
     const response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal });
     const approved = response.trim() === 'yes';
@@ -171,7 +180,6 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         choices.forEach((choice, index) => stdout.write(terminal().modelChoice(modelLabel(choice.id), index, { catalogDefault: index === 0, current: choice.id === provider.model }) + '\n'));
         if (!rl) return;
         for (;;) {
-          showStatus();
           const answer = (await rl.question(terminal().pickerPrompt(), { signal: abort.signal })).trim();
           if (!answer) { say('Model unchanged.'); return; }
           const selected = /^\d{1,3}$/.test(answer) ? choices[Number(answer) - 1] : choices.find(choice => choice.id === answer);
@@ -187,12 +195,19 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       abort ??= new AbortController();
       if (owned) lastTurnUsage = undefined;
       let lineOpen = false;
-      const endLine = () => { if (lineOpen) stdout.write('\n'); lineOpen = false; };
+      let waitingOpen = false;
+      const waiting = () => { if (!interactive || waitingOpen) return; stdout.write(terminal().boundary('waiting')); waitingOpen = true; };
+      const endLine = () => {
+        if (waitingOpen) stdout.write(erasable ? '\r\x1b[2K' : '\n');
+        else if (lineOpen) stdout.write('\n');
+        lineOpen = false; waitingOpen = false;
+      };
       try {
         if (!provider.model) {
           if (provider.provider !== 'openai-codex') throw new Error('Choose a model with --model or /model PROVIDER MODEL [URL].');
-          say('Fetching the subscription model catalog...');
+          waiting();
           const choices = await listCodexModels({ signal: abort.signal, baseURL: provider.baseURL });
+          endLine();
           provider = { ...provider, model: choices[0].id }; modelExplicit = false;
           say(`Model: ${modelLabel(provider.model)} (subscription catalog default). Use /model to change it.`);
         }
@@ -206,7 +221,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         const needSessionBaseline = mode === 'work' && sessionBaseline?.generation !== expected;
         const baseline = review || needSessionBaseline ? await captureWorktree(workspace, { signal: abort.signal }) : null;
         if (needSessionBaseline) sessionBaseline = { generation: expected, snapshot: baseline };
-        if (interactive) stdout.write(terminal().boundary('waiting') + '\n');
+        waiting();
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal,
@@ -220,11 +235,15 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
             if (!text) return;
             if (section !== 'answer') {
               endLine();
-              if (interactive || section === 'reasoning') stdout.write(terminal().boundary('answer') + '\n');
+              // Label the answer only where it must be told apart from a labelled reasoning summary.
+              if (section === 'reasoning') stdout.write(terminal().boundary('answer') + '\n');
             }
             stdout.write(text); lineOpen = !text.endsWith('\n'); section = 'answer'; answerVisible = true;
           },
           onToolEvent: event => {
+            // One line per tool call; started/returned are routine. Failed, blocked and cancelled stay visible.
+            if (event.phase === 'started') return;
+            if (event.phase === 'returned') { if (erasable) waiting(); return; }
             endLine();
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
           } });
@@ -242,8 +261,9 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         if (review && baseline) await workflow(text, baseline, false);
         else if (review && !baselineWarned) {
           baselineWarned = true; // once per session: without a Git baseline no change can be reviewed
-          say('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so Work changes are not reviewed. Use /workflow off to hide this.');
+          stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');
         }
+        if (owned && interactive) stdout.write('\n');
       } catch (error) {
         if (abort?.signal.aborted) throw new DOMException('Turn cancelled. No task was replayed. Inspect current state before retrying.', 'AbortError');
         throw error;
@@ -261,6 +281,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
     }
     async function input(text: string): Promise<boolean> {
+      if (interactive && /^(?:exit|quit)$/i.test(text.trim())) text = '/quit'; // bare words, as in a shell
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
       if (command === 'quit' || command === 'exit') { if (interactive) say('Neura closed.'); return false; }
@@ -369,11 +390,13 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       return true;
     }
     if (prompt !== undefined) { await input(prompt); return; }
+    let idle = false;
     for (;;) {
       let text: string;
-      showStatus();
+      if (!idle) showStatus(); // empty Enter reprompts without repeating status
+      idle = false;
       try { text = await rl!.question(terminal().prompt(mode), { signal: inputClosed.signal }); } catch { say('Neura closed.'); break; }
-      if (!text.trim()) continue;
+      if (!text.trim()) { idle = true; continue; }
       try { if (!await input(text)) break; } catch (error) {
         const message = error instanceof Error ? error.message : 'Request failed.';
         if (error instanceof Error && error.name === 'AbortError') {
