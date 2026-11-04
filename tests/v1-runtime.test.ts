@@ -38,6 +38,35 @@ test("real Agent dispatch executes owned action and returns neutral history/text
   assert.deepEqual(requests[0].tools.map((tool: any) => tool.name), ["action"]);
   assert.equal(result.messages[0].role, "user");
   assert.ok(result.messages.some((message) => message.role === "tool"));
+  assert.deepEqual(result.usage, { inputTokens: 2, outputTokens: 2 }, 'Last-turn usage includes both model steps, not just the final step');
+});
+
+test('real Agent usage preserves reported zero and omits absent, partial or invalid provider counts', async () => {
+  for (const reported of [
+    { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    { inputTokens: 23, outputTokens: 7, totalTokens: 30 },
+    { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    { inputTokens: 23, outputTokens: undefined, totalTokens: undefined },
+    { inputTokens: -1, outputTokens: 7, totalTokens: 6 },
+    { inputTokens: NaN, outputTokens: 7, totalTokens: NaN },
+    { inputTokens: 1.5, outputTokens: 7, totalTokens: 8.5 },
+  ]) {
+    const base = fixture([done]).model;
+    const model = { ...base,
+      doGenerate: async (options: any) => ({ ...await base.doGenerate(options), usage: reported }),
+      doStream: async (options: any) => {
+        const output = await base.doStream(options);
+        return { ...output, stream: output.stream.pipeThrough(new TransformStream({
+          transform(chunk, controller) { controller.enqueue(chunk.type === 'finish' ? { ...chunk, usage: reported } : chunk); },
+        })) };
+      },
+    };
+    const result = await runTurn({ model, messages: [user], instructions: 'Test', tools: [] });
+    const valid = Number.isSafeInteger(reported.inputTokens) && reported.inputTokens! >= 0 &&
+      Number.isSafeInteger(reported.outputTokens) && reported.outputTokens! >= 0;
+    assert.deepEqual(result.usage, valid ? { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens } : undefined);
+    assert.equal(result.text, 'Done');
+  }
 });
 
 test("provider reasoning summaries are visible separately from answers without exposing encrypted metadata", async () => {

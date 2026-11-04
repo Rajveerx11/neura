@@ -19,8 +19,10 @@
 - Repository checkout is source of truth. `~/.pi/agent/` is a generated live install.
 - Read `docs/STATUS.md` before changing policy, modes, proof, autogit, Gmail, or approvals.
 - Keep current release status honest. Human Away is preview-only.
-- Preserve the logo-only launch (`src/brand.ts`, `src/cli.ts`) and its `--ascii`,
-  `TERM=dumb` and narrow-terminal fallbacks.
+- Preserve the launch contract: approved logo (`src/brand.ts`), then
+  prompt-adjacent status and the prompt (`src/terminal-ui.ts`, `src/cli.ts`). No
+  banner or readiness claim. Keep `--ascii`, `TERM=dumb`, `NO_COLOR` and
+  narrow-terminal fallbacks.
 
 ## Change rules
 
