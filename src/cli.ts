@@ -231,7 +231,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         endLine();
         if (interactive && !answerVisible) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected) throw new Error('Session changed; result discarded.');
-        memory = outcome.messages; if (owned) lastTurnUsage = outcome.usage; // the user's turn, not workflow fix turns
+        memory = outcome.messages;
+        // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
+        lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
+          ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;
         if (session) {
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; historySaveFailed = false; }
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }

@@ -213,8 +213,9 @@ workflow and approved branding:
   reviewer flags and `--ascii`; help lists them in grouped sections.
 - Launch prints the approved logo, a blank line, prompt-adjacent status and the
   real prompt. There is still no banner, readiness claim or startup provider call.
-- Workflow fix turns reuse the outer request's cancellation; last-turn usage
-  resets only for the user's own turn.
+- Workflow fix turns reuse the outer request's cancellation. Last-turn usage covers
+  the whole request: the user's turn plus its fix turns. Any unreported count makes
+  the total unknown. Reviewer calls are not included.
 - A workspace without a Git baseline gets a once-per-session `Review unavailable`
   notice in place of the earlier once-per-session `BLOCKED` line, which looked
   like a failure after a plain chat turn. Explicit `/review`
