@@ -196,7 +196,7 @@ test('status tracks fresh, mode, thinking, new and model state with reported las
   assert.equal(states.length, 5);
   assert.ok(transcript.startsWith(renderLogo(80).join('\n') + '\n\n'));
   // A non-Git workspace gets one honest notice per session, not a BLOCKED verdict after every chat turn.
-  assert.equal(transcript.split('Review unavailable: this workspace is not a Git repository').length - 1, 1);
+  assert.equal(transcript.split('Review unavailable: no workspace baseline').length - 1, 1);
   assert.doesNotMatch(transcript, /BLOCKED: no workspace baseline/);
   assert.match(states[0], /Mode: Work\nProvider: openai-codex\nModel: \(not selected\)/);
   assert.match(states[0], /History: off/);

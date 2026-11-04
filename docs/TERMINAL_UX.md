@@ -215,8 +215,9 @@ workflow and approved branding:
   real prompt. There is still no banner, readiness claim or startup provider call.
 - Workflow fix turns reuse the outer request's cancellation; last-turn usage
   resets only for the user's own turn.
-- A workspace without a Git baseline gets one `Review unavailable` notice per
-  session instead of a `BLOCKED` verdict after every turn. Explicit `/review`
+- A workspace without a Git baseline gets a once-per-session `Review unavailable`
+  notice in place of the earlier once-per-session `BLOCKED` line, which looked
+  like a failure after a plain chat turn. Explicit `/review`
   still reports `BLOCKED` when no baseline exists.
 - The first-pass preview PNG and the LinkedIn captures were not committed. They
   show the superseded identity. They remain in the recovery archive.

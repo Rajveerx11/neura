@@ -231,7 +231,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         endLine();
         if (interactive && !answerVisible) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected) throw new Error('Session changed; result discarded.');
-        memory = outcome.messages; lastTurnUsage = outcome.usage;
+        memory = outcome.messages; if (owned) lastTurnUsage = outcome.usage; // the user's turn, not workflow fix turns
         if (session) {
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; historySaveFailed = false; }
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
@@ -239,7 +239,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         if (review && baseline) await workflow(text, baseline, false);
         else if (review && !baselineWarned) {
           baselineWarned = true; // once per session: without a Git baseline no change can be reviewed
-          say('Review unavailable: this workspace is not a Git repository with a commit, so Work changes are not reviewed. Use /workflow off to hide this.');
+          say('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so Work changes are not reviewed. Use /workflow off to hide this.');
         }
       } catch (error) {
         if (abort?.signal.aborted) throw new DOMException('Turn cancelled. No task was replayed. Inspect current state before retrying.', 'AbortError');

@@ -112,8 +112,9 @@ removed. `src/terminal-ui.ts` holds pure, width-aware presentation. It covers
 prompt-adjacent status, `/status`, Mastra-reported last-turn token usage, grouped
 help, explicit approval and cancellation states, and copper color that
 `NO_COLOR`/`TERM=dumb` disable. Context capacity stays unknown, so no percentage
-is shown. Non-Git workspaces get one `Review unavailable` notice instead of a
-`BLOCKED` verdict after every turn. Details and limits are in
+is shown. Workspaces without a Git baseline get a once-per-session
+`Review unavailable` notice instead of a `BLOCKED` line after the first chat turn.
+Details and limits are in
 [terminal UX](TERMINAL_UX.md). Synthetic tests only: no new real-account or
 live-provider evidence is claimed.
 

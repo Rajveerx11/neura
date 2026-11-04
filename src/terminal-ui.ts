@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { renderLogo } from './brand.ts';
 
 export function terminalText(text: string): string {
-  return stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, '');
+  return stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
 type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error';
