@@ -68,7 +68,18 @@ jobs:
         run: npm ci --prefix agent/neura --ignore-scripts
 
       - name: Audit dependency vulnerabilities and registry signatures
-        run: npm run audit:all
+        shell: pwsh
+        run: |
+          # npm's cache can hit a transient Windows file lock (EBUSY) while fetching registry
+          # signatures. Retry the full audit once for that error only. Any other failure, or a
+          # second EBUSY, still fails the job.
+          $ErrorActionPreference = 'Continue'; $PSNativeCommandUseErrorActionPreference = $false
+          npm run audit:all 2>&1 | Tee-Object -Variable lines
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          if (-not ($lines -match 'EBUSY')) { exit 1 }
+          Write-Warning 'npm cache EBUSY (transient Windows file lock); retrying the full audit once.'
+          npm run audit:all
+          exit $LASTEXITCODE
 
       - name: Verify active Mastra graph is Pi-free
         run: npm run check:pi-free

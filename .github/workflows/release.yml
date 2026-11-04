@@ -72,7 +72,16 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: npm run verify:release -- --tag "$env:TAG"
       - name: Audit dependency vulnerabilities and registry signatures
-        run: npm run audit:all
+        shell: pwsh
+        run: |
+          # Same bounded EBUSY retry as Neura CI: once, only for npm's transient Windows cache lock.
+          $ErrorActionPreference = 'Continue'; $PSNativeCommandUseErrorActionPreference = $false
+          npm run audit:all 2>&1 | Tee-Object -Variable lines
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          if (-not ($lines -match 'EBUSY')) { exit 1 }
+          Write-Warning 'npm cache EBUSY (transient Windows file lock); retrying the full audit once.'
+          npm run audit:all
+          exit $LASTEXITCODE
       - name: Verify deterministic repository contracts
         run: npm run verify
       - name: Require configured-host Work sandbox acceptance
