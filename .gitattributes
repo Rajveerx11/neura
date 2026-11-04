@@ -11,6 +11,8 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 VERSION text eol=lf
+assets/brand/*.txt text eol=lf
+assets/brand/*.svg text eol=lf
 LICENSE text eol=lf
 
 *.ps1 text eol=crlf
