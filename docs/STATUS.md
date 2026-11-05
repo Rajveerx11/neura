@@ -19,6 +19,7 @@ have synthetic tests; no real-account login or provider entitlement is claimed.
 The original Pi audit below is historical baseline evidence, not current Mastra
 verification or permission to install/downgrade Pi. Original hardening issues stay
 open; a framework change does not close them. Human Away is unavailable in v1.
+Baseline coverage and owners are tracked in the [parity matrix](PARITY_MATRIX.md) (#114); it is not a parity or readiness claim.
 
 ## Current maintenance checkpoint (2026-10-27)
 
