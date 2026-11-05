@@ -15,6 +15,7 @@ const suites = {
   workflow: ['--test', 'tests/v1-workflow.test.ts'],
   'terminal-ui': ['--test', 'tests/v1-terminal-ui.test.ts'],
   'parity-matrix': ['--test', 'tests/v1-parity-matrix.test.ts'],
+  'dependency-gate': ['--test', 'tests/v1-dependency-gate.test.ts'],
   'learn-materials': ['scripts/tests/learn-materials.mjs'],
   'learn-workshop': ['scripts/tests/learn-workshop.mjs'],
   'learn-storage': ['scripts/tests/learn-storage.mjs'],
