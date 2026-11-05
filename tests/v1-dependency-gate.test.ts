@@ -51,4 +51,5 @@ test('reviewed exceptions bind to the exact version; license exceptions only cov
   assert.deepEqual(checkGraph('synthetic', lock({ 'node_modules/axe-core': entry({ version: '4.14.0', license: 'MPL-2.0', dev: true }) })).errors, []);
   fails(lock({ 'node_modules/axe-core': entry({ version: '4.15.0', license: 'MPL-2.0', dev: true }) }), /Unreviewed license "MPL-2.0".*axe-core@4\.15\.0/);
   fails(lock({ 'node_modules/axe-core': entry({ version: '4.14.0', license: 'MPL-2.0' }) }), /Unreviewed license "MPL-2.0".*axe-core@4\.14\.0/);
+  fails(lock({ 'node_modules/axe-core': entry({ version: '4.14.0', license: 'GPL-3.0-only', dev: true }) }), /Unreviewed license "GPL-3.0-only".*axe-core@4\.14\.0/);
 });

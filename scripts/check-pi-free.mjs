@@ -11,7 +11,7 @@ export const PERMISSIVE = new Set(['Apache-2.0', 'MIT', 'ISC', 'BSD-2-Clause', '
 // Reviewed exceptions bind to name@version, so any version change forces a fresh review.
 // License exceptions are dev-only: they never cover a production-reachable (non-`dev`) entry.
 export const REVIEWED_LICENSES = Object.freeze({
-  'axe-core@4.14.0': 'MPL-2.0 file-level copyleft; dev-only Learn accessibility test dependency, unmodified, never shipped by the source-linked install.',
+  'axe-core@4.14.0': { license: 'MPL-2.0', reason: 'File-level copyleft; dev-only Learn accessibility test dependency, unmodified, never shipped by the source-linked install.' },
 });
 export const REVIEWED_INSTALL_SCRIPTS = Object.freeze({
   'tesseract.js@7.0.0': '`opencollective-postinstall || true` donation banner only; every supported install uses --ignore-scripts.',
@@ -49,7 +49,7 @@ export function checkGraph(relative, json) {
     if (!entry.integrity) errors.push(`Missing package integrity in ${relative}: ${key}`);
     if (entry.hasInstallScript && !Object.hasOwn(REVIEWED_INSTALL_SCRIPTS, id)) errors.push(`Unreviewed install script in ${relative}: ${id}`);
     if (!entry.license) errors.push(`Missing license in ${relative}: ${id}`);
-    else if (!permissive(entry.license) && !(Object.hasOwn(REVIEWED_LICENSES, id) && entry.dev)) errors.push(`Unreviewed license ${JSON.stringify(entry.license)} in ${relative}: ${id}`);
+    else if (!permissive(entry.license) && !(Object.hasOwn(REVIEWED_LICENSES, id) && REVIEWED_LICENSES[id].license === entry.license && entry.dev)) errors.push(`Unreviewed license ${JSON.stringify(entry.license)} in ${relative}: ${id}`);
   }
   return { errors, entries };
 }
