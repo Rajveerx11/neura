@@ -29,7 +29,10 @@ export function permissive(license) {
 // Works for package.json (top-level groups) and lockfile v3 (packages[""] groups plus entries).
 export function checkGraph(relative, json) {
   const errors = [];
-  const direct = json.packages?.[''] ?? json;
+  const lock = relative.endsWith('package-lock.json') || Object.hasOwn(json, 'lockfileVersion') || Object.hasOwn(json, 'packages');
+  // A lock without its v3 packages map must fail, not be read as a manifest with nothing to check.
+  if (lock && (json.lockfileVersion !== 3 || !json.packages?.[''])) return { errors: [`Unsupported lockfile in ${relative}: lockfileVersion 3 with packages[""] required`], entries: 0 };
+  const direct = lock ? json.packages[''] : json;
   for (const group of ['dependencies', 'devDependencies', 'optionalDependencies']) {
     for (const [name, version] of Object.entries(direct[group] ?? {})) {
       if (FORBIDDEN.test(name)) errors.push(`Pi dependency in ${relative}: ${name}`);

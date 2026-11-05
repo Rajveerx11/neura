@@ -40,6 +40,9 @@ test('pi-tui, install script, missing license, disallowed license and range pin 
   fails(lock({ 'node_modules/gpl': entry({ license: 'GPL-3.0-only' }) }), /Unreviewed license "GPL-3.0-only"/);
   fails(lock({}, { ok: '^1.0.0' }), /Non-exact direct pin.*ok@\^1\.0\.0/);
   fails({ dependencies: { ok: '~1.0.0' } }, /Non-exact direct pin/);
+  fails({ lockfileVersion: 3 }, /Unsupported lockfile/);
+  fails({ lockfileVersion: 2, packages: lock({}).packages }, /Unsupported lockfile/);
+  assert.match(checkGraph('package-lock.json', {}).errors.join(), /Unsupported lockfile/);
 });
 
 test('reviewed exceptions bind to the exact version; license exceptions only cover dev entries', () => {
