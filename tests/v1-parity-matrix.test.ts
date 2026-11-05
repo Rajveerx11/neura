@@ -11,7 +11,7 @@ const link = 'https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b
 const owner = (issue: number) => `[M](https://github.com/Rajveerx11/neura/issues/${issue})`;
 const row = (id: string, status = '`partial`', issue = 116) => `| \`${id}\` | [src](${link}x.ts) | ${owner(issue)} | ${status} | none | needed | |`;
 const synthetic = (rows: string[]) => ['Baseline 3ebaac07c8320125bcc32478b5aa3865746a997c', ...rows].join('\n');
-const inventory = { extensions: ['a.ts', 'b.ts'], commands: ['go'], exists };
+const inventory = { extensions: ['a.ts', 'b.ts'], commands: ['go'], files: new Set(['agent/extensions/x.ts']), exists };
 const complete = [row('ext:a.ts'), row('ext:b.ts'), row('cmd:/go'), row('gate:human-away', '`unavailable`'), row('gate:full-proof', '`unavailable`', 121)];
 
 test('real matrix covers every baseline extension and command with one owner and an honest status', () => {
@@ -35,6 +35,8 @@ test('unowned, out-of-range owner and missing permalink rows fail', () => {
   assert.ok(validateMatrix(synthetic(foreign), inventory).some(error => error.includes('exactly one owner')));
   const unlinked = complete.map(line => line.replace(link, 'https://example.com/'));
   assert.ok(validateMatrix(synthetic(unlinked), inventory).some(error => error.includes('missing baseline permalink')));
+  const broken = complete.map(line => line.replace(`${link}x.ts`, `${link}gone.ts#L3`));
+  assert.ok(validateMatrix(synthetic(broken), inventory).some(error => error.includes('not in the baseline tree: agent/extensions/gone.ts')));
 });
 
 test('Human Away or full proof marked implemented fails, as do invalid statuses and fake evidence', () => {
@@ -46,4 +48,6 @@ test('Human Away or full proof marked implemented fails, as do invalid statuses 
   assert.ok(validateMatrix(synthetic(supported), inventory).some(error => error.includes('invalid status')));
   const invented = complete.map(line => line.includes('ext:a.ts') ? line.replace('| none |', '| `tests/does-not-exist.test.ts` |') : line);
   assert.ok(validateMatrix(synthetic(invented), inventory).some(error => error.includes('evidence path does not exist')));
+  const nonTest = complete.map(line => line.includes('ext:a.ts') ? line.replace('| none |', '| `scripts/learn-material-fixtures.mjs` |') : line);
+  assert.ok(validateMatrix(synthetic(nonTest), inventory).some(error => error.includes('evidence must be a test file')));
 });

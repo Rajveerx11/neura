@@ -278,6 +278,11 @@ boundaries and unavailable-sandbox refusal without requiring a successful WSL
 command. Sandbox argument, link and integrity contracts remain mandatory. Hosted
 PR CI does not establish real Work sandbox execution.
 
+The `parity-matrix` suite reads frozen baseline commit
+`3ebaac07c8320125bcc32478b5aa3865746a997c` from Git history. In a shallow clone,
+run `git fetch --unshallow` (or `git fetch origin 3ebaac07c8320125bcc32478b5aa3865746a997c`)
+first; otherwise `npm run verify` fails that suite. Hosted CI checks out full history.
+
 On a configured native Windows host with WSL2, a selected/default distro and
 working bubblewrap, run the separate acceptance check:
 

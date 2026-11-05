@@ -1,5 +1,6 @@
-// M0 parity matrix gate (#114). Checks inventory coverage and honest status labels only;
-// it does not run or certify the evidence tests the matrix names.
+// M0 parity matrix gate (#114). Checks inventory coverage, honest status labels, that source
+// links resolve to files in the frozen baseline tree and that evidence names test files.
+// It does not run or certify the evidence tests the matrix names.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -8,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 export const BASELINE = '3ebaac07c8320125bcc32478b5aa3865746a997c';
 export const STATUSES = Object.freeze(['implemented', 'partial', 'unavailable', 'future']);
 const PERMALINK = `https://github.com/Rajveerx11/neura/blob/${BASELINE}/`;
+const EVIDENCE = /^(?:tests\/[^/]+\.test\.ts|scripts\/tests\/[^/]+\.mjs)$/;
 const OWNER = /https:\/\/github\.com\/Rajveerx11\/neura\/issues\/(\d+)/g;
 // ponytail: /mcp is registered by @spences10/pi-mcp through the mcp.ts wrapper, so a literal
 // registerCommand scan cannot see it. Add names here only for the same reason.
@@ -23,8 +25,9 @@ export function parseMatrix(text) {
   return rows;
 }
 
-// Pure validation. `exists(relativePath)` decides whether evidence/fixture paths are real.
-export function validateMatrix(text, { extensions, commands, exists }) {
+// Pure validation. `exists(relativePath)` decides whether evidence/fixture paths are real;
+// `files` is the set of baseline-tree paths that source links must resolve to.
+export function validateMatrix(text, { extensions, commands, files, exists }) {
   const errors = [];
   const rows = parseMatrix(text);
   if (!text.includes(BASELINE)) errors.push(`Matrix must name frozen baseline ${BASELINE}`);
@@ -39,6 +42,11 @@ export function validateMatrix(text, { extensions, commands, exists }) {
     const [source = '', owner = '', status = '', evidence = '', fixture = ''] = row.cells;
     const where = `${row.id} (line ${row.line})`;
     if (!source.includes(PERMALINK)) errors.push(`${where}: missing baseline permalink`);
+    for (const [, target] of source.matchAll(/\]\((https:[^\s)]+)\)/g)) {
+      if (!target.startsWith(PERMALINK)) continue;
+      const file = decodeURIComponent(target.slice(PERMALINK.length).split('#')[0]).replace(/\/$/, '');
+      if (!files.has(file)) errors.push(`${where}: source link is not in the baseline tree: ${file}`);
+    }
     const owners = [...owner.matchAll(OWNER)].map(match => Number(match[1]));
     if (owners.length !== 1 || owners[0] < 114 || owners[0] > 129) errors.push(`${where}: needs exactly one owner in #114-#129`);
     const label = status.replace(/`/g, '');
@@ -51,7 +59,11 @@ export function validateMatrix(text, { extensions, commands, exists }) {
       if (cell === empty) continue;
       const paths = [...cell.matchAll(/`([^`]+)`/g)].map(match => match[1]);
       if (!paths.length) errors.push(`${where}: ${name} must be \`path\` or ${empty}`);
-      for (const file of paths) if (!exists(file)) errors.push(`${where}: ${name} path does not exist: ${file}`);
+      for (const file of paths) {
+        if (!exists(file)) errors.push(`${where}: ${name} path does not exist: ${file}`);
+        // ponytail: structural only; a test filename cannot prove non-mock coverage or that it ran.
+        else if (name === 'evidence' && !EVIDENCE.test(file)) errors.push(`${where}: evidence must be a test file (tests/*.test.ts or scripts/tests/*.mjs): ${file}`);
+      }
     }
   }
   return errors;
@@ -68,7 +80,9 @@ export function baselineInventory(root) {
     .filter(file => file.endsWith('.ts')).map(file => path.posix.basename(file)).sort();
   const literal = git('grep', '-h', '-o', '-E', `registerCommand\\(\\s*["'][a-z-]+["']`, BASELINE, '--', 'agent/extensions', 'agent/neura');
   const commands = [...new Set([...literal.matchAll(/["']([a-z-]+)["']/g)].map(match => match[1]).concat(WRAPPED_COMMANDS))].sort();
-  return { extensions, commands };
+  // -t keeps directories too, so a link to a baseline folder also resolves.
+  const files = new Set(git('ls-tree', '-r', '-t', '--name-only', BASELINE).split('\n').filter(Boolean));
+  return { extensions, commands, files };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
