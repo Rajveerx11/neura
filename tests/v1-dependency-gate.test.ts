@@ -27,7 +27,7 @@ test('synthetic clean lock passes; SPDX OR needs one permissive branch', () => {
   assert.deepEqual(checkGraph('synthetic', lock({})).errors, []);
   assert.equal(permissive('(AFL-2.1 OR BSD-3-Clause)'), true);
   assert.equal(permissive('MIT'), true);
-  for (const bad of ['MIT AND GPL-3.0-only', 'MIT OR GPL-3.0-only AND Apache-2.0', 'MIT WITH x', '(MIT OR (BSD-3-Clause))', 'MIT OR', '', 'GPL-3.0-only']) {
+  for (const bad of ['MIT AND GPL-3.0-only', 'MIT OR GPL-3.0-only AND Apache-2.0', 'MIT WITH x', '(MIT OR (BSD-3-Clause))', 'MIT OR', 'MIT OR OR', 'OR OR MIT', '', 'GPL-3.0-only']) {
     assert.equal(permissive(bad), false, bad);
   }
 });

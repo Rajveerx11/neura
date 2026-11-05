@@ -17,13 +17,13 @@ export const REVIEWED_INSTALL_SCRIPTS = Object.freeze({
   'tesseract.js@7.0.0': '`opencollective-postinstall || true` donation banner only; every supported install uses --ignore-scripts.',
 });
 
-// ponytail: SPDX ids joined only by OR, optionally in one outer paren pair. AND, WITH, nesting or
+// ponytail: SPDX ids joined only by OR, optionally in one outer paren pair. AND, WITH, a bare OR operand, nesting or
 // any other syntax counts as not permissive. Under OR the licensee may elect the permissive branch.
 const SPDX_ID = /^[\w.+-]+$/;
 export function permissive(license) {
   if (typeof license !== 'string') return false;
   const ids = (/^\(([^()]*)\)$/.exec(license)?.[1] ?? license).split(' OR ');
-  return ids.every(id => SPDX_ID.test(id) && id !== 'AND' && id !== 'WITH') && ids.some(id => PERMISSIVE.has(id));
+  return ids.every(id => SPDX_ID.test(id) && !['AND', 'OR', 'WITH'].includes(id)) && ids.some(id => PERMISSIVE.has(id));
 }
 
 // Works for package.json (top-level groups) and lockfile v3 (packages[""] groups plus entries).
