@@ -9,6 +9,7 @@ const EXACT = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
 // Derived from both active locks on 2026-11-05. A new license id fails until reviewed here.
 export const PERMISSIVE = new Set(['Apache-2.0', 'MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'BlueOak-1.0.0']);
 // Reviewed exceptions bind to name@version, so any version change forces a fresh review.
+// License exceptions are dev-only: they never cover a production-reachable (non-`dev`) entry.
 export const REVIEWED_LICENSES = Object.freeze({
   'axe-core@4.14.0': 'MPL-2.0 file-level copyleft; dev-only Learn accessibility test dependency, unmodified, never shipped by the source-linked install.',
 });
@@ -16,10 +17,13 @@ export const REVIEWED_INSTALL_SCRIPTS = Object.freeze({
   'tesseract.js@7.0.0': '`opencollective-postinstall || true` donation banner only; every supported install uses --ignore-scripts.',
 });
 
-// ponytail: SPDX OR-only expressions; AND/WITH or anything unparsed counts as not permissive.
+// ponytail: SPDX ids joined only by OR, optionally in one outer paren pair. AND, WITH, nesting or
+// any other syntax counts as not permissive. Under OR the licensee may elect the permissive branch.
+const SPDX_ID = /^[\w.+-]+$/;
 export function permissive(license) {
   if (typeof license !== 'string') return false;
-  return license.replace(/^\((.*)\)$/, '$1').split(' OR ').some(id => PERMISSIVE.has(id.trim()));
+  const ids = (/^\(([^()]*)\)$/.exec(license)?.[1] ?? license).split(' OR ');
+  return ids.every(id => SPDX_ID.test(id) && id !== 'AND' && id !== 'WITH') && ids.some(id => PERMISSIVE.has(id));
 }
 
 // Works for package.json (top-level groups) and lockfile v3 (packages[""] groups plus entries).
@@ -42,7 +46,7 @@ export function checkGraph(relative, json) {
     if (!entry.integrity) errors.push(`Missing package integrity in ${relative}: ${key}`);
     if (entry.hasInstallScript && !Object.hasOwn(REVIEWED_INSTALL_SCRIPTS, id)) errors.push(`Unreviewed install script in ${relative}: ${id}`);
     if (!entry.license) errors.push(`Missing license in ${relative}: ${id}`);
-    else if (!permissive(entry.license) && !Object.hasOwn(REVIEWED_LICENSES, id)) errors.push(`Unreviewed license ${JSON.stringify(entry.license)} in ${relative}: ${id}`);
+    else if (!permissive(entry.license) && !(Object.hasOwn(REVIEWED_LICENSES, id) && entry.dev)) errors.push(`Unreviewed license ${JSON.stringify(entry.license)} in ${relative}: ${id}`);
   }
   return { errors, entries };
 }

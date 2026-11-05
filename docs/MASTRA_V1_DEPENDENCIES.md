@@ -59,7 +59,10 @@ Review ran on Windows 11, Node 24.19.0 and npm 12.2.0.
 a Pi package (including one renamed under a Pi path), missing integrity, an
 `hasInstallScript` package outside a reviewed allowlist, a missing `license`, or
 a license outside the permissive allowlist without a reviewed exception.
-Exceptions bind to `name@version`, so any bump forces a fresh review.
+Exceptions bind to `name@version`, so any bump forces a fresh review. License
+exceptions also require the lock's `dev: true` flag, so a reviewed dev-only
+package that becomes production-reachable fails. License expressions must be
+SPDX ids joined only by `OR`; `AND`, `WITH` or nesting fail.
 `tests/v1-dependency-gate.test.ts` runs the real locks plus synthetic failing
 locks (pi-tui, install script, missing license, GPL, range pin).
 

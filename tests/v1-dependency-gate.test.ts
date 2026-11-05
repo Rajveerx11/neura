@@ -26,7 +26,10 @@ test('real manifests and both active locks pass the dependency gate', () => {
 test('synthetic clean lock passes; SPDX OR needs one permissive branch', () => {
   assert.deepEqual(checkGraph('synthetic', lock({})).errors, []);
   assert.equal(permissive('(AFL-2.1 OR BSD-3-Clause)'), true);
-  assert.equal(permissive('MIT AND GPL-3.0-only'), false);
+  assert.equal(permissive('MIT'), true);
+  for (const bad of ['MIT AND GPL-3.0-only', 'MIT OR GPL-3.0-only AND Apache-2.0', 'MIT WITH x', '(MIT OR (BSD-3-Clause))', 'MIT OR', '', 'GPL-3.0-only']) {
+    assert.equal(permissive(bad), false, bad);
+  }
 });
 
 test('pi-tui, install script, missing license, disallowed license and range pin each fail', () => {
@@ -39,8 +42,10 @@ test('pi-tui, install script, missing license, disallowed license and range pin 
   fails({ dependencies: { ok: '~1.0.0' } }, /Non-exact direct pin/);
 });
 
-test('reviewed exceptions bind to the exact reviewed version', () => {
+test('reviewed exceptions bind to the exact version; license exceptions only cover dev entries', () => {
   assert.deepEqual(checkGraph('synthetic', lock({ 'node_modules/tesseract.js': entry({ version: '7.0.0', hasInstallScript: true }) })).errors, []);
   fails(lock({ 'node_modules/tesseract.js': entry({ version: '7.0.1', hasInstallScript: true }) }), /Unreviewed install script.*tesseract\.js@7\.0\.1/);
-  fails(lock({ 'node_modules/axe-core': entry({ version: '4.15.0', license: 'MPL-2.0' }) }), /Unreviewed license "MPL-2.0".*axe-core@4\.15\.0/);
+  assert.deepEqual(checkGraph('synthetic', lock({ 'node_modules/axe-core': entry({ version: '4.14.0', license: 'MPL-2.0', dev: true }) })).errors, []);
+  fails(lock({ 'node_modules/axe-core': entry({ version: '4.15.0', license: 'MPL-2.0', dev: true }) }), /Unreviewed license "MPL-2.0".*axe-core@4\.15\.0/);
+  fails(lock({ 'node_modules/axe-core': entry({ version: '4.14.0', license: 'MPL-2.0' }) }), /Unreviewed license "MPL-2.0".*axe-core@4\.14\.0/);
 });
