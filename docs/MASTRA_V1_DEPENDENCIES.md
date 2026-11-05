@@ -20,7 +20,7 @@ Pi source and parent-owned migration work are outside this slice.
 | `typebox` | `1.4.3` | Existing Learn schemas and final callback validation; updated in PR #134 |
 | `zod` | `4.6.7` | Mastra peer and reused Learn validation |
 
-Development pins remain `@types/node@26.6.5`, `typescript@7.0.2`,
+Development pins remain `@types/node@26.6.6`, `typescript@7.0.2`,
 `playwright-core@1.64.1`, and `axe-core@4.14.0`. Browser pins are retained for
 parent-owned Learn verification. Existing test scripts remain for parent migration;
 this slice adds `test:v1:runtime` and `typecheck:v1` only.
@@ -40,6 +40,156 @@ Installation used `npm install --ignore-scripts --no-fund`. Lock inspection foun
 no `hasInstallScript` packages. This does not establish absence of WASM or other
 executable content. Runtime core still has a sizable transitive graph; no claim of
 exhaustive transitive source review is made.
+
+## M1 package closure review (2026-11-05)
+
+This closes the package-selection half of [#115](https://github.com/Rajveerx11/neura/issues/115)
+for the two active graphs. No version, lockfile or release metadata changed.
+Review ran on Windows 11, Node 24.19.0 and npm 12.2.0.
+
+### Exact graphs
+
+| Graph | Direct exact pins | Lock entries |
+| --- | --- | --- |
+| Root `package-lock.json` | Runtime: `@mastra/core@1.79.0`, `@ai-sdk/openai@4.0.96`, `@ai-sdk/anthropic@4.0.82`, `typebox@1.4.3`, `zod@4.6.7`. Dev: `@types/node@26.6.6`, `typescript@7.0.2`, `playwright-core@1.64.1`, `axe-core@4.14.0` | 175 (25 dev, 20 optional platform) |
+| Learn `agent/neura/package-lock.json` | `@napi-rs/canvas@1.1.0`, `@tesseract.js-data/eng@1.0.0`, `pdfjs-dist@6.4.299`, `saxes@6.0.0`, `tesseract.js@7.0.0`, `yauzl@3.4.0` | 31 (11 optional platform) |
+
+`scripts/check-pi-free.mjs` now enforces the closure from the locks on every
+`npm run verify`, PR CI and the daily boundary workflow. It fails on a range pin,
+a Pi package (including one renamed under a Pi path), missing integrity, an
+`hasInstallScript` package outside a reviewed allowlist, a missing `license`, or
+a license outside the permissive allowlist without a reviewed exception.
+Exceptions bind to `name@version`, so any bump forces a fresh review.
+`tests/v1-dependency-gate.test.ts` runs the real locks plus synthetic failing
+locks (pi-tui, install script, missing license, GPL, range pin).
+
+### License tally
+
+| License | Root | Learn |
+| --- | --- | --- |
+| MIT | 123 | 24 |
+| Apache-2.0 | 40 | 5 |
+| ISC | 6 | 1 |
+| BSD-2-Clause | 1 (`dotenv`) | 1 |
+| BSD-3-Clause | 1 (`jpeg-js`) | 0 |
+| BlueOak-1.0.0 | 2 (`lru-cache`, `@isaacs/ttlcache`) | 0 |
+| `(AFL-2.1 OR BSD-3-Clause)` | 1 (`json-schema`, BSD-3-Clause branch) | 0 |
+| MPL-2.0 | 1 (`axe-core`, reviewed) | 0 |
+
+Every entry declares a license. `axe-core@4.14.0` is the only non-permissive
+entry. It is a dev-only Learn accessibility test dependency, used unmodified
+and never shipped by the source-linked install. Lock `license` fields are
+package metadata. They cannot show that every shipped file matches its SPDX
+id, which is why Mastra's EE content needs the separate record below.
+
+### Install scripts
+
+The only lock entry with `hasInstallScript` is `tesseract.js@7.0.0`. Its
+`postinstall` is `opencollective-postinstall || true`, a donation banner. All
+supported installs use `npm ci --ignore-scripts`, so it never runs. Both graphs
+installed cleanly that way for this review (156 root and 21 Learn packages on
+win32-x64).
+
+### Mastra EE scope and owner decision
+
+`@mastra/core@1.79.0` ships EE code that its Apache-2.0 `LICENSE.md` excludes,
+and `Agent` imports reach it. **Owner decision, 2026-11-05:** the owner accepts
+Mastra's EE license terms for local development and testing only. This is not
+a redistribution or production grant. Only Mastra (Kepler Software) can give
+one. `npm run verify:release` stays blocked and now says so. Distribution or
+production use still needs Mastra commercial EE terms or an EE-free upstream
+artifact. No entitlement check was removed.
+
+Telemetry stays off by default. `src/runtime.ts` sets
+`MASTRA_TELEMETRY_DISABLED=1` before any dynamic Mastra import and creates an
+`Agent`, never a `Mastra` instance. The clean-environment test in
+`tests/v1-runtime.test.ts` ("clean-environment import and Agent run perform no
+telemetry/license network or process calls") rejects network and subprocess use.
+
+### Import surface
+
+`src/` imports only these package subpaths:
+
+| Package | Subpaths | Where |
+| --- | --- | --- |
+| `@mastra/core` | `/agent`, `/tools`, `/logger` (runtime); `/schema` (types only) | `src/runtime.ts` |
+| `@ai-sdk/openai`, `@ai-sdk/anthropic` | package root | `src/providers.ts` |
+| `typebox` | root, `/value` | `src/runtime.ts`, `src/learn.ts`, `src/work.ts` |
+| `zod` | root | `src/learn.ts`, `src/work.ts`, `src/review.ts` |
+
+`tests/v1-runtime.test.ts` loads `src/runtime.ts` and `src/providers.ts` and
+runs real `Agent` dispatch. PR CI runs it on `windows-2025` after
+`npm ci --ignore-scripts`, so these exports load on Windows with scripts
+disabled. No new import check was needed.
+
+### Native and WASM inventory
+
+Found in the installed win32-x64 graphs. Other platforms resolve the listed
+optional packages instead.
+
+| Graph | Native/WASM file | Package | Scope |
+| --- | --- | --- | --- |
+| Root | `lib/tsc.exe` | `@typescript/typescript-win32-x64` (one of 20 locked platform packages) | Dev typecheck only |
+| Root | `lib/webp_codec.wasm` | `playwright-core` | Dev browser tests |
+| Root | `workerd/xxhash.wasm` | `xxhash-wasm@1.1.0` (via `@mastra/core`) | Runtime dependency. This file is the Cloudflare workerd build |
+| Learn | `skia.win32-x64-msvc.node` | `@napi-rs/canvas-win32-x64-msvc` (one of 11 locked platform packages) | Learn rendering |
+| Learn | `wasm/jbig2.wasm`, `openjpeg.wasm`, `qcms_bg.wasm`, `quickjs-eval.wasm` | `pdfjs-dist` | Learn PDF decode |
+| Learn | six `tesseract-core*.wasm` builds | `tesseract.js-core` (via `tesseract.js`) | Learn OCR |
+
+No `.dll`, `.so` or `.dylib` files ship. These are prebuilt and nothing
+compiles at install. This inventory is a file listing. It does not audit the
+native or WASM code itself.
+
+### Windows prerequisites
+
+Native Windows Node 24.15+ (from `engines`, CI uses 24.16.0) with its bundled npm.
+No compiler, Python or build tools are needed, since the native pieces are
+prebuilt and scripts stay disabled. Work's sandboxed execution separately needs
+WSL, as described in [Mastra v1](MASTRA_V1.md).
+
+### SBOM on demand
+
+Generate SBOMs locally instead of committing them:
+
+```powershell
+npm sbom --sbom-format cyclonedx --omit dev
+npm sbom --prefix agent/neura --sbom-format cyclonedx
+```
+
+Both commands exited 0 on npm 12.2.0, emitting CycloneDX 1.5 with 147 root
+production and 21 Learn components from the installed trees. Add
+`--package-lock-only` to work from the locks alone, as the blocked release
+workflow does for SPDX.
+
+### Rejected candidates
+
+| Candidate | Reason |
+| --- | --- |
+| Mastra Code TUI | Release commit `mastracode/tui/package.json` depends directly on `@earendil-works/pi-tui@0.80.6` |
+| `@mastra/code-sdk@1.15.0` | Pulls libsql, DuckDB, PostgreSQL and native tooling that deep imports don't remove. Defaults to shared `AuthStorage`. Its auth code cites Pi's OAuth implementation, so its provenance is Pi-derived. Neura's own subscription adapter replaced it |
+| `Mastra` instance | Its constructor runs license validation. Neura uses a bare `Agent` |
+
+### Legacy Pi 1.4.0 compatibility defect
+
+Scheduled run [39953146644](https://github.com/Rajveerx11/neura/actions/runs/39953146644)
+found stable Pi `1.4.0` against the reviewed `1.3.0`. The owner chose full Pi
+removal, so legacy Pi runtime support is retired and blocked, not adapted.
+No installed Pi is downgraded and no gate is bypassed. The daily
+`runtime-compatibility.yml` workflow now checks the Mastra boundary
+(`check:pi-free` plus `audit:all`) rather than Pi.
+
+### Rollback
+
+Revert the commit. It rewrites no lock, manifest or credential, so nothing
+else needs restoring.
+
+### Open gaps
+
+Upstream source-to-artifact correspondence was rehashed only for the Mastra
+artifacts and the PRs cited above, not for the full transitive closure. Registry
+signatures are checked by `audit:signatures`. No complete transitive source,
+native or WASM audit is claimed. Terminal package selection is unneeded while
+the active terminal uses Node readline. Mastra EE distribution remains blocked.
 
 ## TypeBox 1.4.3 dependency update (PR #134)
 
