@@ -16,8 +16,8 @@ no v1 surface has yet been shown equivalent to its baseline behavior.
 
 `node scripts/check-parity-matrix.mjs` derives the 19 extension entry points and the
 command names from Git at the frozen commit and fails if any is missing, duplicated,
-unowned, missing a permalink, uses an unknown status, or marks Human Away or full proof
-`implemented`.
+unowned, missing a permalink, links a path absent from the frozen tree, uses an unknown
+status, names a non-test evidence file, or marks Human Away or full proof `implemented`.
 
 ## Status values
 
