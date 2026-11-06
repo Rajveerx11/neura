@@ -20,6 +20,7 @@ The original Pi audit below is historical baseline evidence, not current Mastra
 verification or permission to install/downgrade Pi. Original hardening issues stay
 open; a framework change does not close them. Human Away is unavailable in v1.
 Baseline coverage and owners are tracked in the [parity matrix](PARITY_MATRIX.md) (#114); it is not a parity or readiness claim.
+On 2026-11-05 the owner accepted Mastra EE terms for local development/testing only. The [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05) (#115) now gates pins, install scripts and licenses.
 
 ## Current maintenance checkpoint (2026-10-27)
 

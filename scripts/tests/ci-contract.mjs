@@ -92,5 +92,5 @@ for (const [suite, deadline] of [['runtime', 300000], ['installer', 600000]]) {
 const distribution = spawnSync(process.execPath, ['scripts/check-pi-free.mjs', '--distribution'], { cwd: root, encoding: 'utf8', timeout: 20000 });
 assert.ifError(distribution.error);
 assert.equal(distribution.status, 1, 'Uncleared distribution must not succeed');
-assert.match(distribution.stderr, /Distribution blocked: bundled Mastra EE license scope/);
+assert.match(distribution.stderr, /Distribution blocked: the owner accepted Mastra EE license terms for local development and testing only.*still needs Mastra commercial EE terms or an EE-free upstream artifact/);
 console.log(`CI contracts: four workflows, ${mutations.length + 2} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);
