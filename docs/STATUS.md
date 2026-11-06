@@ -115,14 +115,14 @@ prompt-adjacent status, `/status`, Mastra-reported last-turn token usage, groupe
 help, explicit approval and cancellation states, and copper color that
 `NO_COLOR`/`TERM=dumb` disable. Context capacity stays unknown, so no percentage
 is shown. Workspaces without a Git baseline get a once-per-session
-`Review unavailable` notice instead of a `BLOCKED` line after the first chat turn.
+`Review unavailable` notice only after a turn that may have changed files.
 Details and limits are in
 [terminal UX](TERMINAL_UX.md). Synthetic tests only: no new real-account or
 live-provider evidence is claimed.
 
-A follow-up quieted the chat transcript. The full status block appears only when
-mode, model, session, history or thinking changes; otherwise a one-line footer
-shows the model, message count and tokens. The waiting line is erased when
+A follow-up quieted the chat transcript. Status prints once at launch and chat
+turns print only the answer: model, message count and tokens live in `/status`.
+The waiting line is erased when
 output starts. Each tool call takes one line, and only failed, blocked or
 cancelled outcomes add another. `[answer]` appears only after a reasoning
 summary. A chat turn that changed nothing prints no review line, and bare

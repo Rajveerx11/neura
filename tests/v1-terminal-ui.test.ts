@@ -71,7 +71,7 @@ test('compact status follows width priorities, fits large counts and preserves c
       assert.match(details, /Context window: unknown/);
       assert.doesNotMatch(details, /%|cost|occupancy|estimated/i);
       if (usage) assert.ok(details.includes(`Last turn output tokens: ${usage.outputTokens}`));
-      else assert.doesNotMatch(rendered, /Last turn/, 'Automatic status omits unavailable usage');
+      assert.doesNotMatch(rendered, /Last turn/, 'Usage lives in /status only');
     }
   }
 });
@@ -85,7 +85,7 @@ test('status omits missing, partial or invalid usage without erasing reported ze
     assert.doesNotMatch(ui.status(state), /Last turn/);
     assert.match(ui.statusDetails(state), /Last turn tokens: unavailable/);
   }
-  assert.match(ui.status({ ...status, lastTurnUsage: { inputTokens: 0, outputTokens: 0 } }), /Last turn: 0 in · 0 out tokens/);
+  assert.match(ui.statusDetails({ ...status, lastTurnUsage: { inputTokens: 0, outputTokens: 0 } }), /Last turn input tokens: 0\nLast turn output tokens: 0/);
 });
 
 test('status labels neutralize line/control injection; Unicode labels stay within narrow display widths', () => {
@@ -137,13 +137,5 @@ test('session presentation includes usable IDs, an explicit resume action, and a
   for (const phase of ['requested', 'started', 'returned', 'failed', 'blocked', 'cancelled'] as const) {
     assert.equal(ui.tool('read', phase), phase === 'requested' ? '[tool] read' : `[tool] read: ${phase}`);
   }
-  const state = { mode: 'work' as const, provider: 'openai-codex', model: 'fixture-first', workspace: 'C:/w', workspaceName: 'w', history: 'off' as const, sessionState: 'new' as const, thinking: true, messageCount: 2 };
-  assert.equal(ui.footer(state), 'fixture-first · 2 msgs · /status');
-  assert.equal(ui.footer({ ...state, lastTurnUsage: { inputTokens: 3, outputTokens: 4 } }), 'fixture-first · 2 msgs · 3 in · 4 out tokens · /status');
-  const used = { ...state, lastTurnUsage: { inputTokens: 3, outputTokens: 4 } };
-  // A long model is shortened first, so counts and tokens survive; narrow terminals drop /status, then tokens.
-  assert.equal(createTerminalUI({ columns: 56 }).footer({ ...used, model: 'x'.repeat(80) }), 'x'.repeat(14) + '… · 2 msgs · 3 in · 4 out tokens · /status');
-  assert.equal(createTerminalUI({ columns: 40 }).footer(used), 'fixture-… · 2 msgs · 3 in · 4 out tokens');
-  for (const columns of [20, 24, 30, 40]) assert.ok(createTerminalUI({ columns }).footer(used).length <= columns);
   for (const columns of [20, 40, 80]) assert.ok(createTerminalUI({ columns }).boundary('waiting').length < columns, 'waiting line fits one row');
 });

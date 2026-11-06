@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { lockSession } from './session-lock.ts';
 import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
-import { createWorkspaceTools, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
+import { createWorkspaceTools, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
 import { runTurn, type TurnUsage } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
@@ -129,15 +129,6 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
   });
-  // Full status when mode/model/session/history/thinking changed; otherwise one quiet line, so chat isn't buried.
-  let statusKey = '';
-  const showStatus = () => {
-    if (!interactive) return;
-    const state = statusSnapshot();
-    const key = JSON.stringify({ ...state, messageCount: undefined, lastTurnUsage: undefined });
-    stdout.write((key === statusKey ? terminal().footer(state) : terminal().status(state)) + '\n');
-    statusKey = key;
-  };
   // ANSI-capable terminals erase the transient waiting line; plain ones keep it as a record.
   const erasable = interactive && process.env.TERM !== 'dumb';
   const approve = async (description: string) => {
@@ -209,7 +200,6 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           const choices = await listCodexModels({ signal: abort.signal, baseURL: provider.baseURL });
           endLine();
           provider = { ...provider, model: choices[0].id }; modelExplicit = false;
-          say(`Model: ${modelLabel(provider.model)} (subscription catalog default). Use /model to change it.`);
         }
         const expected = generation;
         const userMessage = { role: 'user', content: text };
@@ -224,6 +214,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         waiting();
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
+        let mutationAttempted = false;
         const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal,
           onReasoning: showReasoning ? summary => {
             endLine();
@@ -242,7 +233,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           },
           onToolEvent: event => {
             // One line per tool call; started/returned are routine. Failed, blocked and cancelled stay visible.
-            if (event.phase === 'started') return;
+            if (event.phase === 'started') { mutationAttempted ||= !READ_ONLY_TOOLS.has(event.toolName); return; }
             if (event.phase === 'returned') { if (erasable) waiting(); return; }
             endLine();
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
@@ -259,8 +250,8 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
         if (review && baseline) await workflow(text, baseline, false);
-        else if (review && !baselineWarned) {
-          baselineWarned = true; // once per session: without a Git baseline no change can be reviewed
+        else if (review && mutationAttempted && !baselineWarned) {
+          baselineWarned = true; // once per session, and only when something may have changed: plain chat stays answer-only
           stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');
         }
         if (owned && interactive) stdout.write('\n');
@@ -390,13 +381,11 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       return true;
     }
     if (prompt !== undefined) { await input(prompt); return; }
-    let idle = false;
+    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n'); // Once at launch. Chat shows answers only; /status has the rest.
     for (;;) {
       let text: string;
-      if (!idle) showStatus(); // empty Enter reprompts without repeating status
-      idle = false;
       try { text = await rl!.question(terminal().prompt(mode), { signal: inputClosed.signal }); } catch { say('Neura closed.'); break; }
-      if (!text.trim()) { idle = true; continue; }
+      if (!text.trim()) continue;
       try { if (!await input(text)) break; } catch (error) {
         const message = error instanceof Error ? error.message : 'Request failed.';
         if (error instanceof Error && error.name === 'AbortError') {

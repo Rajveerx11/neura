@@ -148,7 +148,7 @@ export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'le
   return tools;
 }
 
-const READ_ONLY_TOOLS = new Set(['read', 'ls']);
+export const READ_ONLY_TOOLS = new Set(['read', 'ls']);
 /** Reviewer authority: Learn-mode construction never exposes effectful tools; the allowlist is the enforced boundary. */
 export function createReadOnlyTools(workspace: string, generation: () => number): ToolDefinition[] {
   return createWorkspaceTools(workspace, () => 'learn', generation).filter(tool => READ_ONLY_TOOLS.has(tool.name));

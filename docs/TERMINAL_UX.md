@@ -244,6 +244,21 @@ Approval text, cancellation wording, error output and `/status` details are
 unchanged. Evidence is synthetic: the `v1-cli`, `v1-terminal-ui` and
 `v1-workflow` tests plus the full harness.
 
+## Answer-only chat (2026-11-06)
+
+A real `hi` turn still printed a model line, a review notice and a status block
+around a one-line reply. A chat turn now prints the answer and nothing else:
+
+| Before | Now |
+| --- | --- |
+| `Model: X (subscription catalog default)...` on the first turn | Removed. `/status` shows the model; `/model` still confirms a change. |
+| `Review unavailable` after the first turn in a non-Git workspace | Printed only after a turn that started a non-read-only tool, still once per session |
+| Status block or footer before each prompt | Status prints once at launch. The footer is gone. `/mode`, `/model`, `/thinking` and `/new` already confirm their own changes. Token usage is in `/status`. |
+
+Tool lines, approvals, warnings, errors and review outcomes for real changes stay
+visible. This section supersedes the status and notice rows above. Evidence is
+synthetic: `v1-cli`, `v1-terminal-ui` and the full harness.
+
 ## Follow-up: identity, status and live captures (2026-11-02)
 
 [Research and design decisions](TERMINAL_STATUS_RESEARCH.md) cite the reviewed

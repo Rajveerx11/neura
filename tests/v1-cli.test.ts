@@ -140,6 +140,8 @@ test('bare interactive launch from the user home uses a separate scratch workspa
   const written = await interactiveFixture({ launchFromHome: true, writeTool: true, inputs: ['Create a synthetic file', '/quit'] });
   // Success is quiet: one tool line, no failed/blocked/cancelled outcome.
   assert.match(stripVTControlCharacters(written.stdout), /\[tool\] write\n/);
+  // A turn that may have changed files in a non-Git workspace still gets the one honest notice.
+  assert.equal(written.stdout.split('Review unavailable: no workspace baseline').length - 1, 1);
   assert.doesNotMatch(written.stdout, /\[tool\] write: /);
   assert.equal(written.stderr, '');
   assert.deepEqual(written.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
@@ -164,15 +166,24 @@ test('bare /model lists advertised subscription choices, reprompts bad input and
 
 test('first request uses the catalog default and real Agent tool calls are visible without payloads', async () => {
   const reply = await interactiveFixture({ inputs: ['hi', '/quit'], tool: true });
-  assert.match(reply.stdout, /Model: fixture-first \(subscription catalog default\)/);
   assert.match(reply.stdout, /Hello from selected model/);
   const transcript = stripVTControlCharacters(reply.stdout.replace(/[^\n]*\r\x1b\[2K/g, ''));
   // One quiet line per tool call, the answer right after it, and no routine started/returned noise.
   assert.match(transcript, /\[tool\] read\nHello from selected model\n/);
   assert.doesNotMatch(transcript, /\[tool\] read: |\[answer\]|Review skipped: no workspace changes/);
-  // Status: full block once at launch and again only when the model became known; otherwise a one-line footer.
-  assert.equal(transcript.split('Work · ').length - 1, 2);
+  // Status appears once, at launch; a read-only turn prints no review notice.
+  assert.equal(transcript.split('Work · ').length - 1, 1);
+  assert.doesNotMatch(transcript, /Review unavailable/);
   assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+});
+
+test('a chat turn prints only the answer: no model, status, usage or review lines', async () => {
+  const reply = await interactiveFixture({ inputs: ['hi', 'hi', '/quit'] });
+  const transcript = stripVTControlCharacters(reply.stdout.replace(/[^\n]*\r\x1b\[2K/g, ''));
+  // Exact: everything after the launch status. The fixture echoes no Enter, so erasing the waiting line takes its prompt too.
+  const chat = transcript.split('/status\n')[1];
+  assert.ok(chat.startsWith('Hello from selected model\n\nHello from selected model\n\nwork > Neura closed.\n'), chat);
+  assert.equal(transcript.split('Work · ').length - 1, 1, 'Launch status only');
 });
 
 test('empty interactive input quietly reprompts; Learn, errors and empty sessions have explicit feedback', async () => {
@@ -199,8 +210,8 @@ test('status tracks fresh, mode, thinking, new and model state with reported las
   const states = transcript.split('Neura status\n').slice(1).map(part => part.split('Development/testing only.')[0]);
   assert.equal(states.length, 5);
   assert.ok(transcript.startsWith(renderLogo(80).join('\n') + '\n\n'));
-  // A non-Git workspace gets one honest notice per session, not a BLOCKED verdict after every chat turn.
-  assert.equal(transcript.split('Review unavailable: no workspace baseline').length - 1, 1);
+  // Plain chat in a non-Git workspace prints no review notice, and never a BLOCKED verdict.
+  assert.doesNotMatch(transcript, /Review unavailable/);
   assert.doesNotMatch(transcript, /BLOCKED: no workspace baseline/);
   assert.match(states[0], /Mode: Work\nProvider: openai-codex\nModel: \(not selected\)/);
   assert.match(states[0], /History: off/);

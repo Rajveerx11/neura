@@ -1,0 +1,58 @@
+---
+title: "Neura: chat prints only the answer"
+brief: "A plain chat turn now prints the model's reply and nothing else. Launch status stays once; model, message count and tokens moved to /status. Full verify is green on synthetic tests. Changes are uncommitted but already live in the neura command."
+version: 1
+---
+
+# Saying hi now returns only the reply
+
+## What you see now
+
+```text
+work > hi
+Hi! I'm Neura. What can I help you build or fix?
+
+work >
+```
+
+## What I did
+
+<Table
+  id="done"
+  columns={["Line you saw", "Now", "Where to find it"]}
+  rows={[
+    ["`Model: gpt-6.1-sol (subscription catalog default)...`", "Removed", "`/status`; `/model` still confirms a change"],
+    ["`Review unavailable: no workspace baseline...`", "Hidden on plain chat", "Prints once, only after a turn that may have changed files"],
+    ["`Work · openai-codex/...` block after each turn", "Prints once at launch", "`/status`"],
+    ["`Last turn: 692 in · 20 out tokens`", "Removed from chat", "`/status`"],
+  ]}
+/>
+
+## Why
+
+- **Model line:** a one-time setup fact, repeated in `/status`.
+- **Review note:** it warned about unreviewed changes on a turn that changed nothing. It stays for real edits, because silently skipping review there would mislead you.
+- **Status block:** `/mode`, `/model`, `/thinking` and `/new` already confirm their own changes.
+
+## Kept on purpose
+
+- Logo and launch status: they show which workspace you are in, once.
+- `[tool]` lines, approvals, errors and review results: these are safety output.
+- `Neura closed.` on exit: it is not part of a reply.
+- `[reasoning summary]`: harder prompts can still show it. `/thinking off` or `--no-thinking` hides it.
+
+## Checks
+
+`npm run verify` passed: typecheck and 20/20 suites. A new test pins the exact transcript of two chat turns. All evidence is synthetic; no live provider call was made.
+
+## Do this now
+
+1. Restart `neura`, type `hi`, and confirm the output above.
+2. Reply "push it" to commit this to main. It is uncommitted, but `neura` already runs it because the launcher reads `C:\Neura`.
+3. Tell me if the launch status or `Neura closed.` should go too.
+
+<Callout id="takeaway" tone="decision">
+
+**Key takeaway:** every status line feels useful to whoever added it. Ask what the user needs on this turn, and move the rest behind a command.
+
+</Callout>
