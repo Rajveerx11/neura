@@ -1,0 +1,96 @@
+---
+title: "Neura Milestone 1 report: Work finishes real tasks"
+brief: "Neura built a small CLI with 29 tool calls, ran its tests with no prompts and passed a live review. The Git hook sandbox hole is closed. Changes are uncommitted and already live in the neura command."
+version: 1
+---
+
+# Neura now finishes real tasks
+
+<Diagram id="before-after" caption="The same Work tools, before and after Milestone 1.">
+
+```html
+<div class="grid">
+  <div class="diagram-panel col" data-rough>
+    <div class="head">Before</div>
+    <div class="diagram-node">Silent stop at 8 steps</div>
+    <div class="diagram-node">No code search</div>
+    <div class="diagram-node">No new folders or dotfiles</div>
+    <div class="diagram-node">Typed yes for every command</div>
+    <div class="diagram-node">Sandbox could plant Git hooks</div>
+  </div>
+  <div class="diagram-panel col" data-rough>
+    <div class="head">After</div>
+    <div class="diagram-node">60 steps, honest stop, "continue" works</div>
+    <div class="diagram-node">grep and find, also for the reviewer</div>
+    <div class="diagram-node">Folders and safe dotfiles work</div>
+    <div class="diagram-node">Known commands run with no prompt</div>
+    <div class="diagram-node">.git is read-only in the sandbox</div>
+  </div>
+</div>
+```
+
+```css
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.head { font-weight: 700; color: var(--wf-ink); }
+.diagram-node { font-size: 13px; padding: 7px 10px; }
+```
+
+</Diagram>
+
+## What I did
+
+<Table
+  id="done"
+  columns={["Change", "Why"]}
+  rows={[
+    ["`.git` is read-only in the sandbox", "Test scripts could plant a hook that runs on Windows"],
+    ["Work turns get 60 steps and report a step-limit stop", "Real tasks need more than 8, and partial work must never pass as done"],
+    ["`continue` keeps the original baseline", "The final review covers the whole task"],
+    ["`grep` and `find` tools", "Search replaces opening files one by one"],
+    ["`write` makes folders; safe dotfiles allowed", "Real projects need both. CI workflow files still ask each time"],
+    ["Known commands skip the typed yes", "Chained and unknown commands still ask"],
+    ["Installs fail at once with the exact command", "They used to hang 60 seconds and explain nothing"],
+    ["`AGENTS.md` and `CLAUDE.md` load as guidance", "Neura now follows each repo's rules"],
+    ["A tool's refusal reaches the model", "Added during the build: the model only saw a generic failure and could not recover"],
+  ]}
+/>
+
+## Proof
+
+<Table
+  id="proof"
+  columns={["Check", "Result"]}
+  rows={[
+    ["`npm run verify`", "Exit 0, 21 of 21 suites"],
+    ["Real WSL sandbox tests", "2 of 2 passed: hook write refused, `git status` works, no prompt"],
+    ["`npm run verify:sandbox`", "Passed the live replay"],
+    ["Real run 1: bug fix and new module", "13 tool calls, 52 seconds, 3 tests pass, live review clean"],
+    ["Real run 2: small CLI from scratch", "29 tool calls, 4 minutes, 17 files, 18 tests pass, live review clean"],
+  ]}
+/>
+
+I reran the tests myself after both real runs. Both used your subscription in throwaway repos, which I then deleted.
+
+<Callout id="limits" tone="warning">
+
+**Not proven yet.** The live reviewer was the same model family. Neither run produced a must-fix finding, so the live fix loop is untested. The step-limit stop has fake-model tests only. Run 2 had one failed command, and my log did not record which one. Folders named `memory`, `sessions`, `private` or `secrets` stay blocked, which will hit some real projects.
+
+</Callout>
+
+## Do this now
+
+<Checklist
+  id="next"
+  items={[
+    { id: "try", label: "Try it on a real project: `neura --cwd C:\\path\\to\\project`", note: "It needs a Git repo with one commit. Run dependency installs yourself in WSL." },
+    { id: "node", label: "Upgrade Node in WSL through a system install, because it is 18.19.1", note: "An nvm install under your home is not visible in the sandbox." },
+    { id: "key", label: "Set `ANTHROPIC_API_KEY`, then start with `--reviewer-provider anthropic --reviewer-model claude-sonnet-5-5`", note: "This is your cross-family reviewer. It bills per use." },
+    { id: "commit", label: "Tell me to commit or open a PR", note: "Nothing is committed. Keep the hook bug out of public issues until the fix lands." },
+    { id: "4x4", label: "Tell me what `/4x4` does", note: "I need this before Milestone 2." },
+  ]}
+/>
+
+## Key takeaway
+
+Test with a real run as well as fake ones. The tool-error gap was invisible in tests that called tools directly, and it only showed once I traced how a real model hears a refusal.

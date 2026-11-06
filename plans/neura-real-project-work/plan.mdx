@@ -1,0 +1,342 @@
+---
+title: "Neura: finish real project tasks, then run build, review and ship by default"
+brief: "The next feature is Real-Project Work: Neura currently stops after 8 model steps and cannot search code, create folders or edit dotfiles. The screenshot is a three-stage engineering loop. Neura already has about half of its review stage. Four milestones cover the rest, starting with a confirmed sandbox fix."
+version: 1
+---
+
+# Make Neura finish real tasks, then make the workflow the default
+
+**Next feature: Real-Project Work.** Today a Work turn stops after 8 model steps without saying so, then prints raw tool output as its answer. A real coding task needs far more than 8 steps. The screenshot workflow runs on top of Work, so it comes second. If it went first, it would review half-finished code.
+
+**The screenshot** is a three-stage loop: build with evidence, get an independent review, then ship and watch what landed. Neura already has the fresh read-only reviewer, the bounded fix loop and the rule that a review only counts for the exact code it saw. Everything else in the diagram is prompt-only or missing.
+
+One security problem comes first. A sandboxed `npm test` can write a Git hook into the real repository, and that hook runs on Windows at your next commit. I reproduced this.
+
+## What a finished task looks like
+
+This is the target terminal flow for a bug fix in another project, after all four milestones.
+
+<Code
+  id="target-session"
+  language="text"
+  filename="neura --cwd C:\Projects\invoice-app"
+  code={"work > Totals are wrong when a discount is 100%. Fix it.\n\nTask: bug. Repro: npm test -- discount\nRepro failed as expected (exit 1).\n  edit src/totals.ts\nRepro now passes (exit 0).\nChecks: test pass, typecheck pass, lint pass.\n\nReview round 1/3: 2 changed files, risk normal.\nReviewer: claude-sonnet (anthropic, cross-family).\n[note] F1 minor/rare/medium confidence src/totals.ts:41\n\nREADY FOR YOUR APPROVAL: clean of must-fix at 3fa91c02d7e1, 1 round.\nNothing was committed, pushed or merged.\n\nwork > /pr\nBranch neura/fix-discount-total pushed.\nhttps://github.com/you/invoice-app/pull/12\n"}
+/>
+
+## Why Neura cannot do real work yet
+
+I ran the real Work tools in a disposable Git repository on this PC, using the real WSL sandbox and a fake model. No provider request was made.
+
+<Table
+  id="probe-results"
+  columns={["Test", "Result", "Effect on a real project"]}
+  rows={[
+    ["Task needing 21 model steps", "Stopped at 8. No warning. Tool JSON printed as the answer", "Most tasks end silently unfinished, and review then runs on partial work"],
+    ["Search code", "Only `read` and `ls` exist. `grep` and `find` are coded in `plan-files.ts` but not exposed", "The model opens files one by one and burns steps"],
+    ["Write `src/app.ts` in a new folder", "Fails with `ENOENT`", "Cannot scaffold without a shell command"],
+    ["Write `.eslintrc.json`, `.github/workflows/ci.yml`, `.env.example`", "All denied", "Cannot touch normal project config. `.gitignore` edits go through the same check"],
+    ["`npm test`, `mkdir -p src`", "Work, about 1 to 2 seconds. Each needed a typed `yes`", "Policy marks these `allow`, but `work.ts` still prompts. 6 commands meant 6 prompts"],
+    ["`npm install left-pad`", "Hung 60 seconds, then exit 1 with no output", "Dependencies cannot be installed. The failure explains nothing"],
+    ["`git add`, `git commit`", "Refused", "You commit by hand. Review needs a committed baseline first"],
+    ["WSL toolchain", "node `v18.19.1`, npm, git 2.43, python3, gcc, make. No `gh`", "Node 18 is too old for many current tools (my expectation, not tested)"],
+    ["Project instructions", "`src/` never loads `AGENTS.md` or `CLAUDE.md`", "Neura ignores the rules of the repo it works in"],
+  ]}
+/>
+
+<Callout id="hook-risk" tone="risk">
+
+**Confirmed: the sandbox can reach the host through `.git`.** `bubblewrapArguments` binds the whole workspace writable, including `.git`. A `package.json` test script wrote `.git/hooks/pre-commit`, and the file appeared in the host repository. Git would run it on Windows outside the sandbox at the next `git commit`. The approval prompt only shows `npm test`, and the review fingerprint does not cover `.git`. Treat this as a security bug. Fix it before any command runs without a prompt. Report it through the private route in `SECURITY.md`, because the repository is public.
+
+</Callout>
+
+## What the screenshot is, mapped to Neura
+
+Yellow boxes in the screenshot are your decisions, green boxes are independent reviewers and dashed boxes are background loops. The map below shows how each box stands in the current code.
+
+<Diagram id="status-map" caption="Each box from the screenshot and its state in src/ today.">
+
+```html
+<div class="map">
+  <div class="diagram-panel stage" data-rough>
+    <div class="head">1 · Build</div>
+    <div class="row"><span class="diagram-pill part">prompt only</span><span>Reproduce bugs end to end</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Big or risky: stop for my decisions and measurements</span></div>
+    <div class="row"><span class="diagram-pill have">have</span><span>Builder model does the edit</span></div>
+    <div class="row"><span class="diagram-pill part">prompt only</span><span>Tests and typecheck</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Screenshot of the real app</span></div>
+  </div>
+  <div class="diagram-panel stage" data-rough>
+    <div class="head">2 · Review</div>
+    <div class="row"><span class="diagram-pill have">have</span><span>Fresh read-only reviewer</span></div>
+    <div class="row"><span class="diagram-pill part">same model</span><span>Reviewer from another family</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Multi-model review, deduped</span></div>
+    <div class="row"><span class="diagram-pill have">have</span><span>Every issue rated</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Second opinion when unsure</span></div>
+    <div class="row"><span class="diagram-pill have">have</span><span>Fix, then re-review, max 3 rounds</span></div>
+  </div>
+  <div class="diagram-panel stage" data-rough>
+    <div class="head">3 · Ship</div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Push step</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Watch CI</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Side-effect and security checks on what landed</span></div>
+    <div class="row"><span class="diagram-pill miss">missing</span><span>Bug found: restart at stage 1</span></div>
+  </div>
+</div>
+```
+
+```css
+.map { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.stage { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.head { font-weight: 700; color: var(--wf-ink); margin-bottom: 2px; }
+.row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: start; color: var(--wf-ink); font-size: 13px; line-height: 1.3; }
+.diagram-pill { font-size: 11px; text-align: center; padding: 2px 4px; }
+.have { background: var(--wf-accent-soft); color: var(--wf-ink); }
+.part { border: 1px dashed var(--wf-warn); color: var(--wf-ink); }
+.miss { border: 1px solid var(--wf-line); color: var(--wf-muted); }
+```
+
+</Diagram>
+
+The screenshot's slash commands have no definition in this repository, `~/.claude/skills` or `~/.agents/skills`, so this plan works from the diagram text alone. The model names in the screenshot are replaceable roles.
+
+<Callout id="settled" tone="decision">
+
+**Three screenshot steps stay changed.** You accepted these on 2026-11-02 and `plans/review-workflow/SPEC.md` records them.
+
+- **Rating:** each finding keeps separate severity and likelihood fields, with no 1 to 10 multiplied score. A rare data-loss bug must not score low enough to slip through.
+- **Fixes:** the builder fixes must-fix findings on its own, instead of waiting for approval on each. Milestone 3 adds commands so you can still overrule the result.
+- **Shipping:** Neura opens a PR and never pushes straight to `main`.
+
+Routing also uses risk first and size second, because a three-line auth change needs more care than a large copy edit.
+
+</Callout>
+
+## Build order
+
+<Table
+  id="milestones"
+  columns={["Milestone", "You get", "Size", "Related issues"]}
+  rows={[
+    ["1. Real-Project Work", "Neura finishes a real multi-file task in another repo", "Medium", "#117, #120, #125, #92"],
+    ["2. Evidence-backed build", "Stage 1 enforced by code: repro, risk stop, checks", "Medium", "#93, #92"],
+    ["3. Stronger review", "Multi-model panel, second opinion, your overrule commands", "Medium", "#93, #58"],
+    ["4. Ship", "`/pr`, CI watch, review of what landed", "Medium to large", "#93, #28"],
+  ]}
+/>
+
+## Milestone 1: Real-Project Work
+
+**Done means:** Neura completes a task of 20 or more tool steps in a separate repository, with a real provider and a real review, and every stop is reported honestly.
+
+### 1. Close the `.git` hole
+
+Add `--ro-bind` for `.git` after the workspace bind in `bubblewrapArguments` (`agent/neura/human-away-sandbox.ts`), when `.git` exists. `git status` must still work inside the sandbox. This is a security-boundary change, so it needs one positive test and one negative test: the hook write fails, and `git status` passes.
+
+### 2. Honest turn budget
+
+Replace the single `MAX_TURN_STEPS` with a `maxSteps` option on `runTurn`. Work builder turns get 60. Learn and reviewer turns keep 8. `runTurn` returns a `stopReason`, and a turn that hits the limit no longer falls back to dumping tool output.
+
+60 is chosen from `MAX_SESSION_MESSAGES = 200`: a step adds at least two messages, so one 60-step turn fits in history. Tune it after real use.
+
+<Diff
+  id="runtime-diff"
+  filename="src/runtime.ts"
+  language="ts"
+  mode="split"
+  before={"export const MAX_TURN_STEPS = 8;\n\nconst result = await agent.generate(messages, {\n  maxSteps: MAX_TURN_STEPS,\n});\nconst text = result.text || toolText || \"Turn ended without assistant text.\";\nreturn { text, messages: next };\n"}
+  after={"export const DEFAULT_TURN_STEPS = 8;\nexport const WORK_TURN_STEPS = 60;\n\nconst result = await agent.generate(messages, {\n  maxSteps: maxSteps ?? DEFAULT_TURN_STEPS,\n});\nconst stopReason = hitStepLimit(result) ? \"step-limit\" : \"finished\";\nconst text = result.text || (stopReason === \"finished\" ? toolText : \"\") || \"Turn ended without assistant text.\";\nreturn { text, messages: next, stopReason };\n"}
+  annotations={[
+    { side: "after", lines: "7", label: "Pin first", note: "How Mastra reports a step-limit stop is unverified. The first test pins it against the fixture." },
+  ]}
+/>
+
+In `src/cli.ts`, a step-limit stop prints `Stopped at the 60-step limit. Work is unfinished and was not reviewed. Say "continue" to go on.` The review loop skips that turn, so a partial candidate never gets `READY FOR YOUR APPROVAL`.
+
+### 3. Search, folders and dotfiles
+
+<FileTree
+  id="m1-files"
+  title="Milestone 1 files"
+  entries={[
+    { path: "agent/neura/human-away-sandbox.ts", change: "modified", note: "Read-only .git bind." },
+    { path: "src/runtime.ts", change: "modified", note: "maxSteps option and stopReason." },
+    { path: "src/work.ts", change: "modified", note: "grep and find tools, parent folders, dotfile allowlist, auto-run, project instructions." },
+    { path: "src/cli.ts", change: "modified", note: "Step-limit message, skip review on unfinished turns." },
+    { path: "tests/v1-runtime.test.ts", change: "modified", note: "Step-limit stop and text fallback." },
+    { path: "tests/v1-work-sandbox.test.ts", change: "modified", note: "Hook write denied, git status works, on the configured host." },
+    { path: "tests/v1-review.test.ts", change: "modified", note: "Reviewer gets grep and find, still no effectful tool." },
+  ]}
+/>
+
+- **`grep` and `find` tools.** Wrap the existing `inspectPlanFiles` in `createWorkspaceTools` and add both names to `READ_ONLY_TOOLS`, so the reviewer gets them too. Learn keeps its current tool list.
+- **New folders.** `write` creates missing parents. Every path part is still checked first, and the linked-parent check runs on each folder it creates.
+- **Dotfiles.** Replace the blanket `part.startsWith('.')` denial with a small allowlist: `.gitignore`, `.gitattributes`, `.editorconfig`, `.nvmrc`, `.prettierrc*`, `.eslintrc*`, `.dockerignore`, `.env.example` and `.github/**`. `.github/workflows/*` needs typed approval for each write, because those files run remotely. `.env`, `.npmrc`, `.git` and every other `SECRET_PATH` match stay denied. `.env.example` gets an explicit exception in `SECRET_PATH`.
+- **Project instructions.** Read root `AGENTS.md`, then `CLAUDE.md`, through `readPlanFileSnapshot`, capped at 32 KiB and redacted, and append them to the Work instructions as project guidance. They cannot widen policy.
+
+### 4. Fewer prompts, with the fix in place
+
+After step 1, skip the typed `yes` when `inspectAction` returns `route: 'allow'` for `work_exec`. `npm test`, `tsc`, `pytest` and `mkdir` then run on their own, still offline in the sandbox, and each prints one line. Unclassified commands still ask.
+
+### 5. Fail fast on installs
+
+Recognise package-manager installs in `work_exec` and return at once: `No network in the sandbox. Run this yourself in WSL, then say continue: npm install left-pad`. Install from WSL at the `/mnt/c/...` path, because Windows-built native modules are unlikely to load in the Linux sandbox.
+
+<Callout id="m1-risks" tone="warning">
+
+**Known limits after Milestone 1.** There is no context compaction, so very long sessions can hit provider limits. A single turn over 200 messages or 1 MiB fails its history save with a warning, while the turn itself completes. Add compaction when real use shows this happening. Neura still cannot run commands on its own checkout, by design, so use it on other repositories.
+
+</Callout>
+
+## Milestone 2: Evidence-backed build
+
+**Done means:** stage 1 stops depending on the model remembering. The controller holds the evidence.
+
+<Diagram id="controller-flow" caption="Who owns each step. The model acts in the left lane; the controller decides in the right lane.">
+
+```html
+<div class="lanes">
+  <div class="diagram-panel lane" data-rough>
+    <div class="head">Builder model</div>
+    <div class="diagram-node">Calls declare_task: bug, feature or chore</div>
+    <div class="diagram-node">Edits files</div>
+    <div class="diagram-node">Receives failed checks or must-fix findings</div>
+  </div>
+  <div class="diagram-panel lane" data-rough>
+    <div class="head">Controller (src/workflow.ts)</div>
+    <div class="diagram-node">Bug: runs the repro, expects failure, before any edit</div>
+    <div class="diagram-node">High-risk path: stops once and asks you</div>
+    <div class="diagram-node">Reruns repro, runs project checks, records results by fingerprint</div>
+    <div class="diagram-node">Sends checks and diff to the reviewer, then decides ready or blocked</div>
+  </div>
+</div>
+```
+
+```css
+.lanes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; }
+.lane { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.head { font-weight: 700; color: var(--wf-ink); }
+.diagram-node { font-size: 13px; line-height: 1.3; padding: 8px 10px; }
+```
+
+</Diagram>
+
+- **`declare_task` tool.** Input: `kind`, `summary`, optional `reproCommand`, optional `noReproReason`. `write` and `edit` are refused until it is called, so plain chat costs nothing extra. Opaque shell edits can bypass this refusal, so it is a workflow gate and the final line reports `task not declared` when that happens.
+- **Bug repro.** For `kind: 'bug'`, the controller runs `reproCommand` before the first edit and expects it to fail. If it passes, edits stay blocked until the builder supplies a failing command or a `noReproReason`. After the turn the same command must pass. This matches "reproduce it end-to-end" with evidence the model cannot invent.
+- **Risk stop.** The first write to a path where `assessRisk([path]).level === 'high'` stops and asks you once per request, showing the reason. This reuses `approve` and `assessRisk`. Headless runs are denied.
+- **Project checks.** `detectChecks` reads `test`, `typecheck`, `lint` and `build` scripts from the baseline `package.json`, and `pytest` from `pyproject.toml`. The controller runs them through the sandbox before review. A failure goes back to the builder inside the same 3-round cap. No checks found prints `no checks ran`.
+- **Evidence to the reviewer.** Add a `<checks>` block to the `reviewCandidate` prompt. If the builder changes `package.json` scripts, the output says so and the path is already high risk.
+
+<Code
+  id="task-evidence"
+  language="ts"
+  filename="src/workflow.ts"
+  caption="Session memory only. Persist it when a real resume bug appears (#28)."
+  code={"export type TaskEvidence = {\n  kind: 'bug' | 'feature' | 'chore' | 'undeclared';\n  repro?: { command: string; before: number; after?: number } | { skipped: string };\n  riskDecisions: Array<{ path: string; reason: string; approved: boolean }>;\n  checks: Array<{ name: string; command: string; code: number; fingerprint: string }>;\n};\n"}
+/>
+
+**Screenshot step:** deferred. The sandbox has no display or network, and Neura has no browser tool. When UI files change, the ready line says `UI changed: open the app and check it yourself`.
+
+## Milestone 3: Stronger review
+
+**Done means:** high-risk work gets several independent reviewers when you have them configured, and you hold the final word on any finding.
+
+- **Reviewer panel.** `reviewers: ProviderConfig[]` runs `reviewCandidate` in parallel with `Promise.all`. It runs automatically at `risk.level === 'high'` or above 30 changed files, and on demand with `/review panel`. Any count from 2 to 5 works.
+- **Dedupe without a model.** `mergeFindings` joins findings in the same file within 3 lines, keeps the highest severity and records `seenBy`. Two reviewers agreeing is shown, and it never lowers a must-fix.
+- **Failure rule.** All reviewers unavailable means `BLOCKED`. Some unavailable means the run continues and the ready line names who was missing.
+- **Second opinion.** A finding goes to a second reviewer with a verdict of `real`, `overthinking` or `unsure` when it is `major` with low confidence, or when the builder disputes it. `real` becomes must-fix. `unsure` comes to you.
+- **Your overrule commands.** `/fix F3` promotes a note to must-fix. `/waive F2 reason` clears a must-fix for that exact fingerprint and is recorded in the receipt. Only you can type these. The model has no tool for them, and any later edit voids the waiver.
+
+Files: `src/review.ts`, `src/workflow.ts`, `src/cli.ts`, `tests/v1-review.test.ts`, `tests/v1-workflow.test.ts`.
+
+## Milestone 4: Ship
+
+**Done means:** after `READY`, one typed command opens a PR, and Neura reports CI honestly.
+
+- **`/pr` is a human command, never a model tool.** It requires `lastReview` to be ready and still current for the workspace fingerprint. It runs host Git with `AUTOMATIC_GIT_ARGUMENTS` and `automaticGitEnvironment`, stages only paths from the candidate snapshot, creates `neura/<slug>`, commits, pushes and runs `gh pr create`. With no remote it stops after the local commit. It never merges.
+- **`/pr watch`** polls `gh pr checks` with a 30-minute limit and Ctrl+C. A red check prints the failing job and offers a fix turn, which goes through the same review loop.
+- **`/review range BASE..HEAD`** reviews what actually landed, with a security and side-effects prompt. This is the screenshot's post-landing check, started by hand. Background loops need a long-running process and durable state, so they wait for #28.
+- **Docs.** `AGENTS.md`, `CLAUDE.md` and `docs/STATUS.md` say `/ship` verifies only and that automatic Git shipping stays out. `/pr` keeps that rule because you type it each time. Update those files in the same change.
+
+## Out of scope for this plan
+
+Merge and deploy from Neura stay out. So do Plan mode, YOLO mode, background loops, automatic screenshots, persisted task state and context compaction. Each returns when real use shows the need. Nothing here changes the development-only status or the Mastra licence gate.
+
+## Verification
+
+Each milestone passes `npm run verify`, `git diff --check` and the code review rules in `AGENTS.md` before it counts as done.
+
+<Checklist
+  id="verify"
+  items={[
+    { id: "v-hook", label: "Hook write from `npm test` fails; `git status` passes", note: "`npm run test:v1:work-sandbox` on this PC. Rerun the probe from this plan." },
+    { id: "v-steps", label: "A fixture needing 21 steps finishes under 60; one needing 70 stops with `step-limit` and no review", note: "`tests/v1-runtime.test.ts`, `tests/v1-workflow.test.ts`" },
+    { id: "v-paths", label: "Allowed dotfiles write; `.env`, `.npmrc`, `.git/config` and linked parents stay denied", note: "Positive and negative cases in the same suite." },
+    { id: "v-auto", label: "`npm test` runs with no prompt; an unclassified command still prompts", note: "Fake approve counter." },
+    { id: "v-real", label: "Real run: a small project in a separate repo with your subscription, 20+ tool steps, live review", note: "First recorded live reviewer run. Record the result in `docs/STATUS.md`." },
+    { id: "v-bug", label: "Real bug task: repro fails first, passes after, and the output shows both", note: "Milestone 2 exit test." },
+    { id: "v-panel", label: "Two reviewers report one defect; it appears once with both names", note: "Milestone 3 exit test with fake reviewers." },
+    { id: "v-pr", label: "`/pr` refuses a stale review, opens a PR from a current one, and never merges", note: "Test on a throwaway GitHub repo." },
+  ]}
+/>
+
+### Open Questions
+
+<QuestionForm
+  id="open-questions"
+  questions={[
+    {
+      id: "q-auto-run",
+      title: "Should allow-listed commands run without a typed yes?",
+      subtitle: "Only after the .git fix. They stay offline and inside the sandbox.",
+      mode: "single",
+      required: true,
+      options: [
+        { id: "auto", label: "Run automatically", detail: "`npm test`, `tsc`, `pytest`, `mkdir`. Each prints one line. Unclassified commands still ask.", recommended: true },
+        { id: "session", label: "Ask once per session", detail: "One yes covers allow-listed commands until `/new`." },
+        { id: "always", label: "Keep asking every time", detail: "Safest, and painful with 60-step turns." },
+      ],
+    },
+    {
+      id: "q-install",
+      title: "How should dependencies get installed?",
+      subtitle: "The sandbox has no network, so `npm install` cannot work there.",
+      mode: "single",
+      required: true,
+      options: [
+        { id: "manual", label: "You run it in WSL", detail: "Neura prints the exact command and waits. No new network path to secure.", recommended: true },
+        { id: "networked", label: "Approved networked install", detail: "A second sandbox with network and `--ignore-scripts`, approved per command. More convenient, and a real security review." },
+      ],
+    },
+    {
+      id: "q-reviewer",
+      title: "Which reviewer should be the default?",
+      subtitle: "Neura has ChatGPT subscription, local, OpenAI API and Anthropic API providers. Today the reviewer is the builder's model, labelled weaker.",
+      mode: "single",
+      required: true,
+      options: [
+        { id: "anthropic", label: "Anthropic API key", detail: "True cross-family review. Billed per use, separately from your subscription.", recommended: true },
+        { id: "local", label: "Local Qwen", detail: "Free and cross-family. Review quality on this PC is unmeasured." },
+        { id: "same", label: "Keep the same model for now", detail: "No cost, and the weakest independence." },
+      ],
+    },
+    {
+      id: "q-ship",
+      title: "Should `/pr` be the only way to ship?",
+      subtitle: "The screenshot pushes straight to main. Your earlier decision was PR only.",
+      mode: "single",
+      required: true,
+      options: [
+        { id: "pr", label: "PR only", detail: "Matches the 2026-11-02 decision and keeps CI between Neura and main.", recommended: true },
+        { id: "both", label: "Also allow a typed direct push", detail: "For personal repos with no branch protection. Needs its own confirmation step." },
+      ],
+    },
+    {
+      id: "q-4x4",
+      title: "What does `/4x4` do in your workflow?",
+      subtitle: "The diagram only says 'my decisions + live measurements'. Milestone 2's risk stop covers the decisions. Describe it if it should do more.",
+      mode: "freeform",
+      placeholder: "For example: four rounds of four questions, or which measurements it takes...",
+    },
+  ]}
+  submitLabel="Send answers"
+/>

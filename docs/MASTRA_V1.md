@@ -22,7 +22,7 @@ unsupported paths before prerequisite checks or launcher writes.
 | Providers | `src/providers.ts`/`src/auth.ts`, separate ChatGPT subscription/local/OpenAI API/Anthropic API transports, native image parts, explicit login/logout | Synthetic subscription tests are not real-account entitlement or live protocol evidence; see auth status below |
 | Terminal | `src/cli.ts` and pure presentation in `src/terminal-ui.ts`, Node readline, approved logo launch (`src/brand.ts`; `--ascii`, `TERM=dumb` and narrow fallback), prompt-adjacent status, `/status` with reported last-turn tokens, width-aware help/approvals/errors with optional color, explicit cancellation, Work/Learn, scratch-home startup, explicit commands, waiting status and optional provider reasoning summaries | No old Pi cockpit/editor/IME parity. Summaries may arrive only after completion, never hidden reasoning |
 | Manual verification | `src/verification.ts`, reused PoW 0.2.0, Git snapshots and offline WSL sandbox, Work-only approval, session-local receipts and currency checks | Detector-only is never verified. Full proof is unavailable. No durable/signed receipt, original task-base or ignored-file coverage. Configured-host PoW acceptance remains blocked by missing trusted proof paths |
-| Work | `src/work.ts`, reused canonical policy/read/sandbox services, original-byte hash binding with redacted delivery and refusal of redacted mutations, exact interactive command approval with fresh binding | No remote/protected actions, no headless approval or trusted full-proof PASS. Neura runtime writes are blocked even from nested/parent roots; commands on overlapping Neura checkouts require an external manual terminal. Existing workspace/same-user and descendant-cancellation limits remain |
+| Work | `src/work.ts`, reused canonical policy/read/sandbox services, original-byte hash binding with redacted delivery and refusal of redacted mutations, grep/find search, parent-folder creation, a dotfile allowlist, direct execution of policy-allowed commands when `.git` is present, exact interactive approval for all other commands and CI workflow writes | No remote/protected actions, no headless approval or trusted full-proof PASS. Neura runtime writes are blocked even from nested/parent roots; commands on overlapping Neura checkouts require an external manual terminal. Existing workspace/same-user and descendant-cancellation limits remain |
 | Learn | `src/learn.ts`, session-local service using existing Neura parsers, renderer, schemas, exercise/store/vault modules | Native Windows first-store creation, explicit snapshots, historical source restore, no automatic browser sync |
 | History | `src/session.ts`, workspace-scoped CLI directories and `src/session-lock.ts` writer leases, fresh tool authority per turn | Crash locks fail closed; no automatic legacy import or durable reconciliation of uncertain effects |
 | Launcher | `launcher/neura.cmd`, source-linked `install.ps1 -Development` | Local development/testing only; not a release or sealed runtime installer |
@@ -74,6 +74,26 @@ later epoch check fails: a valid but unreferenced artifact/event may remain. Thi
 not an atomic multi-store transaction or zero-side-effect cancellation guarantee.
 
 ## Evidence and remaining gates
+
+### Real-project Work: 2026-11-06
+
+On native Windows Node 24.19.0, `npm run verify` exited 0: strict types, 21/21
+suites and eight current documents. This includes the new `work-tools` suite.
+`npm run test:v1:work-sandbox` passed two tests on this laptop's real WSL sandbox.
+The new test proves a test script is refused on `.git/hooks` and
+`.git/config`, `git status` still works, the rest of the workspace stays writable
+and no prompt appears. `npm run verify:sandbox` also passed its live replay.
+
+Two real runs used the owner's ChatGPT subscription through `src/cli.ts` in
+disposable repositories outside this checkout, headless, with `--no-history`.
+The first fixed a real bug and added a module: 13 tool calls, 52 seconds. The second
+built a small CLI: 29 tool calls, 4 minutes, 17 changed files, 18 tests. Both ended
+`READY FOR YOUR APPROVAL` after a live reviewer pass with no findings, and rerunning
+`node --test` independently passed 3 and 18 tests. These are the first recorded live
+reviewer runs. That reviewer was same-family and neither run exercised a must-fix
+finding, the interactive step-limit path or a cross-family reviewer. The step-limit
+path has synthetic CLI coverage only. This is not entitlement, restart or release
+evidence.
 
 ### Work verification split: 2026-10-25
 

@@ -8,6 +8,9 @@ const {bubblewrapArguments,assertWorkspaceHasNoLinks,validateProofRuntimeInvento
 const args=bubblewrapArguments('/workspace-fixture','printf synthetic');
 for(const flag of ['--unshare-all','--clearenv','--die-with-parent','--new-session']) assert.ok(args.includes(flag));
 assert.deepEqual(args.slice(-3),['sh','-lc','printf synthetic']);
+// Host Git runs what .git holds, so the read-only bind must land on top of the writable workspace bind.
+assert.ok(args.indexOf('--ro-bind-try')>args.indexOf('--bind'),'.git must be bound read-only after the workspace');
+assert.deepEqual(args.slice(args.indexOf('--ro-bind-try')+1,args.indexOf('--ro-bind-try')+3),['/workspace-fixture/.git','/workspace/.git']);
 assert.equal(args.includes('/mnt/c'),false);
 assert.equal(args.includes(process.env.USERPROFILE),false);
 const trust={uvVersion:'0.12.11',uvSha256:'a'.repeat(64),uvxSha256:'b'.repeat(64),

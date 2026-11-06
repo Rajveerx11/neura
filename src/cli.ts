@@ -10,9 +10,9 @@ import { createHash } from 'node:crypto';
 import { lockSession } from './session-lock.ts';
 import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
-import { createWorkspaceTools, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
+import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
-import { runTurn, type TurnUsage } from './runtime.ts';
+import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { createSession, saveSession, resumeSession, listSessions, type Session } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
@@ -83,6 +83,8 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   let workflowOn = true;
   let sessionBaseline: { generation: number; snapshot: TreeSnapshot | null } | undefined;
   let lastReview: { generation: number; receipt: ReviewReceipt } | undefined;
+  // A task cut off at the step limit keeps its starting baseline, so the eventual review covers all of it.
+  let unfinished: { generation: number; snapshot: TreeSnapshot | null } | undefined;
   let baselineWarned = false;
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
   const scratchWorkspace = values.cwd === undefined && interactive && !values.resume && path.relative(fs.realpathSync.native(os.homedir()), workspace) === '';
@@ -205,17 +207,20 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         const userMessage = { role: 'user', content: text };
         learn.input(learnerInput);
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
-        const tools = [...createWorkspaceTools(workspace, () => mode, () => generation, approve), ...(mode === 'learn' ? learn.tools() : [])];
-        const instructions = mode === 'learn' ? await learn.instructions(abort.signal) : workflowOn ? `${WORK_INSTRUCTIONS}\n\n${WORKFLOW_INSTRUCTIONS}` : WORK_INSTRUCTIONS;
+        const tools = [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice: line => { endLine(); say(line); } }), ...(mode === 'learn' ? learn.tools() : [])];
+        const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
+          : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : []), projectInstructions(workspace)].filter(Boolean).join('\n\n');
+        const maxSteps = mode === 'work' ? WORK_TURN_STEPS : DEFAULT_TURN_STEPS;
         const review = reviewTurn && mode === 'work' && workflowOn;
         const needSessionBaseline = mode === 'work' && sessionBaseline?.generation !== expected;
-        const baseline = review || needSessionBaseline ? await captureWorktree(workspace, { signal: abort.signal }) : null;
+        const carried = review && unfinished?.generation === expected ? unfinished.snapshot : null;
+        const baseline = carried ?? (review || needSessionBaseline ? await captureWorktree(workspace, { signal: abort.signal }) : null);
         if (needSessionBaseline) sessionBaseline = { generation: expected, snapshot: baseline };
         waiting();
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
-        const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal,
+        const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal, maxSteps,
           onReasoning: showReasoning ? summary => {
             endLine();
             stdout.write(terminal().boundary('reasoning') + '\n');
@@ -239,7 +244,8 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
           } });
         endLine();
-        if (interactive && !answerVisible) say('Turn ended without answer text. Review tool outcomes above.');
+        const stopped = outcome.stopReason === 'step-limit';
+        if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected) throw new Error('Session changed; result discarded.');
         memory = outcome.messages;
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
@@ -249,7 +255,12 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; historySaveFailed = false; }
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
-        if (review && baseline) await workflow(text, baseline, false);
+        if (stopped) {
+          if (!reviewTurn) throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished.`);
+          if (review) unfinished = { generation: expected, snapshot: baseline };
+          say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
+          if (!rl) process.exitCode = 1;
+        } else if (review && baseline) { unfinished = undefined; await workflow(text, baseline, false); }
         else if (review && mutationAttempted && !baselineWarned) {
           baselineWarned = true; // once per session, and only when something may have changed: plain chat stays answer-only
           stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');

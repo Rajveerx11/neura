@@ -207,6 +207,8 @@ export function bubblewrapArguments(wslWorkspace: string, command: string, proof
     ] : []),
     "--dir", "/workspace",
     "--bind", wslWorkspace, "/workspace",
+    // Host Git runs hooks and config from .git outside this sandbox, so nothing in here may change them.
+    "--ro-bind-try", `${wslWorkspace}/.git`, "/workspace/.git",
     "--chdir", "/workspace",
     "--setenv", "HOME", "/tmp/home",
     "--setenv", "PATH", `${proof ? "/tmp/neura-bin:" : ""}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,

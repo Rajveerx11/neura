@@ -23,7 +23,7 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string }) {
+async function interactiveFixture(options: { inputs: string[]; stepPlan?: Array<{ name: string; input: unknown } | null>; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
@@ -175,6 +175,17 @@ test('first request uses the catalog default and real Agent tool calls are visib
   assert.equal(transcript.split('Work · ').length - 1, 1);
   assert.doesNotMatch(transcript, /Review unavailable/);
   assert.deepEqual(reply.requests, [{ type: 'catalog' }, { type: 'model', model: 'fixture-first' }, { type: 'model', model: 'fixture-first' }]);
+});
+
+test('a task stopped at the step limit says so, skips review, and "continue" reviews all of it', async () => {
+  const write = (file: string) => ({ name: 'write', input: { path: file, content: 'x', expectedHash: null } });
+  const stepPlan = [write('first.ts'), ...Array.from({ length: 59 }, () => ({ name: 'ls', input: { path: '.' } })), write('second.ts'), null];
+  const reply = await interactiveFixture({ inputs: ['build it', 'continue', '/quit'], gitWorkspace: true, stepPlan });
+  const transcript = stripVTControlCharacters(reply.stdout.replace(/[^\n]*\r\x1b\[2K/g, ''));
+  const [before, afterStop] = transcript.split('Stopped at the 60-step limit. The task is unfinished and was not reviewed. Say "continue" to go on.');
+  assert.ok(afterStop, transcript);
+  assert.doesNotMatch(before, /Review round|READY FOR YOUR APPROVAL|"entries"/);
+  assert.match(afterStop, /Hello from selected model[\s\S]*Review round 1\/3: 2 changed file\(s\)[\s\S]*READY FOR YOUR APPROVAL/);
 });
 
 test('a chat turn prints only the answer: no model, status, usage or review lines', async () => {

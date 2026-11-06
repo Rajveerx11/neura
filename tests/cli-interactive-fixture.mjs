@@ -57,9 +57,13 @@ globalThis.fetch = async (url, init) => {
   if (config.denyModel) return new Response(JSON.stringify({ error: { code: 'model_not_found', message: 'synthetic-private-value' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   const toolName = config.writeTool ? 'write' : 'read';
   const toolInput = config.writeTool ? { path: 'smoke.txt', content: 'scratch-only', expectedHash: null } : { path: 'sample.txt' };
-  const output = (config.tool || config.writeTool) && modelRequests === 1
-    ? [{ type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: toolName, arguments: JSON.stringify(toolInput), status: 'completed' }]
-    : [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hello from selected model', annotations: [] }] }];
+  const message = text => [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] }];
+  const functionCall = (name, input) => [{ type: 'function_call', id: `fc_${modelRequests}`, call_id: `call_${modelRequests}`, name, arguments: JSON.stringify(input), status: 'completed' }];
+  const planned = config.stepPlan && !body.instructions.includes('independent code reviewer') ? config.stepPlan.shift() : undefined;
+  const output = body.instructions.includes('independent code reviewer') ? message('{"findings":[]}')
+    : planned ? functionCall(planned.name, planned.input)
+    : (config.tool || config.writeTool) && modelRequests === 1 ? functionCall(toolName, toolInput)
+    : message('Hello from selected model');
   const reasoning = config.reasoning ? [{ type: 'reasoning', id: 'rs_fixture', summary: [{ type: 'summary_text', text: 'I will inspect the workspace before answering.' }], encrypted_content: 'synthetic-private-value' }] : [];
   const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output: [...reasoning, ...output], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
   if (config.jsonResponse) return new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
