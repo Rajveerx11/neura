@@ -9,7 +9,7 @@ const EXACT = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
 // Derived from both active locks on 2026-11-05. A new license id fails until reviewed here.
 export const PERMISSIVE = new Set(['Apache-2.0', 'MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'BlueOak-1.0.0']);
 // Reviewed exceptions bind to name@version, so any version change forces a fresh review.
-// License exceptions are dev-only: they never cover a production-reachable (non-`dev`) entry.
+// License exceptions need the lock's `dev: true` flag. That is lock metadata, not a reachability analysis.
 export const REVIEWED_LICENSES = Object.freeze({
   'axe-core@4.14.0': { license: 'MPL-2.0', reason: 'File-level copyleft; dev-only Learn accessibility test dependency, unmodified, never shipped by the source-linked install.' },
 });
@@ -64,8 +64,9 @@ export function checkGraph(relative, json) {
   }
   let entries = 0;
   for (const [key, entry] of Object.entries(json.packages ?? {})) {
-    // Regular edges must resolve so the closure has no unchecked package. Peer and optional edges may be absent.
-    for (const dependency of Object.keys(entry.dependencies ?? {})) {
+    // Regular edges, plus the root's dev edges, must resolve so the closure has no unchecked package.
+    // Peer and optional edges may be absent.
+    for (const dependency of Object.keys({ ...entry.dependencies, ...(key ? {} : entry.devDependencies) })) {
       if (!resolvesInLock(json.packages, key, dependency)) errors.push(`Unresolved dependency in ${relative}: ${key || '(root)'} -> ${dependency}`);
     }
     if (!key) continue;

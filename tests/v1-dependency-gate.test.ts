@@ -55,6 +55,8 @@ test('manifest/lock drift and unresolved regular edges fail; peer and optional e
   assert.match(checkManifestLock('synthetic', {}, lock({})).join(), /disagree.*ok \(absent vs 1\.0\.0\)/);
   fails(lock({}, { ok: '1.0.0', gone: '1.0.0' }), /Unresolved dependency.*\(root\) -> gone/);
   fails(lock({ 'node_modules/a': entry({ dependencies: { gone: '1.0.0' } }) }), /Unresolved dependency.*node_modules\/a -> gone/);
+  fails({ lockfileVersion: 3, packages: { '': { devDependencies: { gone: '1.0.0' } } } }, /Unresolved dependency.*\(root\) -> gone/);
+  assert.deepEqual(checkGraph('synthetic', lock({ 'node_modules/a': entry({ devDependencies: { unlocked: '1.0.0' } }) })).errors, []);
   const edges = { 'node_modules/a': entry({ dependencies: { ok: '1.0.0', b: '1.0.0' }, peerDependencies: { p: '1.0.0' }, optionalDependencies: { o: '1.0.0' } }), 'node_modules/a/node_modules/b': entry({ dependencies: { ok: '1.0.0' } }) };
   assert.deepEqual(checkGraph('synthetic', lock(edges)).errors, []);
 });

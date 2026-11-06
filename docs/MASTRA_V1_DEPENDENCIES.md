@@ -63,8 +63,9 @@ fails on a lock that is not version 3 with a `packages[""]` root, on a direct
 dependency that differs between manifest and lock, and on a regular dependency
 edge with no lock entry. Peer and optional edges may be absent.
 Exceptions bind to `name@version`, so any bump forces a fresh review. License
-exceptions also require the lock's `dev: true` flag, so a reviewed dev-only
-package that becomes production-reachable fails. License expressions must be
+exceptions also require the lock's `dev: true` flag. This reads lock metadata and
+does not compute production reachability, so a stale flag would pass.
+License expressions must be
 SPDX ids joined only by `OR`; `AND`, `WITH` or nesting fail.
 `tests/v1-dependency-gate.test.ts` runs the real locks plus synthetic failing
 locks (pi-tui, install script, missing license, GPL, range pin, manifest drift,
