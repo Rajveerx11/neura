@@ -26,6 +26,29 @@ export function permissive(license) {
   return ids.every(id => SPDX_ID.test(id) && !['AND', 'OR', 'WITH'].includes(id)) && ids.some(id => PERMISSIVE.has(id));
 }
 
+// Node resolution over lock keys: nearest nested node_modules first, then each parent, then the root.
+function resolvesInLock(packages, from, dependency) {
+  for (let base = from; ; base = base.slice(0, Math.max(base.lastIndexOf('/node_modules/'), 0))) {
+    if (packages[`${base ? `${base}/` : ''}node_modules/${dependency}`]) return true;
+    if (!base) return false;
+  }
+}
+
+const DIRECT_GROUPS = ['dependencies', 'devDependencies', 'optionalDependencies'];
+// A dependency present only in the manifest would otherwise skip every lock-entry check above.
+export function checkManifestLock(relative, manifest, lock) {
+  const errors = [];
+  const root = lock.packages?.[''] ?? {};
+  for (const group of DIRECT_GROUPS) {
+    const declared = manifest[group] ?? {};
+    const locked = root[group] ?? {};
+    for (const name of new Set([...Object.keys(declared), ...Object.keys(locked)])) {
+      if (declared[name] !== locked[name]) errors.push(`Manifest and lock disagree in ${relative}: ${group} ${name} (${declared[name] ?? 'absent'} vs ${locked[name] ?? 'absent'})`);
+    }
+  }
+  return errors;
+}
+
 // Works for package.json (top-level groups) and lockfile v3 (packages[""] groups plus entries).
 export function checkGraph(relative, json) {
   const errors = [];
@@ -33,7 +56,7 @@ export function checkGraph(relative, json) {
   // A lock without its v3 packages map must fail, not be read as a manifest with nothing to check.
   if (lock && (json.lockfileVersion !== 3 || !json.packages?.[''])) return { errors: [`Unsupported lockfile in ${relative}: lockfileVersion 3 with packages[""] required`], entries: 0 };
   const direct = lock ? json.packages[''] : json;
-  for (const group of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+  for (const group of DIRECT_GROUPS) {
     for (const [name, version] of Object.entries(direct[group] ?? {})) {
       if (FORBIDDEN.test(name)) errors.push(`Pi dependency in ${relative}: ${name}`);
       if (!EXACT.test(version)) errors.push(`Non-exact direct pin in ${relative}: ${name}@${version}`);
@@ -41,6 +64,10 @@ export function checkGraph(relative, json) {
   }
   let entries = 0;
   for (const [key, entry] of Object.entries(json.packages ?? {})) {
+    // Regular edges must resolve so the closure has no unchecked package. Peer and optional edges may be absent.
+    for (const dependency of Object.keys(entry.dependencies ?? {})) {
+      if (!resolvesInLock(json.packages, key, dependency)) errors.push(`Unresolved dependency in ${relative}: ${key || '(root)'} -> ${dependency}`);
+    }
     if (!key) continue;
     entries++;
     const name = entry.name ?? key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
@@ -49,7 +76,7 @@ export function checkGraph(relative, json) {
     if (!entry.integrity) errors.push(`Missing package integrity in ${relative}: ${key}`);
     if (entry.hasInstallScript && !Object.hasOwn(REVIEWED_INSTALL_SCRIPTS, id)) errors.push(`Unreviewed install script in ${relative}: ${id}`);
     if (!entry.license) errors.push(`Missing license in ${relative}: ${id}`);
-    else if (!permissive(entry.license) && !(Object.hasOwn(REVIEWED_LICENSES, id) && REVIEWED_LICENSES[id].license === entry.license && entry.dev)) errors.push(`Unreviewed license ${JSON.stringify(entry.license)} in ${relative}: ${id}`);
+    else if (!permissive(entry.license) && !(Object.hasOwn(REVIEWED_LICENSES, id) && REVIEWED_LICENSES[id].license === entry.license && entry.dev === true)) errors.push(`Unreviewed license ${JSON.stringify(entry.license)} in ${relative}: ${id}`);
   }
   return { errors, entries };
 }
@@ -80,6 +107,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const result = checkGraph(relative, JSON.parse(fs.readFileSync(path.join(root, relative), 'utf8')));
     errors.push(...result.errors);
     entries += result.entries;
+  }
+  for (const directory of ['', 'agent/neura/']) {
+    const read = file => JSON.parse(fs.readFileSync(path.join(root, directory, file), 'utf8'));
+    errors.push(...checkManifestLock(`${directory}package.json`, read('package.json'), read('package-lock.json')));
   }
   const trace = traceImports(root, path.join(root, 'src/cli.ts'));
   errors.push(...trace.errors);
