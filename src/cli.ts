@@ -261,10 +261,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
         if (stopped) {
+          if (!rl) process.exitCode = 1;
           if (!reviewTurn) { fixStopped = true; throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`); }
           if (review) unfinished = { generation: expected, snapshot: baseline };
           say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
-          if (!rl) process.exitCode = 1;
         } else if (review && baseline) { unfinished = undefined; await workflow(text, baseline, false); }
         else if (review && mutationAttempted && !baselineWarned) {
           baselineWarned = true; // once per session, and only when something may have changed: plain chat stays answer-only

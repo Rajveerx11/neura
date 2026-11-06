@@ -105,6 +105,12 @@ test('every .github write needs a person and must fit in the prompt', async () =
   const edge = `${'#'.repeat(16 * 1024 - 9)}\nrun: end`;
   await body(named(work(root, async text => { prompts.push(text); return true; }), 'write'), { path: '.github/workflows/edge.yml', content: edge, expectedHash: null });
   assert.match(prompts.at(-1)!, /run: end/, 'the end of the longest allowed file is shown');
+  for (const content of ['run: echo api-key=$(printf hidden-command)', `${'api-key=x\n'.repeat(1200)}run: tail`]) {
+    let approvals = 0;
+    await assert.rejects(named(work(root, async () => { approvals++; return true; }), 'write').execute({ path: '.github/workflows/hidden.yml', content, expectedHash: null }, {}), /cannot be shown in full/);
+    assert.equal(approvals, 0, 'redaction must never hide the bytes a person approves');
+    assert.equal(await exists(path.join(root, '.github/workflows/hidden.yml')), false);
+  }
 });
 
 test('Neura cannot edit its own CI or dotfiles even when the workspace is its checkout', async () => {

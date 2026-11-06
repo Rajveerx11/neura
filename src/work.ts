@@ -140,7 +140,9 @@ export function createWorkspaceTools(workspace: string, mode: () => 'work' | 'le
     if (action.route !== 'allow' && !(ci && action.category === 'protected-control')) throw new Error(`Write unavailable: ${action.reason}`);
     if (ci) {
       if (content.length > CI_PROMPT_CHARS) throw new Error('This CI file is too long to show for approval. Ask the user to edit it manually.');
-      if (!await approve(`Write CI file?\n${redactSensitiveText(requested, 1024)}\n${redactSensitiveText(content, CI_PROMPT_CHARS * 2)}\nApproval applies once to this exact write.`)) throw new Error('Write denied; nothing changed.');
+      const shownContent = redactSensitiveText(content, CI_PROMPT_CHARS * 2);
+      if (shownContent !== content) throw new Error('This CI file cannot be shown in full for approval. Ask the user to edit it manually.');
+      if (!await approve(`Write CI file?\n${redactSensitiveText(requested, 1024)}\n${shownContent}\nApproval applies once to this exact write.`)) throw new Error('Write denied; nothing changed.');
       check(signal, true);
     }
     fs.mkdirSync(path.dirname(file), { recursive: true });

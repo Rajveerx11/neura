@@ -85,8 +85,12 @@ The new test proves a test script is refused on `.git/hooks` and
 and no prompt appears. `npm run verify:sandbox` also passed its live replay.
 
 After review fixes, `npm run verify` passed again (21/21 suites). Configured-host
-Work acceptance now passes four tests, covering gitfile refusal, nested secret
-masking, protected-path cleanup and ordinary workspace writes. Existing gitfiles
+Work acceptance now passes five tests, covering gitfile refusal, nested secret
+masking, protected-path cleanup, large mount lists and ordinary workspace writes.
+Mount options use a NUL-separated stdin stream rather than the Windows command
+line. Cleanup runs independently of the discovery budget, continues past unreadable
+subtrees, and reports incomplete cleanup as failure. CI file writes are refused
+when redaction would hide any content from the approval prompt. Existing gitfiles
 are refused at any depth rather than leaving their target writable. Project
 guidance is ephemeral user context, not system instructions or saved history.
 `npm run verify:sandbox` and the live launcher `install.ps1 -Check` also pass.

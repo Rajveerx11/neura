@@ -70,6 +70,33 @@ test('configured-host sandbox: model-written code cannot read secrets or leave h
   }
 });
 
+test('configured-host sandbox: large mount lists and paths with spaces survive Windows launch limits', { timeout: 150000 }, async () => {
+  assert.equal(process.platform, 'win32');
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-many-mounts-')));
+  const oldHome = process.env.NEURA_HOME;
+  try {
+    const workspace = path.join(scratch, 'workspace with spaces'); await fs.mkdir(workspace);
+    process.env.NEURA_HOME = path.join(scratch, 'private');
+    for (let index = 0; index < 400; index++) {
+      const directory = path.join(workspace, 'packages', `package ${index} ${'x'.repeat(40)}`);
+      await fs.mkdir(directory, { recursive: true });
+      await fs.writeFile(path.join(directory, '.env'), 'fixture-sensitive-many-mounts');
+    }
+    await fs.writeFile(path.join(workspace, 'plant.js'), "const fs=require('fs');for(const name of fs.readdirSync('packages')){try{if(fs.readFileSync('packages/'+name+'/.env','utf8')!=='')throw new Error('secret exposed')}catch(e){if(e.code!=='EACCES')throw e}}console.log('masked=400')");
+    await fs.writeFile(path.join(workspace, 'package.json'), JSON.stringify({ scripts: { test: 'node plant.js' } }));
+    execFileSync('git', ['init', '-q'], { cwd: workspace, stdio: 'pipe' });
+    const exec = createWorkspaceTools(workspace, () => 'work', () => 0).find(tool => tool.name === 'work_exec')!;
+    const part = (await exec.execute({ command: 'npm test' }, {})).content[0]; assert.ok(part.type === 'text');
+    const result = JSON.parse(part.text);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /masked=400/);
+    assert.doesNotMatch(result.stdout, /fixture-sensitive-many-mounts/);
+  } finally {
+    if (oldHome === undefined) delete process.env.NEURA_HOME; else process.env.NEURA_HOME = oldHome;
+    await fs.rm(scratch, { recursive: true, force: true });
+  }
+});
+
 test('configured-host sandbox: gitfiles are refused before any project code executes', { timeout: 150000 }, async () => {
   assert.equal(process.platform, 'win32');
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-work-gitfile-')));

@@ -23,7 +23,7 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; projectGuidance?: string; stepPlan?: Array<{ name: string; input: unknown } | null>; reviewerPlan?: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string }) {
+async function interactiveFixture(options: { inputs: string[]; exitCode?: number; projectGuidance?: string; stepPlan?: Array<{ name: string; input: unknown } | null>; reviewerPlan?: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
@@ -40,7 +40,12 @@ async function interactiveFixture(options: { inputs: string[]; projectGuidance?:
     }
     const config = path.join(scratch, 'fixture.json');
     await fs.writeFile(config, JSON.stringify({ ...options, workspace }));
-    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), TEMP: scratch, TMP: scratch, NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 });
+    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), TEMP: scratch, TMP: scratch, NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 }).then(result => {
+      assert.equal(options.exitCode ?? 0, 0, 'a failing CLI exit was expected'); return result;
+    }, error => {
+      if (options.exitCode === undefined) throw error;
+      assert.equal(error.code, options.exitCode, error.stderr); return { stdout: String(error.stdout), stderr: String(error.stderr) };
+    });
     const match = /NEURA_FIXTURE_REQUESTS=(.+)/.exec(reply.stdout);
     assert.ok(match, 'The real CLI must consume all synthetic interactive input');
     assert.ok(!reply.stdout.includes('synthetic-private-value'));
@@ -204,6 +209,15 @@ test('a fix stopped at the step limit keeps the task baseline, so "continue" rev
   const [, afterStop] = transcript.split('step limit and is unfinished. Say "continue" to go on.');
   assert.ok(afterStop, transcript);
   assert.match(afterStop, /Review round 1\/3: 2 changed file\(s\)[\s\S]*READY FOR YOUR APPROVAL/);
+});
+
+test('a headless fix stopped at the step limit exits nonzero', async () => {
+  const finding = { severity: 'blocker', likelihood: 'likely', confidence: 'high', file: 'first.ts', summary: 'Synthetic defect.', evidence: 'Synthetic.' };
+  const stepPlan = [{ name: 'write', input: { path: 'first.ts', content: 'x', expectedHash: null } }, null,
+    ...Array.from({ length: 60 }, () => ({ name: 'ls', input: { path: '.' } }))];
+  const reply = await interactiveFixture({ inputs: [], args: ['-p', 'build it'], exitCode: 1, gitWorkspace: true, stepPlan, reviewerPlan: [JSON.stringify({ findings: [finding] })] });
+  assert.match(reply.stdout, /fix stopped at the 60-step limit/);
+  assert.match(reply.stdout, /BLOCKED/);
 });
 
 test('a chat turn prints only the answer: no model, status, usage or review lines', async () => {

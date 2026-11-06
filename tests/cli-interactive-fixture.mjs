@@ -86,7 +86,11 @@ assert.equal(answers.length, 0, 'All intended interactive inputs must be consume
 if (config.projectGuidance && config.history) {
   for (const directory of await fs.readdir(path.join(process.env.NEURA_HOME, 'sessions'))) {
     for (const file of await fs.readdir(path.join(process.env.NEURA_HOME, 'sessions', directory))) {
-      if (file.endsWith('.json')) assert.ok(!(await fs.readFile(path.join(process.env.NEURA_HOME, 'sessions', directory, file), 'utf8')).includes(config.projectGuidance.split('\n').at(-1)), 'guidance must not persist in session history');
+      if (file.endsWith('.json')) {
+        const stored = await fs.readFile(path.join(process.env.NEURA_HOME, 'sessions', directory, file), 'utf8');
+        assert.ok(stored.includes('second task'), 'the final task must have been saved');
+        assert.ok(!stored.includes(config.projectGuidance.split('\n').at(-1)), 'guidance must not persist in session history');
+      }
     }
   }
 }

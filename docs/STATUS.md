@@ -111,7 +111,9 @@ host Git would run outside the sandbox. Commands that policy routes `allow` now 
 without a prompt when `.git` exists, and they run model-written code, so the sandbox
 holds the boundary. `.git`, `.github`, `.husky` and `.vscode` are read-only at any
 depth. Any such path a command creates is removed afterward and the command reports
-failure. Secret-named files are empty or unreadable, including inside host-run and
+failure. Cleanup does not depend on the discovery scan limit. If any subtree cannot
+be checked or cleaned, execution reports failure and requires manual inspection
+before running host tools. Secret-named files are empty or unreadable, including inside host-run and
 dependency folders. Links are allowed only inside `node_modules` and `.venv`,
 except host-run paths, which must not be links. Chained and unclassified commands
 still ask. Common dependency installs are refused at once with the exact manual

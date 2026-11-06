@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isolate } from './isolation.mjs';
 const scratch = isolate();
-const {bubblewrapArguments,assertWorkspaceHasNoLinks,validateProofRuntimeInventory,validateProofRuntimeProbe} = await import('../../agent/neura/human-away-sandbox.ts');
+const {bubblewrapArguments,bubblewrapInput,removeCreatedHostRunPaths,assertWorkspaceHasNoLinks,validateProofRuntimeInventory,validateProofRuntimeProbe} = await import('../../agent/neura/human-away-sandbox.ts');
 const args=bubblewrapArguments('/workspace-fixture','printf synthetic');
 for(const flag of ['--unshare-all','--clearenv','--die-with-parent','--new-session']) assert.ok(args.includes(flag));
 assert.deepEqual(args.slice(-3),['sh','-lc','printf synthetic']);
+assert.deepEqual(bubblewrapInput(args).toString('utf8').split('\0').slice(0,-1),args);
+const manyMounts=Array.from({length:800},(_,i)=>`/workspace/path with spaces/package-${i}/.github`);
+assert.ok(bubblewrapInput(manyMounts).length>32767);
+assert.deepEqual(bubblewrapInput(manyMounts).toString('utf8').split('\0').slice(0,-1),manyMounts);
+assert.throws(()=>bubblewrapInput(['safe','bad\0--bind']),/NUL/);
 // Host Git runs what .git holds, so the read-only bind must land on top of the writable workspace bind.
 assert.ok(args.indexOf('--ro-bind-try')>args.indexOf('--bind'),'.git must be bound read-only after the workspace');
 assert.deepEqual(args.slice(args.indexOf('--ro-bind-try')+1,args.indexOf('--ro-bind-try')+3),['/workspace-fixture/.git','/workspace/.git']);
@@ -73,5 +79,38 @@ for(const entry of ['.git','src/.git']) {
   fs.mkdirSync(path.dirname(path.join(gitfileRoot,entry)),{recursive:true});
   fs.writeFileSync(path.join(gitfileRoot,entry),'gitdir: git-storage\n');
   assert.throws(()=>assertWorkspaceHasNoLinks(gitfileRoot),/do not support \.git files/,'a gitfile must never leave its target writable');
+}
+const cleanupRoot=path.join(scratch,'cleanup');
+fs.mkdirSync(path.join(cleanupRoot,'.git'),{recursive:true});
+const beforeCleanup=assertWorkspaceHasNoLinks(cleanupRoot);
+fs.mkdirSync(path.join(cleanupRoot,'.husky'));
+fs.mkdirSync(path.join(cleanupRoot,'blocked'));
+fs.mkdirSync(path.join(cleanupRoot,'later','.vscode'),{recursive:true});
+const originalRead=fs.readdirSync,originalStat=fs.lstatSync;
+try {
+  fs.readdirSync=function(directory,...rest) {
+    if(directory===path.join(cleanupRoot,'blocked'))throw new Error('synthetic unreadable directory');
+    return originalRead.call(this,directory,...rest);
+  };
+  syncBuiltinESMExports();
+  const cleaned=removeCreatedHostRunPaths(cleanupRoot,beforeCleanup);
+  assert.deepEqual(cleaned.created.sort(),['.husky','later/.vscode']);
+  assert.deepEqual(cleaned.errors,['blocked']);
+  assert.ok(fs.existsSync(path.join(cleanupRoot,'.git')),'pre-existing controls must survive');
+  fs.mkdirSync(path.join(cleanupRoot,'.husky'));
+  fs.readdirSync=function(directory,...rest) {
+    if(directory===cleanupRoot)return [...Array.from({length:200001},(_,i)=>({name:`ordinary-${i}`})),{name:'.husky'}];
+    return originalRead.call(this,directory,...rest);
+  };
+  fs.lstatSync=function(file,...rest) {
+    if(path.dirname(file)===cleanupRoot && path.basename(file).startsWith('ordinary-'))return {isSymbolicLink:()=>false,isDirectory:()=>false};
+    return originalStat.call(this,file,...rest);
+  };
+  syncBuiltinESMExports();
+  assert.throws(()=>assertWorkspaceHasNoLinks(cleanupRoot),/safe entry limit/);
+  assert.deepEqual(removeCreatedHostRunPaths(cleanupRoot,beforeCleanup),{created:['.husky'],errors:[]},'discovery overflow must not prevent cleanup');
+  assert.equal(fs.existsSync(path.join(cleanupRoot,'.husky')),false);
+} finally {
+  fs.readdirSync=originalRead;fs.lstatSync=originalStat;syncBuiltinESMExports();
 }
 console.log('PASS sandbox contract; live WSL replay: npm run verify:sandbox');
