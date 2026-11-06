@@ -102,7 +102,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     if (options) groups.splice(1, 0,
       paint('Usage: neura [task] [options]', 'bone'),
       group('Request options', [
-        ['-p, --prompt TEXT', 'Run one request. Commands fail closed without interactive approval.'],
+        ['-p, --prompt TEXT', 'Run one request. Known commands run in the sandbox; others fail closed.'],
         ['--cwd PATH', 'Project directory. Bare interactive launch from ~ opens a scratch workspace.'],
         ['--mode work|learn', 'Start in Work (default) or Learn.'],
         ['--provider PROVIDER', 'openai-codex (default), local, openai or anthropic.'],

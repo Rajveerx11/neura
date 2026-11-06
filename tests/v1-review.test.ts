@@ -144,6 +144,8 @@ test('unparseable output, model failure and missing git are unavailable, never c
   const thrown = await reviewCandidate(input, { createModel: (() => { throw new Error('OPENAI_API_KEY is not set'); }) as any });
   assert.equal(thrown.status, 'unavailable');
   assert.match(thrown.reason!, /Reviewer failed/);
+  const stoppedEarly = await reviewCandidate(input, { createModel: (() => ({})) as any, runTurn: (async () => ({ text: '{"findings":[]}', messages: [], stopReason: 'step-limit' })) as any });
+  assert.equal(stoppedEarly.status, 'unavailable', 'a reviewer that ran out of steps never yields a clean receipt');
   const turnFailed = await reviewCandidate(input, { createModel: (() => ({})) as any, runTurn: async () => { throw new Error('rate limited'); } });
   assert.equal(turnFailed.status, 'unavailable');
   const noGit = await reviewCandidate(input, { capture: async () => null, ...reply('{"findings":[]}') });

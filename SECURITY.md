@@ -33,9 +33,18 @@ response-time or embargo guarantee is offered.
 ## Current security model
 
 - Work is the default supervised mode. Structured reads/edits/writes stay within
-  the canonical workspace. `work_exec` uses network-disabled WSL2 bubblewrap;
-  protected, remote, destructive, and unknown actions encounter deterministic
-  policy and, where permitted, explicit interactive approval. Headless approval
+  the canonical workspace. `work_exec` uses network-disabled WSL2 bubblewrap.
+  Known build, test and read-only commands run there without a prompt when `.git`
+  exists, including headless. These run model-written code, so the sandbox itself
+  holds the boundary: secret-named files are empty or unreadable, including inside
+  dependency and host-run folders. `.git`, `.github`, `.husky`
+  and `.vscode` are read-only at any depth, and any such path a command creates is
+  removed afterward. Gitfiles (linked worktrees or separate Git directories) are
+  refused for command execution. Git-ignored files without a secret name stay readable to
+  commands, and project code a command changes still runs when you run it on the
+  host. Remote mutations and destructive actions remain subject to deterministic
+  policy, as do protected or unknown actions. Where permitted, these need explicit
+  interactive approval. Headless approval
   requests fail closed. Generic shell access is restricted to read-only inspection.
 - Plan uses a fixed tool set and canonical workspace containment.
 - Plan Git inspection supports only `git rev-parse --short HEAD` for the current

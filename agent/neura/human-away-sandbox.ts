@@ -2,12 +2,18 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SECRET_PATH } from "./action-paths.ts";
 import { redactSensitiveText } from "./redaction.ts";
 import { PROOF_PYTHON, proofRuntimeArguments } from "./verification.ts";
 
 export { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./capabilities.ts";
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_WORKSPACE_ENTRIES = 200_000;
+// Host Git, editors and CI run what these hold, so a sandboxed command may read them but never change them.
+const HOST_RUN_NAME = /^(?:\.git|\.github|\.husky|\.vscode)$/i;
+// Dependency links resolve only inside the sandbox. Traverse real folders for secrets, but never follow links.
+const LINKED_DEPENDENCY_PATH = /(?:^|\/)(?:node_modules|\.venv)\//;
+export type WorkspaceScan = { links: string[]; hostRun: string[]; secrets: Array<{ path: string; directory: boolean }> };
 
 type ProcessResult = { code: number; stdout: string; stderr: string; completed?: boolean };
 type ProofTrust = {
@@ -135,10 +141,10 @@ export async function inspectProofSandboxRuntime(signal?: AbortSignal, workspace
     const runtime = validateProofRuntimeInventory(result.stdout, uvDirectory, wheelhouse, trust);
     if (!runtime) return { ready: false, detail: "WSL proof runtime integrity mismatch", action };
     if (workspace) {
-      assertWorkspaceHasNoLinks(workspace);
+      const scan = assertWorkspaceHasNoLinks(workspace);
       const wslWorkspace = await toWslPath(workspace);
       const probe = `set -eu; uvx --version; ${PROOF_PYTHON} -I -S -c 'import sys; print(".".join(map(str, sys.version_info[:3])))'; uvx ${proofRuntimeArguments().join(" ")} proof-of-work --help >/dev/null; printf 'proof-ready\\n'`;
-      const checked = await runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, probe, runtime)], 30_000, signal);
+      const checked = await runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, probe, runtime, scan)], 30_000, signal);
       if (checked.code !== 0 || !validateProofRuntimeProbe(checked.stdout, trust)) {
         return { ready: false, detail: "sandbox proof runtime could not execute offline", action };
       }
@@ -147,8 +153,9 @@ export async function inspectProofSandboxRuntime(signal?: AbortSignal, workspace
   } catch { return { ready: false, detail: "WSL proof runtime probe failed", action }; }
 }
 
-export function assertWorkspaceHasNoLinks(workspace: string): void {
+function scanWorkspace(workspace: string, refuseGitfiles = false): WorkspaceScan {
   const root = fs.realpathSync(workspace);
+  const scan: WorkspaceScan = { links: [], hostRun: [], secrets: [] };
   const pending = [root];
   let visited = 0;
   while (pending.length) {
@@ -157,12 +164,45 @@ export function assertWorkspaceHasNoLinks(workspace: string): void {
       if (++visited > MAX_WORKSPACE_ENTRIES) throw new Error("Workspace link scan exceeded its safe entry limit.");
       const candidate = path.join(directory, entry.name);
       const stat = fs.lstatSync(candidate);
+      const relative = path.relative(root, candidate).split(path.sep).join("/");
+      const hostRun = HOST_RUN_NAME.test(entry.name);
+      if (hostRun) scan.hostRun.push(relative);
       if (stat.isSymbolicLink()) {
-        throw new Error(`Human Away sandbox refused linked workspace entry: ${path.relative(root, candidate)}`);
+        if (hostRun || !LINKED_DEPENDENCY_PATH.test(relative)) scan.links.push(relative);
+        continue;
       }
-      if (stat.isDirectory()) pending.push(candidate);
+      // A gitfile may point at an otherwise writable directory. Until that target is protected, refuse execution.
+      if (refuseGitfiles && entry.name.toLowerCase() === ".git" && !stat.isDirectory()) throw new Error("Sandbox commands do not support .git files (worktrees or separate Git directories). Use an external manual terminal.");
+      if (SECRET_PATH.test(`/${relative}`)) scan.secrets.push({ path: relative, directory: stat.isDirectory() });
+      else if (stat.isDirectory()) pending.push(candidate);
     }
   }
+  return scan;
+}
+
+export function assertWorkspaceHasNoLinks(workspace: string): WorkspaceScan {
+  const scan = scanWorkspace(workspace, true);
+  if (scan.links.length) throw new Error(`Human Away sandbox refused linked workspace entry: ${scan.links[0]}`);
+  return scan;
+}
+
+// ponytail: bwrap cannot bind a path that does not exist yet, so new ones are removed afterward. Nothing of the user's is lost: they did not exist before this command.
+function removeCreatedHostRunPaths(workspace: string, before: WorkspaceScan): string[] {
+  const known = new Set(before.hostRun);
+  const created = scanWorkspace(workspace).hostRun.filter((entry) => !known.has(entry));
+  for (const entry of created) fs.rmSync(path.join(workspace, entry), { recursive: true, force: true });
+  return created;
+}
+
+async function runScanned(workspace: string, scan: WorkspaceScan, command: string, timeoutMs: number, signal?: AbortSignal, proof?: ProofSandboxRuntime): Promise<ProcessResult> {
+  const wslWorkspace = await toWslPath(workspace);
+  let created: string[] = [];
+  let result: ProcessResult;
+  try {
+    result = await runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, command, proof, scan)], timeoutMs, signal);
+  } finally { created = removeCreatedHostRunPaths(workspace, scan); }
+  if (!created.length) return result;
+  return { ...result, code: result.code || 1, stderr: `${result.stderr}\nNeura removed protected paths this command created: ${created.join(", ")}\n` };
 }
 
 async function toWslPath(workspace: string): Promise<string> {
@@ -174,7 +214,7 @@ async function toWslPath(workspace: string): Promise<string> {
   return converted;
 }
 
-export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime): string[] {
+export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime, scan?: WorkspaceScan): string[] {
   const verifiedCommand = proof
     ? `set -eu; printf '%s\\n' ${[
       `${proof.trust.uvSha256}  /tmp/neura-bin/uv`,
@@ -209,6 +249,9 @@ export function bubblewrapArguments(wslWorkspace: string, command: string, proof
     "--bind", wslWorkspace, "/workspace",
     // Host Git runs hooks and config from .git outside this sandbox, so nothing in here may change them.
     "--ro-bind-try", `${wslWorkspace}/.git`, "/workspace/.git",
+    ...(scan?.hostRun ?? []).filter((entry) => entry !== ".git").flatMap((entry) => ["--ro-bind", `${wslWorkspace}/${entry}`, `/workspace/${entry}`]),
+    // Commands run model-written code, so secrets the read tool refuses read as empty here too.
+    ...(scan?.secrets ?? []).flatMap((secret) => secret.directory ? ["--tmpfs", `/workspace/${secret.path}`] : ["--ro-bind", "/dev/null", `/workspace/${secret.path}`]),
     "--chdir", "/workspace",
     "--setenv", "HOME", "/tmp/home",
     "--setenv", "PATH", `${proof ? "/tmp/neura-bin:" : ""}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
@@ -236,10 +279,9 @@ export async function runInHumanAwaySandbox(
   if (process.platform !== "win32") throw new Error("Human Away sandbox currently requires Windows with WSL2.");
   if (!command.trim()) throw new Error("Human Away sandbox command is empty.");
   if (!fs.statSync(workspace).isDirectory()) throw new Error("Human Away sandbox workspace is not a directory.");
-  assertWorkspaceHasNoLinks(workspace);
+  const scan = assertWorkspaceHasNoLinks(workspace);
   if (!await humanAwaySandboxAvailable()) throw new Error("Human Away sandbox unavailable: install WSL2 and bubblewrap.");
-  const wslWorkspace = await toWslPath(workspace);
-  return runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, command)], timeoutMs, signal);
+  return runScanned(workspace, scan, command, timeoutMs, signal);
 }
 
 export async function runProofInSandbox(
@@ -250,10 +292,9 @@ export async function runProofInSandbox(
 ): Promise<ProcessResult> {
   if (!command.trim()) throw new Error("Proof sandbox command is empty.");
   if (!fs.statSync(workspace).isDirectory()) throw new Error("Proof sandbox workspace is not a directory.");
-  assertWorkspaceHasNoLinks(workspace);
+  const scan = assertWorkspaceHasNoLinks(workspace);
   if (!await humanAwaySandboxAvailable()) throw new Error("Proof sandbox unavailable: install WSL2 and bubblewrap.");
   const status = await inspectProofSandboxRuntime(signal);
   if (!status.runtime) throw new Error(status.detail);
-  const wslWorkspace = await toWslPath(workspace);
-  return runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, command, status.runtime)], timeoutMs, signal);
+  return runScanned(workspace, scan, command, timeoutMs, signal, status.runtime);
 }

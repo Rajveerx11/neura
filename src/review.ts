@@ -171,8 +171,9 @@ export async function reviewCandidate(input: ReviewInput, deps: Partial<ReviewDe
       `<diff>\n${await candidateDiff(root, candidate, changed, signal)}\n</diff>`,
     ].join('\n\n');
     let generation = 0;
-    const { text } = await turn({ model, instructions: REVIEW_INSTRUCTIONS, messages: [{ role: 'user', content: prompt }], tools: createReadOnlyTools(workspace, () => generation), signal });
+    const { text, stopReason } = await turn({ model, instructions: REVIEW_INSTRUCTIONS, messages: [{ role: 'user', content: prompt }], tools: createReadOnlyTools(workspace, () => generation), signal });
     generation++; // Reviewer tool authority ends with its turn.
+    if (stopReason === 'step-limit') return receipt('unavailable', [], 'Reviewer stopped at its step limit before finishing.');
     try { findings = parseFindings(text); }
     catch { return receipt('unavailable', [], 'Reviewer output was not the required strict JSON findings object.'); }
   } catch (error) {

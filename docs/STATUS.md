@@ -101,16 +101,25 @@ skips review and keeps its starting baseline, so `continue` reviews the whole ta
 Work and the reviewer gain `grep` and `find`. `write` creates missing folders.
 A small dotfile allowlist is writable, including `.env.example`, which is no longer
 treated as secret. `.env`, `.npmrc`, `.git`, `.husky` and `.vscode` stay denied.
-`.github/workflows/*` needs typed approval for each write. Root `AGENTS.md` and
-`CLAUDE.md` load as bounded project guidance that cannot widen policy. A tool's own
+Every `.github/` write needs typed approval and must fit in the prompt. Root `AGENTS.md` and
+`CLAUDE.md` load as bounded, untrusted user context, never system instructions or
+saved history. They cannot widen policy. A tool's own
 refusal now reaches the model instead of a generic failure.
 
-**Security fix:** `.git` is now mounted read-only in the sandbox. Before this, a
-sandboxed `npm test` could plant `.git/hooks/pre-commit`, which host Git would run
-outside the sandbox. Commands that policy routes `allow` now run without a prompt,
-but only when `.git` exists, so that bind has something to protect. Chained and
-unclassified commands still ask. Nested repositories are not covered by this bind.
-Dependency installs are refused at once with the exact manual command.
+**Security fix:** a sandboxed `npm test` could plant `.git/hooks/pre-commit`, which
+host Git would run outside the sandbox. Commands that policy routes `allow` now run
+without a prompt when `.git` exists, and they run model-written code, so the sandbox
+holds the boundary. `.git`, `.github`, `.husky` and `.vscode` are read-only at any
+depth. Any such path a command creates is removed afterward and the command reports
+failure. Secret-named files are empty or unreadable, including inside host-run and
+dependency folders. Links are allowed only inside `node_modules` and `.venv`,
+except host-run paths, which must not be links. Chained and unclassified commands
+still ask. Common dependency installs are refused at once with the exact manual
+command. Commands refuse `.git` files at any depth: linked worktrees and separate
+Git directories need an external manual terminal until their targets can be protected.
+
+Commands can still read Git-ignored files without a secret name. Project code a
+command changes still runs when you run it on the host, so review the diff.
 
 Limits remain: no context compaction, no local Git commit from Neura, and any path
 component named `memory`, `sessions`, `private` or `secrets` stays unreadable, which

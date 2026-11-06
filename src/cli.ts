@@ -85,6 +85,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   let lastReview: { generation: number; receipt: ReviewReceipt } | undefined;
   // A task cut off at the step limit keeps its starting baseline, so the eventual review covers all of it.
   let unfinished: { generation: number; snapshot: TreeSnapshot | null } | undefined;
+  let fixStopped = false;
   let baselineWarned = false;
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
   const scratchWorkspace = values.cwd === undefined && interactive && !values.resume && path.relative(fs.realpathSync.native(os.homedir()), workspace) === '';
@@ -209,7 +210,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
         const tools = [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice: line => { endLine(); say(line); } }), ...(mode === 'learn' ? learn.tools() : [])];
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
-          : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : []), projectInstructions(workspace)].filter(Boolean).join('\n\n');
+          : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
+        const guidance = mode === 'work' ? projectInstructions(workspace) : '';
+        const guidanceIndex = memory.length;
+        const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         const maxSteps = mode === 'work' ? WORK_TURN_STEPS : DEFAULT_TURN_STEPS;
         const review = reviewTurn && mode === 'work' && workflowOn;
         const needSessionBaseline = mode === 'work' && sessionBaseline?.generation !== expected;
@@ -220,7 +224,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
-        const outcome = await runTurn({ model, messages: [...memory, userMessage], instructions, tools, signal: abort.signal, maxSteps,
+        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, maxSteps,
           onReasoning: showReasoning ? summary => {
             endLine();
             stdout.write(terminal().boundary('reasoning') + '\n');
@@ -247,7 +251,8 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         const stopped = outcome.stopReason === 'step-limit';
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected) throw new Error('Session changed; result discarded.');
-        memory = outcome.messages;
+        // Repository context is lower-priority user data, refreshed each turn rather than persisted into history.
+        memory = guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages;
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
         lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
           ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;
@@ -256,7 +261,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
         if (stopped) {
-          if (!reviewTurn) throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished.`);
+          if (!reviewTurn) { fixStopped = true; throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`); }
           if (review) unfinished = { generation: expected, snapshot: baseline };
           say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
           if (!rl) process.exitCode = 1;
@@ -273,6 +278,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     }
     async function workflow(task: string, baseline: TreeSnapshot | null, manual: boolean) {
       const expected = generation;
+      fixStopped = false;
       const outcome = await runReviewLoop({ workspace, task, baseline, reviewer: reviewer(), builder: provider, signal: abort?.signal, manual }, {
         capture: (root, signal) => captureWorktree(root, { signal }),
         review: input => reviewCandidate(input), assessRisk,
@@ -280,6 +286,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         current: () => generation === expected && mode === 'work',
         report: line => say(line),
       });
+      if (fixStopped) unfinished = { generation: expected, snapshot: baseline }; // The next review must still cover the whole task.
       if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
     }
     async function input(text: string): Promise<boolean> {

@@ -6,9 +6,10 @@ Windows-first engineering and learning assistant. The active source uses
 **Mastra, not Pi**, with two modes:
 
 - **Work:** workspace reads and search, hash-bound writes/edits and
-  network-disabled WSL2/bubblewrap commands. Known build, test and read-only
-  commands run directly in a Git repository; others need confirmation. Missing
-  isolation fails closed.
+  network-disabled WSL2/bubblewrap commands. Known build, test, validation,
+  inspection and folder-creation commands run directly when the workspace root has
+  a `.git` directory. Gitfiles (linked worktrees or separate Git directories) are
+  refused for commands. Others need confirmation or are refused. Missing isolation fails closed.
 - **Learn:** lessons, local PDF/PPTX imports, English OCR, cited HTML boards,
   exercises, hints and explicit save/resume. Obsidian capture is opt-in.
 
@@ -54,7 +55,8 @@ owner artwork is preserved in `agent/neura/launch-artwork.png`.
   sandbox execution. `NEURA_WSL_DISTRO` can select a nondefault distribution.
   The sandbox uses the distribution's `/usr` toolchain, so a Node installed under
   your home, such as through nvm, is not visible. Run dependency installs yourself
-  in WSL from the project folder: Neura refuses them because the sandbox is offline.
+  in WSL from the project folder. The sandbox is offline, so Neura refuses common
+  install commands at once. Other commands that need a network fail there instead.
 - A browser for Learn's generated HTML boards and optional subscription sign-in.
 - A private Neura home outside the test workspace. Windows DACL privacy must be
   checked before signing in. See [authentication](docs/CODEX_AUTH.md).
