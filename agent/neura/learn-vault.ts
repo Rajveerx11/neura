@@ -25,9 +25,12 @@ export const LEARN_PREFERENCE_VALUES = Object.freeze({
 
 export type LearnPreferenceKey = keyof typeof LEARN_PREFERENCE_VALUES;
 export type LearnPreferenceValue = (typeof LEARN_PREFERENCE_VALUES)[LearnPreferenceKey][number];
-type BaseInput = { lessonId: string; title: string; topic?: string; lessonRevision?: string };
+export const LEARN_RELATION_TYPES = ["requires", "supports", "example-of", "contradicts", "supersedes"] as const;
+export type LearnRelation = { type: typeof LEARN_RELATION_TYPES[number]; conceptId: string; propositionId?: string };
+type BaseInput = { lessonId: string; title: string; topic?: string; lessonRevision?: string; conceptId?: string; pathRevision?: string; stepId?: string; exerciseRevision?: string };
 export type LearnVaultInput =
-  | (BaseInput & { type: "concept"; goal: string; bullets: string[]; example: string; nextStep: string })
+  | (BaseInput & { type: "concept"; goal: string; bullets: string[]; example: string; nextStep: string; propositions?: { propositionId: string; content: string }[]; relations?: LearnRelation[] })
+  | (BaseInput & { type: "proposition"; content: string; propositionId?: string; relations: LearnRelation[] })
   | (BaseInput & { type: "practice"; correct: boolean | null; assisted: boolean; revealed: boolean; exerciseKind: string })
   | (BaseInput & { type: "finding"; finding?: string; nextStep?: string })
   | (BaseInput & { type: "preference"; key: LearnPreferenceKey; value: LearnPreferenceValue; evidenceDigest: string });
@@ -174,9 +177,25 @@ function validateInput(input: LearnVaultInput): void {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(lessonId)) throw new Error("Invalid Learn vault lesson ID.");
   if (input.topic !== undefined) bounded(input.topic, 120, "Topic");
   if (input.lessonRevision !== undefined && !/^[a-f0-9]{64}$/.test(input.lessonRevision)) throw new Error("Invalid lesson revision.");
-  if (input.type === "concept") {
-    bounded(input.goal, 500, "Learning goal"); bounded(input.example, 4000, "Example"); bounded(input.nextStep, 1000, "Next step");
-    if (!Array.isArray(input.bullets) || input.bullets.length < 1 || input.bullets.length > 5) throw new Error("Concept events require 1-5 bullets.");
+  for (const id of [input.conceptId, input.stepId]) if (id !== undefined && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stableIdentifier(id, 80, "Knowledge ID")))) throw new Error("Invalid knowledge identity.");
+  for (const revision of [input.pathRevision, input.exerciseRevision]) if (revision !== undefined && !/^[a-f0-9]{64}$/.test(revision)) throw new Error("Invalid evidence revision.");
+  if (input.type === "proposition" || input.type === "concept") {
+    const relations = input.relations ?? [];
+    if (!Array.isArray(relations) || relations.length > 24) throw new Error("At most twenty-four typed relations are allowed.");
+    if (input.type === "concept" && relations.some(relation => relation?.type === "supersedes")) throw new Error("Corrections require a proposition event.");
+    for (const relation of relations) {
+      if (!relation || !LEARN_RELATION_TYPES.includes(relation.type) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stableIdentifier(relation.conceptId, 80, "Relation concept")) || (relation.propositionId !== undefined && !/^[a-f0-9]{64}$/.test(relation.propositionId)) || (relation.type === "supersedes" && !relation.propositionId)) throw new Error("Invalid typed knowledge relation.");
+    }
+  }
+  if (input.type === "proposition") {
+    bounded(input.content, 1000, "Proposition");
+    if (input.propositionId !== undefined && input.propositionId !== learnPropositionId(input.content)) throw new Error("Proposition content hash mismatch.");
+  } else if (input.type === "concept") {
+    bounded(input.goal, 500, "Learning goal");
+    if (typeof input.example !== "string" || input.example.length > 4000) throw new Error("Invalid example.");
+    bounded(input.nextStep, 1000, "Next step");
+    if (!Array.isArray(input.bullets) || input.bullets.length > 5) throw new Error("Concept events require at most five bullets.");
+    if (input.propositions !== undefined && (!Array.isArray(input.propositions) || input.propositions.length > 5 || input.propositions.some(claim => !claim || typeof claim.content !== "string" || claim.content.length > 1000 || claim.propositionId !== learnPropositionId(claim.content)))) throw new Error("Invalid concept propositions.");
     input.bullets.forEach((item) => bounded(item, 1000, "Concept bullet"));
   } else if (input.type === "practice") {
     if (![true, false, null].includes(input.correct) || typeof input.assisted !== "boolean" || typeof input.revealed !== "boolean") throw new Error("Invalid practice evidence.");
@@ -198,8 +217,20 @@ function minimizeInput(input: LearnVaultInput): LearnVaultInput {
     title: minimizedText(input.title, 160),
     ...(input.topic === undefined ? {} : { topic: minimizedText(input.topic, 120) }),
     ...(input.lessonRevision === undefined ? {} : { lessonRevision: input.lessonRevision }),
+    ...(input.conceptId === undefined ? {} : { conceptId: input.conceptId }),
+    ...(input.pathRevision === undefined ? {} : { pathRevision: input.pathRevision }),
+    ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
+    ...(input.exerciseRevision === undefined ? {} : { exerciseRevision: input.exerciseRevision }),
   };
-  if (input.type === "concept") return { ...base, type: "concept", goal: minimizedText(input.goal, 500), bullets: input.bullets.map((item) => minimizedText(item, 1000)), example: minimizedText(input.example, 4000), nextStep: minimizedText(input.nextStep, 1000) };
+  const relations = input.type === "concept" || input.type === "proposition" ? (input.relations ?? []).map(({ type, conceptId, propositionId }) => ({ type, conceptId, ...(propositionId ? { propositionId } : {}) })) : [];
+  if (input.type === "proposition") {
+    const content = minimizedText(input.content, 1000);
+    return { ...base, type: "proposition", content, propositionId: learnPropositionId(content), relations };
+  }
+  if (input.type === "concept") {
+    const bullets = input.bullets.map((item) => minimizedText(item, 1000));
+    return { ...base, type: "concept", goal: minimizedText(input.goal, 500), bullets, propositions: [...new Map(bullets.map(content => [learnPropositionId(content), content])).entries()].map(([propositionId, content]) => ({ propositionId, content })), relations, example: minimizedText(input.example, 4000), nextStep: minimizedText(input.nextStep, 1000) };
+  }
   if (input.type === "practice") return { ...base, type: "practice", correct: input.correct, assisted: input.assisted, revealed: input.revealed, exerciseKind: minimizedText(input.exerciseKind, 20) };
   if (input.type === "finding") return { ...base, type: "finding", ...(input.finding === undefined ? {} : { finding: minimizedText(input.finding, 1000) }), ...(input.nextStep === undefined ? {} : { nextStep: minimizedText(input.nextStep, 1000) }) };
   return { ...base, type: "preference", key: input.key, value: input.value, evidenceDigest: input.evidenceDigest };
@@ -217,6 +248,7 @@ function render(event: LearnVaultEvent): string {
   const frontmatter = `---\nneura_event: ${event.id}\nschema: 1\ntype: ${event.type}\ncreated: ${event.at}\n---\n`;
   const title = safeText(event.title, 160);
   if (event.type === "concept") return `${frontmatter}\n# ${title}\n\n## Goal\n${safeText(event.goal, 500)}\n\n## Key ideas\n${event.bullets.map((item) => `- ${safeText(item, 1000)}`).join("\n")}\n\n## Example\n${fenced(event.example)}\n\n## Next practice\n${safeText(event.nextStep, 1000)}\n`;
+  if (event.type === "proposition") return `${frontmatter}\n# Proposition — ${title}\n\n${safeText(event.content, 1000)}\n\nContent identity: ${event.propositionId}\n`;
   if (event.type === "practice") return `${frontmatter}\n# Practice evidence — ${title}\n\n- Result: ${event.correct === null ? "discussion" : event.correct ? "correct attempt" : "incorrect attempt"}\n- Exercise: ${safeText(event.exerciseKind, 20)}\n- Assisted: ${event.assisted ? "yes" : "no"}\n- Answer revealed: ${event.revealed ? "yes" : "no"}\n\nThis is practice evidence, not a mastery claim. Raw answers are not stored.\n`;
   if (event.type === "preference") return `${frontmatter}\n# Learning preference — ${event.key}\n\n- Value: ${event.value}\n- Provenance: inferred from an exact learner message\n- Status: candidate until repeated distinct evidence\n\nThe originating conversation is not stored.\n`;
   return `${frontmatter}\n# Learning finding — ${title}\n${event.finding ? `\n## Observation\n${safeText(event.finding, 1000)}\n` : ""}${event.nextStep ? `\n## Next practice\n${safeText(event.nextStep, 1000)}\n` : ""}`;
@@ -230,7 +262,38 @@ async function projectionDirectory(root: string, event: LearnVaultEvent): Promis
   return current;
 }
 
+function conceptKey(conceptId: string): string { return `${slug(conceptId)}-${hash(conceptId).slice(0, 12)}`; }
+export function learnPropositionId(content: string): string { return hash(minimizedText(content, 1000).normalize("NFKC").replace(/\s+/g, " ").trim()); }
+function relationLink(relation: LearnRelation): string {
+  const target = `Neura/Concepts/${conceptKey(relation.conceptId)}/${relation.propositionId ?? "index"}`;
+  return `- ${relation.type}: [[${target}]]`;
+}
+async function stableNote(directory: string, filename: string, content: string): Promise<void> {
+  try { await writeLearnExclusive(directory, filename, content, EVENT_LIMIT); }
+  // Never overwrite user edits, links or files belonging to another writer.
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+}
+async function projectKnowledge(root: string, event: LearnVaultEvent): Promise<void> {
+  if (event.type !== "concept" && event.type !== "proposition") return;
+  const conceptId = event.conceptId ?? event.lessonId;
+  const key = conceptKey(conceptId);
+  const topic = event.topic ?? event.title;
+  const topicKey = `${slug(topic)}-${hash(topic).slice(0, 12)}`;
+  const topics = await ensureChild(await ensureChild(root, "Topics"), topicKey);
+  const concepts = await ensureChild(await ensureChild(root, "Concepts"), key);
+  await stableNote(topics, `${key}.md`, `# ${safeText(topic, 160)}\n\n- supports: [[Neura/Concepts/${key}/index]]\n\nTutor-authored knowledge, not learner mastery.\n`);
+  await stableNote(concepts, "index.md", `# ${safeText(event.title, 160)}\n\n- example-of: [[Neura/Topics/${topicKey}/${key}]]\n\nPropositions live beside this note, identified by content hash. Corrections use supersedes links; historical claims remain.\n`);
+  const claims = event.type === "concept" ? event.propositions ?? event.bullets.map(content => ({ content, propositionId: learnPropositionId(content) })) : [{ content: event.content, propositionId: event.propositionId ?? learnPropositionId(event.content) }];
+  const relations = event.relations ?? [];
+  if (event.type === "concept") for (const relation of relations) await stableNote(concepts, `index-${hash(JSON.stringify(relation))}.md`, `# Concept relation\n\n- Source: [[Neura/Concepts/${key}/index]]\n${relationLink(relation)}\n`);
+  for (const claim of claims) {
+    await stableNote(concepts, `${claim.propositionId}.md`, `# Proposition\n\n${safeText(claim.content, 1000)}\n\n- example-of: [[Neura/Concepts/${key}/index]]\n${relations.map(relationLink).join("\n")}\n\nTutor-authored claim. Content identity: ${claim.propositionId}\n`);
+    // New relations do not rewrite the immutable claim or an edited note.
+    for (const relation of relations) await stableNote(concepts, `${claim.propositionId}-${hash(JSON.stringify(relation))}.md`, `# Typed relation\n\n- Source: [[Neura/Concepts/${key}/${claim.propositionId}]]\n${relationLink(relation)}\n`);
+  }
+}
 async function project(root: string, event: LearnVaultEvent): Promise<void> {
+  await projectKnowledge(root, event);
   const directory = await projectionDirectory(root, event);
   const filename = `${event.at.slice(0, 10)}-${event.id}.md`;
   try { await writeLearnExclusive(directory, filename, render(event), EVENT_LIMIT); }
@@ -281,6 +344,26 @@ export async function appendLearnVaultEvent(input: LearnVaultInput): Promise<{ e
   for (let attempt = 0; attempt < MAX_LEARN_VAULT_EVENTS; attempt++) {
     const existing = await readEventsForAppend(managed.events);
     for (const saved of existing) await project(managed.root, saved);
+    if (minimized.type === "proposition") {
+      const conceptId = minimized.conceptId ?? minimized.lessonId;
+      const claims = existing.flatMap(saved => {
+        if ((saved.conceptId ?? saved.lessonId) !== conceptId) return [];
+        if (saved.type === "proposition") return [{ id: saved.propositionId ?? learnPropositionId(saved.content), relations: saved.relations }];
+        if (saved.type === "concept") return saved.bullets.map(content => ({ id: learnPropositionId(content), relations: saved.relations ?? [] }));
+        return [];
+      });
+      if (minimized.relations.some(relation => relation.type === "supersedes" && (relation.conceptId !== conceptId || relation.propositionId === minimized.propositionId || !claims.some(claim => claim.id === relation.propositionId)))) throw new Error("Corrections must supersede an existing different proposition in this concept.");
+      for (const relation of minimized.relations.filter(relation => relation.type === "supersedes")) {
+        const reachable = new Set([relation.propositionId!]);
+        for (let pass = 0; pass < claims.length; pass++) {
+          const previousSize = reachable.size;
+          for (const claim of claims) if (reachable.has(claim.id)) for (const edge of claim.relations) if (edge.type === "supersedes" && edge.propositionId) reachable.add(edge.propositionId);
+          if (previousSize === reachable.size) break;
+        }
+        if (reachable.has(minimized.propositionId!)) throw new Error("Superseding corrections must not create a cycle.");
+      }
+      if (claims.some(claim => claim.id === minimized.propositionId) && minimized.relations.every(relation => claims.some(claim => claim.id === minimized.propositionId && claim.relations.some(saved => JSON.stringify(saved) === JSON.stringify(relation))))) return { enabled: true };
+    }
     if (existing.length >= MAX_LEARN_VAULT_EVENTS) throw new Error("Learn vault event limit reached; archive the managed subtree before continuing.");
     const slot = `${String(existing.length).padStart(4, "0")}.json`;
     try { await writeLearnExclusive(managed.events, slot, text, EVENT_LIMIT); }

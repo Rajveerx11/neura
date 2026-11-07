@@ -649,7 +649,7 @@ test('CLI uses real Mastra/local transport for a Learn board, exposes no Work to
     assert.match(reply.stdout, /Open this local HTML file/);
     assert.equal(requests.length, 1, 'lesson publication must stop provider continuation');
     const names = requests[0].tools.map((tool: any) => tool.function.name).sort();
-    assert.deepEqual(names, ['learn_exercise', 'learn_lesson', 'learn_material', 'learn_progress', 'ls', 'read']);
+    assert.deepEqual(names, ['learn_exercise', 'learn_lesson', 'learn_material', 'learn_path', 'learn_progress', 'ls', 'read']);
     const artifacts = await fs.readdir(path.join(workspace, '.neura-learning'));
     const board = artifacts.find(name => /^lesson-.*\.html$/.test(name));
     assert.ok(board);

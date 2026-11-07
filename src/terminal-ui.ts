@@ -78,7 +78,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
       paint('Neura · Mastra v1 development build', 'bone'),
       group('Work and Learn', [
         ['/mode work|learn', 'Choose Work or Learn. Only these modes are implemented.'],
-        ['/learn', 'Lesson commands: status, answer <text>, hint, reveal, save, saved, resume <file>, reset, explain, deeper, example.'],
+        ['/learn', 'Lesson commands: status, path, accept-plan, next, answer <text>, hint, reveal, save, saved, resume <file>, reset, explain, deeper, example.'],
         ['/verify [quick|full|status]', 'Manual verification in Work. Detector-only is never verified.'],
       ]),
       group('Review workflow', [
