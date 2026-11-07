@@ -2,12 +2,18 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SECRET_PATH } from "./action-paths.ts";
 import { redactSensitiveText } from "./redaction.ts";
 import { PROOF_PYTHON, proofRuntimeArguments } from "./verification.ts";
 
 export { HUMAN_AWAY_SANDBOX_TOOL, WORK_SANDBOX_TOOL } from "./capabilities.ts";
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_WORKSPACE_ENTRIES = 200_000;
+// Host Git, editors and CI run what these hold, so a sandboxed command may read them but never change them.
+const HOST_RUN_NAME = /^(?:\.git|\.github|\.husky|\.vscode)$/i;
+// Dependency links resolve only inside the sandbox. Traverse real folders for secrets, but never follow links.
+const LINKED_DEPENDENCY_PATH = /(?:^|\/)(?:node_modules|\.venv)\//;
+export type WorkspaceScan = { links: string[]; hostRun: string[]; secrets: Array<{ path: string; directory: boolean }> };
 
 type ProcessResult = { code: number; stdout: string; stderr: string; completed?: boolean };
 type ProofTrust = {
@@ -43,9 +49,9 @@ function distroArguments(): string[] {
   return ["-d", distro, "--exec"];
 }
 
-function runWsl(args: string[], timeoutMs: number, signal?: AbortSignal, redact = true): Promise<ProcessResult> {
+function runWsl(args: string[], timeoutMs: number, signal?: AbortSignal, redact = true, input?: Buffer): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
-    execFile(wslExecutable(), [...distroArguments(), ...args], {
+    const child = execFile(wslExecutable(), [...distroArguments(), ...args], {
       env: hostEnvironment(),
       windowsHide: true,
       timeout: timeoutMs,
@@ -63,6 +69,9 @@ function runWsl(args: string[], timeoutMs: number, signal?: AbortSignal, redact 
       if (error && !("code" in error)) reject(new Error("Human Away sandbox process could not start."));
       else resolve(result);
     });
+    // bwrap --args reads NUL-separated arguments from stdin, avoiding Windows' command-line length limit.
+    child.stdin?.on("error", () => {}); // Early process exit is reported by execFile, not an unhandled EPIPE.
+    child.stdin?.end(input);
   });
 }
 
@@ -135,10 +144,10 @@ export async function inspectProofSandboxRuntime(signal?: AbortSignal, workspace
     const runtime = validateProofRuntimeInventory(result.stdout, uvDirectory, wheelhouse, trust);
     if (!runtime) return { ready: false, detail: "WSL proof runtime integrity mismatch", action };
     if (workspace) {
-      assertWorkspaceHasNoLinks(workspace);
+      const scan = assertWorkspaceHasNoLinks(workspace);
       const wslWorkspace = await toWslPath(workspace);
       const probe = `set -eu; uvx --version; ${PROOF_PYTHON} -I -S -c 'import sys; print(".".join(map(str, sys.version_info[:3])))'; uvx ${proofRuntimeArguments().join(" ")} proof-of-work --help >/dev/null; printf 'proof-ready\\n'`;
-      const checked = await runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, probe, runtime)], 30_000, signal);
+      const checked = await runBubblewrap(bubblewrapArguments(wslWorkspace, probe, runtime, scan), 30_000, signal);
       if (checked.code !== 0 || !validateProofRuntimeProbe(checked.stdout, trust)) {
         return { ready: false, detail: "sandbox proof runtime could not execute offline", action };
       }
@@ -147,8 +156,9 @@ export async function inspectProofSandboxRuntime(signal?: AbortSignal, workspace
   } catch { return { ready: false, detail: "WSL proof runtime probe failed", action }; }
 }
 
-export function assertWorkspaceHasNoLinks(workspace: string): void {
+function scanWorkspace(workspace: string): WorkspaceScan {
   const root = fs.realpathSync(workspace);
+  const scan: WorkspaceScan = { links: [], hostRun: [], secrets: [] };
   const pending = [root];
   let visited = 0;
   while (pending.length) {
@@ -157,12 +167,73 @@ export function assertWorkspaceHasNoLinks(workspace: string): void {
       if (++visited > MAX_WORKSPACE_ENTRIES) throw new Error("Workspace link scan exceeded its safe entry limit.");
       const candidate = path.join(directory, entry.name);
       const stat = fs.lstatSync(candidate);
+      const relative = path.relative(root, candidate).split(path.sep).join("/");
+      const hostRun = HOST_RUN_NAME.test(entry.name);
+      if (hostRun) scan.hostRun.push(relative);
       if (stat.isSymbolicLink()) {
-        throw new Error(`Human Away sandbox refused linked workspace entry: ${path.relative(root, candidate)}`);
+        if (hostRun || !LINKED_DEPENDENCY_PATH.test(relative)) scan.links.push(relative);
+        continue;
       }
-      if (stat.isDirectory()) pending.push(candidate);
+      if (stat.isFile() && stat.nlink !== 1) throw new Error(`Human Away sandbox refused hardlinked workspace entry: ${relative}`);
+      // A gitfile may point at an otherwise writable directory. Until that target is protected, refuse execution.
+      if (entry.name.toLowerCase() === ".git" && !stat.isDirectory()) throw new Error("Sandbox commands do not support .git files (worktrees or separate Git directories). Use an external manual terminal.");
+      if (SECRET_PATH.test(`/${relative}`)) scan.secrets.push({ path: relative, directory: stat.isDirectory() });
+      else if (stat.isDirectory()) pending.push(candidate);
     }
   }
+  return scan;
+}
+
+export function assertWorkspaceHasNoLinks(workspace: string): WorkspaceScan {
+  const scan = scanWorkspace(workspace);
+  if (scan.links.length) throw new Error(`Human Away sandbox refused linked workspace entry: ${scan.links[0]}`);
+  return scan;
+}
+
+/** Remove new host-run paths independently of discovery limits; keep pre-existing protected paths intact. */
+export function removeCreatedHostRunPaths(workspace: string, before: WorkspaceScan): { created: string[]; errors: string[] } {
+  const known = new Set(before.hostRun);
+  const masked = new Set(before.secrets.filter(entry => entry.directory).map(entry => entry.path));
+  const created: string[] = [], errors: string[] = [];
+  const pending = [workspace];
+  // Cleanup cannot use the discovery budget: a command could exhaust it before any removal happened.
+  while (pending.length) {
+    const directory = pending.pop()!;
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(directory, { withFileTypes: true }); }
+    catch { errors.push(path.relative(workspace, directory) || "."); continue; }
+    for (const entry of entries) {
+      const candidate = path.join(directory, entry.name);
+      const relative = path.relative(workspace, candidate).split(path.sep).join("/");
+      if (HOST_RUN_NAME.test(entry.name)) {
+        if (!known.has(relative)) {
+          try { fs.rmSync(candidate, { recursive: true, force: true }); created.push(relative); }
+          catch { errors.push(relative); }
+        }
+        continue; // Existing controls were mounted read-only; new ones have been removed as a whole.
+      }
+      if (masked.has(relative)) continue; // Only directories masked before execution were protected from writes.
+      try {
+        const stat = fs.lstatSync(candidate);
+        if (!stat.isSymbolicLink() && stat.isDirectory()) pending.push(candidate);
+      } catch { errors.push(relative); }
+    }
+  }
+  return { created, errors };
+}
+
+async function runScanned(workspace: string, scan: WorkspaceScan, command: string, timeoutMs: number, signal?: AbortSignal, proof?: ProofSandboxRuntime): Promise<ProcessResult> {
+  const wslWorkspace = await toWslPath(workspace);
+  let cleanup: ReturnType<typeof removeCreatedHostRunPaths> = { created: [], errors: [] };
+  let result: ProcessResult;
+  try {
+    result = await runBubblewrap(bubblewrapArguments(wslWorkspace, command, proof, scan), timeoutMs, signal);
+  } finally { cleanup = removeCreatedHostRunPaths(workspace, scan); }
+  const warnings = [
+    ...(cleanup.created.length ? [`Neura removed protected paths this command created: ${cleanup.created.join(", ")}`] : []),
+    ...(cleanup.errors.length ? [`Protected-path cleanup incomplete at: ${cleanup.errors.join(", ")}. Do not run host tools until you inspect this workspace manually.`] : []),
+  ];
+  return warnings.length ? { ...result, code: result.code || 1, stderr: `${result.stderr}\n${warnings.join("\n")}\n` } : result;
 }
 
 async function toWslPath(workspace: string): Promise<string> {
@@ -174,7 +245,20 @@ async function toWslPath(workspace: string): Promise<string> {
   return converted;
 }
 
-export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime): string[] {
+function runBubblewrap(args: string[], timeoutMs: number, signal?: AbortSignal): Promise<ProcessResult> {
+  const boundary = args.indexOf("--");
+  if (boundary < 0) throw new Error("Sandbox command boundary is missing.");
+  // --args parses options only; bwrap requires the bounded command tail on its command line.
+  return runWsl(["bwrap", "--args", "0", ...args.slice(boundary)], timeoutMs, signal, true, bubblewrapInput(args.slice(0, boundary)));
+}
+
+/** Encode each bwrap option unchanged for --args 0; embedded separators must never become extra arguments. */
+export function bubblewrapInput(args: string[]): Buffer {
+  if (args.some(arg => arg.includes("\0"))) throw new Error("Sandbox arguments cannot contain NUL characters.");
+  return Buffer.from(args.join("\0") + "\0", "utf8");
+}
+
+export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime, scan?: WorkspaceScan): string[] {
   const verifiedCommand = proof
     ? `set -eu; printf '%s\\n' ${[
       `${proof.trust.uvSha256}  /tmp/neura-bin/uv`,
@@ -207,6 +291,11 @@ export function bubblewrapArguments(wslWorkspace: string, command: string, proof
     ] : []),
     "--dir", "/workspace",
     "--bind", wslWorkspace, "/workspace",
+    // Host Git runs hooks and config from .git outside this sandbox, so nothing in here may change them.
+    "--ro-bind-try", `${wslWorkspace}/.git`, "/workspace/.git",
+    ...(scan?.hostRun ?? []).filter((entry) => entry !== ".git").flatMap((entry) => ["--ro-bind", `${wslWorkspace}/${entry}`, `/workspace/${entry}`]),
+    // Commands run model-written code, so secrets the read tool refuses read as empty here too.
+    ...(scan?.secrets ?? []).flatMap((secret) => secret.directory ? ["--tmpfs", `/workspace/${secret.path}`] : ["--ro-bind", "/dev/null", `/workspace/${secret.path}`]),
     "--chdir", "/workspace",
     "--setenv", "HOME", "/tmp/home",
     "--setenv", "PATH", `${proof ? "/tmp/neura-bin:" : ""}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
@@ -234,10 +323,9 @@ export async function runInHumanAwaySandbox(
   if (process.platform !== "win32") throw new Error("Human Away sandbox currently requires Windows with WSL2.");
   if (!command.trim()) throw new Error("Human Away sandbox command is empty.");
   if (!fs.statSync(workspace).isDirectory()) throw new Error("Human Away sandbox workspace is not a directory.");
-  assertWorkspaceHasNoLinks(workspace);
+  const scan = assertWorkspaceHasNoLinks(workspace);
   if (!await humanAwaySandboxAvailable()) throw new Error("Human Away sandbox unavailable: install WSL2 and bubblewrap.");
-  const wslWorkspace = await toWslPath(workspace);
-  return runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, command)], timeoutMs, signal);
+  return runScanned(workspace, scan, command, timeoutMs, signal);
 }
 
 export async function runProofInSandbox(
@@ -248,10 +336,9 @@ export async function runProofInSandbox(
 ): Promise<ProcessResult> {
   if (!command.trim()) throw new Error("Proof sandbox command is empty.");
   if (!fs.statSync(workspace).isDirectory()) throw new Error("Proof sandbox workspace is not a directory.");
-  assertWorkspaceHasNoLinks(workspace);
+  const scan = assertWorkspaceHasNoLinks(workspace);
   if (!await humanAwaySandboxAvailable()) throw new Error("Proof sandbox unavailable: install WSL2 and bubblewrap.");
   const status = await inspectProofSandboxRuntime(signal);
   if (!status.runtime) throw new Error(status.detail);
-  const wslWorkspace = await toWslPath(workspace);
-  return runWsl(["bwrap", ...bubblewrapArguments(wslWorkspace, command, status.runtime)], timeoutMs, signal);
+  return runScanned(workspace, scan, command, timeoutMs, signal, status.runtime);
 }

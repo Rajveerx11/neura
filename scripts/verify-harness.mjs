@@ -11,6 +11,7 @@ const suites = {
   'agent-learn': ['--test', 'tests/v1-agent-learn.test.ts'],
   installer: ['--test', 'tests/v1-install.test.ts'],
   cli: ['--test', 'tests/v1-cli.test.ts'],
+  'work-tools': ['--test', 'tests/v1-work-tools.test.ts'],
   review: ['--test', 'tests/v1-review.test.ts'],
   workflow: ['--test', 'tests/v1-workflow.test.ts'],
   'terminal-ui': ['--test', 'tests/v1-terminal-ui.test.ts'],

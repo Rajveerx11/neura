@@ -78,14 +78,14 @@ test('model-supplied mustFix and ids are ignored; malformed output is rejected',
   for (const bad of ['Looks good!', '{"findings":[{"severity":"critical"}]}', '{}', 'prose {"findings":[]}']) assert.throws(() => parseFindings(bad));
 });
 
-test('read-only tools expose only read and ls, enforce workspace policy and generation fences', async () => {
+test('read-only tools expose only read, ls, grep and find, enforce workspace policy and generation fences', async () => {
   const { root } = await repository();
   await writeFile(path.join(root, '.env'), 'TOKEN=synthetic-secret\n');
   const work = createWorkspaceTools(root, () => 'work', () => 0).map(tool => tool.name);
   assert.ok(['write', 'edit', 'work_exec'].every(name => work.includes(name)), 'positive control: Work exposes effectful tools');
   let generation = 0;
   const tools = createReadOnlyTools(root, () => generation);
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['ls', 'read']);
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['find', 'grep', 'ls', 'read']);
   const read = tools.find(tool => tool.name === 'read')!;
   assert.match((await read.execute({ path: 'app.ts' }, {})).content[0]!.type, /text/);
   await assert.rejects(read.execute({ path: '.env' }, {}));
@@ -113,7 +113,7 @@ test('real runTurn review: clean receipt bound to candidate, diff inline, secret
   assert.equal(receipt.fingerprint, (await captureWorktree(root))!.fingerprint);
   assert.equal(await reviewReceiptCurrent(root, receipt), true);
   assert.equal(seen.instructions, REVIEW_INSTRUCTIONS);
-  assert.deepEqual(seen.tools.map((tool: any) => tool.name).sort(), ['ls', 'read']);
+  assert.deepEqual(seen.tools.map((tool: any) => tool.name).sort(), ['find', 'grep', 'ls', 'read']);
   const prompt = seen.messages[0].content as string;
   assert.match(prompt, /-export const value = 1;\n\+export const value = 2;/);
   assert.match(prompt, /new untracked file added\.ts\nexport const added = true;/);
@@ -144,6 +144,8 @@ test('unparseable output, model failure and missing git are unavailable, never c
   const thrown = await reviewCandidate(input, { createModel: (() => { throw new Error('OPENAI_API_KEY is not set'); }) as any });
   assert.equal(thrown.status, 'unavailable');
   assert.match(thrown.reason!, /Reviewer failed/);
+  const stoppedEarly = await reviewCandidate(input, { createModel: (() => ({})) as any, runTurn: (async () => ({ text: '{"findings":[]}', messages: [], stopReason: 'step-limit' })) as any });
+  assert.equal(stoppedEarly.status, 'unavailable', 'a reviewer that ran out of steps never yields a clean receipt');
   const turnFailed = await reviewCandidate(input, { createModel: (() => ({})) as any, runTurn: async () => { throw new Error('rate limited'); } });
   assert.equal(turnFailed.status, 'unavailable');
   const noGit = await reviewCandidate(input, { capture: async () => null, ...reply('{"findings":[]}') });

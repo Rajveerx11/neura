@@ -52,14 +52,25 @@ globalThis.fetch = async (url, init) => {
   assert.equal(init.method, 'POST');
   const body = JSON.parse(init.body);
   assert.ok(!body.instructions.includes('synthetic-private-value'));
+  if (config.projectGuidance && !body.instructions.includes('independent code reviewer')) {
+    const marker = config.projectGuidance.split('\n').at(-1);
+    assert.ok(!body.instructions.includes(marker), 'repository bytes must never become system instructions');
+    const guidance = body.input.filter(item => JSON.stringify(item).includes(marker));
+    assert.equal(guidance.length, 1, 'fresh guidance must be included once, not accumulated in history');
+    assert.equal(guidance[0].role, 'user', 'repository guidance must stay below system authority');
+  }
   requests.push({ type: 'model', model: body.model, ...(config.reasoning ? { summary: body.reasoning?.summary ?? null } : {}) });
   modelRequests++;
   if (config.denyModel) return new Response(JSON.stringify({ error: { code: 'model_not_found', message: 'synthetic-private-value' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   const toolName = config.writeTool ? 'write' : 'read';
   const toolInput = config.writeTool ? { path: 'smoke.txt', content: 'scratch-only', expectedHash: null } : { path: 'sample.txt' };
-  const output = (config.tool || config.writeTool) && modelRequests === 1
-    ? [{ type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: toolName, arguments: JSON.stringify(toolInput), status: 'completed' }]
-    : [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hello from selected model', annotations: [] }] }];
+  const message = text => [{ type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] }];
+  const functionCall = (name, input) => [{ type: 'function_call', id: `fc_${modelRequests}`, call_id: `call_${modelRequests}`, name, arguments: JSON.stringify(input), status: 'completed' }];
+  const planned = config.stepPlan && !body.instructions.includes('independent code reviewer') ? config.stepPlan.shift() : undefined;
+  const output = body.instructions.includes('independent code reviewer') ? message(config.reviewerPlan?.shift() ?? '{"findings":[]}')
+    : planned ? functionCall(planned.name, planned.input)
+    : (config.tool || config.writeTool) && modelRequests === 1 ? functionCall(toolName, toolInput)
+    : message('Hello from selected model');
   const reasoning = config.reasoning ? [{ type: 'reasoning', id: 'rs_fixture', summary: [{ type: 'summary_text', text: 'I will inspect the workspace before answering.' }], encrypted_content: 'synthetic-private-value' }] : [];
   const snapshot = { id: 'resp_fixture', created_at: 1, model: body.model, status: 'completed', output: [...reasoning, ...output], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
   if (config.jsonResponse) return new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -72,4 +83,15 @@ const { main } = await import('../src/cli.ts');
 process.chdir(config.launchFromHome ? process.env.USERPROFILE : config.workspace);
 await main([...(config.launchFromHome || config.omitCwd ? [] : ['--cwd', config.workspace]), ...(config.history ? [] : ['--no-history']), ...(config.args ?? [])]);
 assert.equal(answers.length, 0, 'All intended interactive inputs must be consumed');
+if (config.projectGuidance && config.history) {
+  for (const directory of await fs.readdir(path.join(process.env.NEURA_HOME, 'sessions'))) {
+    for (const file of await fs.readdir(path.join(process.env.NEURA_HOME, 'sessions', directory))) {
+      if (file.endsWith('.json')) {
+        const stored = await fs.readFile(path.join(process.env.NEURA_HOME, 'sessions', directory, file), 'utf8');
+        assert.ok(stored.includes('second task'), 'the final task must have been saved');
+        assert.ok(!stored.includes(config.projectGuidance.split('\n').at(-1)), 'guidance must not persist in session history');
+      }
+    }
+  }
+}
 process.stdout.write('\nNEURA_FIXTURE_REQUESTS=' + JSON.stringify(requests) + '\n');

@@ -70,7 +70,7 @@ bridge checks are not real-artifact acceptance. See the [manual command](../READ
 
 Work now runs an engineering review workflow by default (`/workflow on|off`).
 After a Work turn changes the Git workspace, path-based risk routing skips
-docs-only changes; otherwise one fresh reviewer with code-enforced `read`/`ls`
+docs-only changes; otherwise one fresh reviewer with code-enforced read-only
 tools reviews the candidate diff. Receipts bind to the candidate fingerprint and
 go `stale` on any later edit. The controller, not the model, marks must-fix
 findings (blocker, or major with non-low confidence). The builder fixes them
@@ -79,7 +79,8 @@ automatically for up to 3 review rounds. Every run ends `READY FOR YOUR APPROVAL
 defaults to the builder model and is labelled same-family. Set a different
 provider with `--reviewer-provider/--reviewer-model` or `/reviewer` for
 cross-family independence. Receipts are session-local. Tests use fake and
-mock-model reviewers; no live reviewer run is recorded yet.
+mock-model reviewers. Live same-family reviewer runs are recorded in
+[Mastra v1](MASTRA_V1.md#real-project-work-2026-11-06).
 
 Cleanup distinguishes obsolete implementation work from unmet requirements.
 The stock-Pi three-configuration benchmark (#61) and the retired Pi cockpit/widget
@@ -90,6 +91,48 @@ Keep original hardening and migration blockers open, including installation and
 recovery work. Historical source, plans and verification records are retained
 deliberately. Unreachable by the active app does not mean safe to delete. No private profiles,
 credentials, history, vaults, user drafts or other worktrees are cleanup targets.
+
+## Real-project Work (2026-11-06)
+
+Owner-approved plan: [plans/neura-real-project-work](../plans/neura-real-project-work/plan.mdx).
+This is Milestone 1. Work builder turns now get 60 model steps; Learn and reviewer
+turns keep 8. A turn that runs out stops honestly: it prints no raw tool output,
+skips review and keeps its starting baseline, so `continue` reviews the whole task.
+Work and the reviewer gain `grep` and `find`. `write` creates missing folders.
+A small dotfile allowlist is writable, including `.env.example`, which is no longer
+treated as secret. `.env`, `.npmrc`, `.git`, `.husky` and `.vscode` stay denied.
+Every `.github/` write needs typed approval and must fit in the prompt. Root `AGENTS.md` and
+`CLAUDE.md` load as bounded, untrusted user context, never system instructions or
+saved history. They cannot widen policy. A tool's own
+refusal now reaches the model instead of a generic failure.
+
+**Security fix:** a sandboxed `npm test` could plant `.git/hooks/pre-commit`, which
+host Git would run outside the sandbox. Commands that policy routes `allow` now run
+without a prompt when `.git` exists, and they run model-written code, so the sandbox
+holds the boundary. `.git`, `.github`, `.husky` and `.vscode` are read-only at any
+depth. Any such path a command creates is removed afterward and the command reports
+failure. Cleanup does not depend on the discovery scan limit. If any subtree cannot
+be checked or cleaned, execution reports failure and requires manual inspection
+before running host tools. Secret-named files are empty or unreadable, including inside host-run and
+dependency folders. Regular files with multiple hardlinks are refused before
+execution. Symlinks are allowed only inside `node_modules` and `.venv`, except
+host-run paths, which must not be links. Cleanup traverses newly created secret
+folders, while preserving directories that were masked before the command. Chained and unclassified commands
+still ask. Common dependency installs are refused at once with the exact manual
+command. Commands refuse `.git` files at any depth: linked worktrees and separate
+Git directories need an external manual terminal until their targets can be protected.
+
+Commands can still read Git-ignored files without a secret name. Project code a
+command changes still runs when you run it on the host, so review the diff.
+
+Limits remain: no context compaction, no local Git commit from Neura, and any path
+component named `memory`, `sessions`, `private` or `secrets` stays unreadable, which
+can block real projects with such folders. See the evidence line in
+[Mastra v1](MASTRA_V1.md#real-project-work-2026-11-06).
+
+CI also runs Work-tool, reviewer and workflow regressions in the required Linux
+`portable-proof` job. The Windows harness remains required. Release licensing
+checks and configured-host acceptance remain separate gates.
 
 ## Branding and dependency grouping (2026-11-04)
 

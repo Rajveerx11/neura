@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { Type } from "typebox";
-import { createTurnTools, runTurn, MAX_TURN_STEPS, type ToolDefinition } from "../src/runtime.ts";
+import { createTurnTools, DEFAULT_TURN_STEPS, runTurn, ToolFeedbackError, WORK_TURN_STEPS, type ToolDefinition } from "../src/runtime.ts";
 import { createConfiguredModel } from "../src/providers.ts";
 import { appendSession, createSession, listSessions, resumeSession, saveSession, MAX_SESSION_MESSAGES, MAX_SESSION_BYTES } from "../src/session.ts";
 
@@ -373,9 +373,43 @@ test("abort before dispatch and during first tool prevents later effects", async
 test("turn step limit bounds a model that continuously requests tools", async () => {
   const { model, requests } = fixture([[call("action", { count: 1 })]]);
   let effects = 0;
-  await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => { effects++; return { content: [text("ok")] }; })] });
-  assert.equal(requests.length, MAX_TURN_STEPS);
-  assert.equal(effects, MAX_TURN_STEPS);
+  const shown: string[] = [];
+  const result = await runTurn({ model, messages: [user], instructions: "Test", onText: chunk => shown.push(chunk), tools: [action(async () => { effects++; return { content: [text("tool-output")] }; })] });
+  assert.equal(requests.length, DEFAULT_TURN_STEPS);
+  assert.equal(effects, DEFAULT_TURN_STEPS);
+  assert.equal(result.stopReason, "step-limit");
+  assert.equal(result.text, "", "raw tool output is not an answer");
+  assert.deepEqual(shown, []);
+});
+
+test("Work turns can finish a task that needs more than the default steps", async () => {
+  assert.ok(WORK_TURN_STEPS * 2 < MAX_SESSION_MESSAGES, "one Work turn must fit in saved history");
+  const steps = Array.from({ length: 20 }, () => [call("action", { count: 1 })]);
+  const { model, requests } = fixture([...steps, [{ type: "text", text: "Done." }]]);
+  const result = await runTurn({ model, messages: [user], instructions: "Test", maxSteps: WORK_TURN_STEPS, tools: [action(async () => ({ content: [text("ok")] }))] });
+  assert.equal(requests.length, 21);
+  assert.deepEqual([result.stopReason, result.text], ["finished", "Done."]);
+});
+
+test("a model that finishes on its last allowed step is finished, and a terminating tool is not a step-limit stop", async () => {
+  const last = fixture([[call("action", { count: 1 })], [{ type: "text", text: "Done." }]]);
+  const finished = await runTurn({ model: last.model, messages: [user], instructions: "Test", maxSteps: 2, tools: [action(async () => ({ content: [text("ok")] }))] });
+  assert.deepEqual([finished.stopReason, finished.text], ["finished", "Done."]);
+  const ending = fixture([[call("action", { count: 1 })]]);
+  const terminated = await runTurn({ model: ending.model, messages: [user], instructions: "Test", tools: [action(async () => ({ content: [text("lesson")], terminate: true }))] });
+  assert.deepEqual([terminated.stopReason, terminated.text], ["finished", "lesson"]);
+});
+
+test("a tool's own refusal reaches the model; any other failure stays generic", async () => {
+  const seen = async (error: Error) => {
+    const { model, requests } = fixture([[call("action", { count: 1 })], [{ type: "text", text: "Done." }]]);
+    await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => { throw error; })] });
+    return JSON.stringify(requests[1]);
+  };
+  assert.match(await seen(new ToolFeedbackError("Edit text must match exactly once.")), /Edit text must match exactly once/);
+  const generic = await seen(new Error("synthetic-internal-detail"));
+  assert.doesNotMatch(generic, /synthetic-internal-detail/);
+  assert.match(generic, /Tool callback rejected or failed/);
 });
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
@@ -476,8 +510,9 @@ test("explicit OpenAI/Anthropic API transports carry tool images as native image
 });
 
 test("schema failure without assistant text returns usable feedback", async () => {
-  const { model } = fixture([[call("action", { count: -1 })]]);
+  const { model } = fixture([[call("action", { count: -1 })], []]);
   const result = await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => { throw new Error("Must not execute"); })] });
+  assert.equal(result.stopReason, "finished");
   assert.match(result.text, /Invalid tool input; action rejected/);
 });
 

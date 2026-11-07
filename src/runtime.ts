@@ -36,9 +36,12 @@ export type RunTurnOptions = {
   onReasoning?: (summary: string) => void;
   /** Synchronous, payload-free sink. Thenables are rejected without permitting hidden effects. */
   onToolEvent?: (event: ToolEvent) => void;
+  maxSteps?: number;
 };
 
-export const MAX_TURN_STEPS = 8;
+export const DEFAULT_TURN_STEPS = 8;
+// ponytail: a step adds at least two messages, so 60 keeps one turn inside MAX_SESSION_MESSAGES. Retune from real runs.
+export const WORK_TURN_STEPS = 60;
 
 function closedSchema(schema: any): any {
   if (!schema || typeof schema !== "object") return schema;
@@ -57,6 +60,9 @@ function closedSchema(schema: any): any {
 }
 
 const feedback = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
+
+/** A tool's own refusal. Its message reaches the model; any other thrown error stays generic. */
+export class ToolFeedbackError extends Error {}
 
 /** One invocation owns its queue and authority; never persist or reuse this object. */
 export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal, onToolEvent?: (event: ToolEvent) => void) {
@@ -119,10 +125,10 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
           try {
             signal?.throwIfAborted();
             result = await definition.execute(input, { signal });
-          } catch {
+          } catch (error) {
             if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
             failed = true;
-            result = feedback("Tool callback rejected or failed. Check current state before retrying.");
+            result = feedback(error instanceof ToolFeedbackError ? error.message : "Tool callback rejected or failed. Check current state before retrying.");
           }
           // Record effect/termination state before any fallible post-action notification.
           if (result.terminate) terminated = true;
@@ -138,7 +144,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
   return { tools, results, report, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
 }
 
-export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent }: RunTurnOptions): Promise<{ text: string; messages: any[]; usage?: TurnUsage }> {
+export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent, maxSteps = DEFAULT_TURN_STEPS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | "step-limit"; usage?: TurnUsage }> {
   signal?.throwIfAborted();
   const names = new Set(tools.map(tool => tool.name));
   const turn = createTurnTools(tools, signal, onToolEvent);
@@ -162,7 +168,7 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
   };
   try {
     const result = await agent.generate(messages, {
-      maxSteps: MAX_TURN_STEPS,
+      maxSteps,
       toolCallConcurrency: 1,
       abortSignal: signal,
       modelSettings: { maxRetries: 0 },
@@ -191,15 +197,17 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
     if (reasoningFailed) throw new Error("Reasoning display failed. Some actions may already have completed; inspect current state before retrying.");
     if (turn.reportingFailed()) throw new Error("Tool status output failed. Some actions may already have completed; inspect current state before retrying.");
     const toolText = turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
-    const text = result.text || toolText || "Turn ended without assistant text.";
-    if (!streamed) onText?.(text);
+    // Still asking for tools with no tool ending the turn means the budget ran out, not that the work finished.
+    const stopReason = result.finishReason === "tool-calls" && !turn.isTerminated() ? "step-limit" as const : "finished" as const;
+    const text = result.text || (stopReason === "finished" ? toolText || "Turn ended without assistant text." : "");
+    if (!streamed && text) onText?.(text);
     // Mastra FullOutput.totalUsage aggregates every model step in this invocation.
     // Missing provider counts stay unknown; zero is a valid reported count.
     const counts = result.totalUsage;
     const usage = counts && Number.isSafeInteger(counts.inputTokens) && counts.inputTokens! >= 0 &&
       Number.isSafeInteger(counts.outputTokens) && counts.outputTokens! >= 0
       ? { inputTokens: counts.inputTokens!, outputTokens: counts.outputTokens! } : undefined;
-    return { text, messages: [...messages, ...(result.response.messages ?? [])], ...(usage ? { usage } : {}) };
+    return { text, messages: [...messages, ...(result.response.messages ?? [])], stopReason, ...(usage ? { usage } : {}) };
   } finally {
     turn.close();
   }

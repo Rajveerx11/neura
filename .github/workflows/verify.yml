@@ -154,6 +154,11 @@ jobs:
       - run: node scripts/verify-harness.mjs --suite runtime
       - run: node scripts/verify-harness.mjs --suite process-contract
       - run: node scripts/verify-harness.mjs --suite sandbox
+      - name: Verify portable Work and review regressions
+        run: |
+          node scripts/verify-harness.mjs --suite work-tools
+          node scripts/verify-harness.mjs --suite review
+          node scripts/verify-harness.mjs --suite workflow
       - run: node scripts/verify-harness.mjs --suite learn-storage
       - run: node scripts/verify-harness.mjs --suite learn-vault
 
