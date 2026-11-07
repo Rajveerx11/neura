@@ -8,6 +8,8 @@ $scanScript = Join-Path $PSScriptRoot "verify-secrets.ps1"
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $testRoot = Join-Path $tempRoot ("neura-secret-tests-" + [guid]::NewGuid().ToString("N"))
 $toolCache = Join-Path $testRoot "tools"
+# Fixed balanced canary stays above the scanner's entropy threshold; random GUIDs can be ignored.
+$syntheticToken = ('a1b2c3d4e5f60789' * 4)
 
 function New-TestRepository([string]$Name) {
     $repository = Join-Path $testRoot $Name
@@ -56,7 +58,7 @@ try {
     $manifestFile = 'agent/neura/release-manifest.json'
     Commit-TestFile $manifestRepository $manifestFile $manifestSource
     & $scanScript -RepositoryRoot $manifestRepository -ToolCache $toolCache | Out-Null
-    $otherDigest = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+    $otherDigest = $syntheticToken
     Commit-TestFile $manifestRepository $manifestFile ($manifestSource.Replace($publicDigest, $otherDigest))
     $otherDigestRejected = $false
     try { & $scanScript -RepositoryRoot $manifestRepository -ToolCache $toolCache *>$null }
@@ -79,7 +81,6 @@ try {
 
     $leakRepository = New-TestRepository "leak"
     Commit-TestFile $leakRepository '.gitleaks.toml' $config
-    $syntheticToken = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
     Commit-TestFile $leakRepository "fixture.txt" ("api_key=" + $syntheticToken)
 
     $leakMessage = $null
@@ -176,7 +177,7 @@ try {
     [IO.File]::WriteAllText($documentationIgnorePath, $ignoreSource + "`r`n" + $reviewedProseFingerprint + "`r`n", [Text.UTF8Encoding]::new($false))
     & $scanScript -RepositoryRoot $documentationRepository -ToolCache $toolCache *>$null
 
-    $documentationCanary = 'api_key="{0}"' -f ([guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N'))
+    $documentationCanary = 'api_key="{0}"' -f $syntheticToken
     Commit-TestFile $documentationRepository $documentationPath (((@('') * 483) + @($documentationCanary)) -join "`n")
     $newCanaryRejected = $false
     try { & $scanScript -RepositoryRoot $documentationRepository -ToolCache $toolCache *>$null }

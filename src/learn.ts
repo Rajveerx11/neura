@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { importLearningMaterial } from '../agent/neura/learn-materials.ts';
 import { assertLearnLesson, renderLearnHtml, learnLessonRevision } from '../agent/neura/learn-renderer.ts';
 import { LearnLessonSchema } from '../agent/neura/learn-schema.ts';
+import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { evaluateLearnExercise } from '../agent/neura/learn-exercises.ts';
 import { listLearnProgress, readLearnProgress, writeLearnArtifact } from '../agent/neura/learn-store.ts';
 import { appendLearnVaultEvent, readLearnVaultContext, learnPreferenceEvidence, LEARN_PREFERENCE_VALUES, type LearnVaultInput, type LearnPreferenceKey, type LearnPreferenceValue } from '../agent/neura/learn-vault.ts';
@@ -23,17 +24,21 @@ export function createLearnWorkshop(workspace: string, isActive: () => boolean, 
     if (!isActive() || epoch !== expected) throw new Error('Learning mode/session changed; stale operation discarded.');
   }
   function invalidate(clear = false) { epoch++; lastUserText = ''; if (clear) state = emptyState(); }
+  /** Keep optional vault failures nonfatal while preventing diagnostics from stale operations. */
   async function mirror(event: LearnVaultInput, expected: number, signal?: AbortSignal) {
     fence(expected, signal);
+    // Vault topics have a smaller bound than lesson titles; redact before truncating.
+    if (event.topic !== undefined) event = { ...event, topic: redactSensitiveText(event.topic.trim(), 120) };
     try { await appendLearnVaultEvent(event); }
-    catch { notify('Learning continued; the configured Obsidian vault could not be updated safely.'); }
+    catch { fence(expected, signal); notify('Learning continued; the configured Obsidian vault could not be updated safely.'); }
     fence(expected, signal);
   }
+  /** Read optional learner context without letting late failures notify a replaced session. */
   async function profile(expected: number, signal?: AbortSignal) {
     fence(expected, signal);
     let value: Awaited<ReturnType<typeof readLearnVaultContext>>;
     try { value = await readLearnVaultContext(); }
-    catch { notify('The configured learner profile could not be read safely.'); value = { enabled: false, preferences: {}, difficulties: [] }; }
+    catch { fence(expected, signal); notify('The configured learner profile could not be read safely.'); value = { enabled: false, preferences: {}, difficulties: [] }; }
     fence(expected, signal);
     return value;
   }
