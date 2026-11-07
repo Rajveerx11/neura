@@ -22,6 +22,17 @@ open; a framework change does not close them. Human Away is unavailable in v1.
 Baseline coverage and owners are tracked in the [parity matrix](PARITY_MATRIX.md) (#114); it is not a parity or readiness claim.
 On 2026-11-05 the owner accepted Mastra EE terms for local development/testing only. The [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05) (#115) now gates pins, install scripts and licenses.
 
+## Learn hardening (2026-11-07)
+
+The active Learn service now bounds vault topic metadata without shortening lesson
+titles or changing vault validation. Synthetic Windows regressions cover title
+bounds, configured-vault concept/practice events without raw answers, fresh-process
+explicit save/resume, historical citations until reimport, and delayed board/vault
+operations across session changes, mode changes and cancellation. Stale vault
+failures no longer emit warnings into a later session. Completed artifacts/events
+may remain; no autosave or browser synchronization was added. See
+[Learn acceptance](MASTRA_V1.md#learn-acceptance). #123 remains open.
+
 ## Current maintenance checkpoint (2026-10-27)
 
 The owner reported a completed subscription sign-in followed by HTTP 400 on the

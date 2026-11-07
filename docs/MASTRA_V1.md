@@ -62,6 +62,21 @@ reimport, revision-bound board requests, cancellation and stale-tool denial. PPT
 import uses the same bounded worker as the legacy implementation. Dedicated existing
 suites retain offline OCR, parser attacks, SQL bounds, storage races and vault integrity.
 
+The active service keeps lesson titles up to 160 characters intact. Its shared
+vault mirror trims and redacts topic metadata before capping it at the vault's
+120-character bound; vault validation and event formats stay unchanged. Synthetic
+configured-vault regressions exercise 120/121/160-character titles, reject 161,
+and check concept/practice events from both answer paths without raw-answer storage.
+
+The fresh-process resume regression restores the lesson, attempts, next hint,
+reveal/assistance state, tutor notes and next step. Restored excerpts remain
+historical until the originals are reimported. Isolated delayed-I/O regressions
+cover board publication, concept/practice mirroring, save, resume and profile reads
+across session changes, mode round trips and cancellation. Delayed vault failures
+cannot emit warnings into a later session; current-session failures still warn
+and continue. These checks run in `tests/v1-learn.test.ts` through the existing
+Learn harness suite. They are synthetic Windows evidence, not completion of #123.
+
 The model must see four dedicated tools: `learn_material`, `learn_lesson`,
 `learn_exercise`, `learn_progress`. It may additionally use bounded public workspace
 `read`/`ls`; generic writes, shell, Plan publication and integrations are unavailable.

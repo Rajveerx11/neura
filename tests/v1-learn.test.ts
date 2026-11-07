@@ -11,8 +11,8 @@ import { windowsShortPath } from './windows-short-path.ts';
 import path from 'node:path';
 import { createLearnWorkshop } from '../src/learn.ts';
 import { createWorkspaceTools, assertWorkspaceOutsideNeuraHome } from '../src/work.ts';
-import { readLearnVaultContext } from '../agent/neura/learn-vault.ts';
-import { learnLessonRevision } from '../agent/neura/learn-renderer.ts';
+import { appendLearnVaultEvent, readLearnVaultContext } from '../agent/neura/learn-vault.ts';
+import { assertLearnLesson, learnLessonRevision } from '../agent/neura/learn-renderer.ts';
 import { workshopFixture, sqlExercise } from '../scripts/learn-workshop-fixture.mjs';
 import { pdf, zip, presentation } from '../scripts/learn-material-fixtures.mjs';
 
@@ -50,8 +50,44 @@ test('Learn v1: actual document -> cited lesson -> attempt -> save -> new worksh
     assert.equal((await invoke('learn_exercise', { answer })).terminate, true);
     await assert.rejects(() => invoke('learn_exercise', { answer }), /latest answer/);
     const hinted = await learn.command('hint'); assert.ok(hinted.text);
+    await learn.command('reveal');
+    await invoke('learn_progress', { action: 'note', note: 'Review the many side.', nextStep: 'Try another booking.' });
+    assert.equal((await learn.command('saved')).text, 'No saved progress.');
     const save = await learn.command('save');
     const filename = /Resume: \/learn resume (\S+)/.exec(save.text)![1];
+    // Resume in a separate process too: no imported sources or workshop memory survive.
+    const source = String.raw`
+      import assert from 'node:assert/strict';
+      import fs from 'node:fs/promises';
+      import path from 'node:path';
+      import { createLearnWorkshop } from './src/learn.ts';
+      const [workspace, filename] = process.argv.slice(1);
+      const saved = JSON.parse(await fs.readFile(path.join(workspace, '.neura-learning', filename), 'utf8'));
+      const fresh = createLearnWorkshop(workspace, () => true);
+      assert.equal(JSON.parse((await fresh.command('status')).text).lesson, null);
+      assert.match((await fresh.command('resume ' + filename)).text, /historical/);
+      const tools = fresh.tools();
+      const invoke = (name, input) => tools.find(tool => tool.name === name).execute(input, {});
+      const status = JSON.parse((await invoke('learn_progress', { action: 'status' })).content[0].text);
+      assert.deepEqual(status.currentLesson, saved.lesson);
+      assert.deepEqual(status.attempts, saved.attempts);
+      assert.deepEqual(status.tutorNotes, saved.notes);
+      assert.equal(status.nextStep, saved.nextStep);
+      assert.equal(status.sources[0].verifiedThisSession, false);
+      assert.match(await fs.readFile(status.board, 'utf8'), /source excerpts have not been reverified/);
+      assert.equal((await fresh.command('hint')).text, saved.lesson.exercise.hints[saved.hint]);
+      const attempt = JSON.parse((await fresh.command('answer 1')).text);
+      assert.equal(attempt.solutionPreviouslyRevealed, true);
+      const after = JSON.parse((await fresh.command('status')).text);
+      assert.equal(after.attempts.at(-1).assisted, true);
+      await assert.rejects(invoke('learn_lesson', saved.lesson), /Reimport/);
+      await invoke('learn_material', { path: 'material.pdf', ocr: false });
+      assert.equal(JSON.parse((await fresh.command('status')).text).sources[0].verifiedThisSession, true);
+      assert.equal((await invoke('learn_lesson', saved.lesson)).terminate, true);
+      console.log('Fresh-process continuity passed');
+    `;
+    const reply = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source, scratch, filename], { cwd: path.resolve(import.meta.dirname, '..'), env: process.env, timeout: 30000 });
+    assert.match(reply.stdout, /Fresh-process continuity passed/); assert.equal(reply.stderr, '');
     const restored = createLearnWorkshop(scratch, () => true);
     const resume = await restored.command(`resume ${filename}`);
     assert.match(resume.text, /historical/);
@@ -88,6 +124,157 @@ test('Learn v1: actual document -> cited lesson -> attempt -> save -> new worksh
     await fs.rm(scratch, { recursive: true, force: true });
   }
 });
+
+test('Learn vault mirrors public title bounds through both answer paths without raw answers', { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-learn-topic-')));
+  const oldHome = process.env.NEURA_HOME; const oldVault = process.env.NEURA_LEARN_VAULT;
+  process.env.NEURA_HOME = path.join(scratch, 'home'); process.env.NEURA_LEARN_VAULT = path.join(scratch, 'vault');
+  try {
+    const vault = process.env.NEURA_LEARN_VAULT;
+    await fs.mkdir(path.join(vault, '.obsidian'), { recursive: true });
+    const warnings: string[] = [];
+    const learn = createLearnWorkshop(scratch, () => true, message => warnings.push(message));
+    const invoke = (name: string, input: unknown) => learn.tools().find(tool => tool.name === name)!.execute(input, {});
+    const answer = 'Synthetic learner answer excluded from vault';
+    const eventsDirectory = path.join(vault, 'Neura', '_System', 'events');
+    const titles = [120, 121, 160].map(length => 'L'.repeat(length));
+    titles.push(' '.repeat(130) + 'L'.repeat(30));
+    // Redact before shortening so a credential crossing character 120 cannot survive as a fragment.
+    titles.push('L'.repeat(110) + ' sk-' + 's'.repeat(20));
+    for (const [index, title] of titles.entries()) {
+      const lesson = { ...structuredClone(workshopFixture), title, references: [], exercise: { kind: 'short', prompt: 'Explain the relationship.', acceptedAnswers: [], hints: ['Consider the many side.'], explanation: 'Discuss the relationship.' } };
+      assert.doesNotThrow(() => assertLearnLesson(lesson));
+      await invoke('learn_lesson', lesson);
+      await learn.command(`answer ${answer}`);
+      learn.input(answer); await invoke('learn_exercise', { answer });
+      assert.equal(JSON.parse((await learn.command('status')).text).lesson, title);
+      const names = (await fs.readdir(eventsDirectory)).sort();
+      assert.equal(names.length, (index + 1) * 3, 'configured vault receives every concept and practice event');
+      const events = await Promise.all(names.slice(-3).map(async name => JSON.parse(await fs.readFile(path.join(eventsDirectory, name), 'utf8')).event));
+      assert.deepEqual(events.map(event => event.type), ['concept', 'practice', 'practice']);
+      for (const event of events) {
+        assert.ok(event.topic.length <= 120);
+        assert.doesNotMatch(event.topic, /sk-s/);
+        assert.equal(event.title, title.includes('sk-') ? 'L'.repeat(110) + ' [REDACTED]' : title);
+        if (!title.includes('sk-')) assert.equal(event.topic, title.trim().slice(0, 120));
+      }
+      await assert.rejects(appendLearnVaultEvent({ ...events[0], topic: 'T'.repeat(121) }), /Topic/);
+    }
+    assert.deepEqual(warnings, []);
+    const invalid = { ...structuredClone(workshopFixture), references: [], title: 'L'.repeat(161) };
+    assert.throws(() => assertLearnLesson(invalid), /title/);
+    const before = await fs.readdir(path.join(scratch, '.neura-learning'));
+    await assert.rejects(invoke('learn_lesson', invalid));
+    assert.deepEqual(await fs.readdir(path.join(scratch, '.neura-learning')), before);
+    assert.equal((await fs.readdir(eventsDirectory)).length, titles.length * 3);
+    for (const name of await fs.readdir(vault, { recursive: true })) {
+      if (/\.(?:md|json)$/.test(name)) assert.ok(!(await fs.readFile(path.join(vault, name), 'utf8')).includes(answer), name);
+    }
+  } finally {
+    if (oldHome === undefined) delete process.env.NEURA_HOME; else process.env.NEURA_HOME = oldHome;
+    if (oldVault === undefined) delete process.env.NEURA_LEARN_VAULT; else process.env.NEURA_LEARN_VAULT = oldVault;
+    await fs.rm(scratch, { recursive: true, force: true });
+  }
+});
+
+// Delay real scratch-store I/O in isolated children; no mocks enter the application.
+for (const operation of ['board', 'concept', 'practice', 'save', 'resume', 'profile', 'concept-failure', 'profile-failure']) {
+  for (const transition of operation.endsWith('-failure') ? ['session', 'mode', 'cancel', 'current'] : ['session', 'mode', 'cancel']) {
+    test(`Learn pending ${operation}: ${transition} respects operation authority`, { skip: process.platform !== 'win32' }, async () => {
+      const source = String.raw`
+        import assert from 'node:assert/strict';
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import os from 'node:os';
+        import { syncBuiltinESMExports } from 'node:module';
+        import { workshopFixture } from './scripts/learn-workshop-fixture.mjs';
+        const [operation, transition] = process.argv.slice(1);
+        const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-learn-fence-')));
+        process.env.NEURA_HOME = path.join(scratch, 'home');
+        process.env.NEURA_LEARN_VAULT = path.join(scratch, 'vault');
+        await fs.mkdir(path.join(process.env.NEURA_LEARN_VAULT, '.obsidian'), { recursive: true });
+        let active = true; let armed = false; let artifact;
+        const entered = Promise.withResolvers(); const release = Promise.withResolvers();
+        const originalOpen = fs.open;
+        fs.open = async (...args) => {
+          const handle = await originalOpen(...args);
+          const filename = String(args[0]);
+          const event = path.basename(path.dirname(filename)) === 'events';
+          const profile = operation.startsWith('profile');
+          let target;
+          if (profile) target = event && args[1] !== 'wx';
+          else if (operation === 'save') target = /^progress-.*\.json$/.test(path.basename(filename));
+          else if (['board', 'resume'].includes(operation)) target = /^lesson-.*\.html$/.test(path.basename(filename));
+          else target = event && args[1] === 'wx';
+          if (armed && target) {
+            armed = false; artifact = filename;
+            const method = profile ? 'read' : 'writeFile';
+            const original = handle[method].bind(handle);
+            handle[method] = async (...values) => {
+              const result = await original(...values);
+              entered.resolve(); await release.promise;
+              if (operation.endsWith('-failure')) throw new Error('Synthetic delayed vault failure');
+              return result;
+            };
+          }
+          return handle;
+        };
+        syncBuiltinESMExports();
+        try {
+          const { createLearnWorkshop } = await import('./src/learn.ts');
+          const notices = [];
+          const learn = createLearnWorkshop(scratch, () => active, message => notices.push(message));
+          const invoke = (name, input, signal) => learn.tools().find(tool => tool.name === name).execute(input, { signal });
+          const lesson = { ...structuredClone(workshopFixture), references: [] };
+          await invoke('learn_lesson', lesson);
+          let expectedTitle = lesson.title;
+          let saved;
+          if (operation === 'resume') {
+            saved = /Resume: \/learn resume (\S+)/.exec((await learn.command('save')).text)[1];
+            lesson.title = 'Current lesson must survive stale resume';
+            await invoke('learn_lesson', lesson); expectedTitle = lesson.title;
+          }
+          const controller = new AbortController();
+          armed = true;
+          let pending;
+          if (['board', 'concept', 'concept-failure'].includes(operation)) {
+            const next = { ...lesson, id: 'next-lesson', title: 'Next lesson' };
+            if (operation !== 'board') expectedTitle = next.title;
+            pending = invoke('learn_lesson', next, controller.signal);
+          } else if (operation === 'practice') pending = learn.command('answer 1', controller.signal);
+          else if (operation === 'save') pending = learn.command('save', controller.signal);
+          else if (operation === 'resume') pending = learn.command('resume ' + saved, controller.signal);
+          else pending = invoke('learn_progress', { action: 'status' }, controller.signal);
+          const settled = transition === 'current' ? pending : assert.rejects(pending, transition === 'cancel' ? { name: 'AbortError' } : /stale operation discarded/);
+          await entered.promise;
+          if (transition === 'session') learn.invalidate(true);
+          else if (transition === 'mode') { active = false; learn.invalidate(); active = true; }
+          else if (transition === 'cancel') controller.abort();
+          release.resolve();
+          await settled;
+          active = true;
+          const status = JSON.parse((await learn.command('status')).text);
+          assert.equal(status.lesson, transition === 'session' ? null : expectedTitle);
+          assert.equal(status.attempts.length, transition !== 'session' && operation === 'practice' ? 1 : 0);
+          assert.equal(notices.length, transition === 'current' ? 1 : 0, 'only current vault failures may notify');
+          if (transition === 'current') assert.match(notices[0], /could not be (?:updated|read) safely/);
+          assert.ok(artifact, 'test must reach the intended I/O boundary');
+          assert.ok((await fs.readFile(artifact, 'utf8')).length, 'completed artifact bytes may remain');
+          // The old lock releases, and freshly exposed tools can publish into the new epoch.
+          await invoke('learn_lesson', { ...lesson, id: 'fresh-lesson', title: 'Fresh lesson' });
+          assert.equal(JSON.parse((await learn.command('status')).text).lesson, 'Fresh lesson');
+          console.log('Learn fence passed');
+        } finally {
+          fs.open = originalOpen; syncBuiltinESMExports();
+          await fs.rm(scratch, { recursive: true, force: true });
+        }
+      `;
+      const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp)$/i.test(key)));
+      const reply = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source, operation, transition], { cwd: path.resolve(import.meta.dirname, '..'), env, timeout: 20000 });
+      assert.match(reply.stdout, /Learn fence passed/); assert.equal(reply.stderr, '');
+    });
+  }
+}
 
 test('Work v1: contained writes preserve stale/user bytes; Learn cannot use a stale Work writer', async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-v1-work-')));
