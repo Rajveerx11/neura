@@ -1,5 +1,10 @@
 # Reproducible optional skills
 
+Historical Pi guidance reference, 2026-11-07. The active Mastra CLI does not
+implement this registry, discovery gate or `/skill-doctor`. No personal/Pi
+skills are implicitly imported. Retain the contracts below as migration evidence;
+see [parity](PARITY_MATRIX.md) and [current architecture](ARCHITECTURE.md).
+
 Neura supports one repository-owned, read-only guidance skill:
 `neura-verification` version `1.0.3`. It interprets existing harness/proof evidence;
 it does not execute verification, health, installers, network calls, or writes.

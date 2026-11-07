@@ -1,5 +1,19 @@
 # Neura status
 
+Documentation and public-metadata reconciliation: 2026-11-07, source through
+`6a63952` (#153). The [official README](../README.md) and [documentation index](README.md)
+describe the active Mastra Work/Learn application. The [release inventory](releases/README.md)
+separates unreleased source, the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
+Latest source changes include real-project Work (#152), Learn continuity/vault
+hardening (#153), answer-only chat and M1 package-closure enforcement (#151).
+Original migration/security issues remain open; this documentation pass closes none.
+
+Obsolete standalone HTML plans and old LinkedIn graphics have been removed from
+the checkout, with frozen-history links in [plans](../plans/README.md) and
+[asset history](../assets/linkedin/README.md). Shared modules, required fixtures,
+authored plans/drafts, the migration reference and legacy recovery evidence remain.
+No Git history, private state or other worktree is a cleanup target.
+
 ## Active source: Mastra v1 development migration (2026-10-24)
 
 The owner authorized Pi-free implementation with a usable core and Learn first.
@@ -33,7 +47,7 @@ failures no longer emit warnings into a later session. Completed artifacts/event
 may remain; no autosave or browser synchronization was added. See
 [Learn acceptance](MASTRA_V1.md#learn-acceptance). #123 remains open.
 
-## Current maintenance checkpoint (2026-10-27)
+## Earlier maintenance checkpoint (2026-10-27)
 
 The owner reported a completed subscription sign-in followed by HTTP 400 on the
 first model request. The adapter now classifies recognized backend rejections

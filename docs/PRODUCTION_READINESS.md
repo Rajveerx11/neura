@@ -6,8 +6,13 @@ this file defines order, evidence, and the meaning of done.
 
 ## Current decision
 
-Neura is **not production-ready**. Current supported scope is experimental,
-personal, single-user engineering use. Human Away is preview-only.
+Neura is **not production-ready**. Current Mastra source is restricted to
+development/testing with synthetic, non-sensitive data while EE scope and
+distribution approval remain unresolved. Work and Learn are exposed; Human Away
+is unavailable. Its retained historical implementation remains preview-only.
+Source-linked launcher tests and recorded live Work runs do not establish a
+supported production install. See [status](STATUS.md), the
+[parity matrix](PARITY_MATRIX.md) and [release gates](RELEASING.md).
 
 Open-source publication is a separate decision governed by
 [OPEN_SOURCE.md](OPEN_SOURCE.md). Public source does not satisfy any production
@@ -19,8 +24,9 @@ Roadmap: [#31](https://github.com/Rajveerx11/neura/issues/31)
 
 ## P0 release blockers
 
-Issue state checked 2026-10-15. Merged improvements are in the experimental source candidate;
-closing one issue does not establish production readiness.
+Issue state checked 2026-11-07: #21 and #24 remain open. Merged improvements
+do not establish production readiness. Original requirements carry across
+the migration even when their historical implementation is unavailable.
 
 | Issue | Required outcome |
 |---|---|

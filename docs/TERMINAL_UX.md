@@ -1,5 +1,11 @@
 # Active terminal UX
 
+Current behavior, 2026-11-07: approved logo, startup status and prompt; chat turns
+print only the answer. Tool calls, approvals, warnings and review outcomes remain
+visible; `/status` holds detailed usage. The “Answer-only chat” section below
+supersedes older per-turn footer/status designs. See [current design](../DESIGN.md).
+Earlier audit/test sections remain dated evidence, not new acceptance.
+
 Audit baseline: `5f53c11`, 2026-11-02. Scope: [active CLI](../src/cli.ts),
 [CLI tests](../tests/v1-cli.test.ts), [status](STATUS.md), and
 [design direction](../DESIGN.md). Findings describe that baseline; replacement

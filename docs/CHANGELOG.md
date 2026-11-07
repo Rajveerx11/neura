@@ -1,6 +1,78 @@
 # Changelog
 
-## 2.6.0-rc.1 (experimental candidate)
+## Unreleased: Mastra Work and Learn
+
+Current source is development/testing only, with synthetic, non-sensitive data.
+Package metadata remains `2.6.0-rc.1`. No new version or Mastra release is implied.
+Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
+approval remains unresolved. See [status](STATUS.md) and
+[release inventory](releases/README.md).
+
+### 2026-11-07: documentation and repository cleanup
+
+- Rebuilt the official README around current Work/Learn behavior, source setup,
+  providers and commands, with review/proof limits and data ownership.
+- Reconciled current user guides and maintainer references. Updated design and
+  release guidance. Marked retained Pi references as
+  historical instead of advertising unavailable modes, tools or npm scripts.
+- Updated GitHub About/topics and existing release descriptions: the candidate remains
+  withheld, published Pi notes keep their original body with a historical notice,
+  and no version, tag or package publication is created.
+- Removed 16 obsolete exports: old LinkedIn graphics and standalone HTML plans,
+  totaling 2,639,392 bytes. Frozen-history links preserve access. Shared runtime
+  modules, fixtures, authored plans/drafts, migration reference, private state
+  and other worktrees are preserved. Git history is unchanged.
+
+### 2026-11-07: Learn continuity and vault hardening (#153)
+
+- Bound vault topic metadata to 120 characters without shortening accepted lesson
+  titles up to 160 characters or weakening vault validation.
+- Added synthetic configured-vault and fresh-process save/resume regressions:
+  actual-answer events omit raw answers, restored citations stay historical until
+  reimport, and delayed operations cannot publish stale state or warnings.
+- Completed artifacts/events can remain after cancellation. No autosave or browser
+  synchronization was added. #123 remains open.
+
+### 2026-11-06: real-project Work (#152)
+
+- Increased builder turns to 60 model steps. Learn/reviewers keep eight. Step-limit
+  stops retain the task baseline for continuation and skip premature review.
+- Added Work/reviewer `grep`/`find`, parent-folder creation, a bounded dotfile
+  allowlist and root project instructions as ephemeral untrusted user context.
+- Let policy-allowed commands run directly inside offline WSL isolation when a
+  `.git` directory exists. Protected Git/configuration paths remain read-only.
+  new protected paths are cleaned up, incomplete cleanup fails and gitfiles are refused.
+- Retained exact approval for other permitted commands and every `.github/` write.
+  Added real configured-host sandbox evidence and recorded live same-family Work
+  review runs in [Mastra evidence](MASTRA_V1.md#real-project-work-2026-11-06).
+- Quieted chat to answer-only output. Startup status and explicit `/status`
+  preserve details. Meaningful tool, approval and review output remains visible.
+
+### 2026-11-04 to 2026-11-06: terminal and migration gates
+
+- Integrated approved context-into-action branding and width-aware terminal UX,
+  including ASCII/plain/headless fallbacks and reported last-turn usage.
+- Added the frozen Pi parity inventory (#150) and exact package-closure gate
+  (#151). Local Mastra EE acceptance covers development/testing only and does
+  not resolve distribution approval.
+- Grouped coupled Mastra/AI SDK dependency proposals. Current root source/imports
+  remain Pi-free. Neither retained tests nor the framework change close original
+  hardening or full-proof gates.
+
+### Since 2026-10-24: initial Mastra development application
+
+Replaced the active Pi loop/launcher with Mastra Work/Learn, separate provider
+transports, explicit subscription authorization, Neura-owned workspace history,
+dedicated Learn tools and a source-linked development installer. Added manual
+detector-only `/verify`, default read-only Work review and bounded repair. Legacy
+profile retirement is a separately authorized receipt-matched reversible operation.
+See [dated implementation evidence](MASTRA_V1.md) for exact results and limits.
+
+## 2.6.0-rc.1 (historical Pi candidate; withheld)
+
+The record below predates the Mastra application. It retains original dated
+evidence and does not certify current features or release readiness. The draft
+has been superseded. Use [current candidate status](releases/v2.6.0-rc.1.md).
 
 Prepared on 2026-10-15. Publication remains gated; latest published release is
 `2.5.1`. See [candidate notes](releases/v2.6.0-rc.1.md) for scope, migration,

@@ -1,139 +1,79 @@
-# Neura Design System
+# Neura design system
+
+Updated 2026-11-07 for the active Mastra CLI and Learn boards. Historical Pi
+cockpit designs remain in [source history](plans/README.md). They are not current
+requirements. Implementation details and dated acceptance live in
+[terminal UX](docs/TERMINAL_UX.md).
 
 ## Direction
 
-**Forged Tungsten** is Neura's visual system.
+Forged Tungsten uses neutral dark surfaces, burnt copper and bone text. Keep the
+terminal quiet until work, a decision or evidence needs attention. Text must
+communicate meaning without color. Do not imply readiness or verified completion
+from a decorative state.
 
-Neura is a personal engineering cockpit, not a general dashboard. It stays quiet
-until state changes, risk appears, or evidence matters. The interface should feel
-machined, direct, and personal: neutral dark surfaces, one burnt-copper accent,
-bone text, and semantic colors used only for real outcomes.
-
-## Product principles
-
-1. **Identity before activity.** The dedicated terminal profile opens on local
-   artwork with a centred Neura wordmark and the real task editor.
-   Working state appears after the first task begins.
-2. **One active signal.** Copper identifies current focus and the primary
-   in-product action. The blue owner-supplied logo is reserved for brand artwork,
-   not ambient interface decoration.
-3. **Detail on demand.** Health, memory, agents, model control, proof detail, and
-   recovery stay hidden until invoked.
-4. **Evidence over activity.** Show milestones, verdicts, and recovery. Do not turn
-   raw tool calls into permanent chrome.
-5. **Meaning survives compression.** Phase, active task, safety, and verdict remain
-   visible at narrow terminal widths. Ornament and metadata collapse first.
-6. **Stock pi stays stock.** Theme and UI remain session-only behind `NEURA`.
-
-## Color tokens
+## Tokens
 
 | Token | Value | Role |
-|---|---:|---|
-| Canvas | `#0b0c0e` | Terminal background and negative space |
-| Surface | `#14171a` | Composer, widgets, panels |
-| Raised | `#1c2024` | Selected or focused surface |
-| Border | `#2c3237` | Rules and inactive controls |
-| Copper | `#d97841` | Identity, focus, primary action |
+| --- | --- | --- |
+| Canvas | `#0b0c0e` | Background |
+| Surface | `#14171a` | Grouped content |
+| Raised | `#1c2024` | Selected surface |
+| Border | `#2c3237` | Inactive separation |
+| Copper | `#d97841` | Focus and primary action |
 | Bone | `#e8e2d8` | Primary text |
 | Muted steel | `#a8a39b` | Supporting metadata |
-| Dim | `#7a828b` | Inactive and historical text; 5.03:1 on canvas |
-| Plan cyan | `#76b8c4` | Read-only boundary and code structure |
-| Information / Learn blue | `#86a7d7` | Links, informational state, and Learn mode |
-| Success | `#69c08a` | Verified outcomes only |
-| Warning | `#d3a64a` | Approval and degraded operation |
-| Error | `#df6b63` | Blocked and failed outcomes |
+| Dim | `#7a828b` | Inactive/historical text |
+| Learn blue | `#86a7d7` | Information and Learn |
+| Success | `#69c08a` | Supported successful outcomes |
+| Warning | `#d3a64a` | Approval or degraded operation |
+| Error | `#df6b63` | Blocked/failed outcomes |
 
-Color rules:
+Use monospace in the terminal and sentence case for actions. Keep phase/verdict
+labels short. Avoid ambient gradients/glows and decorative motion. Use no emoji.
 
-- Decorative gradients, colored glows, and tinted ambient panels are not used.
-- Copper is the primary interface accent. The image-backed launch may use the
-  blue brand logo behind bone text; the terminal-only fallback remains copper.
-- Plan uses cyan. Human Away Preview and approvals use amber. Neither borrows success green.
-- Success, warning, and error never replace copper for identity or navigation.
-- Text must remain readable without relying on hue alone.
+## Launch and conversation
 
-## Elevation and shape
+`src/brand.ts` supplies the approved static context-into-action mark. Startup
+loads no image/font dependency. Show the logo, prompt-adjacent status and real
+readline prompt. There is no image-backed Terminal profile or Pi editor in the
+active application. Do not add a banner or readiness claim.
 
-- Three elevation levels only: canvas, surface, raised.
-- One-cell borders create separation.
-- Full-width editor borders stay neutral; copper is reserved for local focus and
-  action signals, never used as an ambient rail.
-- Radius is restrained and consistent where the terminal API supports it.
-- Shadows are not part of terminal chrome.
-- Pills are reserved for compact model, phase, or verdict labels.
+Status prints once at launch. Chat turns print the answer, with one short line
+per tool call. Failed/blocked/cancelled outcomes remain visible. `/status` holds
+provider/model, workspace, history and reported last-turn tokens. Usage is not
+context occupancy. Capacity remains unknown. Label an answer only when separating
+it from a provider-supplied reasoning summary. Hidden reasoning is never displayed.
 
-## Typography and language
+`--ascii`, `TERM=dumb` and narrow terminals fall back to `>_ neura`.
+`NO_COLOR`, including an empty value, disables color. Dumb terminals retain
+plain-text meaning without cursor control. Headless, help and check output omit
+artwork. Sanitize control characters and preserve structured output.
 
-- Terminal monospace is the product typeface.
-- Uppercase is reserved for phase, verdict, and short state labels.
-- Actions use sentence case and name their result.
-- Copy is terse, factual, and personal.
-- No emoji or Devanagari.
-- No em dash or en dash in interface copy.
+## Decisions and width
 
-## Launch system: image-backed identity
+Approvals show the exact complete action and require `yes`. Denial/cancellation
+does not grant authority. Keep decisions readable at narrow widths and never
+truncate a sensitive action into an incomplete approval. Ctrl+C cancels running
+work. Do not retry the task automatically.
 
-The dedicated Windows Terminal profile supplies the local square logo artwork as
-a centred, uniformly scaled background over the tungsten canvas. Pi supplies a
-centred launch editor: the responsive NEURA wordmark, a task label, and Pi's real
-input control. The surface stays within ten lines, clears when work begins, and
-`/dash` toggles it on demand. Regular terminals and missing profile support fall
-back to the copper wordmark without blocking startup.
-
-The artwork is bundled locally and never fetched at runtime. Its opacity is kept
-below the text layer so the prompt remains readable; cropping and distortion are
-not allowed.
-
-## Lifecycle hierarchy
-
-1. Phase
-2. Active objective
-3. Evidence or required decision
-4. Ambient session metadata
-
-Launch is identity. Brief makes scope visible. Work shows one active step.
-Approval owns focus. Proof separates running checks from verdict. Handoff closes
-with changed scope, evidence, and one manual next action.
-
-## Modes, motion, and decisions
-
-- Shift+Tab cycles Plan, Work, YOLO, Human Away Preview, and Learn. Work is default.
-- Mode changes enforce policy first, then show a capability latch for workspace,
-  reviewer, sensitive action, and remote action boundaries.
-- Motion settles within 360 ms. Latest transition wins. Reduced motion shows only
-  the final frame.
-- Human Away is always amber and always says `PREVIEW` until its transactional,
-  resource, and field-validation gates pass; WSL2 isolation already exists.
-- Approval is an agent action request: Neura, task, intent, exact action, evidence,
-  boundary, fallback, and one-use grant scope. Denial has default focus.
-
-## Responsive contract
-
-- Validate at 40, 56, 72, 92, and 120 columns.
-- Every widget remains within pi's ten-line cap.
-- Model, phase, active task, safety, and verdict survive longest.
-- Cost, context detail, branch detail, and secondary operation text collapse
-  before primary meaning.
-- No `(widget truncated)`, wrapped footer labels, or hidden primary action.
+Validate output at 40, 56, 72, 80, 92 and 120 columns with long paths, model IDs
+and Unicode. Preserve plain/non-TTY behavior. The static logo remains at most
+ten lines. Old Pi widget limits do not imply an active Pi UI. Work and Learn are
+the only modes. No Shift+Tab mode cycle or `/dash` is implemented.
 
 ## Learn boards
 
-- Teach one concept with 3-5 bullets, a practical example, and one next action.
-- Use small flow, ER, or sequence diagrams with text alternatives. Keep diagrams
-  scrollable on narrow screens and controls usable by keyboard.
-- Separate source excerpts and page/slide citations from tutor examples.
-- Show hints, reveals, and assisted attempts honestly; reading is not mastery.
-- Browser progress stays local until the learner copies a revision-bound command
-  into Neura. Show stale-board rejection and unverified resumed sources clearly.
-- Generate standalone escaped HTML/SVG with a fixed CSP and no remote resources.
-  Verify actual behavior and axe results at 390 and 1280 pixels.
+Teach one concept with short bullets, an example and a practical next step.
+Use small flow, ER or sequence diagrams with text alternatives and narrow-screen
+scrolling. Keep controls keyboard-accessible. Separate source citations from
+tutor examples, record assistance and label historical resumed excerpts.
 
-## Direction contract
+Boards use escaped standalone HTML/SVG, fixed CSP and no remote resources.
+Browser progress returns through copied revision-bound terminal commands, never
+silent synchronization. Test real Edge interaction and axe at narrow/desktop
+widths. Preserve readable source excerpts and explicit save/resume semantics.
 
-<!--
-THESIS: Neura launches as a quiet image-backed identity surface, then yields to work.
-OWN-WORLD: Tungsten neutrals, burnt copper, bone text, flat one-cell rules.
-STORY: Operator sees Neura, then starts work in composer.
-FIRST VIEWPORT: Centred artwork, NEURA wordmark, and one real task editor.
-FORM: Operate-mode terminal instrument; focused, responsive, and state-driven.
--->
+Approved vector, PNG and terminal assets live in [assets/brand](assets/brand/README.txt).
+Artwork approval does not clear trademark, redistribution, dependency or
+production gates.

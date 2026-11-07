@@ -1,5 +1,11 @@
 # Shared capability and process contracts
 
+Scope note, 2026-11-07: this records shared internals and historical Pi consumers.
+The active Mastra CLI exposes only Work/Learn; Gmail, MCP, Human Away and skill
+discovery described below are not active features. Current tools and authority
+are documented in [architecture](ARCHITECTURE.md), [security](../SECURITY.md) and
+the [parity matrix](PARITY_MATRIX.md). Metadata never grants execution permission.
+
 These source contracts support #25's scoped extraction and consumption milestones. They are not
 an autonomous task authority engine (#92), durable recovery state (#28), a new
 approval ledger, or a claim that all of #25's original runtime overview is done.

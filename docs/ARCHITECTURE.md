@@ -1,159 +1,101 @@
 # Architecture
 
-## System boundary
+Updated 2026-11-07. The active application is `src/cli.ts`, backed by Mastra.
+It exposes Work and Learn. Retained Pi extensions are migration evidence and
+are outside the active import graph. See [status](STATUS.md) for release limits.
 
-Neura is a configuration and extension layer around Pi. Repository checkout is
-source of truth. Pi executes copies installed under `~/.pi/agent/`.
+## Runtime boundary
 
-```text
-launcher/neura.cmd
-  sets NEURA=1
-  starts Pi
-    optional Windows Terminal profile renders local launch artwork
-    loads agent/settings.json and agent/mcp.json
-    loads agent/extensions/*.ts
-      uses agent/neura/*.ts shared modules
-      updates terminal UI and local state
-      may call optional local or remote dependencies
-```
+`launcher/neura.cmd` invokes the chosen checkout's `src/cli.ts`. The CLI owns
+provider selection, conversation history, session locks, mode changes and terminal
+input. `src/runtime.ts` wraps a real Mastra Agent with serialized tool effects,
+schema validation and cancellation. Turns are bounded: 60 steps for Work builders,
+eight for Learn and reviewers.
 
-Plain `pi` stays stock for Neura-specific extensions because they return early
-unless `NEURA` is set. October additionally requires YOLO and its configured bus
-environment. It is not an exception to the plain-Pi boundary.
+| Source | Responsibility |
+| --- | --- |
+| `src/cli.ts` | Startup, commands, current generation, approval input and turn orchestration |
+| `src/brand.ts`, `src/terminal-ui.ts` | Approved logo, width-aware status/help, plain-text and color fallbacks |
+| `src/providers.ts`, `src/auth.ts` | Separate subscription, loopback local, OpenAI API and Anthropic API transports. Explicit subscription login/logout |
+| `src/work.ts` | Workspace tools, byte-bound mutations, project guidance and sandbox command admission |
+| `src/review.ts`, `src/workflow.ts` | Candidate risk, read-only reviewer, receipt currency and bounded builder fixes |
+| `src/verification.ts` | Manual Work proof request, trusted offline sandbox invocation and detector receipts |
+| `src/learn.ts`, `src/learn-state.ts` | Dedicated Learn tools, lessons, attempt provenance, async state fences and explicit progress recovery |
+| `src/session.ts`, `src/session-lock.ts` | Workspace-keyed conversations and exclusive writer leases |
 
-## Turn lifecycle
+## Shared Neura services
 
-```text
-session_start
-  start in Work, restore permitted mode, apply theme, show centred launch editor, activate tools
-  pause tools while operations from a replaced session drain
+Active source reuses Neura-owned modules under `agent/neura/`. Their directory
+name does not imply a Pi dependency. Canonical containment, redaction, scoped
+process environments, Git snapshots and the WSL2/bubblewrap bridge are shared.
+Learn reuses the material worker, schemas, renderer, exercise evaluator, marked
+store and opt-in vault writer. Exact reachable imports are checked by
+`scripts/check-pi-free.mjs`, alongside locked package closure and license rules.
 
-interactive, print, JSON, or RPC input
-  start or resume an explicit Plan request lifecycle
-  surface Human Away queue when needed
+The graph check is a package/import identity check, not exhaustive certification
+of embedded code or third-party licenses. The [dependency review](MASTRA_V1_DEPENDENCIES.md)
+records the unresolved distribution boundary.
 
-agent_start
-  hide logo; capture a checkpoint in YOLO only
-  record proof worktree state in Work/YOLO
+## Work turn and review
 
-tool_call
-  selected mode's deterministic tool and action policy
-  Gmail-specific confirmation
-  execute only when hooks allow
+1. Capture the workspace baseline when available. Load root `AGENTS.md` and
+   `CLAUDE.md` as bounded, untrusted user context without persisting them in history.
+2. Run builder tools through current mode/generation checks and deterministic
+   policy. Original bytes bind edits. Secret-shaped content is redacted on delivery.
+3. Commands execute only inside offline WSL isolation. Policy-allowed commands
+   can run without a prompt. Other permitted actions need exact interactive approval.
+   Gitfiles, runtime-overlapping workspaces and unsupported isolation are refused.
+4. After changes, path-based risk routing skips docs-only changes. Substantive
+   changes get a fresh reviewer with code-enforced read-only tools. The controller
+   marks must-fix findings and permits up to three builder-fix rounds.
+5. Bind receipts to the candidate fingerprint. Later edits make them stale.
+   Step exhaustion preserves the task's initial baseline for continuation.
 
-agent_end
-  queue at most one missing-publication Plan retry
-  cockpit completion
+Review ends `READY FOR YOUR APPROVAL`, `BLOCKED` or `Review skipped`. Turns that
+change nothing stay quiet. No baseline means automatic review is unavailable.
+The default reviewer uses the builder model and is labelled same-family. An
+explicit different provider enables cross-family review. No workflow path
+commits, pushes or merges. See [verification](VERIFICATION.md).
 
-agent_settled
-  emit final machine-readable Plan contract failure when still unpublished
-  quick proof starts here for changed Work/YOLO worktrees
-```
+## Learn turn and recovery
 
-## Extension map
+The model receives four dedicated tools: `learn_material`, `learn_lesson`,
+`learn_exercise`, `learn_progress`, plus bounded public-workspace `read`/`ls`.
+It receives no generic mutation, shell, integration or web-search tool. Lesson
+publication and evaluated attempts terminate the turn. Exercise answers must
+match actual learner input. Model-invented attempts are rejected.
 
-| Extension | Responsibility | External dependency or state |
-|---|---|---|
-| `neura.ts` | Centred launch editor/fallback, identity, theme, `/dash`, `/notices`, persona injection | `NEURA.md`, cockpit state |
-| `modes.ts` | Mode switching, active-tool boundary, approval UI | Session entries, approval store |
-| `mcp.ts` | Explicit YOLO-only MCP discovery and reconnect gating | Filtered `@spences10/pi-mcp` package, `mcp.json` |
-| `guardrail.ts` | Plan, Work, Human Away, and Learn policy; explicit YOLO bypass | Action policy, Headmaster, Learn policy |
-| `gmail-guardrail.ts` | Gmail mutation confirmation | Gmail MCP tool names |
-| `human-away-sandbox.ts` | Registers `work_exec` and Human Away's sole execution tool | WSL2, bubblewrap |
-| `learn.ts` | Lessons, document imports, exercises, progress, automatic learning-vault capture, `/learn` | Controlled `.neura-learning/` store; optional configured Obsidian vault; locked parser runtime |
-| `plan-artifact.ts` | Plan request lifecycle and controlled HTML publication | Session entries, `plans/`, renderer/policy |
-| `checkpoint.ts` | YOLO-only pre-turn raw-byte snapshots and `/undo` | Bounded OS-temp copies; Git enumerates names with hostile execution paths disabled |
-| `check-gate.ts` | Work/YOLO quick proof and full `/ship`; no Git publishing | Shared WSL2 sandbox, exact offline proof closure, content-bound receipts |
-| `cockpit.ts` | Footer and active-operation UI | Shared cockpit state |
-| `harness-health.ts` | YOLO-only required/optional capability health and bounded integration probes | Exact Pi/runtime executable contract, WSL proof wheelhouse, Git, MCP initialization, local Qwen |
-| `transcript-actions.ts` | Answer/code copy | Pi clipboard API |
-| `neura-memory.ts` | YOLO-only local cross-session facts | `~/.pi/agent/neura/MEMORY.md` |
-| `presets.ts` | GPT, Opus, local Qwen switching | Provider login or llama.cpp |
-| `skill-doctor.ts` | Read-only supported registry and actual discovery-identity validation; no mode escalation or personal-directory scanning | Versioned `skills-manifest.json`, immutable guidance bytes, machine-local opt-in selection |
-| `ship-report.ts` | End-of-iteration response contract | None |
-| `october-bus.ts` | Optional YOLO-only local multi-agent context bus | Local October HTTP service and environment variables |
+Async operations recheck session/mode epochs before publishing state or warnings.
+Completed disk/vault writes can remain after cancellation or a stale-operation
+refusal. This is not a transaction across stores. `/learn save` is explicit.
+Conversation resume does not silently restore a lesson. Saved excerpts remain
+historical until reimport, and browser actions return through copied commands.
 
-## Shared module map
+## Stored state
 
-| Module | Responsibility |
-|---|---|
-| `action-policy.ts` | Canonical paths, action facts, classification, risk, route, fingerprints |
-| `approval-store.ts` | Hash-chained JSONL, one-use grants, cross-process writer lock, fail-closed corruption/crash handling |
-| `headmaster.ts` | Isolated no-tool reviewer subprocess and verdict parsing |
-| `mode-state.ts` | Five modes, Work default, operation leases, deferred session restoration |
-| `process-security.ts` | Scoped child environments, repository-binary rejection, hardened automatic Git configuration |
-| `learn-policy.ts` | Learn tool allowlist and bounded private-path denial |
-| `learn-schema.ts`, `learn-renderer.ts` | Structured lessons and escaped standalone HTML/SVG boards |
-| `learn-exercises.ts` | Practice grading and bounded disposable SQLite evaluation |
-| `learn-materials.ts`, `learn-materials-worker.mjs` | Captured document bytes, parser worker, citations, offline OCR |
-| `learn-files.ts` | Shared bounded regular-file, exclusive-write, and canonical-directory mechanics for Learn-owned stores |
-| `learn-store.ts` | Owned workspace-local store, exclusive writes, explicit snapshots and resume |
-| `learn-vault.ts` | Opt-in external-vault authorization, lock-free numbered event slots, safe Markdown projections, bounded personalization retrieval |
-| `plan-policy.ts` | Plan tool list, URL policy, plan directory rules |
-| `plan-renderer.ts` | Escaped static HTML generation |
-| `cockpit-state.ts` | Shared UI state and subscribers |
-| `human-away-sandbox.ts` | Workspace link checks, minimal WSL host bridge, bubblewrap namespace/mount contract |
-| `redaction.ts` | Central secret-shaped text and structured-value redaction |
-| `core.ts` | Process, Git, ANSI, palette, and layout helpers |
-| `ui-tokens.ts` | Shared terminal tokens, glyphs, motion values, width fitting |
-| `runtime-contract.json` | Versioned Neura/Pi runtime contract shared by health and installation |
+| State | Current location and ownership |
+| --- | --- |
+| Source and dependencies | Checkout, root lockfile and separate `agent/neura` lockfile |
+| Optional launcher | User-local `neura.cmd`, tracked by a development-install receipt |
+| Credentials | `codex-auth.json` under `~/.neura` or explicit `NEURA_HOME`. Inspect Windows DACLs before use |
+| Conversations and crash locks | Neura home's `sessions/<workspace-hash>/`. No Pi import |
+| Learn boards, material assets and explicit snapshots | Owned workspace `.neura-learning/` store with Git exclusion |
+| Optional vault configuration | `NEURA_LEARN_VAULT` or Neura home's `learn-vault.json` |
+| Optional learning events/projections | Configured Obsidian vault's owned `Neura/` subtree |
+| Review and proof receipts | Current process/session memory. No durable attestation |
 
-## Persistent state
+Private home and workspace must be disjoint in both directions. Pi profiles
+cannot be workspace roots. Development installation and retirement preserve
+legacy credentials, memory, approvals, sessions and vaults, along with unmatched user files.
 
-| State | Location | Repository tracked |
-|---|---|---|
-| Source harness | Repository checkout | Yes |
-| Live harness | `~/.pi/agent/` | No |
-| Launcher | `~/.local/bin/neura.cmd` | No; source tracked under `launcher/` |
-| Launch artwork | `~/.pi/agent/neura/launch-artwork.png` | Source asset tracked under `agent/neura/` |
-| Windows Terminal profile | `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Neura/Neura.json` | No; generated by installer |
-| Start-menu launcher | `%APPDATA%/Microsoft/Windows/Start Menu/Programs/Neura.lnk` | No; generated by installer |
-| Memory | `~/.pi/agent/neura/MEMORY.md` | No |
-| Approval audit | `~/.pi/agent/neura/approvals/audit.jsonl` | No |
-| Session mode | Pi session custom entry | No |
-| Plan contract outcome | Pi `neura-plan-contract` custom entry | No |
-| Checkpoints | Process memory plus Git objects | No |
-| Plan artifacts | Project `plans/` directory | Usually yes |
-| Learn boards and explicit snapshots | Workspace `.neura-learning/` | No; owned store includes Git exclusion |
-| Automatic Learn knowledge events | Configured Obsidian vault's owned `Neura/` subtree | No; machine-local opt-in, immutable JSON plus Markdown projections |
-| Learn vault configuration | `NEURA_LEARN_VAULT` or `~/.pi/agent/neura/learn-vault.json` | No; never created by repository install |
-| Pending Learn initialization | Sibling `.neura-learning-init-UUID` | No lesson content; metadata-only stages can remain after interruption |
-| Proof receipts | Pi `neura-verification` session entries | No |
-| Incremental suite report | `.proofofwork/neura-checks.json` | No; untrusted evidence bound to workspace fingerprint |
+## Trust and limits
 
-Learn does not auto-load snapshots or sync browser state. Saved source text is
-historical and unverified until reimported; images are omitted. Workspace store
-creation requires native Windows. A separately configured Obsidian vault receives
-bounded events automatically, but its schema-validated profile is untrusted data
-and cannot widen policy. See [Learn Mode](LEARN_MODE.md).
+Deterministic policy outranks model output and project guidance. Work command
+isolation protects host paths, secret-named files and Git/configuration directories. Ignored files without secret names may remain readable. Host execution of generated
+project code still requires user review. Learn path checks and parser resource
+bounds are application controls, not OS isolation against a hostile same-user process.
 
-## Trust model
-
-- Deterministic policy is authoritative. Headmaster output cannot widen policy.
-- YOLO bypasses Neura application policy by design; user intent and higher-priority
-  instructions remain its scope boundary, but no Neura hook technically enforces it.
-- Plan text is untrusted and rendered through structured escaped fields.
-- Credentials stay outside source and must be redacted before model or audit use.
-- Plan and Learn path checks are application controls, not OS isolation.
-- Work execution/proof and Human Away execution use network-disabled WSL2
-  bubblewrap; unavailable isolation fails closed. Work's generic reads/searches
-  do not become an OS-isolated confidentiality boundary.
-- Learn parsers use bounded child processes and trusted native/WASM dependencies;
-  document content never grants tool permissions. Citation validation establishes
-  source identity and excerpt location, not semantic correctness.
-- Host checkpoints, health, memory, and October are YOLO-only.
-  Operation leases prevent their work crossing into a restricted mode.
-- `/skill-doctor` validates only the supported immutable registry and actual
-  discovery identity, read-only in any mode. The validator/catalog, discovery gate
-  and managed installer are protected controls, and declared skill permissions never grant execution authority.
-  Selection is machine-local and disabled by default; no personal directories are
-  scanned. See [supported skills](SKILLS.md).
-- Repository and live harness are separate states; drift checks matter.
-
-## Verification architecture
-
-`scripts/test-suites.mjs` defines 18 suites, each launched with a temporary home,
-synthetic state, and the checkout's pinned Pi loader. Windows covers the full
-harness and real Plan/Learn browsers; Linux covers portable boundary contracts.
-See [VERIFICATION.md](VERIFICATION.md) for suite commands, proof fingerprints,
-receipt limits, and approval-lock recovery restrictions.
+There is no Plan, YOLO, Human Away, MCP/LSP, delegation, context compaction,
+durable effect recovery or full trusted proof in the active application. The
+[parity matrix](PARITY_MATRIX.md) tracks those gaps without treating retained
+extensions or old tests as active behavior.

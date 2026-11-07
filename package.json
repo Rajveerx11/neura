@@ -1,7 +1,7 @@
 {
   "name": "neura-harness",
   "version": "2.6.0-rc.1",
-  "description": "Windows-first Neura agent harness with explicit modes, policy guardrails, recovery, and verification.",
+  "description": "Windows-first Mastra terminal assistant for engineering and practical learning, with Work and Learn modes.",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -21,6 +21,8 @@
     "ai-agents",
     "coding-agent",
     "developer-tools",
+    "learning",
+    "mastra",
     "powershell",
     "sandbox",
     "typescript",

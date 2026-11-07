@@ -1,5 +1,10 @@
 # Plan confidentiality (source-only)
 
+Historical Pi boundary reference, 2026-11-07. Plan and its publisher are
+unavailable in the active Mastra CLI; this document is retained security/design
+evidence, not a current feature claim. See [parity](PARITY_MATRIX.md) and
+[current security](../SECURITY.md). Do not enable old tools to bypass the migration.
+
 Neura Plan replaces SDK `read`, `grep`, `find`, `ls`, and `bash` with authorized
 local inspection. Plain Pi registers no wrappers; outside Plan each wrapper
 delegates to the current SDK implementation with the session's effective

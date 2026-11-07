@@ -13,8 +13,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Neura version, source commit, and Pi version
-      placeholder: "Neura from VERSION; commit from git rev-parse --short HEAD; Pi from pi --version"
+      label: Neura version and source commit
+      placeholder: "VERSION and git rev-parse --short HEAD; identify historical Pi releases separately"
     validations:
       required: true
   - type: dropdown
@@ -22,11 +22,9 @@ body:
     attributes:
       label: Mode
       options:
-        - Plan
         - Work (default)
-        - YOLO
-        - Human Away Preview
         - Learn
+        - Historical Pi installation (specify version)
         - Startup or mode-independent
     validations:
       required: true
@@ -34,7 +32,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Windows version, shell, Node version, and relevant optional tooling.
+      description: Include Windows and Node versions. Name the shell and provider kind. For command failures, include WSL distro/toolchain details. No credentials or personal paths.
     validations:
       required: true
   - type: textarea

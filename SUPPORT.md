@@ -1,44 +1,53 @@
 # Support
 
-Neura is experimental, community-supported software. No service-level,
-compatibility, response-time, or production-support commitment is provided.
+Neura is experimental and community-supported. Current `main` is a Mastra
+development build with Work and Learn. `v2.5.1` is the historical Pi release.
+There is no production-support or response-time commitment.
 
 ## Get help
 
-1. Read [README.md](README.md), [docs/STATUS.md](docs/STATUS.md), and
-   [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-2. Run documented verification commands and remove sensitive data from output.
-3. Search existing [issues](https://github.com/Rajveerx11/neura/issues).
-4. Open a bug report only when you have a reproducible defect.
+Read the [README](README.md) and [status](docs/STATUS.md). Find the relevant
+[guide](docs/README.md), then search [existing issues](https://github.com/Rajveerx11/neura/issues).
+For a reproducible defect, use the bug form with the source commit, package
+version, Windows/shell/Node versions, mode, provider kind, safe reproduction and
+short redacted error. A package version alone cannot identify a mutable source build.
+Include a Pi version only for a historical Pi installation.
 
-Include Neura version, Pi version, Windows version, relevant mode, minimal
-reproduction, expected result, actual result, and redacted verification output.
+Never post credentials, authorization URLs/callbacks, private code, memory,
+transcripts, approval records, provider bodies or personal paths. Report
+vulnerabilities privately through [Security](SECURITY.md).
 
-Never post credentials, private repository content, memory, transcripts,
-approval records, provider payloads, or personal paths. Report vulnerabilities
-privately using [SECURITY.md](SECURITY.md).
+## Common problems
 
-Feature ideas may use feature-request form. General setup questions may be
-closed when documentation already answers them or required evidence is missing.
+| Symptom | Next step |
+| --- | --- |
+| Missing Learn dependency | Run `npm ci --prefix agent/neura --ignore-scripts` in the source checkout. Install both locked graphs for a fresh setup. |
+| `--check` passes but a command fails | It does not test WSL. Work requires WSL2/bubblewrap and tools inside the distro's `/usr`. There is no host fallback. |
+| Dependency installation is refused | Install manually in WSL from the project directory. The command sandbox is offline and common installers are refused immediately. |
+| Commands fail in a linked worktree | Gitfiles are refused at any depth. Use an external manual terminal until Git-directory targets can be protected. |
+| Work cannot access `memory`, `sessions`, `private` or `secrets` | Those path components remain protected, even in ordinary projects. Do not weaken the boundary to bypass it. |
+| Review is unavailable | Use a Git repository with committed HEAD within snapshot bounds. Unreviewed output is not clean review evidence. |
+| Work reaches its step limit | Inspect effects, then ask it to continue. Its original baseline is retained. Context compaction is not implemented. |
+| `/verify` or `/verify full` is unavailable | Full trusted proof is blocked. Quick proof separately needs reviewed offline artifacts and interactive approval. See [verification](docs/VERIFICATION.md). |
+| Learn cannot create its store | First creation requires native Windows and an unlinked workspace. Preserve unowned `.neura-learning` content. |
+| Obsidian capture is absent | Opt in with `NEURA_LEARN_VAULT` or Neura home's `learn-vault.json`. No legacy Pi config is read. Use a real local vault with `.obsidian/` and an absent or Neura-owned `Neura/` subtree. |
+| A vault warning appears | Learning continues. Inspect ownership, links, integrity, projection collisions and the event bound. Preserve ambiguous/user-edited files. |
+| Board answers do not reach Neura | Copy the revision-bound command into the terminal. Browser state does not sync automatically. |
+| Resumed citations are historical | Reimport the original document. Snapshots omit images and do not prove current source contents. |
+| PPTX layout or OCR is incomplete | Export full slide layouts or legacy `.ppt` to PDF/PPTX. English OCR can misread formulas and handwriting. |
+| An old command or mode is missing | Plan, YOLO, Human Away, `/health`, `/undo`, `/ship`, MCP/LSP and delegation are unavailable in the active CLI. |
 
-## Common setup and learning problems
+## Provider errors
 
-| Symptom | Check or next step |
-|---|---|
-| Work command or proof is unavailable | Verify WSL2/bubblewrap. Proof also needs its runner and packages available offline inside WSL. There is no automatic host fallback. |
-| Learn reports a missing runtime | Check Node 24.15+ and the nested locked dependency install. Source development needs `npm ci --prefix agent/neura --ignore-scripts`; live provisioning is a separate intentional install. |
-| Learn cannot create its store | First creation requires native Windows and an unlinked workspace. Existing unowned `.neura-learning` content is rejected; do not delete it blindly. |
-| Learn does not update Obsidian | Vault capture is opt-in. Check `NEURA_LEARN_VAULT` or private `~/.pi/agent/neura/learn-vault.json`, confirm the absolute non-UNC path contains a real `.obsidian/`, and ensure `Neura/` is absent or already has Neura's ownership marker. Mapped or otherwise network-backed volumes are unsupported. Never delete an unowned subtree merely to bypass the refusal. |
-| Learn warns that the vault could not be updated | The lesson or attempt still succeeded. Check for linked paths, modified or non-contiguous numbered events, the 2,000-event bound, or projection collisions. Neura retains ambiguous files instead of overwriting them. |
-| PPTX visuals or OCR are incomplete | Export the deck to PDF for full slide layouts. OCR supports English and can misread formulas or handwriting; inspect the preview. Legacy `.ppt` needs PDF/PPTX export. |
-| Browser attempts do not appear in the terminal | Use the board's copy control and submit the command to Neura. Browser state does not auto-sync; stale lesson revisions are rejected. |
-| Resumed citations say unverified | Reimport the original document. Snapshots preserve historical text, omit images, and do not prove current source contents. |
-| Tools pause after session replacement | Earlier host work must drain before mode restoration. Do not bypass the mode gate; report a reproducible failure if it never completes. |
-| A familiar command is unavailable | `/health`, `/undo`, memory, and skill scans are YOLO-only. `/ship` is Work/YOLO verification; it does not publish code. |
+Use [authentication guidance](docs/CODEX_AUTH.md) for DACL inspection, explicit
+login, model selection and sanitized transport errors. The owner reported working
+subscription responses after earlier repairs. Complete entitlement and
+refresh/restart coverage remain open. `--help`/`--check` need no credentials.
 
-Start with the [documentation index](docs/README.md),
-[Learn guide](docs/LEARN_MODE.md), or [verification guide](docs/VERIFICATION.md).
-For a bug report, include the source commit as well as `VERSION` and whether
-you are running a source checkout or an installed release candidate. Historical
-unreleased source shared `2.5.1` with older releases; version alone cannot
-identify the installed behavior.
+For a failed request, retain only the fixed sanitized error and source commit.
+Do not repeatedly log in, reinstall or switch to separately billed APIs as a
+speculative repair. Explicit API provider selection can incur charges. Subscription failure never selects it automatically.
+
+Do not delete lock files, credentials, sessions, vaults, backups or user files to
+force recovery. See [development](docs/DEVELOPMENT.md) and
+[installer limits](docs/INSTALLER_READINESS.md).

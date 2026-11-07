@@ -1,5 +1,27 @@
 # Open-source publication checklist
 
+## Current source and distribution (2026-11-07)
+
+The repository is public, but the active Mastra Work/Learn build is restricted
+to development/testing with synthetic, non-sensitive data. Mastra EE scope and
+distribution approval remain unresolved. `verify:release` intentionally fails.
+The source license does not relicense dependencies. New logo trademark clearance
+and redistribution terms remain undocumented. The historical artwork's terms
+do not clear the new assets. See [releasing](RELEASING.md) and
+[dependency review](MASTRA_V1_DEPENDENCIES.md).
+
+The latest published release is historical Pi `v2.5.1`. `v2.6.0-rc.1` stays a
+withheld draft. Current user/contributor docs describe Mastra only. Old exported
+plans and marketing graphics have frozen-history links instead of checkout copies.
+GitHub About/topics and both existing release descriptions were reconciled with
+this scope on 2026-11-07. The candidate remains a draft and the published release
+keeps its original body beneath a historical notice. This does not approve
+publication, change protection settings or close gates.
+
+The checklist below retains dated publication evidence. Checked historical items
+are not fresh verification of repository settings, the new logo, installability
+or current release readiness. Recheck every applicable item before distribution.
+
 Publication checklist established: 2026-09-04. Public-state reconciliation: 2026-09-13.
 
 This checklist separates repository publication from production readiness.

@@ -1,162 +1,104 @@
 # Releasing Neura
 
+## Current release decision
+
+**Release blocked.** The active Mastra application is for development/testing
+with synthetic, non-sensitive data. Mastra EE scope and distribution approval
+remain unresolved. `npm run verify:release` intentionally refuses distribution.
+Do not bypass it, promote a draft or infer production readiness from passing tests.
+
+Package metadata and `VERSION` remain `2.6.0-rc.1`. “v1” means the Mastra
+implementation, not a selected public version. The latest published release is
+the historical Pi-based `v2.5.1`. The existing `v2.6.0-rc.1` draft remains
+unpublished/withheld. See the [release inventory](releases/README.md) and [status](STATUS.md).
+The [dependency review](MASTRA_V1_DEPENDENCIES.md) records the license boundary.
+
+Updating About text, a release description or documentation does not create a
+release. Version selection, commits, tag/push operations, draft publication,
+package distribution and live installation each require explicit authorization.
+Both npm manifests remain private. No workflow publishes an npm package.
+
 ## Version policy
 
-Neura uses semantic versions:
+Use semantic versions after the owner selects an authorized release scope:
+patch for compatible fixes, minor for compatible capability additions, major
+for incompatible policy/configuration/install changes, and `-rc.N` for a
+candidate with remaining gates. No migration-version decision has been made.
 
-- patch: fixes with no intended capability expansion;
-- minor: new user-visible capability or mode behavior;
-- major: incompatible configuration, policy, or installation change;
-- `-rc.N`: release candidate that still has named gates.
+For a future candidate, reconcile `VERSION`, root package/lock identity and
+`docs/releases/v<version>.md` with reviewed packaging/runtime contracts. The
+private Learn runtime has its own version. Its manifest and lock must agree.
+Historical Pi manifests are evidence and must not be treated as an active
+Mastra distribution manifest.
 
-`VERSION` is the machine-readable source. Changelog and release-note filenames
-must match it.
+## Gates before any release
 
-Current source candidate is [`2.6.0-rc.1`](releases/v2.6.0-rc.1.md), covering
-Work, modular verification, Learn, and Pi `1.3.0` compatibility. Latest published
-release remains `2.5.1` until the candidate is published. Historical v2.5.1 notes
-retain their original scope and must not be rewritten as current evidence.
+- [ ] Resolve the Mastra EE/distribution scope with recorded owner approval.
+- [ ] Define the supported features and platform. Name the exact source revision. Reconcile
+      the [parity matrix](PARITY_MATRIX.md) without promoting mock evidence to parity.
+- [ ] Pass `npm run verify`, Learn browser checks and `git diff --check` on the candidate.
+- [ ] Pass actual configured-host `npm run test:v1:work-sandbox` and the separate
+      `npm run verify:sandbox`. Synthetic/hosted contracts do not replace them.
+- [ ] Install both exact graphs cleanly with scripts disabled. Pass vulnerability
+      and registry-signature audits with `npm run audit:all`.
+- [ ] Pass complete-history secret scanning and scanner regressions. Close any
+      incident with owner-confirmed revocation and value-free evidence.
+- [ ] Review source, author metadata, plans, assets, issues, release text and CI
+      artifacts for private material and redistribution rights. The current
+      logo's trademark clearance/distribution terms remain undocumented.
+- [ ] Demonstrate clean-profile install, interrupted upgrade, preservation and
+      rollback on a disposable Windows host. A source-linked launcher is not
+      sealed or reproducible distribution evidence.
+- [ ] Obtain independent review and required new-head CI, including `harness`,
+      `portable-proof` and applicable security checks. Report failed/skipped review honestly.
+- [ ] Reconcile README, security/support/contribution docs, About/topics, release
+      notes and assets with the tested scope. Historical releases remain historical.
+- [ ] Complete applicable [open-source](OPEN_SOURCE.md), [installer](INSTALLER_READINESS.md)
+      and [production](PRODUCTION_READINESS.md) gates for the proposed claim.
+- [ ] Verify the exact candidate is reviewed, clean and on the authorized main
+      revision before any separately approved tag/publication operation.
 
-## Open-source release gate
+Human Away is unavailable in the active CLI. Its retained preview source does
+not authorize unattended operation. Full trusted proof remains unavailable. Detector receipts cannot satisfy a completion gate.
 
-The repository is public, but a promoted release still requires every applicable
-item in [OPEN_SOURCE.md](OPEN_SOURCE.md). Public visibility, a GitHub draft,
-package publication, live installation, and production readiness are independent.
-Both npm manifests stay private and release automation must never publish to a
-package registry. Public release notes must say `experimental` until the
-production gate below passes.
+## Existing tag workflow
 
-## Stable-release gate
+`.github/workflows/release.yml` accepts `v*` tag pushes, requires an annotated
+tag whose target is contained in `origin/main`, installs both locked graphs and
+checks the active dependency boundary. It calls `verify:release` before audits,
+repository verification, configured-host Work acceptance, browser checks and
+secret-history/installer checks. It currently stops at the license gate.
 
-All items must pass:
+Later jobs contain source/archive/SBOM/checksum and draft-prerelease machinery
+inherited from the Pi pipeline. Those retained steps are not certified Mastra
+packaging. Reconcile their scripts, runtime ownership and manifests before
+unblocking release. Removing a license denial alone is insufficient. Source
+archives do not bundle Node, WSL, bubblewrap or a complete runtime.
 
-- [ ] `docs/STATUS.md` says stable-ready and has no required stable blockers.
-- [ ] `node scripts\verify-harness.mjs` passes.
-- [ ] `node scripts\verify-sandbox.mjs` passes on the release workstation.
-- [ ] `npm run typecheck`, `npm audit --audit-level=high`, and
-      `npm audit signatures` pass from clean lockfile installs. Repeat both
-      audit commands with `--prefix agent/neura` for the Learn runtime graph.
-- [ ] Plan accessibility and `node scripts\tests\learn-browser.mjs` pass in real
-      Edge at narrow/desktop widths; the 18-suite harness includes nonbrowser Learn checks.
-- [ ] `node scripts\check-docs.mjs` passes.
-- [ ] `npm run check:pi-latest` passes against the public registry; stale targets
-      and unavailable discovery evidence block release rather than trigger a downgrade.
-- [ ] Windows and Linux portable CI pass on the release commit. Contract tests
-      do not replace the Windows live WSL2/bubblewrap rehearsal.
-- [ ] `git diff --check` passes.
-- [ ] `powershell -File .\install.ps1 -Check` passes after an intentional live sync.
-- [ ] Neura works with the latest stable Pi checked at release time. Record the
-      upstream version/check date and compatibility evidence in `docs/STATUS.md`.
-      A stale Pi pin or unverified latest release blocks this gate; fix Neura,
-      never downgrade the user's Pi or bypass runtime checks. Follow the
-      [Pi compatibility policy](DEPENDENCIES.md#pi-compatibility-policy).
-- [ ] Pi and every runtime package are exactly pinned and audited; Pi package,
-      lockfile, runtime contract, manifest, installer, and CI versions agree.
-- [ ] Learn's manifest, lockfile, worker, installed runtime, and lock receipt are
-      present; native-Windows first store creation and failure paths are exercised.
-- [ ] Approvals, redaction, and Gmail policy meet the gates in `STATUS.md`.
-- [ ] No credential, private memory, approval audit, session file, personal
-      endpoint, or machine-specific path is tracked in public defaults.
-- [ ] `scripts/verify-secrets.ps1` passes against complete Git history.
-- [ ] Every entry in `docs/SECURITY_INCIDENTS.md` is closed with owner-confirmed
-      revocation and documented scope.
-- [ ] Release notes state user-visible changes, limits, migration, verification, and rollback.
-- [ ] Selected open-source license is present and recognized by GitHub.
-- [ ] README, security, support, conduct, governance, issue forms, pull-request
-      template, CODEOWNERS, and package metadata are current.
-- [ ] GitHub description, topics, branch protection, private vulnerability
-      reporting, security alerts, and Actions permissions are reviewed.
-- [ ] Worktree is clean and local `main` matches `origin/main`.
+No tag command is a current setup step. Do not run archived `check:pi-latest`,
+`test:release`, legacy installer or Pi update commands against the active source.
+Do not delete the existing draft or replace published tags merely to satisfy automation.
 
-Human Away expansion also requires the separate sandbox and adversarial-replay
-gates in [STATUS.md](STATUS.md).
+## Release notes
 
-## Production-release gate
+Notes must state the exact channel/revision, user-visible changes, verification,
+known limitations, installation/migration and rollback. Distinguish source
+availability, a draft, published artifacts, installed code and production readiness.
+Keep experimental language until its gates pass. Disclose no npm publication.
 
-A production-ready claim additionally requires:
-
-- [ ] Every P0 item in
-      [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) is closed.
-- [ ] Every security-critical P1 acceptance criterion and negative test passes.
-- [ ] Strict TypeScript and the hermetic/adversarial suites pass.
-- [ ] Secret scanning reports no unresolved incident.
-- [ ] Clean install, interrupted install, upgrade, rollback, and live-manifest
-      rehearsals pass on a disposable Windows host.
-- [ ] Unknown live extensions, floating executables, and source/live drift are absent.
-- [ ] Human Away is either still preview-disabled or has passed its separate field gates.
-- [ ] Status and release notes state the exact supported scope and remaining limitations.
-
-Production claims follow evidence, not dates. Exceptions require a named owner,
-expiry, compensating control, and tracked issue. A one-step installer additionally
-requires the bootstrap, artifact delivery, recovery, and clean-host gates in
-[INSTALLER_READINESS.md](INSTALLER_READINESS.md). A source ZIP is not a complete
-runtime bundle and does not satisfy those gates.
-
-## Automated draft-prerelease path
-
-Tag automation accepts only an annotated `v*` tag whose target is contained in
-`origin/main`. `VERSION`, root package and lock versions, runtime/release identities, and
-`docs/releases/v$version.md` must agree. The private Learn runtime keeps its
-independent version, with its nested manifest and lock versions matching each
-other. Run locally before tagging:
-
-```powershell
-$version = (Get-Content .\VERSION -Raw).Trim()
-npm run test:release
-npm run verify:release -- --tag "v$version"
-```
-
-Every prerelease note must declare `Channel: prerelease` and state all of:
-
-- This release is experimental and not production-ready.
-- Human Away remains preview-only and is not approved for unattended high-impact work.
-- No npm package is published by this release.
-
-The tag workflow reruns repository, browser, audit, signature, secret-history,
-and ephemeral installer checks using the same hash-verified Windows Git runtime
-as PR CI. It builds deterministic source tarball/ZIP archives, SPDX SBOM snapshots
-for both lockfiles, and `SHA256SUMS` covering both archives, then retains an attempt-scoped workflow artifact
-for three days. The secret scanner's only value-based release-manifest exception is an
-exact reviewed public SHA-256 value in `.gitleaks.toml`; a different digest at
-the same path must still fail. Only the final job receives `contents: write`, and it uses GitHub
-CLI to create a **draft prerelease**. It never publishes npm packages and never
-promotes or publishes the GitHub draft. A maintainer must inspect any draft and
-all remaining gates manually.
-
-Stable semantic-version tags are deliberately rejected unless
-[STATUS.md](STATUS.md) contains the exact machine-readable line
-`Release channel: stable-ready` and no `not production-ready` statement. A
-release candidate such as `v2.6.0-rc.1` is the only currently eligible automated
-channel.
-
-## Tag commands
-
-Run only after the checklist passes, the RC release note is present, `main` is
-pushed, and the tag operation is approved:
-
-```powershell
-$version = (Get-Content .\VERSION -Raw).Trim()
-git tag -a "v$version" -m "Neura v$version"
-git push origin "v$version"
-```
-
-Do not tag an RC as stable or describe preview boundaries as production-safe.
-Tagging starts automation; it is not approval to publish the resulting draft.
+Published `v2.5.1` notes retain their original body, with a dated historical-scope
+notice. The withheld candidate links to its frozen Pi record and current
+development summary. Do not rewrite old test evidence as a new acceptance run.
 
 ## Rollback
 
-1. Stop every Neura process, approval writer, and active external automation.
-2. Check out the previous known-good tag in a separate worktree.
-3. Install that tag's development/runtime graphs with scripts disabled and run
-   its documented verifier. Older tags may not contain a nested Learn graph.
-4. With owner authorization, install that tag with its `install.ps1`.
-5. Run `install.ps1 -Check`.
-6. Record the rollback reason in the next changelog entry.
+Exit Neura and stop relevant writers before changing source or launcher. For
+development use, select a known-good checkout explicitly. Restore only a verified
+installer-owned launcher backup after checking destination ownership. There is
+no automatic rollback command or sealed runtime restoration.
 
-Do not rewrite shared history or delete the failed release tag. Publish a fixed
-version.
-
-Older approval writers may not honor the current cross-process lock. Do not
-repair or discard an invalid audit tail to make rollback pass. Saved Learn files
-and additive proof receipts can remain local; older code may ignore them. Do not
-delete private learning data as part of rollback. See [VERIFICATION.md](VERIFICATION.md).
+Preserve dirty worktrees, credentials, sessions, memory, approvals, learning data
+and vaults, along with recovery backups. Do not downgrade standalone Pi, repair audit tails
+or erase private data to force compatibility. Do not rewrite shared history or
+published tags. Record corrections in a separately approved release. Follow
+[installer preservation rules](INSTALLER_READINESS.md).

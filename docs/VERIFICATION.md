@@ -1,131 +1,116 @@
 # Verification
 
-The current verifier uses 18 isolated suites and the checkout's pinned Pi loader.
-It includes Work/Learn boundaries, document and exercise behavior, and content-bound
-proof receipts. The original modular refactor closed
-[#27](https://github.com/Rajveerx11/neura/issues/27); Learn expanded it in
-[PR #44](https://github.com/Rajveerx11/neura/pull/44).
+Updated 2026-11-07 for the active Mastra application. Repository tests, Work review
+and manual proof are separate checks. None authorizes publication or establishes
+production readiness. Historical Pi tests are retained separately.
 
-## Commands and isolation
+## Repository checks
 
-Run `npm ci --ignore-scripts` and `npm ci --prefix agent/neura --ignore-scripts`, then `npm test` or
-`node scripts/verify-harness.mjs`. No globally installed Pi is needed. Integration
-suites validate installed package versions against `package.json` and the runtime
-contract, then load all 19 extensions with that checkout's real Pi loader.
+Install both locked graphs with scripts disabled, then run:
 
-Each suite starts in a separate process with a temporary home, synthetic approval
-storage, no provider credentials, and isolated Git configuration. Tests neither
-install into the user's harness nor call a model/provider. The installer suite
-executes extracted installer comparison functions against synthetic files; the
-existing Windows CI installation/drift rehearsal remains separate.
+```powershell
+npm run verify
+git diff --check
+```
 
-| Independent command | Coverage |
-|---|---|
-| `npm run test:unit` | Runtime identity, health states, bounded MCP/provider initialization, cancellation, redaction, suite selection, local Pi pin failures |
-| `npm run test:state-machine` | WORK default, transitions, persistence, provider payloads |
-| `npm run test:integration` | Real Pi extension registration/loader/session, enforced native MCP disable under config/CLI/reload/load failure, nested deferred policy, YOLO/stock-Pi positive controls, Gmail mediation, presets |
-| `npm run test:ui` | Logo, cockpit, widths, line caps, contrast, transcript affordances |
-| `npm run test:installer` | Installer contracts, text/binary drift, shared Node-first prerequisite checks, missing/failing/malformed version probes, newer-Pi no-downgrade behavior |
-| `npm run test:sandbox` | Namespace/environment argument contracts and linked-workspace denial |
-| `npm run test:policy` | Positive/negative Plan paths, junctions, shell and Git boundaries |
-| `npm run test:plan` | Plan publication, restart, collisions, failed turns, ownership |
-| `npm run test:approvals` | Guardrail mediation, state-bound one-use grants, expiry, fail-closed audit |
-| `npm run test:approval-storage` | Six concurrent writers, short writes, partial tails, corruption, crash lock |
-| `npm run test:proof` | Content fingerprints, bounds, cancellation, lifecycle, full/quick/incremental receipts |
-| `npm run test:fuzz` | Fixed seed `0x27c0ffee`: 96 generated path cases and 96 shell mutations |
-| `npm run test:learn` | Learn mode/private-read boundaries, PDF/PPTX/OCR, SQL/diagrams, workspace storage races, automatic Obsidian event/projection security, end-to-end progress, and browser behavior |
+`verify` runs strict active-source types, Pi-free/package-closure checks,
+`node scripts/verify-harness.mjs` and registered documentation checks. The active
+runner defines 21 suites, using synthetic stores/models and isolated test
+processes. It does not require credentials, install into a live profile or prove
+live provider access. Default sandbox tests check contracts and fail-closed
+behavior without requiring successful Work execution on an unconfigured host.
 
-`npm run test:release` also covers bounded latest-Pi discovery, pin agreement,
-registry failure/malformed/oversized responses, and the source ZIP/checksum
-workflow contract. `npm run check:pi-latest` queries the public registry and is
-separate from offline harness verification; matching versions never replace
-compatibility tests. Neither command installs into the live harness.
+| Suites | Scope |
+| --- | --- |
+| `runtime`, `auth` | Mastra dispatch, schemas, bounded turns, serialized effects, cancellation and synthetic subscription transport/storage |
+| `cli`, `terminal-ui` | Real CLI with synthetic providers, commands, history, approvals, quiet output, widths and fallbacks |
+| `learn`, `agent-learn` | Active Learn tools, provenance, explicit recovery, title bounds and stale async operations |
+| `work-tools`, `review`, `workflow` | Workspace policy/search/mutations, read-only review, candidate currency and bounded repair |
+| `verification` | Work-only manual proof admission, fingerprints and unavailable/full-proof boundaries |
+| `installer` | Development launcher ownership, path refusals and preservation, including reversible retirement contracts |
+| `parity-matrix`, `dependency-gate` | Frozen-baseline inventory and package/license closure rules |
+| `learn-materials`, `learn-workshop`, `learn-storage`, `learn-vault` | Shared parser/OCR, exercises, store and vault integrity/race regressions |
+| `sandbox`, `process-contract`, `workspace-read`, `ci-contract` | Isolation arguments, process cancellation, canonical traversal and CI gates |
 
-`npm run test:accessibility` is the real Plan Edge/axe browser suite.
-`node scripts/tests/learn-browser.mjs` runs Learn's isolated browser checks.
-Learn's six nonbrowser suites also run in `npm test`; its isolated browser wrapper
-runs separately in CI. Browser tools require Edge on the tested Windows platform.
-`npm run verify:sandbox` remains the independent live WSL2/bubblewrap replay;
-contract tests alone do not establish OS isolation. CI also runs portable proof,
-approval-storage, sandbox, Learn storage, and Learn vault contracts on Linux, including FIFO and executable-bit
-regressions that Windows cannot exercise.
+Run a focused suite with `node scripts/verify-harness.mjs --suite work-tools`.
+Unknown names fail. Definitions live in `scripts/verify-harness.mjs`, not the
+historical `scripts/test-suites.mjs`. No active `test:changed`, `test:release`,
+`test:accessibility` or `check:pi-latest` npm command exists.
 
-## Changed-file checks and receipts
+The parity suite reads baseline commit `3ebaac07c8320125bcc32478b5aa3865746a997c`.
+Use full Git history. Shallow clones need `git fetch --unshallow` first.
 
-`npm run test:changed` selects suites from tracked changes against HEAD and
-nonignored untracked files. Shared/unknown code selects every suite. Documentation
-changes alone select none; documentation checks still run separately. Selection
-never turns a changed filename into a command.
+## Separate acceptance checks
 
-The runner writes a bounded, atomic report to the ignored
-`.proofofwork/neura-checks.json`. It contains suite names/results, time, and the
-workspace fingerprint. Changes during the run mark the report unavailable and
-fail the command. It contains no file bodies or test output.
+| Command | Prerequisite and meaning |
+| --- | --- |
+| `npm run test:browser:learn` | Real Edge. Standalone Learn boards, narrow/desktop interaction, keyboard, axe, CSP and terminal handoff |
+| `npm run test:v1:work-sandbox` | Native Windows, WSL2, selected distro and bubblewrap. Actual Work commands, exact file output and protected-path regressions. Fails if unavailable |
+| `npm run verify:sandbox` | Independent real WSL isolation replay. Not replaced by synthetic command contracts |
+| `npm run audit:dependencies` | Vulnerability audit of both locked graphs. Requires registry access |
+| `npm run audit:signatures` | Registry signatures/attestations for both installed graphs |
+| `powershell -NoProfile -File .\scripts\verify-secrets.ps1` | Complete-history scan. Requires the reviewed scanner and history |
+| `powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1` | Secret-scanner regressions |
+| `powershell -NoProfile -File .\install.ps1 -Check` | Read-only development-launcher drift check. No permission to install |
+| `npm run verify:release` | Expected refusal while Mastra EE/distribution approval remains unresolved |
 
-During interactive work, `check-gate.ts` compares content fingerprints before and
-after a turn. Untracked content-only changes, nested new files, binary edits,
-index changes, and executable-mode changes trigger the quick proof scan.
-The quick scan retains `--no-tests`: a quick PASS is detector-only feedback, not
-complete engineering verification, and never sets the proof UI to COMPLETE.
-Full `/ship` requests tests, but the pinned `proof-of-work-agent==0.2.0` legacy
-verdict has no trusted required-suite/candidate-bound evidence contract. Every
-legacy full `passed: true` is therefore unavailable, even with `tests.ran` and
-`tests.passed` both true. Definitive failures remain failures. No full verified
-PASS is currently available; retrying cannot repair this contract limitation.
-A reviewed release, trusted suite policy, and complete candidate binding remain
-required under [#91](https://github.com/Rajveerx11/neura/issues/91); this safety
-slice does not close that issue or change runtime pins.
+Windows CI keeps the required `harness` job. Ubuntu `portable-proof` runs portable
+contracts, including Work/review/workflow regressions. Hosted PR checks do not
+establish configured-host WSL acceptance. Required CI, CodeQL and dependency
+audits must be evaluated on the actual proposed commit.
 
-Quick/full results become versioned `neura-verification` session entries. Full
-receipts include current/stale quick evidence and, when valid, the incremental
-suite report. Workspace reports are explicitly untrusted metadata: they cannot
-skip full proof or turn a failed/unavailable full verdict into PASS. Receipt scope
-`quick` denotes detector-only feedback; historical receipts are not revalidated
-and must not be treated as delivery authority. Session replacement
-cancels the active check and discards late completion. A workspace mutation during
-proof, malformed output, timeout, cancellation, or failed snapshot cannot earn PASS.
+## Work review
 
-Snapshots cap file count at 50,000, aggregate bytes at 64 MiB, Git output at 8 MiB,
-and capture time at 10 seconds. They reject selected links, special files,
-conflicted index entries, and submodules rather than claiming complete coverage.
-Ignored files remain excluded unless already tracked. These fingerprints do not
-claim to solve all concurrent filesystem races or Plan confidentiality (#35).
+Automatic review is on by default. `/workflow on|off` controls it. `/review`
+requests review of changes since the session baseline and `/review status`
+checks the last receipt. A committed Git root within snapshot bounds is required.
+Docs-only changes are skipped by path-based risk routing. A turn with no changes
+ends silently. Missing baseline means review is unavailable, not a clean review.
 
-## Approval failures and remaining gates
+The reviewer is a fresh model instance with code-enforced read-only tools. It
+defaults to the builder model, labelled same-family. Set a different provider
+through `/reviewer PROVIDER MODEL [URL]` or the reviewer launch flags for
+cross-family independence. The controller marks blockers and major findings with
+non-low confidence as must-fix. The builder may repair them for up to three rounds.
 
-Work and YOLO proof execute only inside the network-disabled WSL2 bubblewrap
-environment. Its exact hash-verified uv binaries, CPython interpreter, and proof
-wheelhouse mount read-only, while each run uses a fresh sandbox-local cache. Unavailable sandbox
-execution reports unavailable, without host fallback. Both modes block mode
-changes during capture and verification. Learn, Plan, and Human Away do not run
-this proof hook.
+Review receipts bind to candidate fingerprints and become stale after later edits.
+They remain session-local. Work's 60-step limit preserves an unfinished task's
+starting baseline for continuation and skips premature review. Reviewers keep an
+eight-step bound. Outcomes are `READY FOR YOUR APPROVAL`, `BLOCKED` or
+`Review skipped`. They never commit, push or merge. Recorded live same-family
+runs are in [Mastra evidence](MASTRA_V1.md#real-project-work-2026-11-06). They do
+not establish live cross-family or must-fix repair acceptance.
 
-Approval writers hold a cross-process directory lock across read, deduplication,
-and append. Short writes retry; completed appends are flushed. Lock waits stop
-after ten seconds. Readers reject malformed JSON or a broken hash chain.
-Windows can return `EPERM` during directory-lock contention. Acquisition retries
-that error within the same deadline; permanent denial still fails without audit
-mutation, and unrelated errors remain immediate. No lock is stolen or bypassed.
+## Manual proof and receipts
 
-A crashed writer can leave a lock or incomplete tail. Both fail closed; the test
-suite proves rejection, not automatic recovery. Before manually repairing a lock,
-stop every Neura process and validate the audit. Never discard an invalid tail to
-manufacture a valid approval. Transactional recovery, authenticated tamper evidence,
-retention, and stronger remote binding remain issue #33. Runner dependency trust
-remains #22; strict TypeScript remains #26; Human Away remains preview-only.
+In Work, `/verify quick` requests pinned PoW `0.2.0` through the network-disabled
+WSL proof sandbox after exact interactive approval. It requires the exact Git
+root with committed HEAD, trusted uv/CPython paths and the reviewed offline
+wheel closure. No automatic download or host fallback occurs. A headless request
+cannot approve execution and fails when verification is unavailable.
 
-## Migration and rollback
+Receipts record before/after fingerprints of HEAD/index, tracked bytes/modes and
+nonignored untracked files. Ignored files are outside this fingerprint.
+`/verify status` rechecks currency. Receipts are process/session metadata with
+`verified:false`. They are not signed, durable, imported from workspace reports,
+saved in conversation history or used to grant delivery authority. Audit files
+use disposable sandbox `/tmp`, not the candidate workspace.
 
-The verification refactor changes no runtime dependency or existing approval schema.
-Learn separately adds the pinned document runtime described in
-[LEARN_DEPENDENCIES.md](LEARN_DEPENDENCIES.md). Existing valid audits
-remain readable. New session receipt entries are additive. Roll back the scoped
-source commit and, only with owner authorization, regenerate the live install;
-older versions ignore the new receipt entries and ignored incremental report.
-Do not roll back while approval writers are active, because older code does not
-honor the writer lock. No live installation is required to run these suites.
+Bare `/verify` and `/verify full` report `unavailable`: PoW `0.2.0` lacks trusted
+required-suite/candidate evidence. Detector-only PASS is not test success or
+engineering completion. Full proof remains [#91](https://github.com/Rajveerx11/neura/issues/91).
+Durable receipts, original-task-base binding, ignored-file coverage and delivery
+enforcement remain open under #28/#91. Learn cannot run proof. `/ship` is unavailable.
 
-Health state and probe results are diagnostic only; no persisted schema changes.
-The runtime contract adds the existing Neura package version for display and
-drift evidence. Roll back the health extension, runtime-contract field, and
-tests together, then regenerate the live install only with owner authorization.
+## Failures and historical evidence
+
+Report the command, source commit, actual exit/result and any missing prerequisite.
+Never relabel a skipped, partial or failed check as passing. Crash locks and
+invalid state fail closed. Do not steal locks, repair an audit tail or delete
+private state to force a pass. Inspect uncertain effects before retrying.
+
+Older evidence belongs to its recorded revision. `scripts/verify-legacy-harness.mjs`
+and `scripts/check-legacy-docs.mjs` retain the Pi baseline and may fail without its
+retired dependencies. They are not current Mastra checks or permission to restore Pi.
+See [status](STATUS.md), [implementation evidence](MASTRA_V1.md) and
+[release policy](RELEASING.md).

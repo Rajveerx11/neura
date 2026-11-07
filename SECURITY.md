@@ -1,184 +1,111 @@
 # Security policy
 
-## Supported version
+## Supported source
 
-Only current `main` receives security fixes. Historical `2.5.1` was a private
-stable release for one operator; it is not a general production or multi-user
-security boundary. Current `main` is a public-release candidate, not an
-approved production release, while named P0 and security-critical P1 issues
-remain open.
+Only current `main` receives security fixes. It is a Mastra development/testing
+build with Work and Learn, not an approved production or multi-user boundary.
+Use synthetic, non-sensitive data while license/distribution approval remains
+unresolved. Historical `v2.5.1` and the withheld Pi candidate do not describe the
+active application. See [status](docs/STATUS.md).
 
 ## Report a vulnerability
 
-Use **Security > Report a vulnerability** in GitHub repository to open a private
-security advisory. If private reporting is unavailable, contact repository owner
-through GitHub without exploit details and request a private channel.
+Use [Security > Report a vulnerability](https://github.com/Rajveerx11/neura/security/advisories/new)
+to open a private advisory. If private reporting is unavailable, contact the
+repository owner through GitHub without exploit details and request a private channel.
 
-Include affected version, exact boundary, safe reproduction, impact, and
-suggested fix. Never include a real credential or private user data. Maintainer
-will acknowledge when practical, validate scope, coordinate a fix, and publish a
-redacted advisory after affected users have a reasonable update window. No fixed
-response-time or embargo guarantee is offered.
+Name the source commit and affected boundary. Describe the impact and provide a
+safe reproduction, with any suggested fix. Never include real credentials or
+private user data. The maintainer
+will validate scope, coordinate a fix and publish a redacted advisory when practical.
+No fixed response-time or embargo guarantee is offered.
 
-## Secret handling
+## Credentials and private state
 
-- Store credentials in user environment variables or provider-managed stores.
-- Never commit `.env` files, auth files, model credentials, memory, sessions, or approval logs.
-- Use synthetic values in tests.
-- Revoke and rotate any credential exposed in a command line, log, screenshot,
-  transcript, issue, commit, or model context. Deleting the visible copy is not enough.
-- Record closure evidence without secret material in
-  [docs/SECURITY_INCIDENTS.md](docs/SECURITY_INCIDENTS.md).
+- Never commit credentials, `.env` files, authorization callbacks, memory,
+  sessions, approval records or raw provider responses. Tests use synthetic values.
+- Subscription tokens live in Neura's private home, not Pi's profile. Inspect
+  effective Windows DACLs on the home and credential file before real login. The runtime does not independently enforce DACL privacy.
+- API keys belong in the explicit provider's environment. Subscription access
+  never falls back to separately billed APIs. Logout removes the local credential
+  and does not claim remote revocation.
+- Neura home and workspace must be disjoint, including linked ancestors. Pi
+  profiles cannot be workspaces. No legacy credentials or history are imported.
+- Revoke/rotate any exposed credential. Deleting a visible copy is insufficient.
+  Record value-free closure in [security incidents](docs/SECURITY_INCIDENTS.md).
 
-## Current security model
+## Active Work boundary
 
-- Work is the default supervised mode. Structured reads/edits/writes stay within
-  the canonical workspace. `work_exec` uses network-disabled WSL2 bubblewrap.
-  Known build, test and read-only commands run there without a prompt when `.git`
-  exists, including headless. These run model-written code, so the sandbox itself
-  holds the boundary: secret-named files are empty or unreadable, including inside
-  dependency and host-run folders. `.git`, `.github`, `.husky`
-  and `.vscode` are read-only at any depth, and any such path a command creates is
-  removed afterward. Gitfiles (linked worktrees or separate Git directories) are
-  refused for command execution. Git-ignored files without a secret name stay readable to
-  commands, and project code a command changes still runs when you run it on the
-  host. Remote mutations and destructive actions remain subject to deterministic
-  policy, as do protected or unknown actions. Where permitted, these need explicit
-  interactive approval. Headless approval
-  requests fail closed. Generic shell access is restricted to read-only inspection.
-- Plan uses a fixed tool set and canonical workspace containment.
-- Plan Git inspection supports only `git rev-parse --short HEAD` for the current
-  HEAD hash. Git historical content, object/index reads, and comparisons are denied,
-  including show, patch/log/diff, cat-file, historical grep, and reflog. The fixed
-  metadata query disables paging, optional locks, lazy fetching, filesystem
-  monitors, hooks, signature display, and mailmaps. It does not consult global
-  config or invoke filters, external diff, or text-conversion drivers.
-  Plan file inspection separately checks Git
-  exclusions, including tracked files and global ignores, before delivering bytes.
-  See [Plan confidentiality](docs/PLAN_CONFIDENTIALITY.md).
-- Plan permits bounded `web_search` but denies direct `web_fetch`; its delegated
-  backend does not expose DNS answers, connection IPs, or redirect hops needed
-  for SSRF-safe enforcement.
-- Plan HTML uses structured input, escaping, CSP, safe URL checks, collision-safe
-  creation, and session-owned revision hashes.
-- Learn permits bounded `read`, `ls`, `web_search`, `questionnaire`, and its four
-  learning tools. It denies generic writes/edits/shell, `grep`/`find`, MCP, Plan
-  publication, private/configuration paths, hidden files, ADS, and linked/hardlinked
-  inputs. Its writers use marked owned stores and exclusive bounded files. Optional
-  automatic Obsidian capture requires a machine-local exact vault configuration,
-  validates a real `.obsidian/`, and writes only append-only minimized events and
-  new projections beneath an owned `Neura/` subtree. It never grants a generic
-  external-path writer or overwrites ambiguous/user-edited content.
-- PDF/PPTX content is untrusted reference data. Learn checks captured bytes,
-  source identity, page/slide number, and quoted excerpts. It does not establish
-  that a tutor's interpretation is correct. Parser workers have deadlines and
-  heap limits but trust native/WASM code; they are not OS security sandboxes.
-- Learn SQL uses a disposable in-memory SQLite process, an authorizer, fixed
-  limits, and sample tables. No arbitrary host code, filesystem access, network,
-  `ATTACH`, or writes are allowed. Browser lessons use fixed CSP and escaped
-  HTML/SVG; worked answers are visible in their source, so this is not an exam system.
-- YOLO intentionally disables Neura application approvals and tool blocking. On
-  native Windows it has no OS sandbox; tool access follows the process and
-  signed-in user's permissions. Every interactive transition into YOLO requires
-  deliberate confirmation, and the post-splash footer keeps a danger label visible.
-- Human Away combines deterministic policy with an isolated no-tool reviewer and
-  a local hash-chained approval audit. Its only provider-visible tool executes
-  through WSL2 bubblewrap with a workspace-only writable mount, cleared host
-  environment, hidden Windows/WSL user paths, and an unshared network namespace.
-- One-use approval retries bind canonical target identity, target content/state,
-  exact input, workspace state, `HEAD`, index state, and a 120-second expiry.
-- Approval writers lock across read/deduplication/append and flush completed
-  writes. Lock contention has a two-second deadline, including Windows `EPERM`.
-  Corrupt tails and crash locks fail closed; no automatic lock stealing or audit
-  repair occurs. This is not authenticated protection against a same-user attacker.
-- Action summaries, cockpit notices, approval text, reviewer dossiers, Gmail
-  summaries, and sandbox output use one central redaction implementation.
-- When a mode exposes Gmail tools outside YOLO, only explicitly allowlisted reads
-  avoid a prompt; other actions confirm interactively or block headless. This
-  guardrail never expands the selected mode's tool allowlist.
-- Headmaster cannot widen deterministic policy.
-- Work and YOLO proof run only in the network-disabled WSL sandbox with the
-  exact hash-verified uv bundle, CPython interpreter, and wheelhouse mounted
-  read-only; the fresh cache is sandbox-local. Unavailable execution never falls back to the host.
-  `/ship` requests verification and does not publish Git changes. Legacy full PASS
-  from the pinned proof runner is unavailable, including aggregate successful test
-  flags: it lacks trusted required-suite/candidate-bound evidence. Quick PASS is
-  detector-only feedback, never complete engineering verification. See
-  [verification limits](docs/VERIFICATION.md).
-- Checkpoints/undo, host health, memory, and October are YOLO-only.
-  `/skill-doctor` is read-only registry/discovery-identity validation in any mode;
-  it does not scan personal skill directories or run host diagnostics. Supported
-  skill validator/catalog, discovery-gate, and managed installer changes remain
-  protected-control actions requiring
-  explicit Work approval; headless Work fails closed. Skill permissions restrict,
-  never grant authority. See [supported skills](docs/SKILLS.md).
-- `/health` executes only existing absolute stdio MCP binaries and sends
-  bounded initialize requests only to HTTPS or loopback HTTP endpoints.
-  All configured HTTP header values must use placeholders from the existing
-  explicit MCP environment allowlist; literal values are rejected regardless of
-  header name. Protocol headers are supplied by the probe. Stdio probes receive
-  no provider credentials; nonabsolute commands are not executed.
-  Repository-defined MCP servers are reported but never auto-probed.
-  Probe output and errors are bounded and redacted before display.
-  Operation leases and paused session restoration prevent old work from crossing
-  into a restricted mode. Late proof results cannot earn a new session receipt.
-- Application policy is distinct from OS isolation. Work/Human Away command
-  execution adds bubblewrap; Plan/Learn path checks remain application controls.
-  YOLO intentionally bypasses Neura application policy.
+Structured file tools use canonical junction-aware containment, protected-path
+checks and original-byte hashes. Redacted contents cannot be rewritten as if they
+were the original file. Root project instructions are bounded untrusted user
+context. They cannot widen policy and are not saved in conversation history.
 
-## Production security gate
+`work_exec` runs only in network-disabled WSL2/bubblewrap. Policy-allowed commands
+can run without a prompt when `.git` exists, including headless. These commands
+can execute model-written project code, so isolation holds the boundary. Other
+permitted commands require exact typed approval. Headless approval fails closed.
+Common dependency installations are refused with a manual command. Missing
+isolation never falls back to host execution.
 
-A production claim requires all P0 issues and security-critical P1 acceptance
-criteria in [PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) to pass.
-In particular:
+The sandbox masks secret-named files and protects `.git`, `.github`, `.husky` and
+`.vscode` at any depth. Newly created protected paths are removed after execution. Incomplete inspection/cleanup reports failure and requires manual inspection
+before host tools are run. Gitfiles are refused at any depth. Regular files with
+multiple hardlinks are refused. Symlinks are permitted only in dependency roots
+under the documented restrictions. Every structured `.github/` write requires
+typed approval with the complete visible action.
 
-- a supervised contained mode must be the default;
-- unattended work must not trust repository-controlled scripts by command name;
-- automatic executables must be pinned and contained;
-- credential incidents must be explicitly closed;
-- Plan, memory, MCP, Gmail, approvals, and skills must preserve confidentiality
-  under adversarial tests;
-- live installed code must match a reviewed manifest.
+Git-ignored files without secret names can remain readable to commands. Generated
+project code will run with host permissions if the user later executes it outside
+the sandbox. Review that diff. Broad private-name exclusions can also block
+ordinary project folders such as `memory` or `sessions`.
 
-No date, version bump, model review, or basic green test suite can waive these
-requirements. A temporary exception needs an owner, expiry, compensating
-control, and tracked issue.
+## Active Learn boundary
 
-## Known limitations
+Learn exposes four dedicated learning tools plus bounded public-workspace
+`read`/`ls`. It has no generic shell/mutation, web search, MCP or integration tool.
+Its writers use marked owned stores, bounded exclusive files and canonical
+path/handle checks. Imported documents, profiles and saved excerpts are untrusted
+data. Citation checks establish source/excerpt identity, not semantic correctness.
 
-- YOLO can read or modify files outside the workspace, use the network, invoke
-  external tools, and trigger destructive or remote side effects without a
-  confirmation prompt. Misuse can cause data loss or account impact.
-- Plan uses application-level canonical containment rather than an OS sandbox.
-- Plan inspection excludes ignored/private files and denies historical Git content.
-  Startup resource loading and memory/network integrations have separate hardening
-  gates; concurrent hostile filesystem changes remain an application-level limit,
-  not an OS-isolated boundary. See [Plan confidentiality](docs/PLAN_CONFIDENTIALITY.md).
-- Work search paths still have confidentiality gaps; do not infer that a workspace
-  boundary prevents discovery of ignored or historical secrets.
-- Learn's first store initialization requires native Windows. Existing validated
-  stores work on POSIX, but first creation there fails before writing. Path/handle
-  revalidation does not isolate against a hostile same-user process moving paths;
-  such a process can relocate a validated parent and receive bytes before the
-  post-write identity check rejects the operation. Learn vault storage is an
-  application control, not an OS confidentiality boundary between same-user processes.
-- Saved learning content and optional Obsidian events are plaintext, not encrypted
-  evidence. Numbered event envelopes detect ordinary edits with SHA-256 but are not
-  authenticated against the signed-in user. UNC vault paths are rejected; mapped or
-  otherwise network-backed volumes cannot be identified reliably and are unsupported.
-  Obsidian Sync or plugins may copy or index vault content independently. Pattern redaction and minimized schemas do
-  not guarantee detection of every secret. Resumed excerpts are historical/unverified;
-  new citations require source reimport. Browser progress transfers only through
-  explicit user action.
-- Human Away requires Windows, WSL2, and `bubblewrap`; tool execution fails closed
-  when they are unavailable or a linked workspace entry is detected. It remains
-  preview-labelled while field evidence accumulates.
-- Redaction is pattern-based. Unknown secret formats can evade detection, so raw
-  credentials must never be placed in prompts, commands, filenames, or output.
-- Optional MCP and model providers expand the network and credential surface.
+PDF/PPTX parsers have deadlines and heap bounds but trust native/WASM code. They are not OS sandboxes. SQL exercises use disposable in-memory SQLite with
+authorizer/limits and no host file/network access. HTML boards escape content
+and use fixed CSP. Worked answers remain visible in their source.
 
-Full release gates are tracked in [docs/STATUS.md](docs/STATUS.md). Do not remove
-preview labels until those gates pass.
+First Learn-store creation requires native Windows. Same-user hostile path
+replacement remains an application-level limit. Optional Obsidian capture uses
+only a configured, marked `Neura/` subtree with minimized append-only events. Raw answers/full transcripts are omitted. Plaintext files and SHA-256 envelopes
+are not encrypted or authenticated against the signed-in user. Obsidian/plugins
+can sync them independently. Network-backed vaults are unsupported.
 
-Detailed parser limits: [Learn runtime review](docs/LEARN_DEPENDENCIES.md).
-Proof and approval failure behavior: [Verification](docs/VERIFICATION.md).
+Save/resume is explicit. Restored excerpts require reimport for new citations.
+Browser actions return through user-copied revision-bound commands. Async
+generation checks prevent stale state/warnings, but completed artifacts/events
+can remain after cancellation. There is no atomic transaction across stores.
+
+## Reviews, proof and recovery
+
+Deterministic policy outranks model output. Work reviewers have enforced read-only
+tools. The default model is same-family and labelled accordingly. Their candidate
+receipts become stale after edits and never authorize committing or publishing.
+Quick proof is detector-only. Full trusted proof is unavailable and every active
+proof receipt retains `verified:false`. See [verification](docs/VERIFICATION.md).
+
+History/crash locks fail closed. Durable recovery of uncertain effects is
+unfinished. Inspect effects before retrying. Do not steal locks, discard invalid
+audit tails or delete private state to force success. Pattern redaction cannot
+recognize every secret.
+
+## Historical modes and release gates
+
+Plan, YOLO, Human Away, Gmail/MCP, private memory, checkpoints and old skill
+discovery are unavailable in the active CLI. Their retained source does not
+establish current authorization or parity. Historical Plan confidentiality and
+Human Away preview obligations remain tracked by the [parity matrix](docs/PARITY_MATRIX.md)
+and [production-readiness backlog](docs/PRODUCTION_READINESS.md).
+
+A framework change does not close original hardening issues. Production claims
+require applicable P0 and security-critical P1 acceptance, adversarial tests,
+dependency trust, credential closure, clean-host install/recovery evidence and
+reviewed release approval. Public source, green tests and version metadata do
+not waive these gates. See [release policy](docs/RELEASING.md).

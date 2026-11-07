@@ -1,5 +1,15 @@
 # Learn document runtime
 
+Current scope, 2026-11-07: the active Mastra Learn service reuses this parser
+runtime with the separate `agent/neura` locked graph. Current pins are canvas
+`1.1.0`, PDF.js `6.4.299`, Tesseract `7.0.0`, English data `1.0.0`, saxes `6.0.0`
+and yauzl `3.4.0`. Install with `npm ci --prefix agent/neura --ignore-scripts`.
+The development launcher does not provision a sealed parser runtime or clear
+third-party distribution rights. See [Learn](LEARN_MODE.md) and the
+[M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05).
+Reviews and test counts below keep their original dates; native/WASM trust and
+resource bounds do not establish OS isolation or production readiness.
+
 Reviewed 2026-09-07. The nested `agent/neura/package.json` and lockfile contain
 the document runtime; repository development dependencies remain separate.
 Install with `npm ci --prefix agent/neura --ignore-scripts`. The Neura installer

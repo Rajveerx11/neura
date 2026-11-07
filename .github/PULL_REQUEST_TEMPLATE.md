@@ -14,8 +14,9 @@
 
 - [ ] `node scripts\verify-harness.mjs`
 - [ ] `npm run typecheck`
-- [ ] `npm run test:accessibility`
-- [ ] `node scripts\tests\learn-browser.mjs` (or reason not relevant/available)
+- [ ] `npm run check:pi-free`
+- [ ] `npm run test:browser:learn` (or reason not relevant/available)
+- [ ] `npm run test:v1:work-sandbox` (when Work execution changes; configured host required)
 - [ ] `node scripts\verify-sandbox.mjs` (or reason not run)
 - [ ] `node scripts\check-docs.mjs`
 - [ ] `git diff --check`
@@ -23,6 +24,7 @@
 - [ ] Verification names the source commit and distinguishes local checks, CI, and live-install evidence
 - [ ] Dependency changes review and audit both affected lockfile graphs
 - [ ] Documentation and changelog updated
+- [ ] Active Work/Learn scope distinguished from historical Pi behavior; release/license gates preserved
 - [ ] No secrets, private memory, sessions, or approval logs included
 - [ ] Contribution follows `CODE_OF_CONDUCT.md` and `CONTRIBUTING.md`
 

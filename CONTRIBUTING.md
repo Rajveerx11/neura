@@ -1,29 +1,25 @@
 # Contributing to Neura
 
-Neura welcomes focused bug reports, documentation fixes, tests, and pull
-requests. Project remains experimental, Windows-first, and maintained on a
-best-effort basis.
+Focused bug reports, documentation fixes and tested changes are welcome. Neura
+is experimental, Windows-first and maintained on a best-effort basis. The active
+application uses Mastra with Work and Learn. Older Pi extensions are migration evidence.
 
-By participating, you agree to [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-Vulnerabilities and credentials must follow [SECURITY.md](SECURITY.md), not
-public issues.
+Follow the [code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities through
+[Security](SECURITY.md), not public issues. Keep credentials, private code,
+transcripts, memory, approval records and provider bodies out of submissions.
 
-## Before opening an issue
+## Before changing code
 
-1. Search existing [issues](https://github.com/Rajveerx11/neura/issues).
-2. Read [current status](docs/STATUS.md) and
-   [known blockers](docs/PRODUCTION_READINESS.md).
-3. Remove credentials, private paths, transcripts, memory, approval data, and
-   provider responses from logs or screenshots.
-4. Use a GitHub issue form and include smallest safe reproduction available.
+Read [current status](docs/STATUS.md), [repository rules](AGENTS.md) and the
+[development guide](docs/DEVELOPMENT.md). Search existing
+[issues](https://github.com/Rajveerx11/neura/issues) and identify one observable
+outcome. Current source and the [parity matrix](docs/PARITY_MATRIX.md) define
+implementation scope. Historical plans do not grant authority or establish parity.
 
-Support questions belong under [SUPPORT.md](SUPPORT.md). The issue tracker is
-for reproducible defects and scoped proposals.
+## Setup
 
-## Development setup
-
-Use Node 24.15+ (CI: 24.16.0). Install both locked graphs; a global Pi or live
-harness installation is not required for development tests.
+Use native Windows, Git, PowerShell and Node `24.15+` with npm. Install both
+locked graphs without lifecycle scripts:
 
 ```powershell
 git clone https://github.com/Rajveerx11/neura.git
@@ -31,56 +27,58 @@ Set-Location .\neura
 npm ci --ignore-scripts
 npm ci --prefix agent/neura --ignore-scripts
 npm run verify
-```
-
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for full workflow and platform
-requirements. Do not install a development checkout into live Pi profile unless
-live validation is necessary and intentional.
-
-## Change standard
-
-- Keep one focused concern per pull request.
-- Fix root cause, not only visible symptom.
-- Add regression tests for behavior changes.
-- Add positive and negative tests for policy or trust-boundary changes.
-- Do not add floating or unreviewed dependencies.
-- Do not add hidden network, process, filesystem, or remote mutation.
-- Update current docs and changelog when behavior changes.
-- Treat `plans/` as historical evidence, not current requirements.
-- Preserve unrelated work.
-
-## Required verification
-
-```powershell
-npm run typecheck
-powershell -NoProfile -File .\scripts\verify-secrets.ps1
-powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
-npm run test:accessibility
-node scripts\tests\learn-browser.mjs
-node scripts\verify-harness.mjs
-node scripts\verify-sandbox.mjs
-node scripts\check-docs.mjs
 git diff --check
 ```
 
-Browser checks need Edge; `verify-sandbox.mjs` needs WSL2 and bubblewrap.
-See [verification guide](docs/VERIFICATION.md) for focused suites and portable
-CI coverage. `npm run test:changed` helps iteration but does not replace required
-checks. If a check cannot run, state why and do not claim it passed.
+Use full history for the frozen-baseline parity suite. No global Pi, provider
+credential or live installation is needed for these checks. Development/testing
+uses synthetic, non-sensitive data while Mastra EE/distribution review remains open.
+
+## Change standard
+
+- Keep one focused concern per PR and preserve unrelated work.
+- Fix the shared cause and update affected callers, fixtures and documentation.
+- Add meaningful regression coverage for nontrivial behavior. Security-boundary
+  changes need allowed and denied cases.
+- New runtime dependencies need exact pins, source/lifecycle review, documentation
+  and tests. Review/audit both affected locked graphs.
+- Do not introduce implicit network access, process execution, filesystem
+  authority or remote mutations. Untrusted content cannot widen policy.
+- Preserve private state, existing user files, dirty worktrees and recovery backups.
+
+## Verification
+
+Run `npm run verify` and `git diff --check`. Run relevant separate checks:
+
+```powershell
+npm run test:browser:learn
+npm run test:v1:work-sandbox
+npm run verify:sandbox
+npm run audit:all
+powershell -NoProfile -File .\scripts\verify-secrets.ps1
+powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
+```
+
+Edge is required for browser checks. Actual Work acceptance/replay requires a
+configured Windows/WSL2/bubblewrap host. Audits need registry access. See
+[verification](docs/VERIFICATION.md) for scope and focused suites. State skipped
+or unavailable checks explicitly. Do not call them passing. `verify:release`
+deliberately fails while distribution approval remains unresolved.
 
 ## Pull requests
 
-- Use an imperative Conventional Commit subject, for example
-  `fix: enforce Plan filesystem containment`.
-- Complete pull request template.
-- Link relevant issue.
-- Describe user-visible behavior, trust-boundary impact, test evidence, and
-  rollback.
-- Keep generated or personal state out of commit.
-- Expect review before merge. Maintainer may ask to split broad changes.
+Use an imperative Conventional Commit subject, such as `fix: reject stale Learn
+commands`. Complete the PR template, link the issue, explain user-visible behavior,
+boundary changes, verification and rollback. Name the tested source revision and
+distinguish local, CI, live-provider and installed-launcher evidence.
+
+Expect review before merge. Required checks and repository protection apply.
+Installation, commits, tags, pushes, merging and publication need the authorization
+required by the current task and repository rules. A documentation change does
+not clear release gates.
 
 ## Licensing
 
-Contributions are accepted under [Apache License 2.0](LICENSE). By submitting a
-contribution, you confirm you have right to license it to project under those
-terms.
+Contributions use [Apache-2.0](LICENSE). Submit only material you have the right
+to license. Third-party packages retain their own terms. The current Mastra
+EE/distribution boundary is documented in the [dependency review](docs/MASTRA_V1_DEPENDENCIES.md).

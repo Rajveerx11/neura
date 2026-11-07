@@ -1,4 +1,11 @@
-# Mastra v1: Learn-first development slice
+# Mastra v1: Work and Learn development build
+
+Current guide reconciled 2026-11-07 through #153. “v1” names the implementation;
+package metadata remains `2.6.0-rc.1` and no Mastra release is published. Work now
+includes the real-project milestone and read-only review workflow; Learn includes
+explicit fresh-process recovery and vault/state hardening. Start with the
+[README](../README.md), [architecture](ARCHITECTURE.md) and [Learn guide](LEARN_MODE.md).
+Evidence below retains its original dates and scope.
 
 Owner direction, 2026-10-24: build the minimum usable harness, then make Learn the
 first end-to-end mode. Do not wait for all sixteen migration issues to finish.
