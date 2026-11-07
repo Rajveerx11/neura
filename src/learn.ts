@@ -24,6 +24,7 @@ export function createLearnWorkshop(workspace: string, isActive: () => boolean, 
     if (!isActive() || epoch !== expected) throw new Error('Learning mode/session changed; stale operation discarded.');
   }
   function invalidate(clear = false) { epoch++; lastUserText = ''; if (clear) state = emptyState(); }
+  /** Keep optional vault failures nonfatal while preventing diagnostics from stale operations. */
   async function mirror(event: LearnVaultInput, expected: number, signal?: AbortSignal) {
     fence(expected, signal);
     // Vault topics have a smaller bound than lesson titles; redact before truncating.
@@ -32,6 +33,7 @@ export function createLearnWorkshop(workspace: string, isActive: () => boolean, 
     catch { fence(expected, signal); notify('Learning continued; the configured Obsidian vault could not be updated safely.'); }
     fence(expected, signal);
   }
+  /** Read optional learner context without letting late failures notify a replaced session. */
   async function profile(expected: number, signal?: AbortSignal) {
     fence(expected, signal);
     let value: Awaited<ReturnType<typeof readLearnVaultContext>>;
