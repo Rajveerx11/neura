@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
-import { canonicalLearnPath, learnPathLayers, learnPathRevision, renderLearnPathText, type LearnPath } from '../agent/neura/learn-path.ts';
+import { canonicalLearnPath, learnId, learnPathLayers, learnPathRevision, renderLearnPathText, type LearnPath } from '../agent/neura/learn-path.ts';
 import { assertLearnLesson, learnBoardRevision, renderLearnHtml, renderLearnPathHtml, type LearnLesson } from '../agent/neura/learn-renderer.ts';
 import { LearnLessonSchema } from '../agent/neura/learn-schema.ts';
 import { appendLearnVaultEvent, learnPropositionId, type LearnVaultInput } from '../agent/neura/learn-vault.ts';
@@ -70,6 +70,10 @@ test('evidence identity isolates path, concept, step, exercise, lesson and instr
   const identity = evidenceIdentity(state)!;
   state.attempts.push({ lessonId: card.id, identity, answer: 'primary key', correct: true, feedback: 'Correct', assisted: false, revealed: false, at: new Date().toISOString() });
   assert.equal(currentAttempts(state).length, 1);
+  const longHyphenLesson = { ...card, id: `${'a'.repeat(69)}-x`, stepId: undefined };
+  const longIdentity = evidenceIdentity(state, longHyphenLesson)!;
+  assert.doesNotMatch(longIdentity.stepId, /--/);
+  assert.ok(learnId(longIdentity.stepId));
   for (const modified of [
     { ...card, id: 'another-lesson' }, { ...card, conceptId: 'other-concept' }, { ...card, stepId: 'another-step' },
     { ...card, goal: 'Another goal' }, { ...card, exercise: { ...card.exercise, prompt: 'Different question' } },
@@ -213,8 +217,21 @@ test('vault knowledge: concept-scoped content identities, stable notes, typed li
     await fs.symlink(outside, linked, process.platform === 'win32' ? 'junction' : 'dir');
     await assert.rejects(appendLearnVaultEvent({ ...claim, content: 'Must not escape' }), /link|junction/);
     assert.deepEqual(await fs.readdir(outside), []);
+    await fs.unlink(linked);
+    await fs.rename(path.join(scratch, 'retained-keys'), linked);
+    // Concept with omitted example
+    await appendLearnVaultEvent({ ...base, type: 'concept', goal: 'Example-free goal', bullets: ['A core truth.'], nextStep: 'Practice' });
     const topicNotes = await fs.readdir(path.join(scratch, 'Neura', 'Topics'), { recursive: true });
     assert.ok(topicNotes.some(name => name.endsWith('.md')));
+    // Proposition is filed under Topics, never Learner/Mistakes
+    const learnerDir = path.join(scratch, 'Neura', 'Learner');
+    try {
+      const learnerFiles = await fs.readdir(learnerDir, { recursive: true });
+      assert.ok(!learnerFiles.some(file => String(file).includes(propositionId)));
+    } catch (err) {
+      // Learner directory may not even exist for purely knowledge events
+      assert.equal((err as NodeJS.ErrnoException).code, 'ENOENT');
+    }
   } finally {
     if (oldVault === undefined) delete process.env.NEURA_LEARN_VAULT; else process.env.NEURA_LEARN_VAULT = oldVault;
     await fs.rm(scratch, { recursive: true, force: true });

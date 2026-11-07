@@ -29,7 +29,7 @@ export const LEARN_RELATION_TYPES = ["requires", "supports", "example-of", "cont
 export type LearnRelation = { type: typeof LEARN_RELATION_TYPES[number]; conceptId: string; propositionId?: string };
 type BaseInput = { lessonId: string; title: string; topic?: string; lessonRevision?: string; conceptId?: string; pathRevision?: string; stepId?: string; exerciseRevision?: string };
 export type LearnVaultInput =
-  | (BaseInput & { type: "concept"; goal: string; bullets: string[]; example: string; nextStep: string; propositions?: { propositionId: string; content: string }[]; relations?: LearnRelation[] })
+  | (BaseInput & { type: "concept"; goal: string; bullets: string[]; example?: string; nextStep: string; propositions?: { propositionId: string; content: string }[]; relations?: LearnRelation[] })
   | (BaseInput & { type: "proposition"; content: string; propositionId?: string; relations: LearnRelation[] })
   | (BaseInput & { type: "practice"; correct: boolean | null; assisted: boolean; revealed: boolean; exerciseKind: string })
   | (BaseInput & { type: "finding"; finding?: string; nextStep?: string })
@@ -192,7 +192,7 @@ function validateInput(input: LearnVaultInput): void {
     if (input.propositionId !== undefined && input.propositionId !== learnPropositionId(input.content)) throw new Error("Proposition content hash mismatch.");
   } else if (input.type === "concept") {
     bounded(input.goal, 500, "Learning goal");
-    if (typeof input.example !== "string" || input.example.length > 4000) throw new Error("Invalid example.");
+    if (input.example !== undefined && (typeof input.example !== "string" || input.example.length > 4000)) throw new Error("Invalid example.");
     bounded(input.nextStep, 1000, "Next step");
     if (!Array.isArray(input.bullets) || input.bullets.length > 5) throw new Error("Concept events require at most five bullets.");
     if (input.propositions !== undefined && (!Array.isArray(input.propositions) || input.propositions.length > 5 || input.propositions.some(claim => !claim || typeof claim.content !== "string" || claim.content.length > 1000 || claim.propositionId !== learnPropositionId(claim.content)))) throw new Error("Invalid concept propositions.");
@@ -229,7 +229,7 @@ function minimizeInput(input: LearnVaultInput): LearnVaultInput {
   }
   if (input.type === "concept") {
     const bullets = input.bullets.map((item) => minimizedText(item, 1000));
-    return { ...base, type: "concept", goal: minimizedText(input.goal, 500), bullets, propositions: [...new Map(bullets.map(content => [learnPropositionId(content), content])).entries()].map(([propositionId, content]) => ({ propositionId, content })), relations, example: minimizedText(input.example, 4000), nextStep: minimizedText(input.nextStep, 1000) };
+    return { ...base, type: "concept", goal: minimizedText(input.goal, 500), bullets, propositions: [...new Map(bullets.map(content => [learnPropositionId(content), content])).entries()].map(([propositionId, content]) => ({ propositionId, content })), relations, example: minimizedText(input.example ?? "", 4000), nextStep: minimizedText(input.nextStep, 1000) };
   }
   if (input.type === "practice") return { ...base, type: "practice", correct: input.correct, assisted: input.assisted, revealed: input.revealed, exerciseKind: minimizedText(input.exerciseKind, 20) };
   if (input.type === "finding") return { ...base, type: "finding", ...(input.finding === undefined ? {} : { finding: minimizedText(input.finding, 1000) }), ...(input.nextStep === undefined ? {} : { nextStep: minimizedText(input.nextStep, 1000) }) };
@@ -255,9 +255,10 @@ function render(event: LearnVaultEvent): string {
 }
 
 async function projectionDirectory(root: string, event: LearnVaultEvent): Promise<string> {
-  const category = event.type === "concept" ? "Topics" : event.type === "practice" || event.type === "finding" ? "Learner" : "Learner";
+  const knowledge = event.type === "concept" || event.type === "proposition";
+  const category = knowledge ? "Topics" : "Learner";
   let current = await ensureChild(root, category);
-  const parts = event.type === "concept" ? [slug(event.topic ?? event.title)] : event.type === "preference" ? ["Preferences"] : ["Mistakes", slug(event.topic ?? event.title)];
+  const parts = knowledge ? [slug(event.topic ?? event.title)] : event.type === "preference" ? ["Preferences"] : ["Mistakes", slug(event.topic ?? event.title)];
   for (const part of parts) current = await ensureChild(current, part);
   return current;
 }
@@ -292,8 +293,8 @@ async function projectKnowledge(root: string, event: LearnVaultEvent): Promise<v
     for (const relation of relations) await stableNote(concepts, `${claim.propositionId}-${hash(JSON.stringify(relation))}.md`, `# Typed relation\n\n- Source: [[Neura/Concepts/${key}/${claim.propositionId}]]\n${relationLink(relation)}\n`);
   }
 }
-async function project(root: string, event: LearnVaultEvent): Promise<void> {
-  await projectKnowledge(root, event);
+async function project(root: string, event: LearnVaultEvent, knowledge = false): Promise<void> {
+  if (knowledge) await projectKnowledge(root, event);
   const directory = await projectionDirectory(root, event);
   const filename = `${event.at.slice(0, 10)}-${event.id}.md`;
   try { await writeLearnExclusive(directory, filename, render(event), EVENT_LIMIT); }
@@ -343,7 +344,7 @@ export async function appendLearnVaultEvent(input: LearnVaultInput): Promise<{ e
   const text = JSON.stringify(envelope);
   for (let attempt = 0; attempt < MAX_LEARN_VAULT_EVENTS; attempt++) {
     const existing = await readEventsForAppend(managed.events);
-    for (const saved of existing) await project(managed.root, saved);
+    for (const saved of existing) await project(managed.root, saved, false);
     if (minimized.type === "proposition") {
       const conceptId = minimized.conceptId ?? minimized.lessonId;
       const claims = existing.flatMap(saved => {
@@ -371,7 +372,7 @@ export async function appendLearnVaultEvent(input: LearnVaultInput): Promise<{ e
       if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
       throw error;
     }
-    await project(managed.root, event);
+    await project(managed.root, event, true);
     return { enabled: true, eventId: event.id };
   }
   throw new Error("Learn vault event slots remained busy; retry the automatic update.");

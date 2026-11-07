@@ -17,7 +17,7 @@ const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(va
 export function evidenceIdentity(state: State, lesson = state.lesson): EvidenceIdentity | undefined {
   if (!lesson) return undefined;
   return { pathRevision: state.path ? learnPathRevision(state.path) : digest({ lessonId: lesson.id, goal: lesson.goal }), conceptId: lesson.conceptId ?? state.conceptId ?? lesson.id,
-    stepId: lesson.stepId ?? `${lesson.id.slice(0, 70)}-${lesson.currentStep}`, exerciseRevision: digest({ lessonId: lesson.id, phase: lesson.phase ?? state.phase, exercise: lesson.exercise }) };
+    stepId: lesson.stepId ?? `${lesson.id.slice(0, 70).replace(/-+$/, "")}-${lesson.currentStep}`, exerciseRevision: digest({ lessonId: lesson.id, phase: lesson.phase ?? state.phase, exercise: lesson.exercise }) };
 }
 const sameIdentity = (left?: EvidenceIdentity, right?: EvidenceIdentity) => !!left && !!right && left.pathRevision === right.pathRevision && left.conceptId === right.conceptId && left.stepId === right.stepId && left.exerciseRevision === right.exerciseRevision;
 
