@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
-import { renderLearnHtml, learnLessonRevision } from "../agent/neura/learn-renderer.ts";
+import { renderLearnHtml, renderLearnPathHtml, learnLessonRevision, learnBoardRevision } from "../agent/neura/learn-renderer.ts";
 import { workshopFixture, sqlExercise } from "./learn-workshop-fixture.mjs";
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -98,6 +98,31 @@ try {
     await page.locator('#answer').fill('My reasoning'); await page.locator('#exercise-form button[type=submit]').click();
     assert.match(await page.locator('#feedback').innerText(), /does not grade/);
     assert.equal(await page.locator('header [role=note]').isVisible(), true);
+    const curriculum = { goal: 'Use keys to join rows', targetConceptId: 'joins', concepts: [{ id: 'rows', title: 'Rows' }, { id: 'keys', title: 'Keys' }, { id: 'joins', title: 'J'.repeat(160) }], edges: [{ from: 'rows', to: 'keys' }, { from: 'keys', to: 'joins' }] };
+    const board = { path: curriculum, current: 'keys', completed: ['rows'], accepted: true };
+    const atomic = { ...subjective, references: [], diagram: undefined, example: undefined, bullets: ['One useful idea.'] };
+    for (const standalone of [false, true]) {
+      const file = join(output, `path-${standalone ? 'standalone' : 'atomic'}-${width}.html`);
+      writeFileSync(file, standalone ? renderLearnPathHtml(board) : renderLearnHtml(atomic, { curriculum: board }));
+      await page.goto(pathToFileURL(file).href);
+      assert.match(await page.locator('#path-rows').innerText(), /Completed prerequisite/);
+      assert.match(await page.locator('#path-keys').innerText(), /Current concept/);
+      assert.match(await page.locator('#path-joins').innerText(), /Upcoming/);
+      assert.equal(await page.locator('#path-keys > a').getAttribute('aria-current'), 'step');
+      await page.locator('#path-keys > a').focus(); await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.getAttribute('href')), '#path-rows');
+      await page.keyboard.press('Enter'); assert.match(page.url(), /#path-rows$/);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, 'Curriculum titles must wrap');
+      if (!standalone) {
+        await page.locator('#answer').fill('A diagnostic answer');
+        await page.getByRole('button', { name: 'Send attempt to Neura', exact: true }).click();
+        assert.equal(await page.locator('#handoff-command').inputValue(), `/learn answer-for ${learnBoardRevision(atomic, curriculum)} A diagnostic answer`);
+      }
+      await page.evaluate(axeSource);
+      const pathA11y = await page.evaluate(async () => globalThis.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } }));
+      assert.deepEqual(pathA11y.violations.map(violation => violation.id), []);
+      await captureScreenshot(page, join(output, `path-${standalone ? 'standalone' : 'atomic'}-${width}.png`));
+    }
     assert.deepEqual(errors, []); assert.deepEqual(requests, []);
     await context.close();
   }

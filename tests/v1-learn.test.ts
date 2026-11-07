@@ -26,8 +26,7 @@ test('Learn v1: actual document -> cited lesson -> attempt -> save -> new worksh
   try {
     let active = true;
     const learn = createLearnWorkshop(scratch, () => active);
-    const tools = learn.tools();
-    const invoke = (name: string, input: any) => tools.find(tool => tool.name === name)!.execute(input, {});
+    const invoke = (name: string, input: any) => learn.tools().find(tool => tool.name === name)!.execute(input, {});
     await fs.writeFile(path.join(scratch, 'material.pdf'), pdf(['Customers make bookings']));
     const material = decode(await invoke('learn_material', { path: 'material.pdf', ocr: false }));
     assert.match(material.sourceId, /^sha256:[a-f0-9]{64}$/);
@@ -76,14 +75,17 @@ test('Learn v1: actual document -> cited lesson -> attempt -> save -> new worksh
       assert.equal(status.sources[0].verifiedThisSession, false);
       assert.match(await fs.readFile(status.board, 'utf8'), /source excerpts have not been reverified/);
       assert.equal((await fresh.command('hint')).text, saved.lesson.exercise.hints[saved.hint]);
-      const attempt = JSON.parse((await fresh.command('answer 1')).text);
-      assert.equal(attempt.solutionPreviouslyRevealed, true);
-      const after = JSON.parse((await fresh.command('status')).text);
-      assert.equal(after.attempts.at(-1).assisted, true);
+      assert.equal(status.wait, 'awaiting-continuation');
+      await assert.rejects(fresh.command('answer 1'), /learn next/);
+      assert.equal(status.attempts.at(-1).assisted, false);
       await assert.rejects(invoke('learn_lesson', saved.lesson), /Reimport/);
       await invoke('learn_material', { path: 'material.pdf', ocr: false });
       assert.equal(JSON.parse((await fresh.command('status')).text).sources[0].verifiedThisSession, true);
-      assert.equal((await invoke('learn_lesson', saved.lesson)).terminate, true);
+      await fresh.command('reset');
+      await fresh.tools().find(tool => tool.name === 'learn_material').execute({ path: 'material.pdf', ocr: false }, {});
+      assert.equal((await fresh.tools().find(tool => tool.name === 'learn_lesson').execute(saved.lesson, {})).terminate, true);
+      await fresh.command('reveal');
+      assert.equal(JSON.parse((await fresh.command('answer 1')).text).solutionPreviouslyRevealed, true);
       console.log('Fresh-process continuity passed');
     `;
     const reply = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source, scratch, filename], { cwd: path.resolve(import.meta.dirname, '..'), env: process.env, timeout: 30000 });
@@ -112,8 +114,12 @@ test('Learn v1: actual document -> cited lesson -> attempt -> save -> new worksh
     assert.equal(slides.kind, 'pptx');
     assert.ok(slides.pageCount >= 1);
     const sqlLesson = { ...structuredClone(lesson), id: 'sql-practice', references: [], exercise: structuredClone(sqlExercise) };
-    await restoredTools.find(tool => tool.name === 'learn_lesson')!.execute(sqlLesson, {});
+    await restored.command('reset');
+    await restored.tools().find(tool => tool.name === 'learn_lesson')!.execute(sqlLesson, {});
     assert.equal(JSON.parse((await restored.command(`answer ${sqlExercise.solution}`)).text).correct, true);
+    await assert.rejects(restored.command("answer ATTACH DATABASE '/tmp/blocked.db' AS other"), /learn next/);
+    await restored.command('reset');
+    await restored.tools().find(tool => tool.name === 'learn_lesson')!.execute(sqlLesson, {});
     assert.equal(JSON.parse((await restored.command("answer ATTACH DATABASE '/tmp/blocked.db' AS other")).text).correct, false);
     await restored.command('reset');
     await assert.rejects(() => restoredTools[0].execute({ path: 'material.pdf' }, {}), /changed/);
@@ -144,14 +150,18 @@ test('Learn vault mirrors public title bounds through both answer paths without 
     for (const [index, title] of titles.entries()) {
       const lesson = { ...structuredClone(workshopFixture), title, references: [], exercise: { kind: 'short', prompt: 'Explain the relationship.', acceptedAnswers: [], hints: ['Consider the many side.'], explanation: 'Discuss the relationship.' } };
       assert.doesNotThrow(() => assertLearnLesson(lesson));
+      await learn.command('reset');
       await invoke('learn_lesson', lesson);
       await learn.command(`answer ${answer}`);
+      await assert.rejects(invoke('learn_lesson', lesson), /learn next/);
+      await learn.command('reset');
+      await invoke('learn_lesson', lesson);
       learn.input(answer); await invoke('learn_exercise', { answer });
       assert.equal(JSON.parse((await learn.command('status')).text).lesson, title);
       const names = (await fs.readdir(eventsDirectory)).sort();
-      assert.equal(names.length, (index + 1) * 3, 'configured vault receives every concept and practice event');
-      const events = await Promise.all(names.slice(-3).map(async name => JSON.parse(await fs.readFile(path.join(eventsDirectory, name), 'utf8')).event));
-      assert.deepEqual(events.map(event => event.type), ['concept', 'practice', 'practice']);
+      assert.equal(names.length, (index + 1) * 4, 'configured vault receives every concept and practice event');
+      const events = await Promise.all(names.slice(-4).map(async name => JSON.parse(await fs.readFile(path.join(eventsDirectory, name), 'utf8')).event));
+      assert.deepEqual(events.map(event => event.type), ['concept', 'practice', 'concept', 'practice']);
       for (const event of events) {
         assert.ok(event.topic.length <= 120);
         assert.doesNotMatch(event.topic, /sk-s/);
@@ -166,7 +176,7 @@ test('Learn vault mirrors public title bounds through both answer paths without 
     const before = await fs.readdir(path.join(scratch, '.neura-learning'));
     await assert.rejects(invoke('learn_lesson', invalid));
     assert.deepEqual(await fs.readdir(path.join(scratch, '.neura-learning')), before);
-    assert.equal((await fs.readdir(eventsDirectory)).length, titles.length * 3);
+    assert.equal((await fs.readdir(eventsDirectory)).length, titles.length * 4);
     for (const name of await fs.readdir(vault, { recursive: true })) {
       if (/\.(?:md|json)$/.test(name)) assert.ok(!(await fs.readFile(path.join(vault, name), 'utf8')).includes(answer), name);
     }
@@ -178,7 +188,7 @@ test('Learn vault mirrors public title bounds through both answer paths without 
 });
 
 // Delay real scratch-store I/O in isolated children; no mocks enter the application.
-for (const operation of ['board', 'concept', 'practice', 'save', 'resume', 'profile', 'concept-failure', 'profile-failure']) {
+for (const operation of ['board', 'path', 'concept', 'practice', 'save', 'resume', 'profile', 'concept-failure', 'profile-failure']) {
   for (const transition of operation.endsWith('-failure') ? ['session', 'mode', 'cancel', 'current'] : ['session', 'mode', 'cancel']) {
     test(`Learn pending ${operation}: ${transition} respects operation authority`, { skip: process.platform !== 'win32' }, async () => {
       const source = String.raw`
@@ -204,7 +214,7 @@ for (const operation of ['board', 'concept', 'practice', 'save', 'resume', 'prof
           let target;
           if (profile) target = event && args[1] !== 'wx';
           else if (operation === 'save') target = /^progress-.*\.json$/.test(path.basename(filename));
-          else if (['board', 'resume'].includes(operation)) target = /^lesson-.*\.html$/.test(path.basename(filename));
+          else if (['board', 'path', 'resume'].includes(operation)) target = /^lesson-.*\.html$/.test(path.basename(filename));
           else target = event && args[1] === 'wx';
           if (armed && target) {
             armed = false; artifact = filename;
@@ -226,11 +236,13 @@ for (const operation of ['board', 'concept', 'practice', 'save', 'resume', 'prof
           const learn = createLearnWorkshop(scratch, () => active, message => notices.push(message));
           const invoke = (name, input, signal) => learn.tools().find(tool => tool.name === name).execute(input, { signal });
           const lesson = { ...structuredClone(workshopFixture), references: [] };
-          await invoke('learn_lesson', lesson);
-          let expectedTitle = lesson.title;
+          const publishing = ['board', 'path', 'concept', 'concept-failure'].includes(operation);
+          if (!publishing) await invoke('learn_lesson', lesson);
+          let expectedTitle = publishing ? null : lesson.title;
           let saved;
           if (operation === 'resume') {
             saved = /Resume: \/learn resume (\S+)/.exec((await learn.command('save')).text)[1];
+            learn.invalidate(true);
             lesson.title = 'Current lesson must survive stale resume';
             await invoke('learn_lesson', lesson); expectedTitle = lesson.title;
           }
@@ -241,7 +253,8 @@ for (const operation of ['board', 'concept', 'practice', 'save', 'resume', 'prof
             const next = { ...lesson, id: 'next-lesson', title: 'Next lesson' };
             if (operation !== 'board') expectedTitle = next.title;
             pending = invoke('learn_lesson', next, controller.signal);
-          } else if (operation === 'practice') pending = learn.command('answer 1', controller.signal);
+          } else if (operation === 'path') pending = invoke('learn_path', { path: { goal: 'A bounded goal', targetConceptId: 'one', concepts: [{ id: 'one', title: 'One concept' }], edges: [] } }, controller.signal);
+          else if (operation === 'practice') pending = learn.command('answer 1', controller.signal);
           else if (operation === 'save') pending = learn.command('save', controller.signal);
           else if (operation === 'resume') pending = learn.command('resume ' + saved, controller.signal);
           else pending = invoke('learn_progress', { action: 'status' }, controller.signal);
@@ -261,6 +274,7 @@ for (const operation of ['board', 'concept', 'practice', 'save', 'resume', 'prof
           assert.ok(artifact, 'test must reach the intended I/O boundary');
           assert.ok((await fs.readFile(artifact, 'utf8')).length, 'completed artifact bytes may remain');
           // The old lock releases, and freshly exposed tools can publish into the new epoch.
+          learn.invalidate(true);
           await invoke('learn_lesson', { ...lesson, id: 'fresh-lesson', title: 'Fresh lesson' });
           assert.equal(JSON.parse((await learn.command('status')).text).lesson, 'Fresh lesson');
           console.log('Learn fence passed');

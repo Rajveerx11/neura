@@ -26,7 +26,7 @@ assert.ok(!escaped.includes(malicious.title));
 assert.ok(!escaped.includes(malicious.example));
 assert.match(escaped, /\\u003cscript/);
 for (const mutate of [
-  (value) => { value.bullets = ["only one"]; },
+  (value) => { value.bullets = Array(6).fill("too many"); },
   (value) => { value.diagram.nodes[0].id = '../outside'; },
   (value) => { value.diagram.nodes[1].id = value.diagram.nodes[0].id; },
   (value) => { value.diagram.edges[0].from = 'missing'; },
