@@ -80,12 +80,19 @@ for(const entry of ['.git','src/.git']) {
   fs.writeFileSync(path.join(gitfileRoot,entry),'gitdir: git-storage\n');
   assert.throws(()=>assertWorkspaceHasNoLinks(gitfileRoot),/do not support \.git files/,'a gitfile must never leave its target writable');
 }
+const hardlinked=path.join(scratch,'hardlinked');
+fs.mkdirSync(hardlinked);
+fs.writeFileSync(path.join(hardlinked,'ordinary'),'fixture');
+fs.linkSync(path.join(hardlinked,'ordinary'),path.join(hardlinked,'alias'));
+assert.throws(()=>assertWorkspaceHasNoLinks(hardlinked),/refused hardlinked workspace entry/);
 const cleanupRoot=path.join(scratch,'cleanup');
 fs.mkdirSync(path.join(cleanupRoot,'.git'),{recursive:true});
+fs.mkdirSync(path.join(cleanupRoot,'.aws','.git'),{recursive:true});
 const beforeCleanup=assertWorkspaceHasNoLinks(cleanupRoot);
 fs.mkdirSync(path.join(cleanupRoot,'.husky'));
 fs.mkdirSync(path.join(cleanupRoot,'blocked'));
 fs.mkdirSync(path.join(cleanupRoot,'later','.vscode'),{recursive:true});
+fs.mkdirSync(path.join(cleanupRoot,'.azure','.git'),{recursive:true});
 const originalRead=fs.readdirSync,originalStat=fs.lstatSync;
 try {
   fs.readdirSync=function(directory,...rest) {
@@ -94,16 +101,17 @@ try {
   };
   syncBuiltinESMExports();
   const cleaned=removeCreatedHostRunPaths(cleanupRoot,beforeCleanup);
-  assert.deepEqual(cleaned.created.sort(),['.husky','later/.vscode']);
+  assert.deepEqual(cleaned.created.sort(),['.azure/.git','.husky','later/.vscode']);
   assert.deepEqual(cleaned.errors,['blocked']);
   assert.ok(fs.existsSync(path.join(cleanupRoot,'.git')),'pre-existing controls must survive');
+  assert.ok(fs.existsSync(path.join(cleanupRoot,'.aws','.git')),'pre-existing masked subtrees must not be cleaned');
   fs.mkdirSync(path.join(cleanupRoot,'.husky'));
   fs.readdirSync=function(directory,...rest) {
     if(directory===cleanupRoot)return [...Array.from({length:200001},(_,i)=>({name:`ordinary-${i}`})),{name:'.husky'}];
     return originalRead.call(this,directory,...rest);
   };
   fs.lstatSync=function(file,...rest) {
-    if(path.dirname(file)===cleanupRoot && path.basename(file).startsWith('ordinary-'))return {isSymbolicLink:()=>false,isDirectory:()=>false};
+    if(path.dirname(file)===cleanupRoot && path.basename(file).startsWith('ordinary-'))return {isSymbolicLink:()=>false,isDirectory:()=>false,isFile:()=>true,nlink:1};
     return originalStat.call(this,file,...rest);
   };
   syncBuiltinESMExports();

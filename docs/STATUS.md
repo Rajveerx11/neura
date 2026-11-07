@@ -114,8 +114,10 @@ depth. Any such path a command creates is removed afterward and the command repo
 failure. Cleanup does not depend on the discovery scan limit. If any subtree cannot
 be checked or cleaned, execution reports failure and requires manual inspection
 before running host tools. Secret-named files are empty or unreadable, including inside host-run and
-dependency folders. Links are allowed only inside `node_modules` and `.venv`,
-except host-run paths, which must not be links. Chained and unclassified commands
+dependency folders. Regular files with multiple hardlinks are refused before
+execution. Symlinks are allowed only inside `node_modules` and `.venv`, except
+host-run paths, which must not be links. Cleanup traverses newly created secret
+folders, while preserving directories that were masked before the command. Chained and unclassified commands
 still ask. Common dependency installs are refused at once with the exact manual
 command. Commands refuse `.git` files at any depth: linked worktrees and separate
 Git directories need an external manual terminal until their targets can be protected.
@@ -127,6 +129,10 @@ Limits remain: no context compaction, no local Git commit from Neura, and any pa
 component named `memory`, `sessions`, `private` or `secrets` stays unreadable, which
 can block real projects with such folders. See the evidence line in
 [Mastra v1](MASTRA_V1.md#real-project-work-2026-11-06).
+
+CI also runs Work-tool, reviewer and workflow regressions in the required Linux
+`portable-proof` job. The Windows harness remains required. Release licensing
+checks and configured-host acceptance remain separate gates.
 
 ## Branding and dependency grouping (2026-11-04)
 

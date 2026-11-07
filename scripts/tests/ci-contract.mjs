@@ -38,6 +38,10 @@ function validate(sources) {
   assert.match(sources.verify, /verify-secrets\.ps1/);
   assert.match(sources.verify, /verify-secrets\.tests\.ps1/);
   assert.match(sources.verify, /npm run test:browser:learn/);
+  const portable = sources.verify.split(/\r?\n  portable-proof:\r?\n/)[1]?.split(/\r?\n  [\w-]+:/)[0] ?? '';
+  for (const suite of ['work-tools', 'review', 'workflow']) {
+    assert.match(portable, new RegExp(`^          node scripts/verify-harness\\.mjs --suite ${suite}\\r?$`, 'm'), `Portable CI must execute ${suite}, not just mention it`);
+  }
   assert.match(sources.release, /npm run verify:release/);
   assert.match(sources.release, /npm run test:v1:work-sandbox/);
   assert.ok(sources.release.indexOf('npm run verify:release') < sources.release.indexOf('npm run test:v1:work-sandbox'), 'License gate must precede host acceptance');
@@ -61,6 +65,10 @@ const mutations = [
   ['verify', 'needs: [harness, portable-proof, dependency-review]', 'needs: [harness]'],
   ['verify', 'test "$HARNESS_RESULT" = success', 'echo "$HARNESS_RESULT"'],
   ['verify', '(Split-Path -Parent $executable) >> $env:GITHUB_PATH', '# PATH publication removed'],
+  ...['work-tools', 'review', 'workflow'].flatMap(suite => [
+    ['verify', `node scripts/verify-harness.mjs --suite ${suite}`, 'echo required portable suite omitted'],
+    ['verify', `node scripts/verify-harness.mjs --suite ${suite}`, `# node scripts/verify-harness.mjs --suite ${suite}`],
+  ]),
   ['release', '$version.Trim() -ne $git.windowsVersion', '$version.Length -lt 1'],
   ['release', 'npm run verify:release', 'npm run check:pi-free'],
   ['release', 'npm run test:v1:work-sandbox', 'echo host acceptance omitted'],
