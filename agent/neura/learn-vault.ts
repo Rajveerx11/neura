@@ -247,7 +247,7 @@ function validateEvent(value: unknown): LearnVaultEvent {
 function render(event: LearnVaultEvent): string {
   const frontmatter = `---\nneura_event: ${event.id}\nschema: 1\ntype: ${event.type}\ncreated: ${event.at}\n---\n`;
   const title = safeText(event.title, 160);
-  if (event.type === "concept") return `${frontmatter}\n# ${title}\n\n## Goal\n${safeText(event.goal, 500)}\n\n## Key ideas\n${event.bullets.map((item) => `- ${safeText(item, 1000)}`).join("\n")}\n\n## Example\n${fenced(event.example)}\n\n## Next practice\n${safeText(event.nextStep, 1000)}\n`;
+  if (event.type === "concept") return `${frontmatter}\n# ${title}\n\n## Goal\n${safeText(event.goal, 500)}\n\n## Key ideas\n${event.bullets.map((item) => `- ${safeText(item, 1000)}`).join("\n")}\n\n## Example\n${fenced(event.example ?? "")}\n\n## Next practice\n${safeText(event.nextStep, 1000)}\n`;
   if (event.type === "proposition") return `${frontmatter}\n# Proposition — ${title}\n\n${safeText(event.content, 1000)}\n\nContent identity: ${event.propositionId}\n`;
   if (event.type === "practice") return `${frontmatter}\n# Practice evidence — ${title}\n\n- Result: ${event.correct === null ? "discussion" : event.correct ? "correct attempt" : "incorrect attempt"}\n- Exercise: ${safeText(event.exerciseKind, 20)}\n- Assisted: ${event.assisted ? "yes" : "no"}\n- Answer revealed: ${event.revealed ? "yes" : "no"}\n\nThis is practice evidence, not a mastery claim. Raw answers are not stored.\n`;
   if (event.type === "preference") return `${frontmatter}\n# Learning preference — ${event.key}\n\n- Value: ${event.value}\n- Provenance: inferred from an exact learner message\n- Status: candidate until repeated distinct evidence\n\nThe originating conversation is not stored.\n`;
