@@ -1,101 +1,155 @@
 # Architecture
 
-Updated 2026-11-07. The active application is `src/cli.ts`, backed by Mastra.
-It exposes Work and Learn. Retained Pi extensions are migration evidence and
-are outside the active import graph. See [status](STATUS.md) for release limits.
+Updated 2026-11-08 against the active Mastra Work/Learn source through `efdbde3`,
+including the local T3 Code adapter. This is a source-linked development application,
+not a production release or full ACP implementation. [Release and licensing gates](STATUS.md) remain
+open. Retained Pi extensions are historical evidence, outside the active import graph.
 
-## Runtime boundary
+## System overview
 
-`launcher/neura.cmd` invokes the chosen checkout's `src/cli.ts`. The CLI owns
-provider selection, conversation history, session locks, mode changes and terminal
-input. `src/runtime.ts` wraps a real Mastra Agent with serialized tool effects,
-schema validation and cancellation. Turns are bounded: 60 steps for Work builders,
-eight for Learn and reviewers.
+![System diagram: native terminal and T3 ACP share a controller and Mastra runtime, with explicit providers, mode-specific tools and separate owned storage.](../assets/diagrams/architecture.png)
+
+*DIAGRAM, not a product screenshot. [Editable SVG source](../assets/diagrams/architecture.svg).*
+
+Read the diagram from top to bottom:
+
+1. The native launcher and T3's local ACP command enter the **same controller**.
+2. Mastra handles model turns; Neura validates and serializes tool effects.
+3. The current mode determines tool authority. Model output cannot widen it.
+4. Credentials, learning artifacts and optional vault events have separate owners.
+
+The arrows summarize control flow, not every disk or network operation. Only Work
+command execution uses offline OS isolation. Host-side file tools and Learn parsers
+use application-level controls. Model transports can use the network. The editable
+[SVG source](../assets/diagrams/architecture.svg) contains no scripts or remote assets.
+
+## Entry points and shared runtime
+
+`launcher/neura.cmd` starts `src/cli.ts`. Interactive startup shows the approved
+logo, prompt-adjacent status and prompt; headless and ACP output omit artwork.
+`src/acp.ts` bridges newline-delimited JSON-RPC to that same CLI through its injected
+I/O/controller interface. There is no second agent loop or Pi profile lookup.
+
+The controller owns provider selection, mode, conversation history, session locks,
+approval input and cancellation. `src/runtime.ts` wraps a real Mastra Agent with
+schema validation, serialized effects and cancellation. Work builders have a
+60-step bound; Learn and reviewers have an eight-step bound.
 
 | Source | Responsibility |
 | --- | --- |
-| `src/cli.ts` | Startup, commands, current generation, approval input and turn orchestration |
-| `src/brand.ts`, `src/terminal-ui.ts` | Approved logo, width-aware status/help, plain-text and color fallbacks |
-| `src/providers.ts`, `src/auth.ts` | Separate subscription, loopback local, OpenAI API and Anthropic API transports. Explicit subscription login/logout |
-| `src/work.ts` | Workspace tools, byte-bound mutations, project guidance and sandbox command admission |
-| `src/review.ts`, `src/workflow.ts` | Candidate risk, read-only reviewer, receipt currency and bounded builder fixes |
-| `src/verification.ts` | Manual Work proof request, trusted offline sandbox invocation and detector receipts |
-| `src/learn.ts`, `src/learn-state.ts` | Dedicated Learn tools, lessons, attempt provenance, async state fences and explicit progress recovery |
-| `src/session.ts`, `src/session-lock.ts` | Workspace-keyed conversations and exclusive writer leases |
+| [`src/cli.ts`](../src/cli.ts) | Startup, commands, generation fences and turn orchestration |
+| [`src/acp.ts`](../src/acp.ts) | T3 transport, Work/Learn mode mapping, streamed updates, permission requests and disconnect cleanup |
+| [`scripts/register-t3.mjs`](../scripts/register-t3.mjs) | Scoped, serialized local registration; metadata check and real discovery probe |
+| [`src/brand.ts`](../src/brand.ts), [`src/terminal-ui.ts`](../src/terminal-ui.ts) | Approved launch mark, width-aware status/help and plain-text fallbacks |
+| [`src/providers.ts`](../src/providers.ts), [`src/auth.ts`](../src/auth.ts) | Separate subscription, loopback local and explicitly billed API transports; explicit login/logout |
+| [`src/work.ts`](../src/work.ts) | Guarded workspace tools, byte-bound mutations, project guidance and command admission |
+| [`src/review.ts`](../src/review.ts), [`src/workflow.ts`](../src/workflow.ts) | Read-only review, risk routing, receipt currency and bounded builder fixes |
+| [`src/verification.ts`](../src/verification.ts) | Manual proof requests, trusted offline sandbox invocation and detector receipts |
+| [`src/learn.ts`](../src/learn.ts), [`src/learn-state.ts`](../src/learn-state.ts) | Teaching tools, instructional phases, prerequisite paths, evidence identities and explicit recovery |
+| [`src/session.ts`](../src/session.ts), [`src/session-lock.ts`](../src/session-lock.ts) | Workspace-keyed history and exclusive writer leases |
+
+### T3 is a transport, not an authority bypass
+
+T3 launches one Neura ACP process per thread. Normal sessions retain workspace
+containment and Neura's policy. Permission responses allow or reject one exact
+action; Neura revalidates it afterward. Cancellation/disconnection denies pending
+approvals and waits for interrupted work before releasing the writer lease.
+T3's permission mode may answer requests automatically; use Supervised for manual
+review of each request Neura emits.
+
+T3 discovery uses a separate empty temporary workspace with history disabled. It
+runs real CLI setup, cannot execute tasks and removes its empty workspace on
+disconnect. `--check` reads registration metadata; `--probe` exercises T3's actual
+session-creation probe. Neither proves subscription inference or entitlement.
+External MCP, native ACP resume/fork and full T3 parity remain unsupported. See
+[T3 setup and limits](T3_CODE.md).
 
 ## Shared Neura services
 
-Active source reuses Neura-owned modules under `agent/neura/`. Their directory
-name does not imply a Pi dependency. Canonical containment, redaction, scoped
-process environments, Git snapshots and the WSL2/bubblewrap bridge are shared.
-Learn reuses the material worker, schemas, renderer, exercise evaluator, marked
-store and opt-in vault writer. Exact reachable imports are checked by
-`scripts/check-pi-free.mjs`, alongside locked package closure and license rules.
+The active import graph reuses Neura-owned modules under `agent/neura/`; the folder
+name does not imply a Pi runtime dependency. Shared mechanics include canonical
+containment, redaction, scoped process environments, Git snapshots and the
+WSL2/bubblewrap bridge. Learn reuses the material worker, schemas, path validator,
+renderer, exercise evaluator, owned store and opt-in vault writer.
 
-The graph check is a package/import identity check, not exhaustive certification
-of embedded code or third-party licenses. The [dependency review](MASTRA_V1_DEPENDENCIES.md)
-records the unresolved distribution boundary.
+`scripts/check-pi-free.mjs` checks reachable imports and locked package closure,
+including the ACP entry point. This is not exhaustive certification of embedded
+code or third-party licenses. See the [dependency review](MASTRA_V1_DEPENDENCIES.md).
 
-## Work turn and review
+## Work: inspect → change → review
 
-1. Capture the workspace baseline when available. Load root `AGENTS.md` and
-   `CLAUDE.md` as bounded, untrusted user context without persisting them in history.
-2. Run builder tools through current mode/generation checks and deterministic
-   policy. Original bytes bind edits. Secret-shaped content is redacted on delivery.
-3. Commands execute only inside offline WSL isolation. Policy-allowed commands
-   can run without a prompt. Other permitted actions need exact interactive approval.
-   Gitfiles, runtime-overlapping workspaces and unsupported isolation are refused.
-4. After changes, path-based risk routing skips docs-only changes. Substantive
-   changes get a fresh reviewer with code-enforced read-only tools. The controller
-   marks must-fix findings and permits up to three builder-fix rounds.
-5. Bind receipts to the candidate fingerprint. Later edits make them stale.
-   Step exhaustion preserves the task's initial baseline for continuation.
+1. Capture a workspace baseline when available. Root `AGENTS.md` and `CLAUDE.md`
+   are bounded, untrusted context; they are not persisted in conversation history.
+2. Admit tools through current mode/generation and deterministic policy. Existing
+   bytes bind mutations. Secret-shaped content is redacted before delivery.
+3. Execute commands only in network-disabled WSL2/bubblewrap. Policy-allowed
+   commands can run without a prompt; other permitted commands need exact
+   interactive approval. Missing isolation has no host fallback. Gitfiles and
+   runtime-overlapping workspaces are refused for command execution.
+4. Skip automatic review for docs-only changes. Substantive changes receive a
+   fresh reviewer with code-enforced read-only tools and up to three builder-fix
+   rounds. No committed baseline means automatic review is unavailable.
+5. Bind review receipts to the candidate fingerprint; later edits make them stale.
+   Step exhaustion preserves the original task baseline for continuation.
 
-Review ends `READY FOR YOUR APPROVAL`, `BLOCKED` or `Review skipped`. Turns that
-change nothing stay quiet. No baseline means automatic review is unavailable.
-The default reviewer uses the builder model and is labelled same-family. An
-explicit different provider enables cross-family review. No workflow path
-commits, pushes or merges. See [verification](VERIFICATION.md).
+Review outcomes are `READY FOR YOUR APPROVAL`, `BLOCKED` or `Review skipped`.
+No-change turns stay quiet. The default reviewer follows the builder and is labelled
+same-family; selecting another provider enables cross-family review. No workflow
+path commits, pushes or merges. Manual proof remains a bounded first integration
+slice, not a completion attestation. See [verification](VERIFICATION.md).
 
-## Learn turn and recovery
+## Learn: teach → attempt → explicit continuation
 
-The model receives four dedicated tools: `learn_material`, `learn_lesson`,
-`learn_exercise`, `learn_progress`, plus bounded public-workspace `read`/`ls`.
-It receives no generic mutation, shell, integration or web-search tool. Lesson
-publication and evaluated attempts terminate the turn. Exercise answers must
-match actual learner input. Model-invented attempts are rejected.
+The model receives five teaching tools: `learn_material`, `learn_path`,
+`learn_lesson`, `learn_exercise` and `learn_progress`, plus bounded public-workspace
+`read`/`ls`. It receives no generic mutation, shell, integration or web-search tool.
+
+Application code owns `probe`, `plan`, `teach`, `check`, `practice` and `review`.
+The learner accepts a proposed prerequisite DAG with `/learn accept-plan`.
+Publishing a card, proposing a path or evaluating an attempt ends the model turn.
+Feedback leaves the controller awaiting explicit continuation. Only `/learn next`
+permits progression; failed or ungraded checks require remediation. Attempts bind to path, concept, step and exercise revisions. The model
+cannot invent learner answers, skip prerequisites or claim mastery.
+
+HTML boards have no automatic connection back to the controller. Buttons prepare
+revision-bound `/learn` commands for the learner to paste into the terminal.
+`/learn save` explicitly creates a recovery snapshot; conversation resume does not
+silently restore a lesson. Restored excerpts remain historical until reimport.
+Citation checks bind source identity and location, not the truth of an explanation.
+See the [Learn guide and screenshots](LEARN_MODE.md).
 
 Async operations recheck session/mode epochs before publishing state or warnings.
-Completed disk/vault writes can remain after cancellation or a stale-operation
-refusal. This is not a transaction across stores. `/learn save` is explicit.
-Conversation resume does not silently restore a lesson. Saved excerpts remain
-historical until reimport, and browser actions return through copied commands.
+Completed disk/vault writes can remain after cancellation or stale-operation
+refusal. There is no transaction across stores and no automatic snapshot save.
 
-## Stored state
+## Stored state and ownership
 
-| State | Current location and ownership |
+| State | Current location and boundary |
 | --- | --- |
-| Source and dependencies | Checkout, root lockfile and separate `agent/neura` lockfile |
-| Optional launcher | User-local `neura.cmd`, tracked by a development-install receipt |
-| Credentials | `codex-auth.json` under `~/.neura` or explicit `NEURA_HOME`. Inspect Windows DACLs before use |
-| Conversations and crash locks | Neura home's `sessions/<workspace-hash>/`. No Pi import |
-| Learn boards, material assets and explicit snapshots | Owned workspace `.neura-learning/` store with Git exclusion |
+| Source and dependencies | Checkout; root lockfile and separate `agent/neura` lockfile |
+| Optional launcher | User-local `neura.cmd` pointing at this checkout. Exact-content drift check; legacy receipt consulted only when replacing an owned old launcher. No new development receipt is written |
+| T3 provider registration | T3 server's `providerInstances.neura`, created through its serialized settings API; no copied Neura credentials |
+| Credentials | `codex-auth.json` under `~/.neura` or explicit `NEURA_HOME`; inspect Windows DACLs before use |
+| Conversations and crash locks | Neura home's `sessions/<workspace-hash>/`; no implicit Pi import |
+| Learn boards, material assets and explicit snapshots | Owned workspace `.neura-learning/` with marker and Git exclusion |
 | Optional vault configuration | `NEURA_LEARN_VAULT` or Neura home's `learn-vault.json` |
-| Optional learning events/projections | Configured Obsidian vault's owned `Neura/` subtree |
-| Review and proof receipts | Current process/session memory. No durable attestation |
+| Optional learning events/projections | Configured Obsidian vault's marked `Neura/` subtree; minimized events, no raw answers or full transcripts |
+| Review and proof receipts | Process/session memory; no durable attestation |
 
-Private home and workspace must be disjoint in both directions. Pi profiles
-cannot be workspace roots. Development installation and retirement preserve
-legacy credentials, memory, approvals, sessions and vaults, along with unmatched user files.
+Private home and workspace must be disjoint in both directions. Pi profiles cannot
+be workspaces. Installation and retirement preserve legacy credentials, memory,
+approvals, sessions and vaults, along with unmatched user files. See
+[installer ownership and rollback](INSTALLER_READINESS.md).
 
-## Trust and limits
+## Trust boundaries and open limits
 
-Deterministic policy outranks model output and project guidance. Work command
-isolation protects host paths, secret-named files and Git/configuration directories. Ignored files without secret names may remain readable. Host execution of generated
-project code still requires user review. Learn path checks and parser resource
-bounds are application controls, not OS isolation against a hostile same-user process.
+Deterministic policy outranks model output, source documents, saved profiles and
+project guidance. Work commands protect Git/configuration directories and mask
+secret-named files; ignored files without secret names may remain readable.
+Generated project code requires review before host execution. Application path
+checks and parser resource bounds do not isolate against a hostile same-user process.
 
-There is no Plan, YOLO, Human Away, MCP/LSP, delegation, context compaction,
-durable effect recovery or full trusted proof in the active application. The
-[parity matrix](PARITY_MATRIX.md) tracks those gaps without treating retained
-extensions or old tests as active behavior.
+Plan, YOLO, Human Away, external MCP/LSP, delegation, context compaction, durable
+effect recovery and full trusted proof are unavailable in the active application.
+Historical extensions and old tests do not establish current behavior. The
+[parity matrix](PARITY_MATRIX.md) tracks those gaps without a readiness claim.

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Neura: active Mastra architecture</title>
+  <desc id="desc">The native terminal and T3 Code local ACP adapter enter one CLI controller and Mastra runtime. Explicitly selected provider transports perform inference. Work exposes guarded files and offline sandbox commands; Learn exposes constrained learning tools and copied browser commands. Credentials and conversations, workspace learning artifacts, and optional Obsidian events have separate ownership boundaries. This is a development build, not full ACP parity or a production release.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#72a7ff"/></marker>
+    <style>
+      text{font-family:Segoe UI,Arial,sans-serif;fill:#f3f6ff}
+      .heading{font-size:28px;font-weight:700}.title{font-size:23px;font-weight:650}
+      .body{font-size:19px}.code{font-family:Consolas,monospace;font-size:17px;fill:#b4bece}
+      .muted{font-size:17px;fill:#b4bece}.label{font-size:15px;letter-spacing:1.8px;font-weight:700;fill:#72a7ff}
+      .card{fill:#101522;stroke:#26334c;stroke-width:1.5}.flow{fill:none;stroke:#72a7ff;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1000" height="1000" rx="20" fill="#080a0f"/>
+  <text x="36" y="45" class="heading">One assistant. Two entry points. Two modes.</text>
+  <text x="36" y="74" class="muted">Active source architecture · 2026-11-08 · Mastra, not Pi</text>
+
+  <rect x="36" y="100" width="438" height="108" rx="12" class="card"/>
+  <text x="58" y="133" class="title">Native terminal</text>
+  <text x="58" y="160" class="code">launcher/neura.cmd → src/cli.ts</text>
+  <text x="58" y="187" class="body">Logo, prompt, commands and approvals</text>
+  <rect x="526" y="100" width="438" height="108" rx="12" class="card"/>
+  <text x="548" y="133" class="title">T3 Code · Local ACP command</text>
+  <text x="548" y="160" class="code">src/acp.ts → src/cli.ts</text>
+  <text x="548" y="187" class="body">Stdio JSON-RPC; no duplicate agent loop</text>
+  <path d="M255 208V229H343V249" class="flow"/>
+  <path d="M745 208V229H343" fill="none" stroke="#72a7ff" stroke-width="2"/>
+
+  <rect x="36" y="250" width="614" height="98" rx="12" class="card"/>
+  <text x="58" y="284" class="title">Shared controller · src/cli.ts</text>
+  <text x="58" y="312" class="body">Mode, conversation, writer lease, approval and cancellation</text>
+  <text x="58" y="335" class="code">Work builder: 60 steps · Learn / reviewer: 8 steps</text>
+  <path d="M343 348V373" class="flow"/>
+  <rect x="36" y="374" width="614" height="96" rx="12" class="card"/>
+  <text x="58" y="407" class="title">Mastra Agent · src/runtime.ts</text>
+  <text x="58" y="436" class="body">Schema validation · serialized effects · turn cancellation</text>
+  <text x="58" y="458" class="code">Model output cannot widen tool authority</text>
+
+  <rect x="686" y="250" width="278" height="220" rx="12" class="card"/>
+  <text x="708" y="282" class="title">Provider boundary</text>
+  <text x="708" y="309" class="code">src/providers.ts</text>
+  <text x="708" y="341" class="body">ChatGPT subscription</text>
+  <text x="708" y="371" class="body">Loopback local model</text>
+  <text x="708" y="401" class="body">Explicitly billed APIs</text>
+  <text x="708" y="434" class="muted">No paid fallback</text>
+  <text x="708" y="456" class="muted">Network depends on provider</text>
+  <path d="M650 421H685" class="flow" marker-start="url(#arrow)"/>
+  <path d="M343 470V500H255V525" class="flow"/>
+  <path d="M343 500H745V525" class="flow"/>
+
+  <rect x="36" y="526" width="438" height="216" rx="12" class="card"/>
+  <text x="58" y="560" class="title">Work · guarded engineering tools</text>
+  <text x="58" y="588" class="code">src/work.ts · review.ts · workflow.ts</text>
+  <text x="58" y="622" class="body">Read, search and byte-bound edits</text>
+  <text x="58" y="651" class="body">Deterministic policy + exact approvals</text>
+  <text x="58" y="680" class="body">Commands → offline WSL2 / bubblewrap</text>
+  <text x="58" y="715" class="muted">Fresh read-only review; no commit or push</text>
+  <rect x="526" y="526" width="438" height="216" rx="12" class="card"/>
+  <text x="548" y="560" class="title">Learn · constrained teaching tools</text>
+  <text x="548" y="588" class="code">src/learn.ts · learn-state.ts</text>
+  <text x="548" y="622" class="body">Prerequisite DAG + learner-led phases</text>
+  <text x="548" y="651" class="body">PDF/PPTX, boards and exercises</text>
+  <text x="548" y="680" class="body">Browser → copied revision-bound command</text>
+  <text x="548" y="715" class="muted">No shell or general-purpose mutations</text>
+
+  <text x="36" y="783" class="label">SEPARATE OWNED STATE · NO IMPLICIT PI PROFILE READS</text>
+  <rect x="36" y="802" width="292" height="119" rx="12" class="card"/>
+  <text x="54" y="834" class="title">Private Neura home</text>
+  <text x="54" y="862" class="code">~/.neura / NEURA_HOME</text>
+  <text x="54" y="897" class="body">Credentials + conversations</text>
+  <rect x="354" y="802" width="292" height="119" rx="12" class="card"/>
+  <text x="372" y="834" class="title">Workspace Learn store</text>
+  <text x="372" y="862" class="code">.neura-learning/</text>
+  <text x="372" y="897" class="body">Boards, assets + snapshots</text>
+  <rect x="672" y="802" width="292" height="119" rx="12" class="card"/>
+  <text x="690" y="834" class="title">Obsidian · opt-in</text>
+  <text x="690" y="862" class="code">Marked Neura/ subtree</text>
+  <text x="690" y="897" class="body">Minimized events + notes</text>
+  <text x="36" y="956" class="muted">Only command execution is offline-isolated; file tools and parsers use application-level controls.</text>
+  <text x="36" y="982" class="muted">Development/testing only · Mastra EE and distribution approval remain unresolved.</text>
+</svg>

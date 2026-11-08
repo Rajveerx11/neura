@@ -47,8 +47,8 @@ the reviewed uv/CPython/wheel closure. Setup never provisions these silently.
 5. Inspect the complete diff for unrelated edits and private data. Report actual
    results, skipped checks and limitations. A green local suite is not CI or release approval.
 
-The active runner defines 21 suites in `scripts/verify-harness.mjs`. Unknown
-suite names fail. There is no active `test:changed` or `test:accessibility` npm
+The active runner defines 22 suites, including `acp`, in `scripts/verify-harness.mjs`.
+Unknown suite names fail. There is no active `test:changed` or `test:accessibility` npm
 script. Historical Pi runners remain separate and do not certify Mastra parity.
 
 ## Invariants
@@ -107,6 +107,7 @@ known-good checkout or restore only a verified installer-owned launcher backup. 
 | User-visible behavior | `README.md`, `docs/STATUS.md`, `docs/CHANGELOG.md` |
 | Runtime or lifecycle | `docs/ARCHITECTURE.md`, `docs/MASTRA_V1.md` |
 | Learn or document support | `docs/LEARN_MODE.md`, `docs/LEARN_DEPENDENCIES.md` |
+| Documentation images | `assets/screenshots/README.md` for renderer/fixture provenance; label architecture artwork as a diagram and keep its editable SVG |
 | Tests, review or proof | `docs/VERIFICATION.md` |
 | Dependencies or distribution | `docs/DEPENDENCIES.md`, `docs/MASTRA_V1_DEPENDENCIES.md` |
 | Install or release policy | `docs/INSTALLER_READINESS.md`, `docs/RELEASING.md` |

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const docs = ['README.md', 'AGENTS.md', 'docs/STATUS.md', 'docs/README.md', 'docs/MASTRA_V1.md', 'docs/MASTRA_V1_DEPENDENCIES.md', 'docs/PARITY_MATRIX.md'];
 if (fs.existsSync(path.join(root, 'docs/CODEX_AUTH.md'))) docs.push('docs/CODEX_AUTH.md');
-docs.push('docs/T3_CODE.md');
+docs.push('docs/T3_CODE.md', 'docs/ARCHITECTURE.md', 'docs/LEARN_MODE.md', 'docs/DEVELOPMENT.md', 'docs/VERIFICATION.md', 'assets/screenshots/README.md', 'assets/diagrams/README.md');
 for (const relative of docs) {
   const source = fs.readFileSync(path.join(root, relative), 'utf8');
   assert.ok(!/[ \t]+$/m.test(source), `Trailing whitespace: ${relative}`);

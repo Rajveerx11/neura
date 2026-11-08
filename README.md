@@ -13,9 +13,17 @@ diagrams and exercises. The active application uses **Mastra, not Pi**.
 > remain unresolved. Local development acceptance does not authorize processing
 > end-user, customer or business-operational data, redistribution or production use.
 
-[Documentation](docs/README.md) · [Current status](docs/STATUS.md) ·
-[Changelog](docs/CHANGELOG.md) · [Security](SECURITY.md) ·
-[Contributing](CONTRIBUTING.md)
+[Documentation](docs/README.md) · [Quick start](#quick-start-from-source) ·
+[Architecture](docs/ARCHITECTURE.md) · [T3 Code](docs/T3_CODE.md) ·
+[Current status](docs/STATUS.md) · [Security](SECURITY.md)
+
+## A look inside Learn
+
+![Neura Learn on desktop: a booking-system relationship diagram, concept highlights and lesson route.](assets/screenshots/learn-workshop-desktop.png)
+
+*Native Edge capture at 1280 × 1000 of the current Learn renderer with synthetic
+teaching data—not a live provider session or a real PDF import.
+[Visual tour](docs/LEARN_MODE.md#visual-tour) · [Capture provenance](assets/screenshots/README.md).*
 
 ## What Neura does
 
@@ -50,6 +58,17 @@ There is **no automatic browser synchronization**. Copy a board's revision-bound
 command into the terminal to submit an answer. Reading or revealing an answer
 does not establish mastery. See the [Learn guide](docs/LEARN_MODE.md).
 
+## How it fits together
+
+![System diagram: native terminal and T3 ACP share one CLI controller and Mastra runtime; Work and Learn have separate tool boundaries and owned stores.](assets/diagrams/architecture.png)
+
+*DIAGRAM, not a product screenshot. [Editable SVG source](assets/diagrams/architecture.svg).*
+
+T3 is another entry point into Neura, not a replacement agent loop. Work commands
+run only in the offline sandbox; model inference uses the selected provider's
+transport, which may use the network. Learn boards return actions through copied
+commands, not a background connection. See the [source map and trust boundaries](docs/ARCHITECTURE.md).
+
 ## Project state
 
 The current checkout is an unreleased Mastra development build. Package metadata
@@ -61,9 +80,10 @@ belongs to the historical Pi application. The existing `v2.6.0-rc.1` draft is
 withheld. Neither describes an installable release of the current application.
 See [release status](docs/releases/README.md) and the [parity matrix](docs/PARITY_MATRIX.md).
 
-Recent source changes include real-project Work support (#152), Learn continuity
-and vault hardening (#153), answer-only chat output, the approved terminal logo,
-and package-closure gates (#151). [Dated evidence](docs/MASTRA_V1.md) distinguishes
+Recent source changes include the local T3 Code ACP adapter, active Learn pedagogy
+and prerequisite paths (#154), real-project Work support (#152), Learn continuity
+and vault hardening (#153), and package-closure gates (#151).
+[Dated evidence](docs/MASTRA_V1.md) distinguishes
 synthetic checks from recorded live tests and unresolved gates.
 
 <a id="requirements"></a>
@@ -250,9 +270,10 @@ git diff --check
 ```
 
 `npm run verify` includes strict types, the Pi-free/dependency-closure gate,
-21 active suites and registered documentation checks. Tests use synthetic state. Default verification does not require a successful live WSL command. Edge is
-needed for the separate Learn browser check. In a shallow clone, fetch full
-history before verification with `git fetch --unshallow`.
+22 active suites (including ACP) and registered documentation checks. Tests use
+synthetic state. Default verification does not require a successful live WSL
+command. Edge is needed for the separate Learn browser check. In a shallow clone,
+fetch full history before verification with `git fetch --unshallow`.
 
 On a configured native Windows/WSL2/bubblewrap host, also run:
 

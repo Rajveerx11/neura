@@ -6,6 +6,38 @@ learner-approved prerequisite paths and concept-scoped evidence to the
 continuity/vault hardening in #153. Development/testing uses synthetic, non-sensitive materials.
 [Distribution and production gates](STATUS.md) remain open.
 
+## Visual tour
+
+### Understand one idea
+
+![Desktop Learn board showing Customer, Booking and Room entities, focus controls and a three-step lesson route.](../assets/screenshots/learn-workshop-desktop.png)
+
+Use concept highlights, a text alternative, a worked example and progressive hints.
+The route at the right describes the lesson; reading a page does not mark it complete.
+
+### Try a query
+
+![Learn SQL exercise with synthetic customer and booking tables, a SELECT input and the Prepare SQL for Neura button.](../assets/screenshots/learn-sql-lab.png)
+
+The browser prepares a revision-bound command. Paste it into the current Neura
+session for bounded SQLite evaluation; SQL does not execute in the browser.
+Choice and keyed short-answer exercises can show local feedback, but only terminal
+submission records an attempt in Neura.
+
+### Follow prerequisites
+
+![Curriculum path showing completed rows practice, primary and foreign keys as the current concept, and joins as upcoming.](../assets/screenshots/learn-curriculum.png)
+
+Accepted paths show prerequisite layers, the current concept and upcoming practice.
+Progress is practice evidence, not certification.
+
+These are unretouched native Edge screenshots of the current renderer, captured
+on 2026-11-08 with **synthetic fixtures**. The desktop view is 1280 × 1000; the SQL
+and curriculum views capture their complete panels at the same desktop scale.
+Names, tables, source identifiers and the displayed PDF citation are examples—not
+private learner data, a real document import or live model-inference evidence.
+[Capture provenance and reproduction](../assets/screenshots/README.md).
+
 ## Start a lesson
 
 Launch Neura in a disposable workspace with a configured provider, then enter:

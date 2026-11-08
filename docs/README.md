@@ -1,7 +1,8 @@
 # Neura documentation
 
-Updated 2026-11-07 against the active Mastra application and recent changes
-through `6a63952` (#153). Work and Learn are the only implemented modes.
+Updated 2026-11-08 against the active Mastra application through `efdbde3`,
+including the local T3 Code integration and Learn prerequisite paths (#154).
+Work and Learn are the only implemented modes.
 Development/testing uses synthetic, non-sensitive data while Mastra EE scope and
 distribution approval remain unresolved. No production readiness is claimed.
 
@@ -13,7 +14,7 @@ distribution approval remain unresolved. No production readiness is claimed.
 | Check implemented behavior and open gates | [Status](STATUS.md), [Mastra implementation/evidence](MASTRA_V1.md), [parity matrix](PARITY_MATRIX.md) |
 | Choose a provider or diagnose subscription access | [Authentication](CODEX_AUTH.md) |
 | Register Neura as a local T3 Code development provider | [T3 Code integration](T3_CODE.md) |
-| Learn from documents and save progress | [Learn Mode](LEARN_MODE.md), [document runtime](LEARN_DEPENDENCIES.md) |
+| See the interface, learn from documents and save progress | [Learn visual tour](LEARN_MODE.md#visual-tour), [lesson workflow](LEARN_MODE.md#start-a-lesson), [document runtime](LEARN_DEPENDENCIES.md) |
 | Understand Work review and proof limits | [Verification](VERIFICATION.md) |
 | Resolve a setup problem | [Support](../SUPPORT.md) |
 | Report a vulnerability privately | [Security policy](../SECURITY.md) |
@@ -23,7 +24,8 @@ distribution approval remain unresolved. No production readiness is claimed.
 | Need | Guide |
 | --- | --- |
 | Set up a checkout and contribute | [Development](DEVELOPMENT.md), [Contributing](../CONTRIBUTING.md) |
-| Trace the active source and stored data | [Architecture](ARCHITECTURE.md) |
+| Trace entry points, tool authority and owned data | [Architecture diagram and source map](ARCHITECTURE.md) |
+| Reproduce the real-renderer documentation images | [Screenshot provenance and capture recipe](../assets/screenshots/README.md) |
 | Review exact pins and package-closure/license gates | [Dependency policy](DEPENDENCIES.md), [Mastra closure review](MASTRA_V1_DEPENDENCIES.md) |
 | Change terminal or board presentation | [Design](../DESIGN.md), [terminal UX](TERMINAL_UX.md) |
 | Understand development-launcher ownership and rollback | [Installer readiness](INSTALLER_READINESS.md) |

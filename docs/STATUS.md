@@ -1,7 +1,7 @@
 # Neura status
 
 Documentation and public-metadata reconciliation: 2026-11-08, source through
-`f7acf58` (#154). The [official README](../README.md) and [documentation index](README.md)
+`efdbde3` (T3 integration; Learn pedagogy in #154). The [official README](../README.md) and [documentation index](README.md)
 describe the active Mastra Work/Learn application. The [release inventory](releases/README.md)
 separates unreleased source, the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
 Latest source changes include active pedagogy and proposition graph (#154),
@@ -59,9 +59,14 @@ Learn mode now incorporates active pedagogy with Socratic guidance, progressive
 scaffolding, challenge exercises and active practice steps. A curriculum DAG
 engine models directional topic dependencies, prerequisite resolution and
 topological progression. The proposition vault provides atomic concept notes
-with typed bidirectional wikilinks (`supports`, `refines`, `contradicts`,
-`prerequisite_for`), cycle-safe traversal and bounded proposition storage.
-All 21 Mastra v1 test suites and documentation gates pass on `main`.
+with typed relations (`requires`, `supports`, `example-of`, `contradicts`,
+`supersedes`), cycle-safe correction handling and bounded proposition storage.
+The active harness has 22 suites, including ACP. The 2026-11-08 native Windows
+verification of `efdbde3` passed all 22 suites and the documentation gate; required
+CI also passed after a transient scanner-download retry. This is historical
+verification of that committed baseline, not a test result for this
+documentation/image refresh, live-account acceptance or production clearance.
+See the current [architecture](ARCHITECTURE.md) and [Learn visual tour](LEARN_MODE.md#visual-tour).
 
 ## Learn hardening (2026-11-07)
 
@@ -225,6 +230,10 @@ summary. A chat turn that changed nothing prints no review line, and bare
 
 ## Historical Pi candidate baseline
 
+> Everything below records the retained Pi-era checkpoint, including its release
+> language, UI, repository settings and verification evidence. It does not describe
+> active Mastra capabilities, current settings verification or release clearance.
+
 Last documentation audit: 2026-10-20
 
 Current candidate: [`2.6.0-rc.1`](releases/v2.6.0-rc.1.md). Latest published
@@ -252,7 +261,7 @@ for touched live files at the owner's request so repository changes remain
 source-only. No current live-match claim is made. Older working checkouts and
 live installations can differ.
 
-## Release decision
+### Release decision
 
 Release channel: experimental
 
@@ -273,7 +282,7 @@ The canonical hardening backlog is
 release gates and issue ownership live in
 [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
-## Current evidence
+### Current evidence
 
 | Area | State | Evidence or blocker |
 |---|---|---|
@@ -300,7 +309,7 @@ release gates and issue ownership live in
 | Health | Implemented in RC source | Core readiness is separate from optional capabilities. Bounded MCP/provider probes report explicit states, redacted errors, runtime identity, and remediation. Track delivery in [#39](https://github.com/Rajveerx11/neura/issues/39). |
 | Evaluations and operations | Major gap | Privacy-preserving evaluation and observability remain open. Track [#30](https://github.com/Rajveerx11/neura/issues/30). |
 
-## GitHub repository controls
+### GitHub repository controls
 
 The current repository settings reported for this infrastructure update are:
 
@@ -322,7 +331,7 @@ is documented separately in `agent/neura/launch-artwork.md`.
 The stable aggregate `Required CI` is additive: preserving the required job names
 `harness` and `portable-proof` keeps current protection satisfiable.
 
-## Production claim gate
+### Production claim gate
 
 Delivery reference: [PR #44](https://github.com/Rajveerx11/neura/pull/44), merged
 2026-09-07. Final reviewed head `c66c88c` passed
@@ -350,7 +359,7 @@ Neura may be called production-ready only when:
 Passing tests prove only the behavior they cover. Dates, version bumps, or a
 green basic harness do not override an unmet production gate.
 
-## Preserved invariants
+### Preserved invariants
 
 - Repository checkout remains source of truth; live harness is generated.
 - Plain Pi stays stock unless `NEURA` is set.

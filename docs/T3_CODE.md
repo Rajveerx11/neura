@@ -123,7 +123,8 @@ to API billing. Do not assume account isolation between two provider instances.
 - Stop cancels the current turn without replay. Only one prompt may run at a time.
   Disconnect waits for the interrupted operation before releasing its writer lease.
 - The native offline WSL2/bubblewrap command sandbox remains mandatory. No T3
-  terminal execution or host fallback bypasses it.
+  terminal execution or host fallback bypasses it. This isolates Work commands,
+  not model inference: Neura's selected provider transport can use the network.
 
 External MCP servers are **not connected** in this first development adapter;
 a session receiving them reports that limitation. It does not claim HTTP/SSE MCP
@@ -133,6 +134,22 @@ thread and usage reporting are not advertised. T3's portable handoff may start a
 new session; this is not native session restoration. Use the native terminal for
 account and history management. Maintained regression tests are source, not
 cleanup targets.
+
+## Diagnose setup without changing private state
+
+| Check or symptom | Meaning and next step |
+| --- | --- |
+| `node scripts/register-t3.mjs --check` passes | Stored executable and arguments match this checkout, and `NEURA_PROVIDER` selects `openai-codex`. Extra environment settings are not validated. No model is launched |
+| `node scripts/register-t3.mjs --probe` reports `ready` | T3 created a real discovery session. Inference, entitlement and command-sandbox acceptance are separate checks |
+| Neura is missing from the picker | Check the selected T3 environment and Settings → Providers. Registration is local to the Windows server |
+| Test-session creation fails | Confirm native Node 24.15+, both dependency graphs, the checkout path and `src/acp.ts`. Run `--check`, then `--probe`; do not edit unrelated providers or reset T3 settings |
+| A normal thread rejects its workspace | Choose a disposable project disjoint from `NEURA_HOME` and Pi profiles. Work commands also refuse a workspace overlapping Neura's running checkout |
+| Subscription inference fails after discovery passes | Follow [account setup and safe diagnostics](CODEX_AUTH.md); `ready` does not establish entitlement. Do not copy tokens into T3 or switch to paid APIs implicitly |
+| A Work command is unavailable | Check WSL2/bubblewrap and the project toolchain. There is no host-execution fallback |
+
+The [architecture diagram](ARCHITECTURE.md#system-overview) shows which parts are
+shared with the native CLI. The [Learn visual tour](LEARN_MODE.md#visual-tour)
+shows the separate local browser boards, not T3's own interface.
 
 ## Verification
 

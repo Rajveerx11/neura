@@ -1,7 +1,7 @@
 # Verification
 
-Updated 2026-11-07 for the active Mastra application. Repository tests, Work review
-and manual proof are separate checks. None authorizes publication or establishes
+Updated 2026-11-08 for the active Mastra application through `efdbde3`.
+Repository tests, Work review and manual proof are separate checks. None authorizes publication or establishes
 production readiness. Historical Pi tests are retained separately.
 
 ## Repository checks
@@ -15,7 +15,7 @@ git diff --check
 
 `verify` runs strict active-source types, Pi-free/package-closure checks,
 `node scripts/verify-harness.mjs` and registered documentation checks. The active
-runner defines 21 suites, using synthetic stores/models and isolated test
+runner defines 22 suites, using synthetic stores/models and isolated test
 processes. It does not require credentials, install into a live profile or prove
 live provider access. Default sandbox tests check contracts and fail-closed
 behavior without requiring successful Work execution on an unconfigured host.
@@ -24,6 +24,7 @@ behavior without requiring successful Work execution on an unconfigured host.
 | --- | --- |
 | `runtime`, `auth` | Mastra dispatch, schemas, bounded turns, serialized effects, cancellation and synthetic subscription transport/storage |
 | `cli`, `terminal-ui` | Real CLI with synthetic providers, commands, history, approvals, quiet output, widths and fallbacks |
+| `acp` | ACP negotiation, isolated discovery, retained Work/Learn state, exact-action permissions, tool cards, cancellation and disconnect cleanup |
 | `learn`, `agent-learn` | Active Learn tools, provenance, explicit recovery, title bounds and stale async operations |
 | `work-tools`, `review`, `workflow` | Workspace policy/search/mutations, read-only review, candidate currency and bounded repair |
 | `verification` | Work-only manual proof admission, fingerprints and unavailable/full-proof boundaries |
