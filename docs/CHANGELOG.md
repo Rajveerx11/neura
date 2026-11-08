@@ -8,6 +8,18 @@ Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
 approval remains unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-08: active pedagogy and proposition graph (#154)
+
+- Integrated active pedagogy into Learn mode: Socratic guidance, progressive
+  scaffolding, challenge exercises, and active practice steps.
+- Added curriculum DAG engine: directional topic dependencies, prerequisite
+  resolution, cycle detection, and progressive lesson plan generation.
+- Implemented proposition graph vault with typed bidirectional wikilinks:
+  atomic proposition notes, typed relations (supports, refines, contradicts,
+  prerequisite_for), and wikilink graph navigation.
+- Hardened proposition and curriculum identity bounds: bounded node counts,
+  title constraints, link validation, and isolated file-based proposition storage.
+
 ### 2026-11-07: documentation and repository cleanup
 
 - Rebuilt the official README around current Work/Learn behavior, source setup,

@@ -1,11 +1,12 @@
 # Neura status
 
-Documentation and public-metadata reconciliation: 2026-11-07, source through
-`6a63952` (#153). The [official README](../README.md) and [documentation index](README.md)
+Documentation and public-metadata reconciliation: 2026-11-08, source through
+`f7acf58` (#154). The [official README](../README.md) and [documentation index](README.md)
 describe the active Mastra Work/Learn application. The [release inventory](releases/README.md)
 separates unreleased source, the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
-Latest source changes include real-project Work (#152), Learn continuity/vault
-hardening (#153), answer-only chat and M1 package-closure enforcement (#151).
+Latest source changes include active pedagogy and proposition graph (#154),
+real-project Work (#152), Learn continuity/vault hardening (#153), answer-only chat
+and M1 package-closure enforcement (#151).
 Original migration/security issues remain open; this documentation pass closes none.
 
 Obsolete standalone HTML plans and old LinkedIn graphics have been removed from
@@ -35,6 +36,16 @@ verification or permission to install/downgrade Pi. Original hardening issues st
 open; a framework change does not close them. Human Away is unavailable in v1.
 Baseline coverage and owners are tracked in the [parity matrix](PARITY_MATRIX.md) (#114); it is not a parity or readiness claim.
 On 2026-11-05 the owner accepted Mastra EE terms for local development/testing only. The [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05) (#115) now gates pins, install scripts and licenses.
+
+## Active pedagogy and proposition graph (2026-11-08)
+
+Learn mode now incorporates active pedagogy with Socratic guidance, progressive
+scaffolding, challenge exercises and active practice steps. A curriculum DAG
+engine models directional topic dependencies, prerequisite resolution and
+topological progression. The proposition vault provides atomic concept notes
+with typed bidirectional wikilinks (`supports`, `refines`, `contradicts`,
+`prerequisite_for`), cycle-safe traversal and bounded proposition storage.
+All 21 Mastra v1 test suites and documentation gates pass on `main`.
 
 ## Learn hardening (2026-11-07)
 
