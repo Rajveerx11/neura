@@ -12,6 +12,7 @@ distribution approval remain unresolved. No production readiness is claimed.
 | Understand Neura and run it from source | [Official README](../README.md) |
 | Check implemented behavior and open gates | [Status](STATUS.md), [Mastra implementation/evidence](MASTRA_V1.md), [parity matrix](PARITY_MATRIX.md) |
 | Choose a provider or diagnose subscription access | [Authentication](CODEX_AUTH.md) |
+| Register Neura as a local T3 Code development provider | [T3 Code integration](T3_CODE.md) |
 | Learn from documents and save progress | [Learn Mode](LEARN_MODE.md), [document runtime](LEARN_DEPENDENCIES.md) |
 | Understand Work review and proof limits | [Verification](VERIFICATION.md) |
 | Resolve a setup problem | [Support](../SUPPORT.md) |

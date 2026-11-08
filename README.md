@@ -113,6 +113,9 @@ next launch. It is not a sealed release or an automatic updater. The installer
 preserves unknown/modified launchers and backs up receipt-owned replacements.
 Without the launcher, use `node C:\path\to\neura\src\cli.ts` in place of `neura`.
 
+For T3 Code, use the [local ACP development integration](docs/T3_CODE.md).
+It keeps Neura's Work/Learn loop and sandbox; it is not a Pi provider or a release.
+
 ### Manual test in a disposable workspace
 
 Use a project outside the Neura checkout and its ancestors/descendants, Neura's

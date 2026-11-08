@@ -37,6 +37,22 @@ open; a framework change does not close them. Human Away is unavailable in v1.
 Baseline coverage and owners are tracked in the [parity matrix](PARITY_MATRIX.md) (#114); it is not a parity or readiness claim.
 On 2026-11-05 the owner accepted Mastra EE terms for local development/testing only. The [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05) (#115) now gates pins, install scripts and licenses.
 
+## Local T3 Code development integration (2026-11-08)
+
+The source-linked [T3 Code adapter](T3_CODE.md) exposes ACP v1 through
+`src/acp.ts`, sharing the active CLI's Work/Learn state, policy, approvals,
+review workflow and offline sandbox. Registration uses T3's serialized local
+provider-instance API, not a Pi alias or a public registry distribution.
+Synthetic native-Windows tests cover isolated provider discovery, private-home
+containment, multi-turn state, complete approval payloads, distinct batched tool
+cards, cancellation and disconnected pipes. `register-t3.mjs --probe` verifies
+T3's actual test-session creation without model inference or native history.
+External MCP, native ACP resume/fork and full T3 feature parity are not claimed.
+T3 local ACP commands still show the generic ACP icon. Official Neura logo
+display is blocked by T3's current icon settings and CDN allowlist, as documented
+under [provider discovery and branding](T3_CODE.md#provider-discovery-and-official-logo).
+This does not change the existing development-only licensing/release gates.
+
 ## Active pedagogy and proposition graph (2026-11-08)
 
 Learn mode now incorporates active pedagogy with Socratic guidance, progressive

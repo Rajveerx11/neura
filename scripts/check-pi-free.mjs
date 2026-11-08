@@ -115,6 +115,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   }
   const trace = traceImports(root, path.join(root, 'src/cli.ts'));
   errors.push(...trace.errors);
+  errors.push(...traceImports(root, path.join(root, 'src/acp.ts')).errors);
   const launcher = fs.readFileSync(path.join(root, 'launcher/neura.cmd'), 'utf8');
   if (!launcher.includes('src\\cli.ts')) errors.push('Launcher does not invoke the new application');
   if (/^\s*(?:call\s+)?pi(?:\s|$)/mi.test(launcher)) errors.push('Launcher invokes Pi');

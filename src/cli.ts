@@ -12,7 +12,7 @@ import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
 import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
-import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage } from './runtime.ts';
+import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { createSession, saveSession, resumeSession, listSessions, type Session } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
@@ -22,12 +22,26 @@ import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createTerminalUI, terminalText, type TerminalStatus } from './terminal-ui.ts';
 export { terminalText } from './terminal-ui.ts';
 
-const say = (text: string) => stdout.write(terminalText(text) + '\n');
 const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env });
-const warning = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'warning') + '\n');
 const failure = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
 
-export async function main(args = process.argv.slice(2)): Promise<void> {
+export type CliBridge = {
+  write: (text: string) => void;
+  approve: (description: string) => Promise<boolean>;
+  onToolEvent?: (event: ToolEvent, invocationId?: string) => void;
+  onReasoning?: (text: string) => void;
+  onStepLimit?: () => void;
+  serve: (session: { execute: (text: string) => Promise<boolean>; cancel: () => void }) => Promise<void>;
+};
+
+/** The terminal and ACP share one loop, policy, workflow and Learn state. */
+export async function main(args = process.argv.slice(2), bridge?: CliBridge): Promise<void> {
+  const output = bridge ? { write: (text: string) => { bridge.write(text); return true; }, isTTY: false, columns: undefined } : process.stdout;
+  const stdout = output;
+  const stderr = bridge ? output : process.stderr;
+  const say = (text: string) => stdout.write(terminalText(text) + '\n');
+  const warning = (text: string) => stderr.write(bridge ? redactSensitiveText(text, 8000) + '\n' : terminal(process.stderr).feedback(redactSensitiveText(text, 8000), 'warning') + '\n');
+  const failure = (text: string) => bridge ? warning(text) : process.stderr.write(terminal(process.stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
     help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, ascii: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
     'reviewer-provider': { type: 'string' }, 'reviewer-model': { type: 'string' }, 'reviewer-base-url': { type: 'string' },
@@ -54,7 +68,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   const home = path.resolve(process.env.NEURA_HOME || path.join(os.homedir(), '.neura'));
   if (home.split(/[\\/]/).some(part => part.replace(/[. ]+$/, '').toLowerCase() === '.pi')) throw new Error('NEURA_HOME must be outside the legacy Pi profile.');
   const prompt = values.prompt ?? (positionals.length ? positionals.join(' ') : undefined);
-  if (prompt === undefined && !(stdin.isTTY && stdout.isTTY)) throw new Error('Noninteractive input requires an explicit --prompt.');
+  if (!bridge && prompt === undefined && !(stdin.isTTY && stdout.isTTY)) throw new Error('Noninteractive input requires an explicit --prompt.');
   if (values.prompt !== undefined && positionals.length) throw new Error('Use either --prompt or a positional task, not both.');
   const providerKinds = ['openai-codex', 'local', 'openai', 'anthropic'];
   const defaultBaseURL = (kind: string) => kind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined;
@@ -94,7 +108,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   catch (error) { if (scratchWorkspace) fs.rmdirSync(workspace); throw error; }
   const workspaceKey = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
   const sessions = path.join(home, 'sessions', workspaceKey);
-  const rl = interactive ? createInterface({ input: stdin, output: stdout }) : undefined;
+  const rl = interactive ? createInterface({ input: stdin, output: process.stdout }) : undefined;
   let abort: AbortController | undefined;
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
@@ -135,6 +149,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   // ANSI-capable terminals erase the transient waiting line; plain ones keep it as a record.
   const erasable = interactive && process.env.TERM !== 'dumb';
   const approve = async (description: string) => {
+    if (bridge) return bridge.approve(description);
     if (!rl) return false;
     stdout.write('\n' + terminal().approval(description) + '\n');
     const response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal });
@@ -226,6 +241,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         let mutationAttempted = false;
         const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, maxSteps,
           onReasoning: showReasoning ? summary => {
+            if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
             endLine();
             stdout.write(terminal().boundary('reasoning') + '\n');
             say(redactSensitiveText(summary, 8000)); section = 'reasoning';
@@ -240,10 +256,12 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
             }
             stdout.write(text); lineOpen = !text.endsWith('\n'); section = 'answer'; answerVisible = true;
           },
-          onToolEvent: event => {
+          onToolEvent: (event, invocationId) => {
+            bridge?.onToolEvent?.(event, invocationId);
             // One line per tool call; started/returned are routine. Failed, blocked and cancelled stay visible.
             if (event.phase === 'started') { mutationAttempted ||= !READ_ONLY_TOOLS.has(event.toolName); return; }
             if (event.phase === 'returned') { if (erasable) waiting(); return; }
+            if (bridge?.onToolEvent) return;
             endLine();
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
           } });
@@ -261,7 +279,8 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
         if (stopped) {
-          if (!rl) process.exitCode = 1;
+          bridge?.onStepLimit?.();
+          if (!rl && !bridge) process.exitCode = 1;
           if (!reviewTurn) { fixStopped = true; throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`); }
           if (review) unfinished = { generation: expected, snapshot: baseline };
           say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
@@ -317,7 +336,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
             });
             verificationGeneration = expected;
             say(JSON.stringify(lastVerification, null, 2));
-            if (!rl && lastVerification.status !== 'detector-only') process.exitCode = 1;
+            if (!rl && !bridge && lastVerification.status !== 'detector-only') process.exitCode = 1;
             if (lastVerification.reason === 'full_evidence_unavailable') say('Full verification is blocked: PoW 0.2.0 lacks trusted suite/candidate evidence. No tests were run.');
             else if (lastVerification.reason === 'snapshot_unavailable') say('Use a committed Git repository root within the snapshot limits. No proof command was run.');
             else if (lastVerification.reason === 'runner_unavailable') say('Pinned offline PoW/WSL sandbox unavailable. No host fallback was used.');
@@ -398,6 +417,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       } else throw new Error('Unknown command. Use /help.');
       return true;
     }
+    if (bridge) { await bridge.serve({ execute: input, cancel: () => abort?.abort() }); return; }
     if (prompt !== undefined) { await input(prompt); return; }
     if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n'); // Once at launch. Chat shows answers only; /status has the rest.
     for (;;) {
@@ -407,7 +427,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       try { if (!await input(text)) break; } catch (error) {
         const message = error instanceof Error ? error.message : 'Request failed.';
         if (error instanceof Error && error.name === 'AbortError') {
-          stderr.write(terminal(stderr).feedback('Cancelled. No task was replayed. Inspect current state before retrying.', 'cancelled') + '\n');
+          stderr.write(terminal(process.stderr).feedback('Cancelled. No task was replayed. Inspect current state before retrying.', 'cancelled') + '\n');
           continue;
         }
         failure(message);

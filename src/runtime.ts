@@ -1,4 +1,5 @@
 import { types as utilTypes } from "node:util";
+import { randomUUID } from "node:crypto";
 import { Check } from "typebox/value";
 import type { TSchema } from "typebox";
 import type { AgentConfig } from "@mastra/core/agent";
@@ -35,7 +36,7 @@ export type RunTurnOptions = {
   /** Provider-exposed summary text only; never signatures, encrypted content or inferred thoughts. */
   onReasoning?: (summary: string) => void;
   /** Synchronous, payload-free sink. Thenables are rejected without permitting hidden effects. */
-  onToolEvent?: (event: ToolEvent) => void;
+  onToolEvent?: (event: ToolEvent, invocationId?: string) => void;
   maxSteps?: number;
 };
 
@@ -65,14 +66,14 @@ const feedback = (text: string): ToolResult => ({ content: [{ type: "text", text
 export class ToolFeedbackError extends Error {}
 
 /** One invocation owns its queue and authority; never persist or reuse this object. */
-export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal, onToolEvent?: (event: ToolEvent) => void) {
+export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal, onToolEvent?: (event: ToolEvent, invocationId?: string) => void) {
   let queue = Promise.resolve();
   let terminated = false;
   let closed = false;
   let reportingFailed = false;
-  const report = (event: ToolEvent): boolean => {
+  const report = (event: ToolEvent, invocationId?: string): boolean => {
     try {
-      const observed: unknown = onToolEvent?.(event);
+      const observed: unknown = onToolEvent?.(event, invocationId);
       if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
         if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
         throw new Error("Tool observers must be synchronous");
@@ -109,8 +110,9 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
           : part) };
       },
       execute: (input) => {
+        const invocationId = randomUUID(); // Runtime-owned identity; never a model-provided payload.
         const pending = queue.then(async () => {
-          const emit = (phase: ToolEvent["phase"]) => report({ toolName: definition.name, phase });
+          const emit = (phase: ToolEvent["phase"]) => report({ toolName: definition.name, phase }, invocationId);
           if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
           if (closed || terminated) { emit("blocked"); return feedback("Turn closed; no further actions allowed."); }
           // Resume/direct execution can bypass framework validation; enforce it at the effect boundary.
