@@ -17,7 +17,7 @@ Pi source and parent-owned migration work are outside this slice.
 | `@mastra/core` | `1.79.0` | Real Agent execution and tool dispatch |
 | `@ai-sdk/openai` | `4.0.96` | Explicit OpenAI Responses API and local Chat Completions |
 | `@ai-sdk/anthropic` | `4.0.82` | Explicit Anthropic Messages API |
-| `typebox` | `1.4.3` | Existing Learn schemas and final callback validation; updated in PR #134 |
+| `typebox` | `1.4.4` | Existing Learn schemas and final callback validation; updated in PR #155 |
 | `zod` | `4.6.7` | Mastra peer and reused Learn validation |
 
 Development pins remain `@types/node@26.6.6`, `typescript@7.0.2`,
@@ -198,6 +198,24 @@ artifacts and the PRs cited above, not for the full transitive closure. Registry
 signatures are checked by `audit:signatures`. No complete transitive source,
 native or WASM audit is claimed. Terminal package selection is unneeded while
 the active terminal uses Node readline. Mastra EE distribution remains blocked.
+
+## TypeBox 1.4.4 dependency update (PR #155, 2026-11-09)
+
+The exact root pin advances from `1.4.3` to `1.4.4`. Comparing both published
+tarballs found changes only in `package.json` and the two IRI format
+implementations. Exports, type declarations, interpreted Check and the MIT license
+are byte-identical. Neither manifest declares dependencies or lifecycle scripts.
+Both SHA-512 hashes match registry metadata; the new hash matches the lockfile.
+
+Upstream tag [`1.4.4`, commit `63e2d9c007705261b20f9b258a6129f30aee9f24`](https://github.com/sinclairzx81/typebox/tree/63e2d9c007705261b20f9b258a6129f30aee9f24)
+tightens RFC 3987 IRI validation. Neura's Work/Learn schemas use no IRI format.
+Existing runtime regressions cover nested schema closure, invalid inputs and
+direct/resumed callback validation. Neura needs no schema or execution policy
+changes. Rollback restores the exact root pin, lock entry and current
+documentation together.
+
+This scoped review does not establish reproducible builds or exhaustive upstream
+security. Mastra distribution remains blocked.
 
 ## TypeBox 1.4.3 dependency update (PR #134)
 

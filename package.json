@@ -54,7 +54,7 @@
     "@ai-sdk/anthropic": "4.0.82",
     "@ai-sdk/openai": "4.0.96",
     "@mastra/core": "1.79.0",
-    "typebox": "1.4.3",
+    "typebox": "1.4.4",
     "zod": "4.6.7"
   },
   "devDependencies": {
