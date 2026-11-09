@@ -73,7 +73,7 @@ commands, not a background connection. See the [source map and trust boundaries]
 
 The current checkout is an unreleased Mastra development build. Package metadata
 remains `2.6.0-rc.1`. “v1” in migration documents names the implementation, not a
-published version. Mastra core is pinned to `1.79.0`.
+published version. Mastra core is pinned to `1.82.0`.
 
 The [latest published release, v2.5.1](https://github.com/Rajveerx11/neura/releases/tag/v2.5.1),
 belongs to the historical Pi application. The existing `v2.6.0-rc.1` draft is

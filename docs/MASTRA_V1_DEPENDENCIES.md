@@ -14,9 +14,9 @@ Pi source and parent-owned migration work are outside this slice.
 
 | Direct runtime package | Version | Purpose |
 | --- | --- | --- |
-| `@mastra/core` | `1.79.0` | Real Agent execution and tool dispatch |
-| `@ai-sdk/openai` | `4.0.96` | Explicit OpenAI Responses API and local Chat Completions |
-| `@ai-sdk/anthropic` | `4.0.82` | Explicit Anthropic Messages API |
+| `@mastra/core` | `1.82.0` | Real Agent execution and tool dispatch |
+| `@ai-sdk/openai` | `4.0.106` | Explicit OpenAI Responses API and local Chat Completions |
+| `@ai-sdk/anthropic` | `4.0.93` | Explicit Anthropic Messages API |
 | `typebox` | `1.4.4` | Existing Learn schemas and final callback validation; updated in PR #155 |
 | `zod` | `4.6.7` | Mastra peer and reused Learn validation |
 
@@ -25,8 +25,8 @@ Development pins remain `@types/node@26.6.6`, `typescript@7.0.2`,
 parent-owned Learn verification. Existing test scripts remain for parent migration;
 this slice adds `test:v1:runtime` and `typecheck:v1` only.
 
-Both provider versions depend on `@ai-sdk/provider@4.0.29` and
-`@ai-sdk/provider-utils@5.0.62`, matching Mastra's v7 aliases. Newer provider
+Both provider versions depend on `@ai-sdk/provider@4.0.35` and
+`@ai-sdk/provider-utils@5.0.72`, matching Mastra's v7 aliases. Newer provider
 contracts are not interchangeable merely because their major versions match.
 Dependabot therefore proposes `@mastra/*` and `@ai-sdk/*` together as the
 `model-stack` group. Isolated provider bumps (#141, #142) duplicated
@@ -40,6 +40,41 @@ Installation used `npm install --ignore-scripts --no-fund`. Lock inspection foun
 no `hasInstallScript` packages. This does not establish absence of WASM or other
 executable content. Runtime core still has a sizable transitive graph; no claim of
 exhaustive transitive source review is made.
+
+## Model-stack update (PR #156, 2026-11-09)
+
+The current graph uses the exact pins above. The original proposal combined
+Mastra `1.82.0` with OpenAI `4.0.109` and Anthropic `4.0.97`. Those providers
+require `@ai-sdk/provider@4.0.36`. Mastra aliases `4.0.35`. The newer stream
+union adds `ping`, making the models incompatible with Mastra's declared input
+contract. Strict typecheck reproduced errors in the CLI, reviewer and transport
+tests. OpenAI `4.0.106` and Anthropic `4.0.93` use Mastra's exact provider and
+provider-utils contracts. No cast, override or runtime adapter was added.
+
+Reviewed the [Mastra 1.82.0 release](https://github.com/mastra-ai/mastra/releases/tag/%40mastra%2Fcore%401.82.0)
+and the providers' shipped changelogs and source. Provider changes include model
+catalogs, credential resolution and reasoning-option mapping. Inspected the
+selected Responses, Chat Completions and Messages construction paths and Mastra's
+Agent/tool declarations. Changed tarballs were checked against lock SHA-512
+integrities. Their manifests declare no consumer install/prepare scripts.
+Changed packages retain Apache-2.0, MIT or ISC metadata. Mastra's shipped
+`LICENSE.md` still excludes EE directories from Apache-2.0. Existing local
+development/testing permission and the distribution block remain in force.
+
+The root lock has 178 entries (25 dev, 20 optional platform), including 43
+Apache-2.0 entries. Other license totals match the dated M1 table below. Learn's
+31-entry graph is unchanged. Both locked graphs install with `--ignore-scripts`.
+Audits found zero known vulnerabilities. On Windows Node `24.19.0`, registry
+verification covered 159 root signatures and 44 attestations, plus 21 Learn
+signatures and 3 attestations. These counts cover the installed platform only.
+The closure gate checks 209 lock entries and 36 reachable CLI modules, plus the
+ACP import graph. Strict typecheck passes with the selected provider pins.
+
+Earlier reviews below retain their original versions and counts as dated
+evidence. They do not certify this updated graph. This review does not establish
+live provider access, exhaustive upstream source provenance or distribution
+rights. Rollback restores the coordinated manifest/lock and current-pin docs.
+No user data or live installation changes are required.
 
 ## M1 package closure review (2026-11-05)
 
