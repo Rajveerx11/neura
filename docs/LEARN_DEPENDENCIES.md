@@ -1,8 +1,8 @@
 # Learn document runtime
 
-Current scope, 2026-11-07: the active Mastra Learn service reuses this parser
+Current scope, 2026-11-09: the active Mastra Learn service reuses this parser
 runtime with the separate `agent/neura` locked graph. Current pins are canvas
-`1.1.0`, PDF.js `6.4.299`, Tesseract `7.0.0`, English data `1.0.0`, saxes `6.0.0`
+`1.1.0`, PDF.js `6.5.438`, Tesseract `7.0.0`, English data `1.0.0`, saxes `6.0.0`
 and yauzl `3.4.0`. Install with `npm ci --prefix agent/neura --ignore-scripts`.
 The development launcher does not provision a sealed parser runtime or clear
 third-party distribution rights. See [Learn](LEARN_MODE.md) and the
@@ -95,7 +95,7 @@ manifest and lockfile together before a scripts-disabled reinstall.
 
 | Package | Version | License | Purpose and reviewed surface |
 |---|---|---|---|
-| `pdfjs-dist` | `6.4.299` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `isEvalSupported:false`, `useWorkerFetch:false`, and disabled system fonts. Never invoke document JavaScript, actions, attachments, or links. |
+| `pdfjs-dist` | `6.5.438` | Apache-2.0 | Mozilla PDF.js parsing and raster operations. Reviewed `package.json`, `legacy/build/pdf.mjs` document options, Node resource factories, canvas integration, and worker loading. Use captured bytes, local fonts/CMaps/WASM, `useWorkerFetch:false`, and disabled system fonts. `isEvalSupported:false` is unused by PDF.js. Never invoke document JavaScript, actions, attachments, or links. |
 | `@napi-rs/canvas` | `1.0.13` | MIT plus Chromium icon notice | Skia-backed raster canvas. Reviewed `index.js`, `js-binding.js`, `load-image.js`, and platform package selection. Pass PNG/JPEG bytes, never paths or URLs. Filter image dimensions before decoding; disable automatic system/user font discovery in parser processes. Native bindings are still trusted executable dependencies. |
 | `yauzl` | `3.4.0` | MIT | ZIP directory and streaming inflate. Reviewed `index.js` `fromBuffer`, lazy entry dispatch, filename validation, local entry reads, and size validation. Add aggregate/per-entry limits, CRC checks, duplicate/link/encryption rejection. Never extract ZIP entries to disk. |
 | `saxes` | `6.0.0` | ISC | Namespace-aware XML. Reviewed `saxes.js` entry imports, SAX events, namespace handling, and entity errors. Its runtime dependency is `xmlchars`; no external entity resolver or network transport. Explicitly reject DTD/entity declarations before parsing; cap depth, nodes, XML bytes, and text. |
@@ -113,6 +113,36 @@ The lockfile pins every transitive version and registry integrity hash, includin
 platform canvas binaries, `tesseract.js-core`, and `xmlchars`. `npm audit` reported
 zero known vulnerabilities for this nested graph on the review date. Registry
 audit results are not a guarantee of dependency safety.
+
+## PR #158 PDF.js 6.5.438 review (2026-11-09)
+
+The exact PDF.js pin and nested lock advance from `6.4.299` to `6.5.438`.
+Reviewed the official [release](https://github.com/mozilla/pdf.js/releases/tag/v6.5.438)
+and [source comparison](https://github.com/mozilla/pdf.js/compare/v6.4.299...v6.5.438),
+published legacy API and worker entry points, Node canvas/resource factories
+and bundled notices. The release changes image decoding and font mapping and
+adds worker rendering. Node defaults to main-thread canvas rendering because
+OffscreenCanvas support is disabled there. Neura keeps captured bytes and local
+CMaps/fonts/WASM, with system fonts and worker fetch disabled. Bounded previews
+and explicit parser cleanup remain. `isEvalSupported:false` remains unused by
+PDF.js and is not a security control.
+
+The package remains Apache-2.0, with Node `>=22.13.0 || >=24` and no lifecycle
+scripts. Its optional canvas minimum changes to `^1.0.13`, satisfied by Neura's
+unchanged exact `1.1.0` pin. The top-level LICENSE is unchanged. Newly shipped
+`wasm/LICENSE_QUICKJS` and `wasm/LICENSE_PDFJS_QUICKJS` carry MIT notices for
+the bundled QuickJS components. Preserve these with the complete package.
+The OpenJPEG WASM and image fallback code changed. This scoped review does not
+certify every parser path, native/WASM implementation or distribution rights.
+The downloaded tarball matches the nested lock's SHA-512 integrity. Registry
+`gitHead` is `0a4153349dc473ba950fc17941c5ca7eda43c1de`.
+On Windows Node 24.19.0, scripts-disabled locked installs and all 43 synthetic
+document assertions passed, including real PDF previews, offline OCR and
+malformed-input/path rejection. Strict typecheck and the dependency gate passed.
+The nested audit found no known vulnerabilities. Registry verification passed
+for 21 packages and three attestations. Other platforms were not exercised.
+Rollback restores the nested manifest and lock together before reinstalling
+with lifecycle scripts disabled. Source-linked use remains development-only.
 
 ## Input, output, and process boundary
 

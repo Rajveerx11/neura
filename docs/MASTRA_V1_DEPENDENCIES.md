@@ -17,11 +17,11 @@ Pi source and parent-owned migration work are outside this slice.
 | `@mastra/core` | `1.82.0` | Real Agent execution and tool dispatch |
 | `@ai-sdk/openai` | `4.0.106` | Explicit OpenAI Responses API and local Chat Completions |
 | `@ai-sdk/anthropic` | `4.0.93` | Explicit Anthropic Messages API |
-| `typebox` | `1.4.3` | Existing Learn schemas and final callback validation; updated in PR #134 |
+| `typebox` | `1.4.4` | Existing Learn schemas and final callback validation; updated in PR #155 |
 | `zod` | `4.6.7` | Mastra peer and reused Learn validation |
 
 Development pins remain `@types/node@26.6.6`, `typescript@7.0.2`,
-`playwright-core@1.64.1`, and `axe-core@4.14.0`. Browser pins are retained for
+`playwright-core@1.65.0`, and `axe-core@4.14.0`. Browser pins are retained for
 parent-owned Learn verification. Existing test scripts remain for parent migration;
 this slice adds `test:v1:runtime` and `typecheck:v1` only.
 
@@ -234,6 +234,24 @@ signatures are checked by `audit:signatures`. No complete transitive source,
 native or WASM audit is claimed. Terminal package selection is unneeded while
 the active terminal uses Node readline. Mastra EE distribution remains blocked.
 
+## TypeBox 1.4.4 dependency update (PR #155, 2026-11-09)
+
+The exact root pin advances from `1.4.3` to `1.4.4`. Comparing both published
+tarballs found changes only in `package.json` and the two IRI format
+implementations. Exports, type declarations, interpreted Check and the MIT license
+are byte-identical. Neither manifest declares dependencies or lifecycle scripts.
+Both SHA-512 hashes match registry metadata; the new hash matches the lockfile.
+
+Upstream tag [`1.4.4`, commit `63e2d9c007705261b20f9b258a6129f30aee9f24`](https://github.com/sinclairzx81/typebox/tree/63e2d9c007705261b20f9b258a6129f30aee9f24)
+tightens RFC 3987 IRI validation. Neura's Work/Learn schemas use no IRI format.
+Existing runtime regressions cover nested schema closure, invalid inputs and
+direct/resumed callback validation. Neura needs no schema or execution policy
+changes. Rollback restores the exact root pin, lock entry and current
+documentation together.
+
+This scoped review does not establish reproducible builds or exhaustive upstream
+security. Mastra distribution remains blocked.
+
 ## TypeBox 1.4.3 dependency update (PR #134)
 
 The root pin advances from `1.3.36` to exact `1.4.3`. No other package identity
@@ -348,6 +366,29 @@ injected script/markup and observed no network requests. Strict types and the
 production readiness, Electron, or Chromium 155 CORS behavior. Parent review
 and required CI remain pending. Rollback restores both root pins/lock identity
 and this review record. No runtime or live-install change is involved.
+
+### PR #157 Playwright Core 1.65.0 review (2026-11-09)
+
+The exact development pin and root lock advance from `1.64.1` to `1.65.0`.
+The official [release](https://github.com/microsoft/playwright/releases/tag/v1.65.0)
+and [source comparison](https://github.com/microsoft/playwright/compare/v1.64.1...v1.65.0)
+include action checks for inert elements, Chromium launch fixes and browser
+revision updates. Reviewed the published `lib/coreBundle.js`, package metadata,
+browser revisions and API declarations against Neura's two Chromium callers.
+Neura uses installed Edge with disposable contexts. It does not use the test
+runner, Bun or default-profile CDP connection. No caller change was needed.
+
+Node remains `>=20`. The package has no dependencies or lifecycle scripts.
+Apache-2.0 LICENSE and NOTICE are unchanged. The downloaded tarball matches
+the root lock's SHA-512 integrity. Registry `gitHead` is
+`a1f35e1955976e84411f9c10358228a80b763ebe`.
+Scripts-disabled installs and strict typecheck passed. The existing Learn
+browser suite passed at 390px and 1280px, including keyboard/axe checks,
+grading, terminal handoff, rejected script injection and no page network requests.
+Registry verification passed for 156 packages and 42 attestations.
+Bundled-browser revisions and other operating systems were not exercised.
+Rollback restores the root manifest and lock together. Development use only.
+The existing licensing and distribution gates remain.
 
 ## Public contracts
 

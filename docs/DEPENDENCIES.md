@@ -3,10 +3,10 @@
 ## Active Mastra graphs (2026-11-09)
 
 Current runtime pins are `@mastra/core@1.82.0`, `@ai-sdk/openai@4.0.106`,
-`@ai-sdk/anthropic@4.0.93`, `typebox@1.4.3` and `zod@4.6.7`. Root development
+`@ai-sdk/anthropic@4.0.93`, `typebox@1.4.4` and `zod@4.6.7`. Root development
 pins and the separate Learn graph are recorded in the
 [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05).
-The nested graph currently pins canvas `1.1.0`, PDF.js `6.4.299`, Tesseract `7.0.0`,
+The nested graph currently pins canvas `1.1.0`, PDF.js `6.5.438`, Tesseract `7.0.0`,
 English OCR data `1.0.0`, saxes `6.0.0` and yauzl `3.4.0`.
 
 Install both locked graphs with `npm ci --ignore-scripts` and
