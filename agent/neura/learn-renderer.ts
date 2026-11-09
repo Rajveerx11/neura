@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { learnPathLayers, learnPathRevision, learnPrerequisites, type LearnPath } from "./learn-path.ts";
 import { PALETTE } from "./palette.ts";
-import { assertLearnExercise, learnArray, learnText, type LearnExercise } from "./learn-exercises.ts";
+import { assertLearnExercise, learnArray, learnShortAnswerMatches, learnText, type LearnExercise } from "./learn-exercises.ts";
 
 export type LearnReference = { sourceId: string; filename: string; unit: "page" | "slide"; number: number; excerpt: string };
 export type LearnDiagram = {
@@ -113,14 +114,14 @@ const exercise=lesson.exercise;
 const byId=id=>document.getElementById(id);
 const feedback=byId('feedback');
 let hintIndex=0, revealed=false;
-const normalize=value=>value.trim().replace(/\s+/g,' ').toLowerCase();
+const matches=${learnShortAnswerMatches.toString()};
 function handoff(command){
   byId('handoff').hidden=false;
   byId('handoff-command').value=command;
   byId('handoff-command').focus(); byId('handoff-command').select();
   byId('handoff-status').textContent='Command selected. Copy it and paste into Neura. This board does not save progress.';
 }
-function answerCommand(answer){return '/learn '+(revealed||hintIndex?'answer-helped-for ':'answer-for ')+revision+' '+answer;}
+function answerCommand(answer){const sent=exercise.kind==='choice'&&exercise.options.some(option=>/^\d+$/.test(option.trim()))?exercise.options[Number(answer)-1].trim():answer;return '/learn '+(revealed||hintIndex?'answer-helped-for ':'answer-for ')+revision+' '+sent;}
 function currentAnswer(){
   if(exercise.kind==='choice'){const selected=document.querySelector('input[name="answer"]:checked');return selected?selected.value:'';}
   return byId('answer').value.trim();
@@ -130,12 +131,30 @@ byId('show-example')?.addEventListener('click',()=>{byId('example').open=true;by
 byId('hint').addEventListener('click',()=>{if(hintIndex<exercise.hints.length){const item=document.createElement('li');item.textContent=exercise.hints[hintIndex++];byId('hints').append(item);byId('hint').textContent=hintIndex===exercise.hints.length?'All hints shown':'Next hint';byId('hint').disabled=hintIndex===exercise.hints.length;}});
 byId('reveal').addEventListener('click',()=>{revealed=true;byId('solution').hidden=false;byId('solution-text').textContent=(exercise.kind==='choice'?exercise.options[exercise.answer]:exercise.kind==='short'?(exercise.acceptedAnswers.join(' / ')||'Compare your reasoning with this explanation.'):exercise.solution)+'\n\n'+exercise.explanation;byId('reveal').disabled=true;feedback.textContent='Answer revealed. Try a fresh problem to demonstrate understanding.';});
 document.querySelectorAll('[data-focus]').forEach(button=>button.addEventListener('click',()=>{const id=button.dataset.focus;document.querySelectorAll('[data-focus]').forEach(other=>other.setAttribute('aria-pressed',String(other===button)));document.querySelectorAll('[data-node]').forEach(node=>node.classList.toggle('focused',node.dataset.node===id));document.querySelectorAll('.diagram-edge').forEach(edge=>edge.classList.toggle('active',edge.dataset.from===id||edge.dataset.to===id));const node=lesson.diagram.nodes.find(node=>node.id===id);byId('focus-description').textContent=node.detail||node.label;document.querySelector('[data-node="'+id+'"]').scrollIntoView({block:'nearest',inline:'center'});}));
-byId('exercise-form').addEventListener('submit',event=>{event.preventDefault();const answer=currentAnswer();if(!answer){feedback.textContent='Enter an answer first.';return;}if(exercise.kind==='sql'){feedback.textContent='SQL runs in Neura’s restricted lab. Paste the selected command there to run and record this attempt.';handoff(answerCommand(answer));return;}if(exercise.kind==='short'&&!exercise.acceptedAnswers.length){feedback.textContent='Open-ended exercise. Send your reasoning to Neura for tutor feedback; this board does not grade it.';return;}const correct=exercise.kind==='choice'?Number(answer)-1===exercise.answer:exercise.acceptedAnswers.some(value=>normalize(value)===normalize(answer));feedback.textContent=(correct?'Matches the expected answer. '+exercise.explanation:exercise.kind==='short'?'No exact match. Try a hint, or ask your tutor to review different wording.':'That choice does not fit yet. Compare the alternatives or try a hint.')+(revealed?' Answer was revealed; this is practice, not mastery.':'')+' Local feedback only. Send your attempt to Neura to record it.';});
+byId('exercise-form').addEventListener('submit',event=>{event.preventDefault();const answer=currentAnswer();if(!answer){feedback.textContent='Enter an answer first.';return;}if(exercise.kind==='sql'){feedback.textContent='SQL runs in Neura’s restricted lab. Paste the selected command there to run and record this attempt.';handoff(answerCommand(answer));return;}if(exercise.kind==='short'&&!exercise.acceptedAnswers.length){feedback.textContent='Open-ended exercise. Send your reasoning to Neura for tutor feedback; this board does not grade it.';return;}const correct=exercise.kind==='choice'?Number(answer)-1===exercise.answer:exercise.acceptedAnswers.some(value=>matches(value,answer));feedback.textContent=(correct?'Matches the expected answer. '+exercise.explanation:exercise.kind==='short'?'No exact match. Try a hint, or ask your tutor to review different wording.':'That choice does not fit yet. Compare the alternatives or try a hint.')+(revealed?' Answer was revealed; this is practice, not mastery.':'')+' Local feedback only. Send your attempt to Neura to record it.';});
 byId('record').addEventListener('click',()=>{const answer=currentAnswer();if(!answer){feedback.textContent='Enter an answer first.';return;}handoff(answerCommand(answer));});
 document.querySelectorAll('[data-command]').forEach(button=>button.addEventListener('click',()=>handoff('/learn '+button.dataset.command+'-for '+revision)));
 byId('copy-command').addEventListener('click',async()=>{const field=byId('handoff-command');try{await navigator.clipboard.writeText(field.value);byId('handoff-status').textContent='Copied. Paste into Neura.';}catch{field.focus();field.select();byId('handoff-status').textContent='Clipboard unavailable. Command selected; copy it manually.';}});
 })();`;
 
+/** The chat copy of a card: terminals and T3 show plain text, not the HTML board. Never includes hints or answers. */
+export function renderLearnCardText(lesson: LearnLesson, board: string): string {
+  const { exercise, diagram } = lesson;
+  const label = (id: string) => diagram!.nodes.find((node) => node.id === id)!.label;
+  const numeric = exercise.kind === "choice" && exercise.options.some((option) => /^\d+$/.test(option.trim()));
+  const options = exercise.kind === "choice" ? exercise.options.map((option, index) => `  ${index + 1}. ${option}`) : [];
+  let answering = "/learn answer <your answer>";
+  if (exercise.kind === "choice") answering = numeric ? "/learn answer <the value>" : "/learn answer <option number>";
+  return [
+    `${lesson.phase ? `[${lesson.phase}] ` : ""}${lesson.title}`, lesson.goal,
+    ...lesson.bullets.map((bullet) => `- ${bullet}`),
+    ...(diagram ? ["", `Diagram: ${diagram.title}`, ...diagram.nodes.map((node) => `  [${node.label}]${node.detail ? ` ${node.detail}` : ""}`), ...diagram.edges.map((edge) => `  ${label(edge.from)} --(${edge.label})--> ${label(edge.to)}`)] : []),
+    ...(lesson.example ? ["", "Worked example:", lesson.example] : []),
+    "", `Question: ${exercise.prompt}`, ...options,
+    "", `Answer: ${answering}. Stuck: /learn hint.`,
+    `Open this local HTML file for the visual board: ${pathToFileURL(board).href}`,
+  ].join("\n");
+}
 export type LearnBoardPath = { path: LearnPath; current?: string; completed: string[]; accepted: boolean };
 function renderPath(board: LearnBoardPath): string {
   const { path, current, completed } = board;

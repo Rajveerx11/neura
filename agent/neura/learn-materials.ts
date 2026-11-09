@@ -3,6 +3,8 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { SECRET_PATH } from "./action-paths.ts";
+import { redactSensitiveText } from "./redaction.ts";
 
 export interface LearningImage {
   mimeType: "image/png";
@@ -19,7 +21,7 @@ export interface LearningPage {
 export interface LearningMaterial {
   id: string;
   name: string;
-  kind: "pdf" | "pptx";
+  kind: "pdf" | "pptx" | "text";
   pages: LearningPage[];
   warnings: string[];
 }
@@ -40,13 +42,16 @@ export const LEARNING_MATERIAL_LIMITS = Object.freeze({
   timeoutMs: 120_000,
 });
 
+// Course notes and lab programs. Extracted as inert text; nothing in them is run or rendered.
+const TEXT_MATERIALS = new Set([".html", ".htm", ".txt", ".md", ".c", ".h", ".cpp"]);
+
 function inside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return !!relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 /** Read one contained regular file; no links, UNC/device paths, URLs, or ADS. */
-async function readSource(options: LearningMaterialOptions): Promise<{ bytes: Buffer; name: string; kind: "pdf" | "pptx" }> {
+async function readSource(options: LearningMaterialOptions): Promise<{ bytes: Buffer; name: string; kind: LearningMaterial["kind"]; html: boolean }> {
   const supplied = options.path;
   if (typeof supplied !== "string" || !supplied || supplied.length > 4096 || /[\x00-\x1f]/.test(supplied)
     || /^[\\/]{2}/.test(supplied) || /^[a-z][a-z0-9+.-]*:\/\//i.test(supplied)
@@ -56,8 +61,9 @@ async function readSource(options: LearningMaterialOptions): Promise<{ bytes: Bu
   const root = await fs.realpath(options.workspace);
   const candidate = path.resolve(root, supplied);
   if (!inside(root, candidate)) throw new Error("Learning material must remain inside the workspace.");
-  if (path.relative(root, candidate).split(path.sep).some((component) => component.startsWith(".") || /^(?:node_modules|sessions|approvals)$/i.test(component))) {
-    throw new Error("Learning materials cannot be imported from hidden, dependency, session, or approval directories.");
+  // Same boundary as Learn's read tool: text import must not be a way around it.
+  if (SECRET_PATH.test(`/${path.relative(root, candidate)}`) || path.relative(root, candidate).split(path.sep).some((component) => component.startsWith(".") || /^(?:node_modules|sessions|approvals|memory|private|secrets)$/i.test(component))) {
+    throw new Error("Learning materials cannot be imported from hidden, dependency, session, approval, private or credential paths.");
   }
   let current = root;
   for (const component of path.relative(root, candidate).split(path.sep)) {
@@ -68,7 +74,8 @@ async function readSource(options: LearningMaterialOptions): Promise<{ bytes: Bu
   if (!inside(root, canonical)) throw new Error("Learning material resolves outside the workspace.");
   const extension = path.extname(candidate).toLowerCase();
   if (extension === ".ppt") throw new Error("Legacy .ppt is unsupported. Export it as .pptx or PDF in PowerPoint or LibreOffice, then import that file.");
-  if (extension !== ".pdf" && extension !== ".pptx") throw new Error("Supported learning materials: .pdf and .pptx.");
+  const textual = TEXT_MATERIALS.has(extension);
+  if (extension !== ".pdf" && extension !== ".pptx" && !textual) throw new Error(`Supported learning materials: .pdf, .pptx, ${[...TEXT_MATERIALS].join(", ")}.`);
   const before = await fs.lstat(candidate);
   if (!before.isFile() || before.isSymbolicLink() || before.nlink > 1) throw new Error("Learning material must be an ordinary, unlinked file.");
   if (!before.size || before.size > LEARNING_MATERIAL_LIMITS.inputBytes) throw new Error("Learning material must be nonempty and at most 25 MiB.");
@@ -89,7 +96,7 @@ async function readSource(options: LearningMaterialOptions): Promise<{ bytes: Bu
     const after = await handle.stat();
     if (count !== opened.size || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs
       || await fs.realpath(candidate) !== canonical) throw new Error("Learning material changed during import; try again.");
-    return { bytes: buffer.subarray(0, count), name: path.basename(candidate), kind: extension.slice(1) as "pdf" | "pptx" };
+    return { bytes: buffer.subarray(0, count), name: path.basename(candidate), kind: textual ? "text" : extension.slice(1) as "pdf" | "pptx", html: /^\.html?$/.test(extension) };
   } finally { await handle.close(); }
 }
 
@@ -98,7 +105,7 @@ export async function importLearningMaterial(options: LearningMaterialOptions, s
   signal?.throwIfAborted();
   const maxPages = options.maxPages ?? LEARNING_MATERIAL_LIMITS.pages;
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > LEARNING_MATERIAL_LIMITS.pages) throw new Error("maxPages must be between 1 and 100.");
-  const { bytes, name, kind } = await readSource(options);
+  const { bytes, name, kind, html } = await readSource(options);
   signal?.throwIfAborted();
   const id = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
   const result = await new Promise<{ pages: LearningPage[]; warnings: string[] }>((resolve, reject) => {
@@ -134,15 +141,16 @@ export async function importLearningMaterial(options: LearningMaterialOptions, s
       finish(undefined, message);
     });
     if (signal?.aborted) abort();
-    else worker.send({ bytes, kind, maxPages, ocr: options.ocr !== false, includeImages: options.includeImages !== false });
+    else worker.send({ bytes, kind, html, maxPages, ocr: options.ocr !== false, includeImages: options.includeImages !== false });
   });
+  if (kind === "text") for (const page of result.pages) page.text = redactSensitiveText(page.text);
   return { id, name, kind, ...result };
 }
 
 /** Validate exact source identity, page/slide, and quoted excerpt; this does not prove a claim's interpretation. */
 export function validateLearningCitation(material: LearningMaterial, citation: { sourceId: string; filename: string; unit: "page" | "slide"; number: number; excerpt: string }): boolean {
   if (citation.sourceId !== material.id || citation.filename !== material.name
-    || citation.unit !== (material.kind === "pdf" ? "page" : "slide") || !Number.isInteger(citation.number)
+    || citation.unit !== (material.kind === "pptx" ? "slide" : "page") || !Number.isInteger(citation.number)
     || typeof citation.excerpt !== "string" || !citation.excerpt.trim() || citation.excerpt.length > 4000) return false;
   const page = material.pages.find((entry) => entry.number === citation.number);
   if (!page) return false;

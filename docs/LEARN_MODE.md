@@ -47,13 +47,18 @@ Launch Neura in a disposable workspace with a configured provider, then enter:
 Teach database joins using materials/joins.pdf. Show one diagram and an example, then give me an exercise.
 ```
 
-Use an ordinary workspace PDF/PPTX that you created for testing. The tutor imports
-it before citing page/slide excerpts, publishes a diagnostic card or proposes a
-path, then waits. Accept a proposed path with `/learn accept-plan`. Cards can use
-compact bullets. Diagrams and examples are optional.
-Progressive hints are available. Open-ended work receives discussion rather than an automatic grade.
+Use an ordinary workspace PDF, PPTX, HTML, text, Markdown or C/C++ file that you
+created for testing. The tutor imports it before citing page/slide excerpts,
+publishes a diagnostic card or proposes a path, then waits. Accept a proposed path
+with `/learn accept-plan`. Teach cards carry a worked example and common mistakes,
+plus a diagram when the idea has structure or steps. Probe and check cards can stay
+compact. Progressive hints are available. Teaching cards can stay open-ended;
+check, practice and review cards must be automatically graded.
 
-Open the returned local HTML path. Browser controls copy revision-bound commands. Submit them in the terminal. There is **no automatic browser synchronization**.
+Each card prints in chat as plain text: goal, bullets, the diagram's nodes and
+edges, worked example, question and options. Neither the terminal nor T3 draws the
+diagram itself. Open the `file://` board link for the visual version. Browser
+controls copy revision-bound commands. Submit them in the terminal. There is **no automatic browser synchronization**.
 A command from an old lesson revision is rejected. Worked answers are visible
 in board source, so boards support self-study rather than examination security.
 
@@ -81,6 +86,9 @@ require that reimport. Attempts bind to `(pathRevision, conceptId, stepId,
 exerciseRevision)`. Different lessons, phases, steps, questions or paths cannot
 reuse an earlier attempt as current evidence. Legacy version-1 snapshots migrate
 without trusting their lesson-ID-only attempts. Those remain historical. Reading, revealing or answering correctly does not prove mastery.
+Each attempt also keeps a bounded copy of what was asked, so a resumed tutor can
+avoid repeating an earlier scenario. The fresh-scenario and single-correct-option
+rules are prompt instructions, which the application cannot verify.
 
 New conversations do not silently load learning content. `/resume <id>` restores
 conversation history in Work. Use `/mode learn` and `/learn resume <filename>`
@@ -92,8 +100,10 @@ artifacts. There is no automatic progress snapshot save.
 Application code owns `probe`, `plan`, `teach`, `check`, `practice` and `review`.
 Publishing a card sets `awaiting-answer`. Evaluation sets `awaiting-continuation`
 and cannot publish or advance another card. Only `/learn next` releases that
-boundary. Failed or ungraded checks/practice return to teaching before another
-check. Open-ended teaching and review can remain ungraded. They are not mastery.
+boundary. Failed checks and practice return to teaching before another check.
+A revealed answer can teach, but it cannot pass a check or finish a concept. Check,
+practice and review cards without an automatic answer key are refused, because they
+could only loop back to teaching. Open-ended teaching remains ungraded and is not mastery.
 
 `learn_path` can propose a route before a diagnostic when assessment is unnecessary.
 The learner must still accept it. Paths contain at most 24 concepts and 48 directed
@@ -115,14 +125,18 @@ generic write/edit, shell, `grep`/`find`, web search, integration or Plan tool.
 Publishing a card, proposing a path or evaluating an attempt ends the model turn. Model-generated
 answers cannot substitute for the learner's actual latest input.
 
-PDF/PPTX import checks captured bytes, source identity and excerpt locations.
+HTML notes, text, Markdown and C/C++ source import as inert UTF-8 text, split into
+numbered sections cited as pages. HTML loses scripts, styles and layout.
+Document import checks captured bytes, source identity and excerpt locations.
 These checks validate citation identity, not the truth of the tutor's explanation.
 OCR is offline English and can misread formulas or handwriting. Export legacy
 `.ppt` and full PowerPoint layouts to PDF/PPTX as described in the
 [document runtime review](LEARN_DEPENDENCIES.md). Limits include 12 materials per
 session, 25 MiB and 100 pages/slides per file.
 
-Short keyed answers use normalized exact matching. SQL exercises use bounded,
+Short keyed answers ignore spacing and case, and treat `3/8`, `0.375` and `37.5%`
+as equal. Decimals with at least three significant digits may be rounded. Choice
+answers use the option number, or the value when options are bare numbers. SQL exercises use bounded,
 disposable in-memory SQLite with sample tables, no host file/network access and
 no `ATTACH` or writes. Grading compares columns and duplicate rows, ignores row
 ordering and refuses to grade truncated output. Open-ended work has no automatic score.

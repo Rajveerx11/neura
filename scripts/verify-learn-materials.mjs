@@ -47,7 +47,7 @@ try {
   const runtimeModules = path.join(runtime, "node_modules");
   await fs.mkdir(runtimeModules, { recursive: true });
   const sourceRuntime = path.resolve(import.meta.dirname, "../agent/neura");
-  for (const filename of ["learn-materials.ts", "learn-materials-worker.mjs", "package.json"]) await fs.copyFile(path.join(sourceRuntime, filename), path.join(runtime, filename));
+  for (const filename of ["learn-materials.ts", "learn-materials-worker.mjs", "action-paths.ts", "redaction.ts", "package.json"]) await fs.copyFile(path.join(sourceRuntime, filename), path.join(runtime, filename));
   const moduleLinks = ["saxes", "yauzl", "pdfjs-dist", "@napi-rs", "tesseract.js"];
   try {
     for (const module of moduleLinks) await fs.symlink(path.join(sourceRuntime, "node_modules", module), path.join(runtimeModules, module), process.platform === "win32" ? "junction" : "dir");

@@ -287,10 +287,44 @@ async function pptx(bytes, options) {
   return pages;
 }
 
+const HTML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rarr: "→", larr: "←", bull: "•", le: "≤", ge: "≥", ne: "≠", times: "×", minus: "−", mdash: "—", ndash: "–" };
+function htmlText(source) {
+  return source.replace(/<!--[\s\S]*?-->/g, " ").replace(/<(script|style|head)\b[\s\S]*?<\/\1\s*>/gi, " ")
+    .replace(/<sup\b[^>]*>([^<]*)<\/sup>/gi, "^$1").replace(/<sub\b[^>]*>([^<]*)<\/sub>/gi, "_$1")
+    .replace(/<\/?(?:p|div|li|ul|ol|h[1-6]|tr|table|pre|section|article|header|footer|br|hr)\b[^>]*>/gi, "\n").replace(/<\/t[dh]\s*>/gi, " ").replace(/<[^>]*>/g, "")
+    .replace(/&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/gi, (entity, decimal, hex, name) => {
+      if (name) return HTML_ENTITIES[name.toLowerCase()] ?? entity;
+      const code = decimal ? Number(decimal) : Number.parseInt(hex, 16);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
+    }).replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n");
+}
+/** Notes and lab source have no pages, so citations use fixed-size line-bounded sections. */
+function textMaterial(bytes, options) {
+  let source;
+  try { source = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { fail("Text material must be UTF-8."); }
+  if (source.includes("\u0000")) fail("Text material must not contain binary data.");
+  const sections = [];
+  let current = "";
+  for (const line of (options.html ? htmlText(source) : source).split(/\r?\n/)) {
+    for (let start = 0; start === 0 || start < line.length; start += 6000) {
+      const piece = line.slice(start, start + 6000);
+      if (current.length + piece.length + 1 > 6000 && current) { sections.push(current); current = ""; }
+      current += `${piece}\n`;
+    }
+  }
+  if (current.trim()) sections.push(current);
+  if (!sections.length) fail("Text material has no readable content.");
+  if (sections.length > options.maxPages) fail(`Text material needs ${sections.length} sections; the limit is ${options.maxPages}. Split the file.`);
+  warn("Text sections are numbered as pages. HTML is reduced to text; layout and images are not kept.");
+  return sections.map((section, index) => ({ number: index + 1, text: textBudget(section), extraction: "text" }));
+}
+
 process.once("message", async (options) => {
   try {
     const bytes = Buffer.from(options.bytes);
-    const pages = options.kind === "pdf" ? await pdf(bytes, options) : await pptx(bytes, options);
+    let pages;
+    if (options.kind === "text") pages = textMaterial(bytes, options);
+    else pages = options.kind === "pdf" ? await pdf(bytes, options) : await pptx(bytes, options);
     await ocrWorker?.terminate();
     process.send({ pages, warnings }, () => process.exit(0));
   } catch (error) {

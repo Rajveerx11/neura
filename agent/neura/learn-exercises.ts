@@ -22,6 +22,11 @@ function record(value: unknown): value is Record<string, unknown> { return !!val
 function sqlValue(value: unknown): value is SqlValue {
   return value === null || (typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER) || (typeof value === "string" && value.length <= 1000);
 }
+/** True when the application, not a tutor, can decide right or wrong. */
+export function learnExerciseGradable(exercise: LearnExercise): boolean {
+  if (exercise.kind === "short") return exercise.acceptedAnswers.length > 0;
+  return exercise.kind === "choice" || exercise.expectedRows !== undefined;
+}
 export function assertLearnExercise(value: unknown): asserts value is LearnExercise {
   if (!record(value)) throw new Error("Exercise must be an object.");
   learnText(value.prompt, "exercise.prompt");
@@ -150,6 +155,28 @@ async function runSql(tables: LearnTable[], answer: string): Promise<{ rows: Rec
 }
 
 function normalized(value: string): string { return value.trim().replace(/\s+/g, " ").toLowerCase(); }
+/**
+ * Equivalent spellings of a short answer: spacing, case, n² vs n^2, 3/8 vs 0.375 vs 37.5%.
+ * Decimals of three or more significant digits may be rounded. The board embeds this
+ * with toString(), so it must stay self-contained and free of runtime imports.
+ */
+export function learnShortAnswerMatches(accepted: string, answer: string): boolean {
+  const clean = (text: string) => text.replace(/²/g, "^2").replace(/³/g, "^3").normalize("NFKC").replace(/−/g, "-").replace(/\s+/g, "").replace(/[.;]+$/, "").toLowerCase();
+  const number = (text: string) => {
+    const fraction = /^([-+]?\d*\.?\d+)\/(\d*\.?\d+)$/.exec(text);
+    if (fraction) return Number(fraction[2]) ? Number(fraction[1]) / Number(fraction[2]) : NaN;
+    if (/^[-+]?\d*\.?\d+%$/.test(text)) return Number(text.slice(0, -1)) / 100;
+    return /^[-+]?\d*\.?\d+$/.test(text) ? Number(text) : NaN;
+  };
+  const [key, given] = [clean(accepted), clean(answer)];
+  if (key === given) return true;
+  const [expected, actual] = [number(key), number(given)];
+  if (Number.isNaN(expected) || Number.isNaN(actual)) return false;
+  if (Math.abs(expected - actual) <= 1e-9 * Math.max(1, Math.abs(expected))) return true;
+  const places = (/\.(\d+)/.exec(given)?.[1].length ?? 0) + (given.endsWith("%") ? 2 : 0);
+  const significant = given.replace(/\D/g, "").replace(/^0+/, "").length;
+  return /\./.test(given) && significant >= 3 && Math.abs(expected - actual) <= 0.5 * 10 ** -places + 1e-12;
+}
 function canonicalRows(rows: Record<string, SqlValue>[]): string {
   return JSON.stringify(rows.map((row) => JSON.stringify(Object.keys(row).sort().map((key) => [key, row[key]]))).sort());
 }
@@ -158,13 +185,16 @@ export async function evaluateLearnExercise(exercise: LearnExercise, answer: str
   learnText(answer, "answer", 8000);
   if (exercise.kind === "choice") {
     // User-visible answers are numbered from 1; the authoring index is zero-based.
-    const choice = /^\d+$/.test(answer.trim()) ? Number(answer.trim()) - 1 : exercise.options.findIndex((option) => normalized(option) === normalized(answer));
+    // Numeric options ("2", "4", "8") make a bare number mean the value, never a position.
+    const byText = exercise.options.findIndex((option) => normalized(option) === normalized(answer));
+    const positional = /^\d+$/.test(answer.trim()) && !exercise.options.some((option) => /^\d+$/.test(option.trim()));
+    const choice = positional ? Number(answer.trim()) - 1 : byText;
     const correct = choice === exercise.answer;
     return { correct, feedback: correct ? `Correct. ${exercise.explanation}` : "That choice does not fit yet. Try a hint and compare the alternatives." };
   }
   if (exercise.kind === "short") {
     if (!exercise.acceptedAnswers.length) return { correct: null, feedback: "Open-ended attempt recorded for tutor review. Compare your reasoning with the example; this exercise is not automatically graded." };
-    const correct = exercise.acceptedAnswers.some((accepted) => normalized(accepted) === normalized(answer));
+    const correct = exercise.acceptedAnswers.some((accepted) => learnShortAnswerMatches(accepted, answer));
     return { correct, feedback: correct ? `Matches the expected answer. ${exercise.explanation}` : "No exact match. Check the hint, or ask the tutor to review your reasoning; wording can differ." };
   }
   try {

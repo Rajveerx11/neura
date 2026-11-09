@@ -14,6 +14,8 @@ const { noopLogger } = await import("@mastra/core/logger");
 export type ToolResult = {
   content: Array<{ type: "text"; text: string } | { type: "image"; mimeType: string; data: string }>;
   terminate?: boolean;
+  /** Learner-facing text, shown even when the model also wrote a preamble. Never sent to the model. */
+  display?: string;
 };
 
 export type ToolDefinition = {
@@ -201,8 +203,11 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
     const toolText = turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
     // Still asking for tools with no tool ending the turn means the budget ran out, not that the work finished.
     const stopReason = result.finishReason === "tool-calls" && !turn.isTerminated() ? "step-limit" as const : "finished" as const;
-    const text = result.text || (stopReason === "finished" ? toolText || "Turn ended without assistant text." : "");
+    const display = turn.results.flatMap((result) => result.display ? [result.display] : []).join("\n");
+    const fallback = stopReason === "finished" ? display || toolText || "Turn ended without assistant text." : "";
+    const text = result.text && display ? `${result.text}\n${display}` : result.text || fallback;
     if (!streamed && text) onText?.(text);
+    else if (streamed && display) onText?.(`\n${display}`);
     // Mastra FullOutput.totalUsage aggregates every model step in this invocation.
     // Missing provider counts stay unknown; zero is a valid reported count.
     const counts = result.totalUsage;

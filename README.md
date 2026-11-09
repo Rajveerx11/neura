@@ -48,7 +48,7 @@ baseline within snapshot limits. It never commits, pushes or merges.
 ### Learn
 
 - Teach one concept with a diagram and example, then offer a practical exercise.
-- Import workspace PDF/PPTX files, including bounded offline English OCR.
+- Import workspace PDF/PPTX files, including bounded offline English OCR, plus HTML, text, Markdown and C/C++ notes.
 - Publish local HTML boards with page/slide citations and exercise feedback. Hints are available.
 - Save progress explicitly and resume it in a later process. Restored source
   excerpts remain historical until the originals are reimported.

@@ -5,12 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { canonicalLearnPath, learnId, learnPathLayers, learnPathRevision, renderLearnPathText, type LearnPath } from '../agent/neura/learn-path.ts';
-import { assertLearnLesson, learnBoardRevision, renderLearnHtml, renderLearnPathHtml, type LearnLesson } from '../agent/neura/learn-renderer.ts';
+import { assertLearnLesson, learnBoardRevision, renderLearnCardText, renderLearnHtml, renderLearnPathHtml, type LearnLesson } from '../agent/neura/learn-renderer.ts';
 import { LearnLessonSchema } from '../agent/neura/learn-schema.ts';
 import { appendLearnVaultEvent, learnPropositionId, type LearnVaultInput } from '../agent/neura/learn-vault.ts';
-import { emptyState, evidenceIdentity, currentAttempts, snapshot, restoreSnapshot, proposePath, acceptPlan, advanceLearn, guardLesson } from '../src/learn-state.ts';
+import { emptyState, evidenceIdentity, currentAttempts, snapshot, restoreSnapshot, proposePath, acceptPlan, advanceLearn, guardLesson, LEARN_ASKED_MAX } from '../src/learn-state.ts';
 import { createLearnWorkshop } from '../src/learn.ts';
-import { runTurn } from '../src/runtime.ts';
+import { runTurn, ToolFeedbackError } from '../src/runtime.ts';
+import { evaluateLearnExercise, learnShortAnswerMatches } from '../agent/neura/learn-exercises.ts';
+import { importLearningMaterial, validateLearningCitation } from '../agent/neura/learn-materials.ts';
 import { fixture } from './model-fixture.ts';
 
 const curriculum: LearnPath = { goal: 'Use joins to report bookings', targetConceptId: 'joins',
@@ -93,6 +95,10 @@ test('snapshot v1 migration quarantines evidence; v2 preserves transitions and r
   assert.equal(currentAttempts(migrated).length, 0); assert.equal(migrated.attempts.length, 1);
   assert.throws(() => advanceLearn(migrated), /Answer/);
   assert.deepEqual(snapshot(restoreSnapshot(snapshot(migrated))), snapshot(migrated));
+  const oversized = emptyState(); oversized.attempts = [{ ...state.attempts[0], asked: 'x'.repeat(LEARN_ASKED_MAX + 1) }];
+  assert.throws(() => restoreSnapshot(snapshot(oversized)), /Invalid saved attempt/);
+  oversized.attempts[0].asked = 'A table of 0.25, 0.50, 0.25';
+  assert.equal(restoreSnapshot(snapshot(oversized)).attempts[0].asked, 'A table of 0.25, 0.50, 0.25');
   const planned = emptyState(); proposePath(planned, curriculum); acceptPlan(planned);
   assert.deepEqual(snapshot(restoreSnapshot(snapshot(planned))), snapshot(planned));
   for (const invalid of [
@@ -161,6 +167,126 @@ test('active Mastra pedagogy: probe, plan acceptance, explicit next, failed-chec
     assert.equal((await status()).conceptId, null);
     await assert.rejects(invoke('learn_lesson', lesson('review', 'joins')), /prerequisites/);
     assert.match((await learn.command('path')).text, /Done: joins/);
+  } finally {
+    if (oldHome === undefined) delete process.env.NEURA_HOME; else process.env.NEURA_HOME = oldHome;
+    if (oldVault === undefined) delete process.env.NEURA_LEARN_VAULT; else process.env.NEURA_LEARN_VAULT = oldVault;
+    await fs.rm(scratch, { recursive: true, force: true });
+  }
+});
+
+test('short answers accept equivalent math and complexity forms without accepting different values', () => {
+  for (const [accepted, answer] of [['0.375', '3/8'], ['3/8', '37.5%'], ['0.5', '.5'], ['1/3', '0.333'], ['1/3', '33.3%'], ['0.3125', '0.312'], ['O(n log n)', 'o(nlogn)'], ['O(n^2)', 'O(n²)'], ['low = mid + 1;', 'low=mid+1'], ['-2', '−2']])
+    assert.equal(learnShortAnswerMatches(accepted, answer), true, `${accepted} / ${answer}`);
+  for (const [accepted, answer] of [['0.375', '3/9'], ['0.25', '0.3'], ['1/3', '0.33'], ['0.5', '5'], ['1/0', '1/0.0'], ['O(n)', 'O(n^2)'], ['0.5', '0.6%'], ['12', '12.4']])
+    assert.equal(learnShortAnswerMatches(accepted, answer), false, `${accepted} / ${answer}`);
+});
+
+test('choice answers: numeric options mean values, text options keep numbering; board sends option text', async () => {
+  const numeric = { kind: 'choice' as const, prompt: 'Comparisons?', options: ['2', '4', '8'], answer: 1, hints: ['Count.'], explanation: 'Four.' };
+  assert.equal((await evaluateLearnExercise(numeric, '4')).correct, true);
+  assert.equal((await evaluateLearnExercise(numeric, '2')).correct, false, 'a bare 2 is the value, not the second option');
+  const named = { ...numeric, options: ['Stack', 'Queue'], answer: 1 };
+  assert.equal((await evaluateLearnExercise(named, '2')).correct, true);
+  assert.equal((await evaluateLearnExercise(named, 'queue')).correct, true);
+  assert.equal((await evaluateLearnExercise(named, '1')).correct, false);
+  const html = renderLearnHtml({ ...card, exercise: numeric });
+  assert.match(html, /exercise\.options\[Number\(answer\)-1\]\.trim\(\)/, 'numeric options send the value, never a position');
+  assert.match(html, /const matches=function learnShortAnswerMatches/);
+  assert.doesNotMatch(html, /accepted: string/, 'board script must be plain JavaScript');
+});
+
+test('chat card shows the question, options and diagram text, but never the answer key; path display needs no model text', async () => {
+  const board = path.join(os.tmpdir(), 'lesson-x.html');
+  const lesson: LearnLesson = { ...card, phase: 'teach', example: 'Worked: row 7 has key 7.', diagram: { kind: 'flow', title: 'Pointer move', nodes: [{ id: 'prev', label: 'prev' }, { id: 'curr', label: 'curr', detail: 'Current node' }], edges: [{ from: 'curr', to: 'prev', label: 'next points back' }] },
+    exercise: { kind: 'choice', prompt: 'Which is identity?', options: ['Primary key', 'Sort order'], answer: 0, hints: ['SECRET-HINT'], explanation: 'SECRET-EXPLANATION' } };
+  const text = renderLearnCardText(lesson, board);
+  for (const shown of ['[teach]', 'Which is identity?', '1. Primary key', '2. Sort order', 'curr --(next points back)--> prev', 'Worked: row 7', 'file:///']) assert.ok(text.includes(shown), shown);
+  assert.doesNotMatch(text, /SECRET/);
+  assert.match(renderLearnCardText({ ...lesson, exercise: { ...lesson.exercise, options: ['2', '4'] } as LearnLesson['exercise'] }, board), /<the value>/);
+  const display = { content: [{ type: 'text' as const, text: 'model-only json' }], display: 'THE CARD', terminate: true };
+  const tools = [{ name: 'card', description: 'd', parameters: { type: 'object', properties: {} }, execute: async () => display }];
+  const preamble = fixture([[{ type: 'text', text: 'Here is your card.' }, { type: 'tool-call', toolCallId: 'a', toolName: 'card', input: '{}' }], [{ type: 'text', text: 'Must stop' }]]);
+  const chunks: string[] = [];
+  const shown = await runTurn({ model: preamble.model, messages: [{ role: 'user', content: 'x' }], instructions: 'T', tools, onText: chunk => chunks.push(chunk) });
+  assert.match(chunks.join(''), /Here is your card\.[\s\S]*THE CARD/); assert.match(shown.text, /THE CARD/);
+  const silent = fixture([[{ type: 'tool-call', toolCallId: 'a', toolName: 'card', input: '{}' }], [{ type: 'text', text: 'Must stop' }]]);
+  assert.equal((await runTurn({ model: silent.model, messages: [{ role: 'user', content: 'x' }], instructions: 'T', tools })).text, 'THE CARD');
+  assert.doesNotMatch(JSON.stringify(silent.requests), /THE CARD/);
+});
+
+test('text materials: HTML notes and C source import as inert citable text; unsafe inputs stay refused', { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-text-material-')));
+  const write = (name: string, value: string | Buffer) => fs.writeFile(path.join(scratch, name), value);
+  try {
+    await write('notes.html', '<html><head><title>x</title><style>.a{}</style></head><body><script>steal()</script><h1>Worst case</h1><p>O(n<sup>2</sup>) when sorted &amp; pivot &rarr; last</p><!-- hidden --></body></html>');
+    await write('lab.c', 'int pivot = arr[high]; /* Lomuto */\n');
+    await write('big.txt', Array.from({ length: 200 }, () => 'x'.repeat(5999)).join('\n'));
+    await write('data.txt', Buffer.from([0x66, 0x00, 0x67]));
+    await write('invalid.txt', Buffer.from([0xff, 0xfe, 0x41]));
+    await write('tool.exe', 'MZ');
+    await fs.mkdir(path.join(scratch, '.hidden')); await write(path.join('.hidden', 'n.html'), '<p>no</p>');
+    const notes = await importLearningMaterial({ workspace: scratch, path: 'notes.html' });
+    assert.equal(notes.kind, 'text');
+    assert.match(notes.pages[0].text, /O\(n\^2\) when sorted & pivot → last/);
+    assert.doesNotMatch(notes.pages[0].text, /steal|hidden|\.a\{|<h1>/);
+    assert.equal(validateLearningCitation(notes, { sourceId: notes.id, filename: 'notes.html', unit: 'page', number: 1, excerpt: 'when sorted & pivot' }), true);
+    assert.equal(validateLearningCitation(notes, { sourceId: notes.id, filename: 'notes.html', unit: 'slide', number: 1, excerpt: 'when sorted & pivot' }), false);
+    assert.equal(validateLearningCitation(notes, { sourceId: notes.id, filename: 'notes.html', unit: 'page', number: 1, excerpt: 'not in the notes' }), false);
+    assert.match((await importLearningMaterial({ workspace: scratch, path: 'lab.c' })).pages[0].text, /Lomuto/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: 'big.txt' }), /limit is 100/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: 'data.txt' }), /binary/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: 'invalid.txt' }), /UTF-8/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: 'tool.exe' }), /Supported learning materials/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: '.hidden/n.html' }), /hidden/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: '../outside.html' }), /inside the workspace/);
+    await fs.mkdir(path.join(scratch, 'private')); await write(path.join('private', 'n.md'), 'no');
+    await write('credentials.txt', 'no');
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: 'private/n.md' }), /private or credential/);
+    await assert.rejects(importLearningMaterial({ workspace: scratch, path: 'credentials.txt' }), /private or credential/);
+    await write('leak.txt', 'keep this\nAPI_KEY=abc123secret\n');
+    const redacted = await importLearningMaterial({ workspace: scratch, path: 'leak.txt' });
+    assert.match(redacted.pages[0].text, /keep this/); assert.doesNotMatch(redacted.pages[0].text, /abc123secret/);
+    const state = emptyState(); state.materials.set(notes.id, notes);
+    const restored = restoreSnapshot(snapshot(state));
+    assert.equal(restored.materials.get(notes.id)!.kind, 'text');
+    assert.equal(restored.verifiedSources.size, 0, 'saved excerpts still require reimport');
+  } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('mastery gates: revealed answers cannot pass, ungraded checks are refused with a reason, remediation survives a fresh process', { skip: process.platform !== 'win32' }, async () => {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-gates-')));
+  const oldHome = process.env.NEURA_HOME; const oldVault = process.env.NEURA_LEARN_VAULT;
+  process.env.NEURA_HOME = path.join(scratch, 'home'); delete process.env.NEURA_LEARN_VAULT;
+  try {
+    const single: LearnPath = { goal: 'One idea', targetConceptId: 'rows', concepts: [{ id: 'rows', title: 'Rows' }], edges: [] };
+    const learn = createLearnWorkshop(scratch, () => true);
+    const invoke = (name: string, input: unknown) => learn.tools().find(tool => tool.name === name)!.execute(input, {});
+    const phase = async () => JSON.parse((await learn.command('status')).text).phase;
+    const lesson = (value: string, extra: object = {}) => ({ ...card, phase: value, conceptId: 'rows', ...extra });
+    await invoke('learn_lesson', { ...card, phase: 'probe' }); await learn.command('answer primary key'); await learn.command('next');
+    await invoke('learn_path', { path: single }); await learn.command('accept-plan');
+    await invoke('learn_lesson', lesson('teach')); await learn.command('answer primary key'); await learn.command('next');
+    assert.equal(await phase(), 'check');
+    const ungraded = { exercise: { kind: 'short', prompt: 'Explain.', acceptedAnswers: [], hints: ['Think.'], explanation: 'Open.' } };
+    await assert.rejects(invoke('learn_lesson', lesson('check', ungraded)), (error: Error) => error instanceof ToolFeedbackError && /automatically graded/.test(error.message));
+    const model = fixture([[call('learn_lesson', lesson('check', ungraded))], [{ type: 'text', text: 'Noted.' }]]);
+    await runTurn({ model: model.model, instructions: 'T', messages: [{ role: 'user', content: 'x' }], tools: learn.tools() });
+    assert.match(JSON.stringify(model.requests[1].prompt), /automatically graded/, 'the model sees why the card was refused');
+    await invoke('learn_lesson', lesson('check')); await learn.command('reveal'); await learn.command('answer primary key');
+    const revealed = await learn.command('next');
+    assert.equal(await phase(), 'teach', 'a revealed answer goes back to teaching');
+    assert.match(revealed.text, /remediation required/);
+    assert.match(revealed.prompt!, /"revealed":true/);
+    await invoke('learn_lesson', lesson('teach')); await learn.command('answer primary key'); await learn.command('next');
+    await invoke('learn_lesson', lesson('check', { exercise: { kind: 'choice', prompt: 'SECOND-CHECK', options: ['GOOD-OPTION', 'wrong idea'], answer: 0, hints: ['Think.'], explanation: 'Because.' } })); await learn.command('answer 2');
+    const file = /Resume: \/learn resume (\S+)/.exec((await learn.command('save')).text)![1];
+    const fresh = createLearnWorkshop(scratch, () => true); await fresh.command(`resume ${file}`);
+    const remediation = await fresh.command('next');
+    assert.match(remediation.prompt!, /SECOND-CHECK/); assert.match(remediation.prompt!, /wrong idea/); assert.match(remediation.prompt!, /"learnerAnswer":"2"/);
+    assert.doesNotMatch(remediation.prompt!, /acceptedAnswers/);
+    const asked = JSON.parse((await fresh.command('status')).text).otherLessonHistory.attempts.map((attempt: { asked?: string }) => attempt.asked);
+    assert.ok(asked.some((text?: string) => text?.includes('SECOND-CHECK')), 'questions asked before a save stay visible after resume');
+    assert.ok(asked.every((text?: string) => text && text.length <= LEARN_ASKED_MAX));
   } finally {
     if (oldHome === undefined) delete process.env.NEURA_HOME; else process.env.NEURA_HOME = oldHome;
     if (oldVault === undefined) delete process.env.NEURA_LEARN_VAULT; else process.env.NEURA_LEARN_VAULT = oldVault;
