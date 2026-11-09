@@ -55,7 +55,7 @@ export function advanceLearn(state: State): void {
   else if (!earned && phase !== "review") state.phase = "teach";
   else if (phase === "check") state.phase = "practice";
   else if (phase === "practice") state.phase = "review";
-  else if (phase === "review" && (attempt.correct === false || attempt.revealed)) state.phase = "teach";
+  else if (phase === "review" && !earned) state.phase = "teach";
   else if (phase === "review" && state.path) {
     if (state.conceptId && !state.completed.includes(state.conceptId)) state.completed.push(state.conceptId);
     state.conceptId = learnPathLayers(state.path).flat().find(id => !state.completed.includes(id) && state.path!.edges.filter(edge => edge.to === id).every(edge => state.completed.includes(edge.from)));

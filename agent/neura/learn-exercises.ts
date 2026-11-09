@@ -171,11 +171,11 @@ export function learnShortAnswerMatches(accepted: string, answer: string): boole
   const [key, given] = [clean(accepted), clean(answer)];
   if (key === given) return true;
   const [expected, actual] = [number(key), number(given)];
-  if (Number.isNaN(expected) || Number.isNaN(actual)) return false;
+  if (!Number.isFinite(expected) || !Number.isFinite(actual)) return false;
   if (Math.abs(expected - actual) <= 1e-9 * Math.max(1, Math.abs(expected))) return true;
   const places = (/\.(\d+)/.exec(given)?.[1].length ?? 0) + (given.endsWith("%") ? 2 : 0);
   const significant = given.replace(/\D/g, "").replace(/^0+/, "").length;
-  return /\./.test(given) && significant >= 3 && Math.abs(expected - actual) <= 0.5 * 10 ** -places + 1e-12;
+  return /^[-+]?\d*\.\d+%?$/.test(given) && significant >= 3 && Math.abs(expected - actual) <= 0.5 * 10 ** -places + 1e-12;
 }
 function canonicalRows(rows: Record<string, SqlValue>[]): string {
   return JSON.stringify(rows.map((row) => JSON.stringify(Object.keys(row).sort().map((key) => [key, row[key]]))).sort());

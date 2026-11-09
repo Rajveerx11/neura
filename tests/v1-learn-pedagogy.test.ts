@@ -177,8 +177,29 @@ test('active Mastra pedagogy: probe, plan acceptance, explicit next, failed-chec
 test('short answers accept equivalent math and complexity forms without accepting different values', () => {
   for (const [accepted, answer] of [['0.375', '3/8'], ['3/8', '37.5%'], ['0.5', '.5'], ['1/3', '0.333'], ['1/3', '33.3%'], ['0.3125', '0.312'], ['O(n log n)', 'o(nlogn)'], ['O(n^2)', 'O(n²)'], ['low = mid + 1;', 'low=mid+1'], ['-2', '−2']])
     assert.equal(learnShortAnswerMatches(accepted, answer), true, `${accepted} / ${answer}`);
-  for (const [accepted, answer] of [['0.375', '3/9'], ['0.25', '0.3'], ['1/3', '0.33'], ['0.5', '5'], ['1/0', '1/0.0'], ['O(n)', 'O(n^2)'], ['0.5', '0.6%'], ['12', '12.4']])
+  for (const [accepted, answer] of [['0.375', '3/9'], ['0.25', '0.3'], ['1/3', '0.33'], ['0.5', '5'], ['1/0', '1/0.0'], ['O(n)', 'O(n^2)'], ['0.5', '0.6%'], ['12', '12.4'], ['0.3', '3.14/10']])
     assert.equal(learnShortAnswerMatches(accepted, answer), false, `${accepted} / ${answer}`);
+});
+
+test('overflowed numeric answer keys cannot accept unrelated finite answers', () => {
+  assert.equal(learnShortAnswerMatches('9'.repeat(400), '1'), false);
+});
+
+test('review completion requires an unrevealed correct attempt, including after resume', () => {
+  for (const correct of [true, false, null]) for (const revealed of [false, true]) {
+    const state = emptyState();
+    state.path = canonicalLearnPath(curriculum); state.conceptId = 'rows';
+    state.phase = 'review'; state.wait = 'awaiting-continuation'; state.readyForLesson = false;
+    state.lesson = { ...structuredClone(card), phase: 'review', conceptId: 'rows', stepId: 'rows-review' };
+    state.attempts = [{ lessonId: card.id, identity: evidenceIdentity(state), answer: 'primary key', correct,
+      feedback: 'Reviewed', revealed, assisted: false, at: new Date().toISOString() }];
+    const resumed = restoreSnapshot(snapshot(state));
+    advanceLearn(resumed);
+    const earned = correct === true && !revealed;
+    assert.deepEqual(resumed.completed, earned ? ['rows'] : []);
+    assert.equal(resumed.conceptId, earned ? 'keys' : 'rows');
+    assert.equal(resumed.nextStep.includes('remediation required'), !earned);
+  }
 });
 
 test('choice answers: numeric options mean values, text options keep numbering; board sends option text', async () => {
@@ -287,6 +308,19 @@ test('mastery gates: revealed answers cannot pass, ungraded checks are refused w
     const asked = JSON.parse((await fresh.command('status')).text).otherLessonHistory.attempts.map((attempt: { asked?: string }) => attempt.asked);
     assert.ok(asked.some((text?: string) => text?.includes('SECOND-CHECK')), 'questions asked before a save stay visible after resume');
     assert.ok(asked.every((text?: string) => text && text.length <= LEARN_ASKED_MAX));
+    for (const nextPhase of ['teach', 'check', 'practice']) {
+      await fresh.tools().find(tool => tool.name === 'learn_lesson')!.execute(lesson(nextPhase), {});
+      await fresh.command('answer primary key'); await fresh.command('next');
+    }
+    await fresh.tools().find(tool => tool.name === 'learn_lesson')!.execute(lesson('review', { exercise: {
+      kind: 'sql', prompt: 'Count the rows.', tables: [{ name: 'items', columns: [{ name: 'n', type: 'INTEGER' }], rows: Array.from({ length: 15 }, (_, index) => [index]) }],
+      solution: 'SELECT COUNT(*) AS n FROM items', expectedRows: [{ n: 15 }], hints: ['Use COUNT.'], explanation: 'There are 15 rows.',
+    } }), {});
+    const ungradedReview = JSON.parse((await fresh.command('answer SELECT a.n FROM items a CROSS JOIN items b')).text);
+    assert.equal(ungradedReview.correct, null);
+    assert.match(ungradedReview.next, /remediation/);
+    assert.match((await fresh.command('next')).text, /remediation required/);
+    assert.deepEqual(JSON.parse((await fresh.command('status')).text).completed, []);
   } finally {
     if (oldHome === undefined) delete process.env.NEURA_HOME; else process.env.NEURA_HOME = oldHome;
     if (oldVault === undefined) delete process.env.NEURA_LEARN_VAULT; else process.env.NEURA_LEARN_VAULT = oldVault;

@@ -67,7 +67,7 @@ export function createLearnWorkshop(workspace: string, isActive: () => boolean, 
     const asked = [lesson.exercise.prompt, lesson.example, ...lesson.bullets].filter(Boolean).join(' | ').slice(0, LEARN_ASKED_MAX);
     state.attempts = [...state.attempts, { lessonId: lesson.id, identity: evidenceIdentity(state), asked, answer: text, correct: verdict.correct, feedback: verdict.feedback, revealed: state.revealed, assisted: helped, at: new Date().toISOString() }].slice(-100);
     state.wait = 'awaiting-continuation';
-    const remediation = state.phase !== 'probe' && (verdict.correct === false || (verdict.correct === null && ['check', 'practice'].includes(state.phase)));
+    const remediation = state.phase !== 'probe' && (verdict.correct === false || (verdict.correct === null && ['check', 'practice', 'review'].includes(state.phase)));
     state.nextStep = remediation ? 'Read feedback, then /learn next for remediation.' : 'Read feedback, then /learn next.';
     await mirror({ ...evidenceIdentity(state), type: 'practice', lessonId: lesson.id, lessonRevision: learnLessonRevision(lesson), title: lesson.title, topic: lesson.title, correct: verdict.correct, assisted: helped, revealed: state.revealed, exerciseKind: lesson.exercise.kind }, expected, signal);
     return { ...verdict, evidence: 'Practice attempt; not a mastery claim.', solutionPreviouslyRevealed: state.revealed, next: state.nextStep };
