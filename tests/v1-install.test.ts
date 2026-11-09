@@ -14,7 +14,8 @@ const windowsRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows
 const nativeModules = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
 const powershell = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
-const NATIVE_PS_TIMEOUT_MS = 45000;
+// 45s killed one hosted phase in run 42604924843 while its siblings took 18-33s; cause unknown, and the suite deadline still caps the total.
+const NATIVE_PS_TIMEOUT_MS = 90000;
 
 async function nativePowerShell(phase: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) {
   console.log(`[native-ps] ${phase}: start`);

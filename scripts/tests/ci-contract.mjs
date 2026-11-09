@@ -16,6 +16,38 @@ function validateHarness(source) {
   assert.match(source, /env: process\.env, timeout \}/, 'Subprocess deadline must be applied');
 }
 
+function workflowStep(source, name) {
+  return source.split(/\r?\n(?=\s+- (?:name|uses|run):)/).find(step => step.trimStart().startsWith(`- name: ${name}`)) ?? '';
+}
+
+function validateDownloads({ helper, secrets, install, workflows: sources }) {
+  const calls = {
+    'verify-secrets.ps1': secrets,
+    'verify Git step': workflowStep(sources.verify, 'Provision pinned Git runtime'),
+    'release Git step': workflowStep(sources.release, 'Provision pinned Git runtime'),
+  };
+  for (const [name, source] of Object.entries(calls)) {
+    assert.match(source, /download-verified\.ps1(?:'\))? -Uri \S+ -OutFile \S+ -Sha256 \$\S+/, `${name}: pinned download must use the verified helper`);
+    assert.doesNotMatch(source, /Invoke-WebRequest|Start-BitsTransfer|curl(?:\.exe)?\s/, `${name}: raw download restored`);
+  }
+  assert.equal(helper.match(/\bInvoke-WebRequest\b/g)?.length, 1, 'Helper must have one download call');
+  assert.match(helper, /Invoke-WebRequest [^\r\n]*-TimeoutSec 60\b/, 'Each download attempt needs a finite timeout');
+  assert.match(helper, /\$maximumAttempts = 3\r?$/m, 'Download attempts must stay at three');
+  assert.match(helper, /\$retryDelaySeconds = @\(5, 15\)/, 'Retry delays must stay bounded');
+  assert.match(helper, /\$attempt -ge \$maximumAttempts/, 'Retry loop must honor the attempt cap');
+  const hashAt = helper.indexOf('Get-FileHash');
+  assert.ok(hashAt > helper.indexOf('Invoke-WebRequest'), 'Hash check must follow the download');
+  assert.match(helper.slice(hashAt), /if \(\$actualSha256 -ne \$Sha256\) \{\r?\n\s+throw /, 'Hash mismatch must fail');
+  assert.match(install, /const NATIVE_PS_TIMEOUT_MS = 90000;/, 'Native installer phases keep the 90-second cap');
+  const deadlines = [
+    ['verify', 'Scan complete history for secrets'], ['verify', 'Verify secret scanner failure paths'], ['verify', 'Provision pinned Git runtime'],
+    ['release', 'Provision pinned Git runtime'], ['release', 'Verify complete history secret scan'],
+  ];
+  for (const [name, step] of deadlines) {
+    assert.match(workflowStep(sources[name], step), /^\s+timeout-minutes: 8\r?$/m, `${name}: ${step} needs a finite step deadline`);
+  }
+}
+
 function validate(sources) {
   for (const [name, source] of Object.entries(sources)) {
     assert.match(source, /^permissions:\r?\n  contents: read\b/m, `${name}: default token must be read-only`);
@@ -82,6 +114,36 @@ for (const [name, before, after] of mutations) {
 }
 assert.throws(() => validateHarness(harness.replace('env: process.env, timeout }', 'env: process.env }')), 'Removing the suite deadline must fail');
 assert.throws(() => validateHarness(harness.replace('600_000', 'Infinity')), 'Installer deadline must remain bounded');
+const downloads = {
+  helper: readFileSync(new URL('../download-verified.ps1', import.meta.url), 'utf8'),
+  secrets: readFileSync(new URL('../verify-secrets.ps1', import.meta.url), 'utf8'),
+  install: readFileSync(new URL('../../tests/v1-install.test.ts', import.meta.url), 'utf8'),
+  workflows,
+};
+validateDownloads(downloads);
+const gitDownload = /powershell -NoProfile -NonInteractive -File \.\\scripts\\download-verified\.ps1 [^\r\n]*/;
+const rawGit = 'Invoke-WebRequest -Uri $git.windowsArchiveUrl -OutFile $archive';
+const deadline = /timeout-minutes: 8/;
+const downloadMutations = [
+  ['secrets', /& \(Join-Path \$PSScriptRoot 'download-verified\.ps1'\)[^\r\n]*/, 'Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archivePath'],
+  ['helper', '$maximumAttempts = 3', '$maximumAttempts = 5'],
+  ['helper', '$attempt -ge $maximumAttempts -or ', ''],
+  ['helper', ' -TimeoutSec 60', ''],
+  ['helper', 'if ($actualSha256 -ne $Sha256) {', 'if ($false) {'],
+  ['install', 'NATIVE_PS_TIMEOUT_MS = 90000', 'NATIVE_PS_TIMEOUT_MS = Infinity'],
+];
+for (const [name, before, after] of downloadMutations) {
+  const mutated = downloads[name].replace(before, after);
+  assert.notEqual(mutated, downloads[name], `Mutation target missing: ${name} ${before}`);
+  assert.throws(() => validateDownloads({ ...downloads, [name]: mutated }), `Weakened download contract escaped: ${name} ${before}`);
+}
+for (const name of ['verify', 'release']) {
+  for (const [before, after] of [[gitDownload, rawGit], [deadline, 'timeout-minutes: Infinity']]) {
+    const mutated = workflows[name].replace(before, after);
+    assert.notEqual(mutated, workflows[name], `Mutation target missing: ${name} ${before}`);
+    assert.throws(() => validateDownloads({ ...downloads, workflows: { ...workflows, [name]: mutated } }), `Weakened download contract escaped: ${name} ${before}`);
+  }
+}
 for (const [suite, deadline] of [['runtime', 300000], ['installer', 600000]]) {
   const timeoutProbe = spawnSync(process.execPath, ['--input-type=module', '-e', `
     import assert from 'node:assert/strict';
@@ -101,4 +163,4 @@ const distribution = spawnSync(process.execPath, ['scripts/check-pi-free.mjs', '
 assert.ifError(distribution.error);
 assert.equal(distribution.status, 1, 'Uncleared distribution must not succeed');
 assert.match(distribution.stderr, /Distribution blocked: the owner accepted Mastra EE license terms for local development and testing only.*still needs Mastra commercial EE terms or an EE-free upstream artifact/);
-console.log(`CI contracts: four workflows, ${mutations.length + 2} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);
+console.log(`CI contracts: four workflows, ${mutations.length + downloadMutations.length + 6} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);

@@ -28,14 +28,7 @@ $executablePath = Join-Path $toolDirectory "gitleaks.exe"
 
 New-Item -ItemType Directory -Path $toolDirectory -Force | Out-Null
 
-if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-    Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archivePath
-}
-
-$actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actualSha256 -ne $archiveSha256) {
-    throw "Gitleaks archive integrity check failed. Expected $archiveSha256; received $actualSha256."
-}
+& (Join-Path $PSScriptRoot 'download-verified.ps1') -Uri $downloadUrl -OutFile $archivePath -Sha256 $archiveSha256
 
 Expand-Archive -LiteralPath $archivePath -DestinationPath $toolDirectory -Force
 if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {

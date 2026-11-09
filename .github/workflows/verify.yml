@@ -30,10 +30,12 @@ jobs:
 
       - name: Scan complete history for secrets
         shell: pwsh
+        timeout-minutes: 8
         run: powershell -NoProfile -File .\scripts\verify-secrets.ps1
 
       - name: Verify secret scanner failure paths
         shell: pwsh
+        timeout-minutes: 8
         run: powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -46,13 +48,14 @@ jobs:
 
       - name: Provision pinned Git runtime
         shell: pwsh
+        timeout-minutes: 8
         run: |
           $contract = Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json
           $git = $contract.automaticExecutables.git
           $archive = Join-Path $env:RUNNER_TEMP $git.windowsArchive
           $destination = Join-Path $env:RUNNER_TEMP "neura-pinned-git"
-          Invoke-WebRequest -Uri $git.windowsArchiveUrl -OutFile $archive
-          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $git.windowsArchiveSha256) { throw "Pinned Git archive integrity check failed." }
+          powershell -NoProfile -NonInteractive -File .\scripts\download-verified.ps1 -Uri $git.windowsArchiveUrl -OutFile $archive -Sha256 $git.windowsArchiveSha256
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $extract = Start-Process -FilePath $archive -ArgumentList "-o$destination", "-y" -Wait -PassThru -WindowStyle Hidden
           if ($extract.ExitCode -ne 0) { throw "Pinned Git extraction failed with exit code $($extract.ExitCode)." }
           $executable = Join-Path $destination 'cmd\git.exe'
