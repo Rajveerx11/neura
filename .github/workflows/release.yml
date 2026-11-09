@@ -47,13 +47,14 @@ jobs:
             agent/neura/package-lock.json
       - name: Provision pinned Git runtime
         shell: pwsh
+        timeout-minutes: 8
         run: |
           $contract = Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json
           $git = $contract.automaticExecutables.git
           $archive = Join-Path $env:RUNNER_TEMP $git.windowsArchive
           $destination = Join-Path $env:RUNNER_TEMP "neura-pinned-git"
-          Invoke-WebRequest -Uri $git.windowsArchiveUrl -OutFile $archive
-          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $git.windowsArchiveSha256) { throw "Pinned Git archive integrity check failed." }
+          powershell -NoProfile -NonInteractive -File .\scripts\download-verified.ps1 -Uri $git.windowsArchiveUrl -OutFile $archive -Sha256 $git.windowsArchiveSha256
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $extract = Start-Process -FilePath $archive -ArgumentList "-o$destination", "-y" -Wait -PassThru -WindowStyle Hidden
           if ($extract.ExitCode -ne 0) { throw "Pinned Git extraction failed with exit code $($extract.ExitCode)." }
           $executable = Join-Path $destination 'cmd\git.exe'
@@ -93,6 +94,7 @@ jobs:
         run: npm run test:browser
       - name: Verify complete history secret scan
         shell: pwsh
+        timeout-minutes: 8
         run: |
           powershell -NoProfile -File .\scripts\verify-secrets.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

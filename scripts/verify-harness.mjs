@@ -37,7 +37,7 @@ const chosen = args.length ? [[args[1], suites[args[1]]]] : Object.entries(suite
 let failures = 0;
 for (const [name, command] of chosen) {
   console.log(`\n=== ${name} ===`);
-  // Cold hosted Windows PS5 starts cost ~23s each; installer cases intentionally use isolated processes.
+  // Installer phases measured 12-24s on hosted Windows against under 1s locally; the cause is unknown. Each case uses isolated processes.
   const timeout = name === 'installer' ? 600_000 : SUITE_TIMEOUT_MS;
   const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env, timeout });
   if (result.error || result.status !== 0) {

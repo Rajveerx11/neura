@@ -51,7 +51,8 @@ Use full Git history. Shallow clones need `git fetch --unshallow` first.
 | `npm run audit:dependencies` | Vulnerability audit of both locked graphs. Requires registry access |
 | `npm run audit:signatures` | Registry signatures/attestations for both installed graphs |
 | `powershell -NoProfile -File .\scripts\verify-secrets.ps1` | Complete-history scan. Requires the reviewed scanner and history |
-| `powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1` | Secret-scanner regressions |
+| `powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1` | Secret-scanner and synthetic download-retry regressions |
+| `powershell -NoProfile -File .\scripts\download-verified.ps1 -Uri URL -OutFile PATH -Sha256 HASH` | CI's pinned-download helper. A cached file gets one hash check and no download. A missing file gets at most three attempts, only for HTTP 502/503/504 or transient network failures. The hash is checked once, after downloading, so a mismatch fails immediately |
 | `powershell -NoProfile -File .\install.ps1 -Check` | Read-only development-launcher drift check. No permission to install |
 | `npm run verify:release` | Expected refusal while Mastra EE/distribution approval remains unresolved |
 

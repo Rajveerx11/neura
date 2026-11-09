@@ -28,12 +28,105 @@ function Commit-TestFile([string]$Repository, [string]$Name, [string]$Value) {
     if ($LASTEXITCODE -ne 0) { throw "Could not commit secret-scan test fixture." }
 }
 
+function Test-DownloadHelper {
+    Add-Type -TypeDefinition 'public sealed class NeuraSyntheticWebResponse : System.Net.WebResponse { public System.Net.HttpStatusCode StatusCode { get; set; } }'
+    function New-WebFailure([string]$Status, [int]$Code = 0) {
+        $response = if ($Code) { [NeuraSyntheticWebResponse]@{ StatusCode = $Code } } else { $null }
+        return [Net.WebException]::new("Synthetic $Status $Code.", $null, [Net.WebExceptionStatus]$Status, $response)
+    }
+    # $script: would bind to the child script, so the fakes share this object through dynamic scope.
+    $downloadState = @{ Calls = 0; Steps = @(); Sleeps = @() }
+    # These shadow the cmdlets for child scripts only while this function runs.
+    function Invoke-WebRequest {
+        param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile, [int]$TimeoutSec)
+        $downloadState.Calls++
+        if ($TimeoutSec -ne 60) { throw "Download helper used timeout $TimeoutSec." }
+        if (Test-Path -LiteralPath $OutFile) { throw 'Download helper retried over a partial file.' }
+        $step = $downloadState.Steps[$downloadState.Calls - 1]
+        if ($step -is [Exception]) {
+            [IO.File]::WriteAllText($OutFile, 'partial body', [Text.UTF8Encoding]::new($false))
+            throw $step
+        }
+        [IO.File]::WriteAllText($OutFile, $step, [Text.UTF8Encoding]::new($false))
+    }
+    function Start-Sleep { param([int]$Seconds) $downloadState.Sleeps += @($Seconds) }
+
+    $helper = Join-Path $PSScriptRoot 'download-verified.ps1'
+    $target = Join-Path $testRoot 'download\artifact.bin'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+    $validBody = 'synthetic verified artifact'
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    $validHash = (($sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($validBody)) | ForEach-Object { $_.ToString('x2') }) -join '')
+    $sha256.Dispose()
+
+    function Assert-Download([string]$Name, [object[]]$Steps, [int]$Calls, [int[]]$Sleeps, [string]$Failure, [string]$Cached) {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        if ($Cached) { [IO.File]::WriteAllText($target, $Cached, [Text.UTF8Encoding]::new($false)) }
+        $downloadState.Steps = $Steps
+        $downloadState.Calls = 0
+        $downloadState.Sleeps = @()
+        $message = ''
+        try { & $helper -Uri 'https://example.invalid/artifact' -OutFile $target -Sha256 $validHash 3>$null }
+        catch { $message = $_.Exception.Message }
+        if ($downloadState.Calls -ne $Calls) { throw "${Name}: expected $Calls downloads, saw $($downloadState.Calls)." }
+        if (($downloadState.Sleeps -join ',') -cne ($Sleeps -join ',')) { throw "${Name}: unexpected delays $($downloadState.Sleeps -join ',')." }
+        if ($Failure) {
+            if ($message -notlike "*$Failure*") { throw "${Name}: expected failure '$Failure', saw '$message'." }
+        } elseif ($message) { throw "${Name}: unexpected failure '$message'." }
+    }
+
+    foreach ($transient in @((New-WebFailure 'ProtocolError' 504), (New-WebFailure 'ProtocolError' 502), (New-WebFailure 'ProtocolError' 503),
+            (New-WebFailure 'Timeout'), (New-WebFailure 'ConnectFailure'), (New-WebFailure 'ConnectionClosed'), (New-WebFailure 'ReceiveFailure'), (New-WebFailure 'NameResolutionFailure'))) {
+        Assert-Download "recovery: $($transient.Message)" @($transient, $validBody) 2 @(5) ''
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw 'Recovered download was not kept.' }
+    }
+    foreach ($permanent in @((New-WebFailure 'ProtocolError' 401), (New-WebFailure 'ProtocolError' 403), (New-WebFailure 'ProtocolError' 404),
+            (New-WebFailure 'TrustFailure'), (New-WebFailure 'SecureChannelFailure'))) {
+        Assert-Download "permanent: $($permanent.Message)" @($permanent, $validBody) 1 @() 'Synthetic'
+        if (Test-Path -LiteralPath $target) { throw 'Failed download left a partial file.' }
+    }
+    Assert-Download 'exception outside the transport' @(([IO.IOException]::new('Synthetic disk failure.')), $validBody) 1 @() 'Synthetic disk failure'
+    $exhausted = New-WebFailure 'ProtocolError' 504
+    Assert-Download 'three transient failures' @($exhausted, $exhausted, $exhausted, $validBody) 3 @(5, 15) 'Synthetic ProtocolError 504'
+    if (Test-Path -LiteralPath $target) { throw 'Exhausted download left a partial file.' }
+    Assert-Download 'valid response with wrong bytes' @('wrong body', $validBody) 1 @() 'integrity check failed'
+    Assert-Download 'valid cache' @() 0 @() '' $validBody
+    Assert-Download 'tampered cache' @($validBody) 0 @() 'integrity check failed' 'tampered body'
+    if ([IO.File]::ReadAllText($target) -cne 'tampered body') { throw 'Tampered cache was replaced instead of rejected.' }
+
+    foreach ($invalid in @(@('http://example.invalid/artifact', $validHash), @('https://example.invalid/artifact', 'not-a-digest'))) {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        $downloadState.Calls = 0
+        $rejected = $false
+        try { & $helper -Uri $invalid[0] -OutFile $target -Sha256 $invalid[1] } catch { $rejected = $true }
+        if (-not $rejected -or $downloadState.Calls -ne 0) { throw "Download helper accepted invalid input: $($invalid[0]) $($invalid[1])." }
+    }
+
+    $downloadState.Steps = @($exhausted, $exhausted, $exhausted)
+    $downloadState.Calls = 0
+    $downloadState.Sleeps = @()
+    $scannerOutput = @()
+    $scanFailed = $false
+    $exhaustedCache = Join-Path $testRoot 'exhausted-tools'
+    try { & $scanScript -RepositoryRoot $testRoot -ToolCache $exhaustedCache 3>$null | ForEach-Object { $scannerOutput += "$_" } }
+    catch { $scanFailed = $true }
+    if (-not $scanFailed -or $downloadState.Calls -ne 3 -or ($scannerOutput -join ' ') -like '*no leaks found*') {
+        throw 'Scanner reported a result after its download was exhausted.'
+    }
+    if (Test-Path -LiteralPath (Join-Path $exhaustedCache 'gitleaks-8.30.1\gitleaks.exe')) { throw 'Exhausted scanner download produced an executable.' }
+}
+
 try {
+    New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+    Test-DownloadHelper
+
     $cleanRepository = New-TestRepository "clean"
     Commit-TestFile $cleanRepository "README.md" "Synthetic clean fixture."
     & $scanScript -RepositoryRoot $cleanRepository -ToolCache $toolCache | Out-Null
 
     $archivePath = Join-Path $toolCache "gitleaks-8.30.1\gitleaks_8.30.1_windows_x64.zip"
+    $verifiedArchivePath = "$archivePath.verified"
+    Copy-Item -LiteralPath $archivePath -Destination $verifiedArchivePath
     [IO.File]::WriteAllText($archivePath, "tampered archive", [Text.UTF8Encoding]::new($false))
     $tamperedArchiveRejected = $false
     try {
@@ -44,7 +137,7 @@ try {
     if (-not $tamperedArchiveRejected) {
         throw "Secret scanner accepted a tampered tool archive."
     }
-    Remove-Item -LiteralPath $archivePath -Force
+    Move-Item -LiteralPath $verifiedArchivePath -Destination $archivePath -Force
 
     # The exact public release digest is ignored, but a different value at the
     # same path must still trip the generic API-key rule after a squash merge.
@@ -187,7 +280,7 @@ try {
     }
     if (-not $newCanaryRejected) { throw 'Documentation exception bypassed a new canary at the same path and line.' }
 
-    Write-Output "Neura secret tests: clean history, reviewed manifest digest, exact PEM/documentation binding and target-repository ignore passed; tampered archive, other digest, off-path key, synthetic token, new-commit PEM/prose, same-line canary and decoy-CWD exception rejected."
+    Write-Output "Neura secret tests: bounded verified downloads, clean history, reviewed manifest digest, exact PEM/documentation binding and target-repository ignore passed; tampered archive, other digest, off-path key, synthetic token, new-commit PEM/prose, same-line canary and decoy-CWD exception rejected."
 } catch {
     Write-Output "Secret test failed before cleanup: $($_.FullyQualifiedErrorId)"
     throw
