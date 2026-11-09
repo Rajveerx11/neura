@@ -1,0 +1,78 @@
+---
+title: "Neura Learn fix report: tutorial lessons publish again"
+brief: "A provider content filter was cutting off coin-toss sample spaces, and Neura hid the reason. Lessons now publish, history saves, and T3 shows the real error. The fix is committed locally and live in the C:\\Neura checkout."
+version: 1
+---
+
+# Tutorial lessons publish again
+
+<Diagram id="failure-chain" caption="What happened after /learn accept-plan, and what changed.">
+
+```html
+<div class="grid">
+  <div class="diagram-panel col" data-rough>
+    <div class="head">Before</div>
+    <div class="diagram-node">Model writes Q1: HHHH, HHHT, HHTH…</div>
+    <div class="diagram-node">Provider filter stops the response</div>
+    <div class="diagram-node">Neura reports a content-type problem</div>
+    <div class="diagram-node">T3 shows "Inspect local configuration"</div>
+  </div>
+  <div class="diagram-panel col" data-rough>
+    <div class="head">After</div>
+    <div class="diagram-node">Long outcome lists are grouped by heads</div>
+    <div class="diagram-node">The lesson card publishes</div>
+    <div class="diagram-node">If the filter fires, Neura names it</div>
+    <div class="diagram-node">T3 shows that same real reason</div>
+  </div>
+</div>
+```
+
+```css
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.head { font-weight: 700; color: var(--wf-ink); }
+.diagram-node { font-size: 13px; padding: 7px 10px; }
+```
+
+</Diagram>
+
+## What I did
+
+<Table
+  id="done"
+  columns={["Change", "Why"]}
+  rows={[
+    ["Learn groups outcome lists above eight items", "The filter cut the model off while it listed the 16 coin-toss outcomes"],
+    ["The stream's stop reason now reaches you", "`content_filter` was being reported as a missing content type"],
+    ["T3 shows the real, redacted error", "The adapter replaced every failure with one generic sentence"],
+    ["Page images leave history after their turn", "One turn held about 3 MB against a 1 MiB limit, which caused the save warning"],
+    ["Three regression tests and two doc notes", "Each fix now fails a test if it breaks"],
+  ]}
+/>
+
+## Proof
+
+<Table
+  id="proof"
+  columns={["Check", "Result"]}
+  rows={[
+    ["Replays with the real Tutorial 1 PDF, before", "11 of 12 stopped by the filter"],
+    ["Replays with the real Tutorial 1 PDF, after", "5 of 5 published a lesson, 4 of them on Q1"],
+    ["History save warning, after", "Gone in all 5 replays"],
+    ["Harness suites and docs check", "22 of 22 and pass"],
+    ["T3 provider probe and registration", "Pass"],
+  ]}
+/>
+
+The grouped listing is a prompt rule, so the filter can still fire. It would now say so by name. One replay also hit a short stall fetching the model list. The next turn worked, and that is unrelated to this bug.
+
+## Do this now
+
+1. Start a **new** Neura thread in T3. The failed thread's process still runs the old code.
+2. Switch it to Learn and ask it to open `Probability_PRP/Tutorial 1.pdf`.
+3. Run `/learn accept-plan` when the path appears.
+4. Run `git push origin main` when you want the fix on GitHub. It is committed locally, and `main` is protected, so a direct push needs your admin bypass.
+
+## Key takeaway
+
+A vague error message costs more than the bug behind it. The real cause was one field in the stream, and two layers of "safe" error handling hid it.

@@ -125,6 +125,9 @@ generic write/edit, shell, `grep`/`find`, web search, integration or Plan tool.
 Publishing a card, proposing a path or evaluating an attempt ends the model turn. Model-generated
 answers cannot substitute for the learner's actual latest input.
 
+Page images stay in conversation history only for the turn that read them. The tutor
+reads a page again when it needs the image later.
+
 HTML notes, text, Markdown and C/C++ source import as inert UTF-8 text, split into
 numbered sections cited as pages. HTML loses scripts, styles and layout.
 Document import checks captured bytes, source identity and excerpt locations.

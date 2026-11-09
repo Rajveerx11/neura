@@ -77,6 +77,10 @@ turns. Live catalog and inference acceptance still require the owner's manual te
 
 ## Safe rejection diagnostics
 
+A well-formed stream that ends without completing reports only an allowlisted
+reason, such as the provider's content filter or output limit. T3 Code shows the
+same redacted failure text as the terminal.
+
 Unsuccessful model responses are read only as JSON, with an 8 KiB limit and a
 one-second read deadline. Recognized model, request-field and quota categories
 produce fixed hints. A request field is shown only if it matches the built-in

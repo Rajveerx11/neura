@@ -89,6 +89,17 @@ function codexCompletedStream(response: CodexResponse): Response {
   return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
 }
 
+/** The backend ended a well-formed stream without completing; its allowlisted reason must reach the user. */
+class CodexStopError extends Error {}
+
+function codexStopReason(payload: { response?: { incomplete_details?: { reason?: unknown }; error?: unknown } }): string | undefined {
+  const reason = payload.response?.incomplete_details?.reason;
+  if (reason === "content_filter") return "The provider's content filter stopped this response";
+  if (reason === "max_output_tokens") return "The response reached the provider's output limit";
+  const denial = codexDenialReason(payload.response?.error ? payload.response : payload);
+  return denial.startsWith("No recognized") ? undefined : denial;
+}
+
 /** The terminal completed snapshot is authoritative; truncated streams must not become successful turns. */
 async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<Response> {
   if (!response.body) throw new Error("Codex response has no stream");
@@ -124,7 +135,10 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
         idleDeadline = performance.now() + STREAM_IDLE_TIMEOUT_MS;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(expire, STREAM_IDLE_TIMEOUT_MS);
-        if (["error", "response.error", "response.failed", "response.incomplete"].includes(payload.type ?? "")) throw new Error("Codex response did not complete");
+        if (["error", "response.error", "response.failed", "response.incomplete"].includes(payload.type ?? "")) {
+          const reason = codexStopReason(payload);
+          throw reason ? new CodexStopError(`Codex response did not complete; ${reason}; no API billing fallback was used`) : new Error("Codex response did not complete");
+        }
         if (payload.type === "response.completed") {
           return new Response(JSON.stringify(completedCodexResponse(payload.response)), { headers: { "Content-Type": "application/json" } });
         }
@@ -243,8 +257,9 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
   try {
     const snapshot = await codexSnapshot(response, signal);
     return streaming ? codexCompletedStream(completedCodexResponse(await snapshot.json())) : snapshot;
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted();
+    if (error instanceof CodexStopError) throw error;
     const publicTypes = ["text/plain", "text/html", "application/octet-stream", "application/x-ndjson", "application/json-seq", "text/x-component"];
     const label = publicTypes.find(type => type === contentType) ?? (contentType ? "other" : "missing");
     throw new Error(`Codex subscription did not return completed Responses SSE (HTTP ${response.status}; content-type ${label}); raw details withheld; no API billing fallback was used`);

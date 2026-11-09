@@ -14,7 +14,7 @@ import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRU
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
 import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
-import { createSession, saveSession, resumeSession, listSessions, type Session } from './session.ts';
+import { createSession, saveSession, resumeSession, listSessions, withoutToolImages, type Session } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.ts';
 import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
@@ -270,7 +270,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected) throw new Error('Session changed; result discarded.');
         // Repository context is lower-priority user data, refreshed each turn rather than persisted into history.
-        memory = guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages;
+        memory = withoutToolImages(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages);
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
         lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
           ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;

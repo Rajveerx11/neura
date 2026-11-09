@@ -117,6 +117,14 @@ test('T3 discovery exercises an ephemeral CLI session without authorizing privat
   }
 });
 
+test('ACP reports the actual failure reason instead of a generic message', { skip: process.platform !== 'win32' }, async () => {
+  const f = await fixture();
+  try {
+    await f.start();
+    assert.equal((await f.prompt('/learn next')).error.message, 'Enter /mode learn first. No task was replayed.');
+  } finally { await f.close(); }
+});
+
 test('ACP shares real Work turns and history, rejects unsupported input, and retains Learn mode', { skip: process.platform !== 'win32' }, async () => {
   const f = await fixture();
   try {

@@ -20,6 +20,13 @@ class RpcError extends Error {
   constructor(code: number, message: string) { super(message); this.code = code; }
 }
 
+/** The same redacted text the terminal prints; thrown errors already withhold raw provider data. */
+function failureMessage(error: unknown) {
+  if (error instanceof RpcError) return error.message;
+  const detail = error instanceof Error ? redactSensitiveText(error.message, 8000) : '';
+  return `${detail || 'Neura request failed.'} No task was replayed.`;
+}
+
 /** Exported for pipe-based protocol regression tests; stdout contains JSON-RPC only. */
 export function serveAcp(input = stdin, output = stdout) {
   let initialized = false;
@@ -169,7 +176,7 @@ export function serveAcp(input = stdin, output = stdout) {
       if (frame.id !== undefined) send({ id: frame.id, result });
     } catch (error) {
       if (frame.id !== undefined) send({ id: frame.id, error: { code: error instanceof RpcError ? error.code : -32603,
-        message: error instanceof RpcError ? error.message : 'Neura request failed. Inspect local configuration; no task was replayed.' } });
+        message: failureMessage(error) } });
     }
   }
   const close = () => {

@@ -77,6 +77,19 @@ function validateMessages(messages: any[]): any[] {
   return history;
 }
 
+const scrubImages = (value: any): any => {
+  if (Array.isArray(value)) return value.map(scrubImages);
+  if (!value || typeof value !== "object") return value;
+  if (["image", "media"].includes(value.type) && typeof value.data === "string") return { type: "text", text: "[Image removed from history after its turn. Read the page again if you need it.]" };
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, scrubImages(child)]));
+};
+
+/** Tool images stay for their own turn only: one page can exceed the whole session cap, and tools can re-read it. */
+export function withoutToolImages(messages: any[]): any[] {
+  // Mastra also copies tool output into the provider options of both the tool call and its result.
+  return messages.map((message) => Array.isArray(message.content) ? { ...message, content: scrubImages(message.content) } : message);
+}
+
 function normalizedSession(session: Session, trim: boolean): Session {
   if (session.version !== 1 || !idPattern.test(session.id) || !Number.isFinite(Date.parse(session.createdAt)) || !Number.isFinite(Date.parse(session.updatedAt))) throw new Error("Invalid session envelope");
   const result: Session = { version: 1, id: session.id, createdAt: session.createdAt, updatedAt: session.updatedAt, messages: validateMessages(session.messages) };

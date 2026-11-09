@@ -10,7 +10,7 @@ import { once } from "node:events";
 import { Type } from "typebox";
 import { createTurnTools, DEFAULT_TURN_STEPS, runTurn, ToolFeedbackError, WORK_TURN_STEPS, type ToolDefinition } from "../src/runtime.ts";
 import { createConfiguredModel } from "../src/providers.ts";
-import { appendSession, createSession, listSessions, resumeSession, saveSession, MAX_SESSION_MESSAGES, MAX_SESSION_BYTES } from "../src/session.ts";
+import { appendSession, createSession, listSessions, resumeSession, saveSession, withoutToolImages, MAX_SESSION_MESSAGES, MAX_SESSION_BYTES } from "../src/session.ts";
 
 import { fixture } from "./model-fixture.ts";
 import { windowsShortPath } from "./windows-short-path.ts";
@@ -514,6 +514,30 @@ test("schema failure without assistant text returns usable feedback", async () =
   const result = await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => { throw new Error("Must not execute"); })] });
   assert.equal(result.stopReason, "finished");
   assert.match(result.text, /Invalid tool input; action rejected/);
+});
+
+test("tool images leave history after their turn, in every copy Mastra keeps", async () => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-test-")));
+  try {
+    const data = "x".repeat(MAX_SESSION_BYTES);
+    const modelOutput = { type: "content", value: [{ type: "text", text: "page text" }, { type: "media", mediaType: "image/png", data }] };
+    const providerOptions = { mastra: { modelOutput } };
+    const userImage = { type: "image", image: "kept" };
+    const messages = [
+      { role: "user", content: [userImage] },
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: "1", toolName: "learn_material", input: {}, providerOptions }] },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "1", toolName: "learn_material", providerOptions,
+        output: { type: "json", value: { content: [{ type: "text", text: "page text" }, { type: "image", mimeType: "image/png", data }] } } }] },
+    ];
+    const session = await createSession(directory);
+    await assert.rejects(saveSession(directory, { ...session, messages }), /Current turn exceeds session limits/);
+    const stripped = withoutToolImages(messages);
+    assert.ok(!JSON.stringify(stripped).includes("xxxx"));
+    assert.ok(JSON.stringify(stripped).includes("page text"));
+    assert.deepEqual(stripped[0].content[0], userImage);
+    await saveSession(directory, { ...session, messages: stripped });
+    assert.equal((await resumeSession(directory, session.id)).messages.length, 3);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("session create/list/append/resume is bounded and rejects incomplete effects or traversal", async () => {
