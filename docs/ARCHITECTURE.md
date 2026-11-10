@@ -51,8 +51,8 @@ schema validation, serialized effects and cancellation. Work builders have a
 
 ### T3 is a transport, not an authority bypass
 
-T3 launches one Neura ACP process per thread. Normal sessions retain workspace
-containment and Neura's policy. Permission responses allow or reject one exact
+T3 launches one Neura ACP process per thread. Work and Learn sessions retain
+workspace containment and Neura's policy; YOLO has neither. Permission responses allow or reject one exact
 action; Neura revalidates it afterward. Cancellation/disconnection denies pending
 approvals and waits for interrupted work before releasing the writer lease.
 T3's permission mode may answer requests automatically; use Supervised for manual
@@ -150,7 +150,7 @@ secret-named files; ignored files without secret names may remain readable.
 Generated project code requires review before host execution. Application path
 checks and parser resource bounds do not isolate against a hostile same-user process.
 
-Plan, YOLO, Human Away, external MCP/LSP, delegation, context compaction, durable
+Plan, Human Away, external MCP/LSP, delegation, context compaction, durable
 effect recovery and full trusted proof are unavailable in the active application.
 Historical extensions and old tests do not establish current behavior. The
 [parity matrix](PARITY_MATRIX.md) tracks those gaps without a readiness claim.

@@ -3,7 +3,7 @@
 ## Supported source
 
 Only current `main` receives security fixes. It is a Mastra development/testing
-build with Work and Learn, not an approved production or multi-user boundary.
+build with Work, Learn and unrestricted YOLO, not an approved production or multi-user boundary.
 Use synthetic, non-sensitive data while license/distribution approval remains
 unresolved. Historical `v2.5.1` and the withheld Pi candidate do not describe the
 active application. See [status](docs/STATUS.md).
@@ -114,7 +114,8 @@ enter through `session/request_permission`. A client that auto-answers permissio
 will enter YOLO without asking a person. The mode is never saved. Every YOLO tool
 call rejects a changed mode or session. That fence stops stale calls and is not a
 containment boundary. A timeout or abort kills the command's process tree, but on
-Windows a descendant whose parent already exited can survive. A report that YOLO
+Windows a descendant whose parent already exited can survive. If Neura itself is
+killed, a running command keeps going. A report that YOLO
 can do what the user can do is not a vulnerability.
 
 ## Historical modes and release gates

@@ -55,8 +55,9 @@ script. Historical Pi runners remain separate and do not certify Mastra parity.
 
 - Preserve the approved logo, startup status and prompt. Keep ASCII, narrow,
   `TERM=dumb`, `NO_COLOR` and headless fallbacks.
-- Expose Work and Learn only. Keep deterministic policy, canonical junction-aware
-  containment, byte-bound edits, protected paths and fail-closed isolation.
+- Expose Work, Learn and explicitly entered YOLO only. In Work and Learn, keep
+  deterministic policy, canonical junction-aware containment, byte-bound edits,
+  protected paths and fail-closed isolation.
 - Project instructions, imported documents, saved profiles and reviewer output
   are untrusted data. None can grant authority.
 - Keep Learn's dedicated tool allowlist, actual-answer provenance, marked stores,
