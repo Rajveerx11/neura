@@ -39,6 +39,8 @@ export type RunTurnOptions = {
   onReasoning?: (summary: string) => void;
   /** Synchronous, payload-free sink. Thenables are rejected without permitting hidden effects. */
   onToolEvent?: (event: ToolEvent, invocationId?: string) => void;
+  /** Tool text is unredacted in YOLO, so an empty answer must not print it. */
+  hideToolText?: boolean;
   maxSteps?: number;
 };
 
@@ -148,7 +150,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
   return { tools, results, report, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
 }
 
-export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent, maxSteps = DEFAULT_TURN_STEPS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | "step-limit"; usage?: TurnUsage }> {
+export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent, hideToolText, maxSteps = DEFAULT_TURN_STEPS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | "step-limit"; usage?: TurnUsage }> {
   signal?.throwIfAborted();
   const names = new Set(tools.map(tool => tool.name));
   const turn = createTurnTools(tools, signal, onToolEvent);
@@ -204,7 +206,7 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
     // Still asking for tools with no tool ending the turn means the budget ran out, not that the work finished.
     const stopReason = result.finishReason === "tool-calls" && !turn.isTerminated() ? "step-limit" as const : "finished" as const;
     const display = turn.results.flatMap((result) => result.display ? [result.display] : []).join("\n");
-    const fallback = stopReason === "finished" ? display || toolText || "Turn ended without assistant text." : "";
+    const fallback = stopReason === "finished" ? display || (hideToolText ? "" : toolText) || "Turn ended without assistant text." : "";
     const text = result.text && display ? `${result.text}\n${display}` : result.text || fallback;
     if (!streamed && text) onText?.(text);
     else if (streamed && display) onText?.(`\n${display}`);

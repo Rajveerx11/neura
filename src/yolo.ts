@@ -7,6 +7,8 @@ import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { ToolFeedbackError, type ToolDefinition } from './runtime.ts';
 
 const MAX_BYTES = 1024 * 1024;
+// A failing build reports at the end, so both ends survive. History stores tool output about three times; this keeps one command under its 1 MiB cap.
+const OUTPUT_PART_BYTES = 64 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 3_600_000;
 // A background process can keep the pipes open after its shell exits. Output gets this long to drain, as in Codex.
@@ -44,18 +46,29 @@ function runOnHost(command: string, cwd: string, timeoutMs: number, signal?: Abo
     let timedOut = false; let truncated = false; let exitCode: number | null = null;
     let drain: ReturnType<typeof setTimeout> | undefined;
     const capture = () => {
-      const chunks: Buffer[] = []; let size = 0;
-      return { chunks, add(chunk: Buffer) {
-        const room = MAX_BYTES - size;
-        if (chunk.length > room) truncated = true;
-        const kept = chunk.subarray(0, room); chunks.push(kept); size += kept.length;
-      } };
+      let head = Buffer.alloc(0); let tail = Buffer.alloc(0); let total = 0;
+      return {
+        add(chunk: Buffer) {
+          total += chunk.length;
+          const room = OUTPUT_PART_BYTES - head.length;
+          if (room > 0) head = Buffer.concat([head, chunk.subarray(0, room)]);
+          const rest = chunk.subarray(Math.max(room, 0));
+          if (rest.length) tail = Buffer.concat([tail, rest]).subarray(-OUTPUT_PART_BYTES);
+        },
+        text() {
+          const omitted = total - head.length - tail.length;
+          if (omitted <= 0) return Buffer.concat([head, tail]).toString('utf8');
+          truncated = true;
+          return `${head.toString('utf8')}\n[${omitted} bytes omitted]\n${tail.toString('utf8')}`;
+        },
+      };
     };
     const stdout = capture(); const stderr = capture();
     const clear = () => { clearTimeout(deadline); clearTimeout(drain); signal?.removeEventListener('abort', stop); };
     const finish = () => {
       clear(); child.stdout.destroy(); child.stderr.destroy();
-      resolve({ stdout: Buffer.concat(stdout.chunks).toString('utf8'), stderr: Buffer.concat(stderr.chunks).toString('utf8'), exitCode: timedOut ? null : exitCode, timedOut, truncated });
+      const output = { stdout: stdout.text(), stderr: stderr.text() }; // text() records any cut in truncated.
+      resolve({ ...output, exitCode: timedOut ? null : exitCode, timedOut, truncated });
     };
     const settle = () => { drain ??= setTimeout(finish, DRAIN_MS); };
     const stop = () => { killTree(child, settle); };
@@ -128,7 +141,7 @@ export function createYoloTools(workspace: string, mode: () => string, generatio
       if (start < 0 || content.indexOf(params.old_string, start + 1) >= 0) throw new Error('Edit text must match exactly once.');
       return commit(params.path, content.slice(0, start) + params.new_string + content.slice(start + params.old_string.length), signal);
     }),
-    tool('exec', `Run a ${shellName} command on the host from the workspace, with network and the full environment. stdout and stderr keep 1 MiB each; truncated reports a cut.${process.platform === 'win32' ? ' A failing native command reports exit code 1 unless you add exit $LASTEXITCODE.' : ''}`, Type.Object({ command: Type.String({ minLength: 1, maxLength: 30_000 }), timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: MAX_TIMEOUT_MS })) }, { additionalProperties: false }), async (params, signal) => {
+    tool('exec', `Run a ${shellName} command on the host from the workspace, with network and the full environment. stdout and stderr each keep their first and last 64 KiB; truncated reports a cut.${process.platform === 'win32' ? ' A failing native command reports exit code 1 unless you add exit $LASTEXITCODE.' : ''}`, Type.Object({ command: Type.String({ minLength: 1, maxLength: 30_000 }), timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: MAX_TIMEOUT_MS })) }, { additionalProperties: false }), async (params, signal) => {
       options.notice?.(`Running on host: ${redactSensitiveText(params.command, 200)}`);
       const outcome = await runOnHost(params.command, root, params.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal);
       signal?.throwIfAborted();

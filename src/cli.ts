@@ -247,7 +247,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
-        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, maxSteps,
+        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, maxSteps, hideToolText: mode === 'yolo',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
             endLine();

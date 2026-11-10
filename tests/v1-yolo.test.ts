@@ -63,7 +63,7 @@ const environment = (home: string): NodeJS.ProcessEnv => ({
   HOME: home, USERPROFILE: home, NEURA_HOME: home, NO_COLOR: '1',
 });
 /** A loopback model that plays the given tool calls, then answers. */
-async function modelServer(plan: Array<{ name: string; input: unknown }>) {
+async function modelServer(plan: Array<{ name: string; input: unknown }>, answer = 'Synthetic answer') {
   const requests: any[] = [];
   const server = createServer(async (req, res) => {
     let body = ''; for await (const chunk of req) body += chunk;
@@ -73,7 +73,7 @@ async function modelServer(plan: Array<{ name: string; input: unknown }>) {
     res.end(JSON.stringify({ id: 'synthetic', object: 'chat.completion', created: 1, model: 'fixture',
       choices: [{ index: 0, finish_reason: step ? 'tool_calls' : 'stop', message: step
         ? { role: 'assistant', content: null, tool_calls: [{ id: `call-${requests.length}`, type: 'function', function: { name: step.name, arguments: JSON.stringify(step.input) } }] }
-        : { role: 'assistant', content: 'Synthetic answer' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+        : { role: 'assistant', content: answer } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return {
@@ -201,15 +201,46 @@ test('turn abort kills the whole process tree', async () => {
   });
 });
 
-test('exec keeps 1 MiB per stream and flags the cut without killing the command', async () => {
+test('exec keeps both ends of each stream and flags the cut without killing the command', async () => {
   await scratch(async ({ workspace }) => {
     const script = path.join(workspace, 'loud.cjs');
-    await fs.writeFile(script, `process.stdout.write('x'.repeat(${2 * MIB}), () => process.stderr.write('done', () => process.exit(3)));`);
+    await fs.writeFile(script, `process.stdout.write('START' + 'x'.repeat(${2 * MIB}) + 'END', () => process.stderr.write('done', () => process.exit(3)));`);
     const result = await call(toolset(workspace).exec, { command: `${runNode(script)}; exit $${process.platform === 'win32' ? 'LASTEXITCODE' : '?'}` });
     assert.equal(result.truncated, true);
-    assert.equal(Buffer.byteLength(result.stdout), MIB);
+    assert.match(result.stdout, /^START/);
+    assert.match(result.stdout, /END\s*$/);
+    assert.match(result.stdout, /bytes omitted/);
+    assert.ok(Buffer.byteLength(result.stdout) < 256 * 1024, 'one command fits in saved history');
     assert.match(result.stderr, /done/);
     assert.equal(result.exitCode, 3, 'the command ran to completion');
+  });
+});
+
+test('a command flooding output does not grow memory with it', async () => {
+  await scratch(async ({ workspace }) => {
+    const script = path.join(workspace, 'flood.cjs');
+    await fs.writeFile(script, `const line=Buffer.alloc(65536,120);line[65535]=10;let left=4096;(function write(){while(left-->0){if(!process.stdout.write(line))return process.stdout.once('drain',write);}})();`);
+    const baseline = process.memoryUsage().arrayBuffers;
+    let peak = baseline;
+    const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().arrayBuffers); }, 10);
+    try {
+      const result = await call(toolset(workspace).exec, { command: runNode(script), timeoutMs: 120000 });
+      assert.equal(result.truncated, true);
+    } finally { clearInterval(sampler); }
+    assert.ok(peak - baseline < 128 * MIB, `retained ${Math.round((peak - baseline) / MIB)} MiB of a 256 MiB flood`);
+  });
+});
+
+test('an empty final answer never prints raw tool data', async () => {
+  await scratch(async dir => {
+    const file = path.join(dir.outside, 'private.txt');
+    await fs.writeFile(file, 'plain-marker-for-display\n');
+    const model = await modelServer([{ name: 'read', input: { path: file } }], '');
+    try {
+      const reply = await cli(dir, '--no-history', '--yolo', '-p', 'read it', '--provider', 'local', '--model', 'fixture', '--base-url', model.url);
+      assert.doesNotMatch(reply.stdout + reply.stderr, /plain-marker-for-display/);
+      assert.match(reply.stdout, /Turn ended without assistant text/);
+    } finally { await model.close(); }
   });
 });
 
