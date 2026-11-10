@@ -13,6 +13,7 @@ const suites = {
   cli: ['--test', 'tests/v1-cli.test.ts'],
   acp: ['--test', 'tests/v1-acp.test.ts'],
   'work-tools': ['--test', 'tests/v1-work-tools.test.ts'],
+  yolo: ['--test', 'tests/v1-yolo.test.ts'],
   review: ['--test', 'tests/v1-review.test.ts'],
   workflow: ['--test', 'tests/v1-workflow.test.ts'],
   'terminal-ui': ['--test', 'tests/v1-terminal-ui.test.ts'],

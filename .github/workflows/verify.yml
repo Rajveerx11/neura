@@ -160,6 +160,7 @@ jobs:
       - name: Verify portable Work and review regressions
         run: |
           node scripts/verify-harness.mjs --suite work-tools
+          node scripts/verify-harness.mjs --suite yolo
           node scripts/verify-harness.mjs --suite review
           node scripts/verify-harness.mjs --suite workflow
       - run: node scripts/verify-harness.mjs --suite learn-storage

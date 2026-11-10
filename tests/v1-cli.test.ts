@@ -23,7 +23,7 @@ function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
 }
 
-async function interactiveFixture(options: { inputs: string[]; exitCode?: number; projectGuidance?: string; stepPlan?: Array<{ name: string; input: unknown } | null>; reviewerPlan?: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string }) {
+async function interactiveFixture(options: { inputs: string[]; exitCode?: number; projectGuidance?: string; stepPlan?: Array<{ name: string; input: unknown } | null>; reviewerPlan?: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string; recordTools?: boolean }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
   try {
     const workspace = path.join(scratch, 'workspace'); const profile = path.join(scratch, 'profile');
@@ -68,7 +68,7 @@ async function interactiveFixture(options: { inputs: string[]; exitCode?: number
         assert.ok(!files.some(name => name.endsWith('.lock')), 'The session writer lease must be released');
       }
     }
-    return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string; summary?: string | null }> };
+    return { ...reply, requests: JSON.parse(match[1]) as Array<{ type: string; model?: string; summary?: string | null; tools?: string[]; yolo?: boolean }> };
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 }
 
@@ -666,7 +666,7 @@ test('CLI source check is independent of workspace/private-home configuration an
       const reply = await exec(process.execPath, [path.join(root, 'src/cli.ts'), '--check', '--cwd', workspace], { cwd: scratch, env });
       const check = JSON.parse(reply.stdout);
       assert.equal(check.framework, 'Mastra');
-      assert.deepEqual(check.modes, ['work', 'learn']);
+      assert.deepEqual(check.modes, ['work', 'learn', 'yolo']);
       assert.equal(reply.stderr, '');
     }
     assert.deepEqual(await fs.readdir(scratch), []);
@@ -726,4 +726,69 @@ test('CLI history is workspace-scoped and releases its writer lock; unavailable 
     }
     await assert.rejects(fs.stat(path.join(home, '.pi')));
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+const WORK_TOOLS = ['read', 'ls', 'grep', 'find', 'write', 'edit', 'work_exec'];
+const YOLO_TOOLS = ['read', 'write', 'edit', 'exec'];
+const modelRequests = (reply: { requests: Array<{ type: string; tools?: string[]; yolo?: boolean }> }) => reply.requests.filter(request => request.type === 'model');
+
+test('/mode yolo with a typed yes enters YOLO, keeps a plain-text danger signal and exposes host tools', async () => {
+  const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-yolo-')));
+  try {
+    const target = path.join(outside, 'marker.txt');
+    const reply = await interactiveFixture({ term: 'dumb', recordTools: true, inputs: ['/mode yolo', 'yes', '/status', 'run it', '/quit'],
+      stepPlan: [{ name: 'exec', input: { command: `echo done > "${target}"` } }, null] });
+    await fs.stat(target);
+    assert.equal(reply.stdout, stripVTControlCharacters(reply.stdout), 'TERM=dumb stays plain');
+    assert.equal(reply.stdout.split('[approval required]').length - 1, 1);
+    assert.match(reply.stdout, /No sandbox and no approvals/);
+    assert.match(reply.stdout, /Mode: YOLO · DANGER/);
+    assert.match(reply.stdout, /yolo > /);
+    assert.match(reply.stderr.replace(/\s+/g, ' '), /YOLO · DANGER: no sandbox, no approvals, network and full account access until \/mode work or exit/);
+    assert.deepEqual(modelRequests(reply).map(request => request.tools), [YOLO_TOOLS, YOLO_TOOLS]);
+    assert.ok(modelRequests(reply).every(request => request.yolo));
+  } finally { await fs.rm(outside, { recursive: true, force: true }); }
+});
+
+test('/mode yolo denied or interrupted stays in the current mode with no YOLO tools', async () => {
+  for (const answer of ['no', '', 'YES', '[CTRL_C]']) {
+    const reply = await interactiveFixture({ recordTools: true, inputs: ['/mode yolo', answer, '/status', 'hello', '/quit'] });
+    const transcript = stripVTControlCharacters(reply.stdout);
+    assert.match(transcript, /YOLO not enabled\. Mode: work/, answer);
+    assert.match(transcript, /Mode: Work/);
+    assert.doesNotMatch(transcript, /yolo > /);
+    assert.deepEqual(modelRequests(reply).map(request => request.tools), [WORK_TOOLS]);
+    assert.equal(modelRequests(reply)[0].yolo, false);
+  }
+});
+
+test('/mode yolo at end of input exits without entering YOLO', async () => {
+  const reply = await interactiveFixture({ inputs: ['/mode yolo', '[EOF]'] });
+  const transcript = stripVTControlCharacters(reply.stdout);
+  assert.match(transcript, /YOLO not enabled\. Mode: work/);
+  assert.match(transcript, /Neura closed/);
+  assert.doesNotMatch(transcript, /yolo > /);
+});
+
+test('--yolo starts without a prompt and keeps the logo, status, prompt order', async () => {
+  const reply = await interactiveFixture({ args: ['--yolo'], inputs: ['/quit'] });
+  const transcript = stripVTControlCharacters(reply.stdout);
+  assert.ok(!transcript.includes('[approval required]'));
+  assert.ok(transcript.indexOf('neura') < transcript.indexOf('YOLO · DANGER'));
+  assert.ok(transcript.indexOf('YOLO · DANGER') < transcript.indexOf('yolo > '));
+  assert.match(reply.stderr, /YOLO · DANGER/);
+});
+
+test('a YOLO change gets project guidance like Work but no automatic review', async () => {
+  const reply = await interactiveFixture({ args: ['--yolo'], gitWorkspace: true, recordTools: true, projectGuidance: 'Project rule\nUNTRUSTED_YOLO_GUIDANCE',
+    stepPlan: [{ name: 'write', input: { path: 'changed.txt', content: 'changed' } }, null], inputs: ['change it', '/quit'] });
+  assert.equal(modelRequests(reply).length, 2, 'the reviewer never called the model');
+  assert.doesNotMatch(reply.stdout, /READY FOR YOUR APPROVAL|BLOCKED|Review skipped|Review unavailable/);
+});
+
+test('/verify and /review stay Work-only in YOLO', async () => {
+  for (const command of ['/verify quick', '/review']) {
+    const reply = await interactiveFixture({ args: ['--yolo'], inputs: [command, '/quit'] });
+    assert.match(reply.stderr, /only in Work/, command);
+  }
 });

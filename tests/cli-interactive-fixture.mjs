@@ -20,6 +20,11 @@ class FixtureReadline extends EventEmitter {
     process.stdout.write(prompt);
     if (!answers.length) throw new Error('No more synthetic input');
     const answer = answers.shift();
+    if (answer === '[EOF]') {
+      this.emit('close');
+      options?.signal?.throwIfAborted();
+      throw new Error('Synthetic input closed');
+    }
     if (answer === '[CTRL_C]') {
       process.emit('SIGINT');
       options?.signal?.throwIfAborted();
@@ -59,7 +64,7 @@ globalThis.fetch = async (url, init) => {
     assert.equal(guidance.length, 1, 'fresh guidance must be included once, not accumulated in history');
     assert.equal(guidance[0].role, 'user', 'repository guidance must stay below system authority');
   }
-  requests.push({ type: 'model', model: body.model, ...(config.reasoning ? { summary: body.reasoning?.summary ?? null } : {}) });
+  requests.push({ type: 'model', model: body.model, ...(config.reasoning ? { summary: body.reasoning?.summary ?? null } : {}), ...(config.recordTools ? { tools: body.tools.map(tool => tool.name), yolo: body.instructions.includes('YOLO mode') } : {}) });
   modelRequests++;
   if (config.denyModel) return new Response(JSON.stringify({ error: { code: 'model_not_found', message: 'synthetic-private-value' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   const toolName = config.writeTool ? 'write' : 'read';

@@ -19,7 +19,8 @@ import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.ts';
 import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
-import { createTerminalUI, terminalText, type TerminalStatus } from './terminal-ui.ts';
+import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
+import { createTerminalUI, terminalText, type Mode, type TerminalStatus } from './terminal-ui.ts';
 export { terminalText } from './terminal-ui.ts';
 
 const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env });
@@ -31,6 +32,7 @@ export type CliBridge = {
   onToolEvent?: (event: ToolEvent, invocationId?: string) => void;
   onReasoning?: (text: string) => void;
   onStepLimit?: () => void;
+  onModeChange?: (mode: Mode) => void;
   serve: (session: { execute: (text: string) => Promise<boolean>; cancel: () => void }) => Promise<void>;
 };
 
@@ -43,7 +45,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const warning = (text: string) => stderr.write(bridge ? redactSensitiveText(text, 8000) + '\n' : terminal(process.stderr).feedback(redactSensitiveText(text, 8000), 'warning') + '\n');
   const failure = (text: string) => bridge ? warning(text) : process.stderr.write(terminal(process.stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
-    help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, ascii: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
+    help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' }, ascii: { type: 'boolean' }, prompt: { type: 'string', short: 'p' }, cwd: { type: 'string' }, mode: { type: 'string' }, yolo: { type: 'boolean' }, 'dangerously-bypass-approvals-and-sandbox': { type: 'boolean' }, provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, resume: { type: 'string' }, 'no-history': { type: 'boolean' }, 'no-thinking': { type: 'boolean' },
     'reviewer-provider': { type: 'string' }, 'reviewer-model': { type: 'string' }, 'reviewer-base-url': { type: 'string' },
   } });
   if (values.help) {
@@ -56,14 +58,16 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     for (const name of Object.keys(learnRuntime.dependencies)) {
       if (!fs.existsSync(new URL(`../agent/neura/node_modules/${name}/package.json`, import.meta.url))) throw new Error(`Learn dependency missing: ${name}. Run npm ci --prefix agent/neura --ignore-scripts.`);
     }
-    say(JSON.stringify({ framework: 'Mastra', version: runtime.dependencies['@mastra/core'], modes: ['work', 'learn'], node: process.version, platform: process.platform, learnFirstCreation: process.platform === 'win32' ? 'supported' : 'requires native Windows', history: 'Neura-owned; no Pi imports', status: 'development; license/distribution and real-auth gates remain' }, null, 2));
+    say(JSON.stringify({ framework: 'Mastra', version: runtime.dependencies['@mastra/core'], modes: ['work', 'learn', 'yolo'], node: process.version, platform: process.platform, learnFirstCreation: process.platform === 'win32' ? 'supported' : 'requires native Windows', history: 'Neura-owned; no Pi imports', status: 'development; license/distribution and real-auth gates remain' }, null, 2));
     return;
   }
   let workspace = fs.realpathSync.native(path.resolve(values.cwd ?? process.cwd()));
   if (!fs.statSync(workspace).isDirectory()) throw new Error('Workspace must be a directory.');
-  let mode: 'work' | 'learn' = 'work';
-  if (values.mode !== undefined && !['work', 'learn'].includes(values.mode)) throw new Error('Only Work and Learn are implemented in this v1.');
-  if (values.mode === 'learn') mode = 'learn';
+  const yoloFlag = Boolean(values.yolo || values['dangerously-bypass-approvals-and-sandbox']);
+  if (values.mode === 'yolo') throw new Error('--mode yolo is refused. Use --yolo; that flag is your explicit consent to no sandbox and no approvals.');
+  if (values.mode !== undefined && !['work', 'learn'].includes(values.mode)) throw new Error('Only --mode work and --mode learn are available.');
+  if (yoloFlag && values.mode !== undefined) throw new Error('--yolo cannot be combined with --mode.');
+  let mode: Mode = yoloFlag ? 'yolo' : values.mode === 'learn' ? 'learn' : 'work';
   let generation = 0;
   const home = path.resolve(process.env.NEURA_HOME || path.join(os.homedir(), '.neura'));
   if (home.split(/[\\/]/).some(part => part.replace(/[. ]+$/, '').toLowerCase() === '.pi')) throw new Error('NEURA_HOME must be outside the legacy Pi profile.');
@@ -162,6 +166,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       await selectSession(values.resume);
     } else if (values.resume) throw new Error('--resume cannot be combined with --no-history.');
     if (interactive) stdout.write(terminal().wordmark(values.ascii) + '\n\n'); // Approved logo; no false READY banner.
+    if (mode === 'yolo') warning(YOLO_WARNING);
     if (scratchWorkspace) {
       say(`Scratch workspace: ${workspace}`);
       say('Files remain here after exit, but OS temp cleanup may remove them. Use --cwd PATH for a project.');
@@ -223,13 +228,16 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const userMessage = { role: 'user', content: text };
         learn.input(learnerInput);
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
-        const tools = [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice: line => { endLine(); say(line); } }), ...(mode === 'learn' ? learn.tools() : [])];
+        const notice = (line: string) => { endLine(); say(line); };
+        const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation, { notice })
+          : [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice }), ...(mode === 'learn' ? learn.tools() : [])];
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
+          : mode === 'yolo' ? YOLO_INSTRUCTIONS
           : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
-        const guidance = mode === 'work' ? projectInstructions(workspace) : '';
+        const guidance = mode === 'learn' ? '' : projectInstructions(workspace);
         const guidanceIndex = memory.length;
         const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
-        const maxSteps = mode === 'work' ? WORK_TURN_STEPS : DEFAULT_TURN_STEPS;
+        const maxSteps = mode === 'learn' ? DEFAULT_TURN_STEPS : WORK_TURN_STEPS;
         const review = reviewTurn && mode === 'work' && workflowOn;
         const needSessionBaseline = mode === 'work' && sessionBaseline?.generation !== expected;
         const carried = review && unfinished?.generation === expected ? unfinished.snapshot : null;
@@ -393,8 +401,18 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         generation++; learn.invalidate(true);
         say('Neura subscription credentials removed locally. Remote tokens were not revoked.');
       } else if (command === 'mode') {
-        if (!['work', 'learn'].includes(rest)) throw new Error('Only /mode work and /mode learn are available.');
-        generation++; learn.invalidate(); mode = rest as typeof mode; say(`Mode: ${mode}`);
+        if (!['work', 'learn', 'yolo'].includes(rest)) throw new Error('Only /mode work, /mode learn and /mode yolo are available.');
+        if (rest === 'yolo') {
+          if (!rl && !bridge) throw new Error('/mode yolo needs a person to confirm. Start with --yolo instead.');
+          abort = new AbortController();
+          let confirmed = false;
+          try { confirmed = await approve(YOLO_CONFIRMATION); }
+          catch (error) { if (!abort.signal.aborted) throw error; } // Ctrl+C or end of input is a denial.
+          finally { abort = undefined; }
+          if (!confirmed) { say(`YOLO not enabled. Mode: ${mode}`); return true; }
+          warning(YOLO_WARNING);
+        }
+        generation++; learn.invalidate(); mode = rest as Mode; say(`Mode: ${mode}`); bridge?.onModeChange?.(mode);
       } else if (command === 'learn') {
         if (mode !== 'learn') throw new Error('Enter /mode learn first.');
         abort = new AbortController();
