@@ -1,7 +1,7 @@
 # Development
 
 Develop against the checkout. The current entry point is `src/cli.ts`, using
-Mastra with Work and Learn. Do not install into or develop against a Pi profile.
+Mastra with Work, Learn and YOLO. Do not install into or develop against a Pi profile.
 Development/testing remains limited to synthetic, non-sensitive data while the
 [license/distribution gate](MASTRA_V1_DEPENDENCIES.md) remains open.
 
@@ -56,8 +56,9 @@ script. Historical Pi runners remain separate and do not certify Mastra parity.
 - Preserve the approved logo, startup status and prompt. Keep ASCII, narrow,
   `TERM=dumb`, `NO_COLOR` and headless fallbacks.
 - Expose Work, Learn and explicitly entered YOLO only. In Work and Learn, keep
-  deterministic policy, canonical junction-aware containment, byte-bound edits,
-  protected paths and fail-closed isolation.
+  deterministic policy, canonical junction-aware containment, byte-bound edits
+  and protected paths. Work commands keep fail-closed OS isolation; Learn parsers
+  use application-level controls, not OS isolation.
 - Project instructions, imported documents, saved profiles and reviewer output
   are untrusted data. None can grant authority.
 - Keep Learn's dedicated tool allowlist, actual-answer provenance, marked stores,

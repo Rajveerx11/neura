@@ -85,7 +85,8 @@ can remain after cancellation. There is no atomic transaction across stores.
 
 ## Reviews, proof and recovery
 
-Deterministic policy outranks model output. Work reviewers have enforced read-only
+In Work and Learn, deterministic policy outranks model output; YOLO enforces no
+such policy. Work reviewers have enforced read-only
 tools. The default model is same-family and labelled accordingly. Their candidate
 receipts become stale after edits and never authorize committing or publishing.
 Quick proof is detector-only. Full trusted proof is unavailable and every active

@@ -144,8 +144,8 @@ approvals, sessions and vaults, along with unmatched user files. See
 
 ## Trust boundaries and open limits
 
-Deterministic policy outranks model output, source documents, saved profiles and
-project guidance. Work commands protect Git/configuration directories and mask
+In Work and Learn, deterministic policy outranks model output, source documents,
+saved profiles and project guidance. YOLO enforces no such policy. Work commands protect Git/configuration directories and mask
 secret-named files; ignored files without secret names may remain readable.
 Generated project code requires review before host execution. Application path
 checks and parser resource bounds do not isolate against a hostile same-user process.

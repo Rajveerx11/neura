@@ -18,8 +18,8 @@ No Git history, private state or other worktree is a cleanup target.
 ## Active source: Mastra v1 development migration (2026-10-24)
 
 The owner authorized Pi-free implementation with a usable core and Learn first.
-The active entry point is `src/cli.ts`, not the retained Pi extensions. Work and
-Learn are the only exposed modes. Root dependencies, launcher and v1 verification
+The active entry point is `src/cli.ts`, not the retained Pi extensions. Work,
+Learn and explicitly entered YOLO are the only exposed modes. Root dependencies, launcher and v1 verification
 are being migrated together. Legacy provider/profile data is not imported.
 
 **Development/testing only. Not a release, full feature parity or production-ready.**
