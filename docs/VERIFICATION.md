@@ -15,7 +15,7 @@ git diff --check
 
 `verify` runs strict active-source types, Pi-free/package-closure checks,
 `node scripts/verify-harness.mjs` and registered documentation checks. The active
-runner defines 22 suites, using synthetic stores/models and isolated test
+runner defines 23 suites, using synthetic stores/models and isolated test
 processes. It does not require credentials, install into a live profile or prove
 live provider access. Default sandbox tests check contracts and fail-closed
 behavior without requiring successful Work execution on an unconfigured host.
@@ -27,6 +27,7 @@ behavior without requiring successful Work execution on an unconfigured host.
 | `acp` | ACP negotiation, isolated discovery, retained Work/Learn state, exact-action permissions, tool cards, cancellation and disconnect cleanup |
 | `learn`, `agent-learn` | Active Learn tools, provenance, explicit recovery, title bounds and stale async operations |
 | `work-tools`, `review`, `workflow` | Workspace policy/search/mutations, read-only review, candidate currency and bounded repair |
+| `yolo` | Host tools with no policy, network, process-tree kill, truncation, stale-call fence, startup flags, confirmed entry and unchanged Work/Learn policy |
 | `verification` | Work-only manual proof admission, fingerprints and unavailable/full-proof boundaries |
 | `installer` | Development launcher ownership, path refusals and preservation, including reversible retirement contracts |
 | `parity-matrix`, `dependency-gate` | Frozen-baseline inventory and package/license closure rules |

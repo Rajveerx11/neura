@@ -47,7 +47,7 @@ the reviewed uv/CPython/wheel closure. Setup never provisions these silently.
 5. Inspect the complete diff for unrelated edits and private data. Report actual
    results, skipped checks and limitations. A green local suite is not CI or release approval.
 
-The active runner defines 22 suites, including `acp`, in `scripts/verify-harness.mjs`.
+The active runner defines 23 suites, including `acp` and `yolo`, in `scripts/verify-harness.mjs`.
 Unknown suite names fail. There is no active `test:changed` or `test:accessibility` npm
 script. Historical Pi runners remain separate and do not certify Mastra parity.
 

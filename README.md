@@ -4,9 +4,10 @@
 
 **Context into action.** A Windows-first terminal assistant for engineering and practical learning.
 
-Neura brings two modes into one CLI: **Work** reads and searches a project, makes edits, then runs tests.
+Neura brings two everyday modes into one CLI: **Work** reads and searches a project, makes edits, then runs tests.
 **Learn** turns concepts and local documents into cited lessons,
-diagrams and exercises. The active application uses **Mastra, not Pi**.
+diagrams and exercises. An opt-in third mode, [YOLO](#yolo), drops the sandbox and
+approvals. The active application uses **Mastra, not Pi**.
 
 > **Development/testing only, not a production release.** Use synthetic,
 > non-sensitive projects and materials. Mastra EE scope and distribution approval
@@ -57,6 +58,25 @@ baseline within snapshot limits. It never commits, pushes or merges.
 There is **no automatic browser synchronization**. Copy a board's revision-bound
 command into the terminal to submit an answer. Reading or revealing an answer
 does not establish mastery. See the [Learn guide](docs/LEARN_MODE.md).
+
+### YOLO
+
+YOLO matches OpenAI Codex `--yolo`. The agent gets your full authority on this
+machine: **no Neura sandbox, no approval prompts, no tool blocking, network on.**
+Secrets are readable, and anything the agent reads may reach the model provider and saved session history. Use it only on repositories you trust. Neura stays development-only.
+
+- Start with `neura --yolo` or its alias `--dangerously-bypass-approvals-and-sandbox`,
+  interactive or with `-p`. The flag is your consent, so there is no prompt.
+  `--mode yolo` is refused, and `--yolo` cannot be combined with `--mode`.
+- Inside a session, `/mode yolo` asks you to type `yes` every time. Denial, end of
+  input or a headless session keeps the current mode.
+- The prompt reads `yolo > ` and the status reads `YOLO · DANGER`, including under
+  `NO_COLOR` and `TERM=dumb`.
+- Tools are `read`, `write`, `edit` and `exec`. Paths can be anywhere, and that
+  includes `.env`, `.git` and Neura's own checkout. `exec` runs PowerShell on Windows and bash elsewhere.
+- There is no automatic review, undo or checkpoint. `/verify` and `/review` stay in Work.
+- It ends at `/mode work`, `/resume` or exit. The mode is never saved, so a new
+  process without the flag starts in Work.
 
 ## How it fits together
 
@@ -199,7 +219,8 @@ Explicit workspaces, headless tasks and resumed sessions never silently switch.
 | Command | Purpose |
 | --- | --- |
 | `/help`, `/status` | Commands, provider, workspace, history and reported last-turn usage |
-| `/mode work`, `/mode learn` | Select either implemented mode |
+| `/mode work`, `/mode learn` | Select Work or Learn |
+| `/mode yolo` | Enter [YOLO](#yolo) after a typed `yes`: no sandbox, no approvals |
 | `/model`, `/model PROVIDER MODEL [URL]` | Subscription picker or explicit provider/model selection |
 | `/login`, `/logout` | Explicit subscription authorization or local credential removal |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries |
@@ -250,7 +271,9 @@ refused for commands. Git-ignored files without secret names can remain readable
 to commands. Review generated code before running it on the host. Application
 path checks do not isolate against a hostile process under the same user.
 
-Plan, YOLO, Human Away, delegation, LSP/MCP, `/ship`, the old cockpit and context
+Those protections apply to Work only. [YOLO](#yolo) has none of them.
+
+Plan, Human Away, delegation, LSP/MCP, `/ship`, the old cockpit and context
 compaction are unavailable in the current application. Learn/reviewer turns keep
 an eight-step bound. Crash locks fail closed. Durable effect recovery is unfinished.
 Legacy source is retained as migration evidence. Human Away remains preview-only
@@ -270,7 +293,7 @@ git diff --check
 ```
 
 `npm run verify` includes strict types, the Pi-free/dependency-closure gate,
-22 active suites (including ACP) and registered documentation checks. Tests use
+23 active suites (including ACP and YOLO) and registered documentation checks. Tests use
 synthetic state. Default verification does not require a successful live WSL
 command. Edge is needed for the separate Learn browser check. In a shallow clone,
 fetch full history before verification with `git fetch --unshallow`.

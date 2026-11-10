@@ -25,7 +25,7 @@ status, names a non-test evidence file, or marks Human Away or full proof `imple
 |---|---|
 | `implemented` | v1 provides the baseline behavior and a non-mock test covers it |
 | `partial` | v1 provides part of the behavior, or its evidence is synthetic or mock-only |
-| `unavailable` | Baseline behavior depends on a mode or gate v1 refuses or that is blocked: Plan, YOLO, Human Away, full proof, or the removed Pi profile |
+| `unavailable` | Baseline behavior depends on a mode or gate v1 refuses or that is blocked: Plan, Human Away, full proof, or the removed Pi profile, or on a Pi-era YOLO extra v1 YOLO does not include |
 | `future` | No v1 code path yet; porting is pending under its owner |
 
 Evidence is `none` when no current test covers the row. Fixture is `needed` when no
@@ -66,7 +66,7 @@ by `@spences10/pi-mcp` through the `mcp.ts` wrapper.
 | `cmd:/dash` | [neura.ts#L172](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/neura.ts#L172) | [M10](https://github.com/Rajveerx11/neura/issues/124) | `future` | none | needed | Branded task-entry toggle. |
 | `cmd:/notices` | [neura.ts#L177](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/neura.ts#L177) | [M10](https://github.com/Rajveerx11/neura/issues/124) | `future` | none | needed | Bounded notices widget. |
 | `cmd:/launcher` | [command-launcher.ts#L199](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/neura/command-launcher.ts#L199) | [M10](https://github.com/Rajveerx11/neura/issues/124) | `future` | none | needed | v1 has grouped `/help`, not a searchable launcher. |
-| `cmd:/mode` | [modes.ts#L461](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts#L461) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `partial` | `tests/v1-cli.test.ts` | `tests/cli-interactive-fixture.mjs` | `work` and `learn` only; `plan`, `yolo`, `human-away`, `next` and `status` arguments are not equivalent. |
+| `cmd:/mode` | [modes.ts#L461](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts#L461) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `partial` | `tests/v1-cli.test.ts` | `tests/cli-interactive-fixture.mjs` | `work`, `learn` and confirmed `yolo`; `plan`, `human-away`, `next` and `status` arguments are not equivalent. |
 | `cmd:/approvals` | [modes.ts#L485](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts#L485) | [M5](https://github.com/Rajveerx11/neura/issues/119) | `future` | none | needed | v1 asks per exact Work command; there is no pending-record command or audit view. |
 | `cmd:/preset` | [presets.ts#L43](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/presets.ts#L43) | [M4](https://github.com/Rajveerx11/neura/issues/118) | `future` | none | needed | Whether `/model` replaces presets is an open M4 decision. |
 | `cmd:/clip` | [transcript-actions.ts#L117](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/transcript-actions.ts#L117) | [M10](https://github.com/Rajveerx11/neura/issues/124) | `future` | none | needed | |
@@ -86,7 +86,7 @@ by `@spences10/pi-mcp` through the `mcp.ts` wrapper.
 | `mode:work` | [modes.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `partial` | `tests/v1-learn.test.ts`, `tests/v1-cli.test.ts` | `tests/cli-interactive-fixture.mjs` | Positive contained-edit cases exist. No headless approval or remote/protected actions. |
 | `mode:learn` | [learn.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/learn.ts) | [M9](https://github.com/Rajveerx11/neura/issues/123) | `partial` | `tests/v1-agent-learn.test.ts` | `scripts/learn-material-fixtures.mjs` | Positive real-Mastra lesson, attempt, save and resume case. |
 | `mode:plan` | [plan-artifact.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/plan-artifact.ts) | [M8](https://github.com/Rajveerx11/neura/issues/122) | `unavailable` | none | needed | No positive v1 Plan read case exists. |
-| `mode:yolo` | [modes.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `unavailable` | none | needed | No positive v1 YOLO control case exists. |
+| `mode:yolo` | [modes.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `partial` | `tests/v1-yolo.test.ts` | `tests/cli-interactive-fixture.mjs` | Host tools, `--yolo` and confirmed entry match Codex `--yolo`. Pi-era undo, checkpoints, MCP, memory and `/health` are not included. |
 | `gate:human-away` | [agent/neura/human-away-sandbox.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/neura/human-away-sandbox.ts) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `unavailable` | `tests/v1-cli.test.ts` | needed | Human Away was preview-only at the baseline and is not supported production behavior. Evidence covers only unavailable modes failing closed. Carried obligation [#24](https://github.com/Rajveerx11/neura/issues/24). |
 | `gate:full-proof` | [verification.ts#L139-L155](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/neura/verification.ts#L139-L155) | [M7](https://github.com/Rajveerx11/neura/issues/121) | `unavailable` | `tests/v1-verification.test.ts` | needed | Full proof PASS is blocked by [#91](https://github.com/Rajveerx11/neura/issues/91). Evidence covers the fail-closed path only. |
 
@@ -170,8 +170,8 @@ These are open M0 items, not accepted limitations.
 5. **Old-runtime fixtures and timing.** No synthetic old-runtime fixture or before/after
    timing input was captured ([#61](https://github.com/Rajveerx11/neura/issues/61)).
    Retained `scripts/tests/` Pi suites cannot run without the removed Pi packages.
-6. **Positive cases.** No v1 positive case exists for Plan reads, YOLO controls or
-   optional integrations.
+6. **Positive cases.** No v1 positive case exists for Plan reads or optional
+   integrations.
 7. **Subscription auth.** Evidence is synthetic. Real-account entitlement, refresh and
    restart are unverified ([#118](https://github.com/Rajveerx11/neura/issues/118)).
 8. **Live WSL.** `tests/v1-work-sandbox.test.ts` needs a configured host and does not

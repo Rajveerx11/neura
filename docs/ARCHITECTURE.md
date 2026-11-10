@@ -38,7 +38,8 @@ schema validation, serialized effects and cancellation. Work builders have a
 | Source | Responsibility |
 | --- | --- |
 | [`src/cli.ts`](../src/cli.ts) | Startup, commands, generation fences and turn orchestration |
-| [`src/acp.ts`](../src/acp.ts) | T3 transport, Work/Learn mode mapping, streamed updates, permission requests and disconnect cleanup |
+| [`src/yolo.ts`](../src/yolo.ts) | YOLO host tools and process-tree kill: no sandbox, approvals or path policy |
+| [`src/acp.ts`](../src/acp.ts) | T3 transport, Work/Learn/YOLO mode mapping, streamed updates, permission requests and disconnect cleanup |
 | [`scripts/register-t3.mjs`](../scripts/register-t3.mjs) | Scoped, serialized local registration; metadata check and real discovery probe |
 | [`src/brand.ts`](../src/brand.ts), [`src/terminal-ui.ts`](../src/terminal-ui.ts) | Approved launch mark, width-aware status/help and plain-text fallbacks |
 | [`src/providers.ts`](../src/providers.ts), [`src/auth.ts`](../src/auth.ts) | Separate subscription, loopback local and explicitly billed API transports; explicit login/logout |
