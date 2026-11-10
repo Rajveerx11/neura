@@ -107,6 +107,7 @@ test('T3 discovery exercises an ephemeral CLI session without authorizing privat
         assert.equal((await fs.readdir(f.scratch)).filter(name => name.startsWith('neura-acp-probe-')).length, 1);
         const task = await f.rpc('session/prompt', { sessionId: session.result.sessionId, prompt: [{ type: 'text', text: 'must not run' }] });
         assert.equal(task.error.code, -32601);
+        assert.equal((await f.rpc('session/set_mode', { sessionId: session.result.sessionId, modeId: 'yolo' })).error.code, -32601, 'discovery cannot enter YOLO');
         f.disconnect(); await f.waitForExit();
         assert.equal((await fs.readdir(f.scratch)).filter(name => name.startsWith('neura-acp-probe-')).length, 0);
       } else {
@@ -282,5 +283,65 @@ test('ACP Stop interrupts an active model request and rejects concurrent prompts
     f.send({ method: 'session/cancel', params: { sessionId } });
     assert.equal((await turn).result.stopReason, 'cancelled');
     assert.equal(f.requests.length, 1);
+  } finally { await f.close(); }
+});
+
+const modeUpdates = (f: Awaited<ReturnType<typeof fixture>>) => f.frames.filter(frame => frame.params?.update?.sessionUpdate === 'current_mode_update').map(frame => frame.params.update.currentModeId);
+const statusText = async (f: Awaited<ReturnType<typeof fixture>>) => {
+  const before = f.frames.length;
+  await f.prompt('/status');
+  return f.frames.slice(before).map(frame => frame.params?.update?.content?.text ?? '').join('');
+};
+
+test('ACP advertises YOLO and set_mode needs permission: allow enters, denial and cancel leave the mode alone', { skip: process.platform !== 'win32' }, async () => {
+  for (const answer of ['allow_once', 'reject_once', 'cancel']) {
+    const f = await fixture();
+    try {
+      const sessionId = await f.start();
+      assert.deepEqual(f.frames.find(frame => frame.result?.modes).result.modes.availableModes.map((mode: any) => mode.id), ['work', 'learn', 'yolo']);
+      assert.equal(f.frames.find(frame => frame.result?.modes).result.modes.currentModeId, 'work');
+      let requests = 0;
+      let concurrent: Promise<any> | undefined;
+      f.setPermission(frame => {
+        requests++;
+        assert.match(frame.params.toolCall.rawInput.description, /No sandbox and no approvals/);
+        concurrent = f.prompt('must not start during the permission request');
+        if (answer === 'cancel') f.send({ method: 'session/cancel', params: { sessionId } });
+        else f.send({ id: frame.id, result: { outcome: { outcome: 'selected', optionId: answer } } });
+      });
+      const reply = await f.rpc('session/set_mode', { sessionId, modeId: 'yolo' });
+      assert.equal(requests, 1);
+      assert.equal((await concurrent).error.code, -32000);
+      assert.equal(f.requests.length, 0);
+      if (answer === 'allow_once') {
+        assert.deepEqual(reply.result, {});
+        assert.deepEqual(modeUpdates(f), ['yolo']);
+        assert.match(await statusText(f), /Mode: YOLO · DANGER/);
+      } else {
+        assert.equal(reply.error.code, -32000);
+        assert.match(reply.error.message, /not enabled/);
+        assert.deepEqual(modeUpdates(f), []);
+        assert.match(await statusText(f), /Mode: Work/);
+      }
+    } finally { await f.close(); }
+  }
+});
+
+test('ACP reports every typed /mode change and none for a denied one', { skip: process.platform !== 'win32' }, async () => {
+  const f = await fixture();
+  try {
+    await f.start();
+    let allow = false;
+    f.setPermission(frame => f.send({ id: frame.id, result: { outcome: { outcome: 'selected', optionId: allow ? 'allow_once' : 'reject_once' } } }));
+    await f.prompt('/mode learn');
+    assert.deepEqual(modeUpdates(f), ['learn']);
+    await f.prompt('/mode yolo');
+    assert.deepEqual(modeUpdates(f), ['learn'], 'a denied typed change sends no update');
+    assert.match(await statusText(f), /Mode: Learn/);
+    allow = true;
+    await f.prompt('/mode yolo');
+    assert.deepEqual(modeUpdates(f), ['learn', 'yolo']);
+    await f.prompt('/mode work');
+    assert.deepEqual(modeUpdates(f), ['learn', 'yolo', 'work']);
   } finally { await f.close(); }
 });

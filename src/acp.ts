@@ -10,10 +10,10 @@ import { main, type CliBridge } from './cli.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 
 const version = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-const MODES = { currentModeId: 'work', availableModes: [{ id: 'work', name: 'Work' }, { id: 'learn', name: 'Learn' }] };
+const MODES = { currentModeId: 'work', availableModes: [{ id: 'work', name: 'Work' }, { id: 'learn', name: 'Learn' }, { id: 'yolo', name: 'YOLO' }] };
 const MAX_FRAME = 256 * 1024;
 type Controller = Parameters<CliBridge['serve']>[0];
-type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; stepLimit: boolean; currentTool?: string };
+type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; stepLimit: boolean; currentTool?: string; mode: string };
 type Frame = { jsonrpc: string; id?: string | number | null; method?: string; params?: any; result?: any; error?: unknown };
 class RpcError extends Error {
   code: number;
@@ -91,6 +91,12 @@ export function serveAcp(input = stdin, output = stdout) {
       const done = main(['--cwd', probeWorkspace ?? params.cwd, ...(providerProbe ? ['--no-history'] : [])], {
         write: text => update(sessionId, text), approve: text => approve(sessionId, text),
         onStepLimit: () => { const session = sessions.get(sessionId); if (session) session.stepLimit = true; },
+        // The one source of truth for T3's mode display, however the mode changed.
+        onModeChange: mode => {
+          const session = sessions.get(sessionId);
+          if (session) session.mode = mode;
+          send({ method: 'session/update', params: { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: mode } } });
+        },
         onReasoning: text => send({ method: 'session/update', params: { sessionId, update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text } } } }),
         onToolEvent: (event, invocationId) => {
           // Model requests may arrive in a batch. Cards follow runtime-owned invocations, not request order.
@@ -111,7 +117,7 @@ export function serveAcp(input = stdin, output = stdout) {
       opening.add(started);
       let controller: Controller;
       try { controller = await started; } finally { opening.delete(started); }
-      sessions.set(sessionId, { controller, done, close, busy: false, cancelled: false, stepLimit: false });
+      sessions.set(sessionId, { controller, done, close, busy: false, cancelled: false, stepLimit: false, mode: 'work' });
       if (closed) { close(); return {}; }
       if (params.mcpServers.length) update(sessionId, 'Neura development adapter: external MCP servers are not connected. Neura-owned tools and sandbox remain active.\n');
       const modelId = process.env.NEURA_MODEL || 'default';
@@ -125,10 +131,15 @@ export function serveAcp(input = stdin, output = stdout) {
     }
     if (method === 'session/set_mode') {
       const [id, session] = getSession(params);
-      if (!['work', 'learn'].includes(params.modeId)) throw new RpcError(-32602, 'Only Work and Learn are available');
+      if (!['work', 'learn', 'yolo'].includes(params.modeId)) throw new RpcError(-32602, 'Only Work, Learn and YOLO are available');
       if (session.busy) throw new RpcError(-32000, 'Wait for the active turn before changing modes');
-      await session.controller.execute(`/mode ${params.modeId}`);
-      send({ method: 'session/update', params: { sessionId: id, update: { sessionUpdate: 'current_mode_update', currentModeId: params.modeId } } });
+      // Busy for the whole change: approve() needs it, and a prompt must not start during the YOLO permission request.
+      session.busy = true; session.cancelled = false;
+      try {
+        session.active = session.controller.execute(`/mode ${params.modeId}`);
+        await session.active;
+      } finally { session.busy = false; session.active = undefined; cancel(id); }
+      if (session.mode !== params.modeId) throw new RpcError(-32000, `YOLO was not enabled. The mode is still ${session.mode}.`);
       return {};
     }
     if (method === 'session/prompt') {
