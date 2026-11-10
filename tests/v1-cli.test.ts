@@ -40,7 +40,7 @@ async function interactiveFixture(options: { inputs: string[]; exitCode?: number
     }
     const config = path.join(scratch, 'fixture.json');
     await fs.writeFile(config, JSON.stringify({ ...options, workspace }));
-    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), TEMP: scratch, TMP: scratch, NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 20000 }).then(result => {
+    const reply = await exec(process.execPath, ['tests/cli-interactive-fixture.mjs'], { cwd: root, env: { ...syntheticEnvironment(profile), TEMP: scratch, TMP: scratch, NEURA_HOME: home, NEURA_CLI_FIXTURE: config }, timeout: 60000 }).then(result => { // A YOLO exec starts PowerShell, which alone took about 18 s on a CI runner.
       assert.equal(options.exitCode ?? 0, 0, 'a failing CLI exit was expected'); return result;
     }, error => {
       if (options.exitCode === undefined) throw error;
