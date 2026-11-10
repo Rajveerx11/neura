@@ -428,7 +428,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } else if (command === 'resume') {
         if (values['no-history']) throw new Error('History disabled.');
         await selectSession(rest);
-        generation++; learn.invalidate(true); mode = 'work'; say('Workspace history resumed in Work. Use /mode learn and explicitly /learn resume to restore a lesson.');
+        generation++; learn.invalidate(true); mode = 'work'; say('Workspace history resumed in Work. Use /mode learn and explicitly /learn resume to restore a lesson.'); bridge?.onModeChange?.(mode);
       } else if (command === 'model') {
         if (!rest.trim()) { await pickModel(); return true; }
         await changeModel(parseProvider(rest, 'model'));

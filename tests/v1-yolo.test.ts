@@ -360,6 +360,7 @@ test('/resume returns to Work, and the mode is never saved', async () => {
       assert.match(await session.status(), /Mode: YOLO · DANGER/);
       await session.execute(`/resume ${id}`);
       assert.match(await session.status(), /Mode: Work/);
+      assert.deepEqual(session.modes, ['yolo', 'work'], 'an ACP client must not keep showing YOLO');
     } finally { await session.close(); }
     await cli(dir, '--yolo', '--prompt', '/status');
     const directory = path.join(dir.home, 'sessions', (await fs.readdir(path.join(dir.home, 'sessions')))[0]);
