@@ -18,8 +18,8 @@ No Git history, private state or other worktree is a cleanup target.
 ## Active source: Mastra v1 development migration (2026-10-24)
 
 The owner authorized Pi-free implementation with a usable core and Learn first.
-The active entry point is `src/cli.ts`, not the retained Pi extensions. Work and
-Learn are the only exposed modes. Root dependencies, launcher and v1 verification
+The active entry point is `src/cli.ts`, not the retained Pi extensions. Work,
+Learn and explicitly entered YOLO are the only exposed modes. Root dependencies, launcher and v1 verification
 are being migrated together. Legacy provider/profile data is not imported.
 
 **Development/testing only. Not a release, full feature parity or production-ready.**
@@ -53,6 +53,15 @@ display is blocked by T3's current icon settings and CDN allowlist, as documente
 under [provider discovery and branding](T3_CODE.md#provider-discovery-and-official-logo).
 This does not change the existing development-only licensing/release gates.
 
+## YOLO mode (2026-11-10)
+
+`src/yolo.ts` adds an owner-selected mode equivalent to OpenAI Codex `--yolo`:
+no sandbox, no approvals, network on and the user's full account access. Entry is
+`--yolo`, or `/mode yolo` with fresh confirmation; ACP uses
+`session/request_permission`. Work stays the default and the mode is never saved.
+Secrets are readable, and anything the agent reads may reach the model provider and saved session history. Use it only on repositories you trust. Undo, checkpoints, MCP, memory
+and `/health` are not part of it. This does not change the development-only licensing/release gates.
+
 ## Active pedagogy and proposition graph (2026-11-08)
 
 Learn mode now incorporates active pedagogy with Socratic guidance, progressive
@@ -61,7 +70,7 @@ engine models directional topic dependencies, prerequisite resolution and
 topological progression. The proposition vault provides atomic concept notes
 with typed relations (`requires`, `supports`, `example-of`, `contradicts`,
 `supersedes`), cycle-safe correction handling and bounded proposition storage.
-The active harness has 22 suites, including ACP. The 2026-11-08 native Windows
+The active harness has 23 suites, including ACP and YOLO. The 2026-11-08 native Windows
 verification of `efdbde3` passed all 22 suites and the documentation gate; required
 CI also passed after a transient scanner-download retry. This is historical
 verification of that committed baseline, not a test result for this

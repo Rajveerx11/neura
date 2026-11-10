@@ -139,3 +139,21 @@ test('session presentation includes usable IDs, an explicit resume action, and a
   }
   for (const columns of [20, 40, 80]) assert.ok(createTerminalUI({ columns }).boundary('waiting').length < columns, 'waiting line fits one row');
 });
+
+test('YOLO danger signal survives NO_COLOR and TERM=dumb and fits every supported width', () => {
+  const yolo = { ...status, mode: 'yolo' as const };
+  for (const options of [{ isTTY: true, env: { NO_COLOR: '1' } }, { isTTY: true, env: { TERM: 'dumb' } }, {}]) {
+    const ui = createTerminalUI(options);
+    assert.equal(ui.prompt('yolo'), 'yolo > ');
+    assert.match(ui.status(yolo), /^YOLO · DANGER · /);
+    assert.match(ui.statusDetails(yolo), /Mode: YOLO · DANGER\nSandbox: none · Approvals: none · Network: on/);
+  }
+  assert.match(createTerminalUI({ isTTY: true }).prompt('yolo'), /\x1b\[38;2;223;107;99m/);
+  assert.doesNotMatch(createTerminalUI({}).statusDetails(status), /YOLO|Sandbox: none/);
+  for (const columns of widths) {
+    const ui = createTerminalUI({ columns });
+    for (const output of [ui.prompt('yolo'), ui.status(yolo), ui.help(true)]) for (const line of plain(output).split('\n')) assert.ok(line.length <= columns, `${columns} columns: ${line}`);
+    assert.match(plain(ui.help(true)), /--yolo/);
+    if (columns >= 46) assert.match(plain(ui.help(true)), /--dangerously-bypass-approvals-and-sandbox/);
+  }
+});

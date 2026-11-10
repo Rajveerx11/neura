@@ -113,8 +113,16 @@ to API billing. Do not assume account isolation between two provider instances.
 - Text and resource references; references do not authorize outside-workspace
   reads or automatic URL retrieval. Images, audio and embedded resources are
   rejected rather than silently lost.
-- Work and Learn mode selection, assistant text, provider-exposed reasoning
+- Work, Learn and YOLO mode selection, assistant text, provider-exposed reasoning
   summaries and payload-free tool lifecycle cards. Plan is not implemented.
+  Every mode change, including a typed `/mode`, sends `current_mode_update`.
+- Selecting YOLO goes through `session/request_permission` first and holds the
+  session busy, so a prompt cannot start during it. Denial, cancellation or
+  disconnect returns an error, keeps the mode and sends no update. T3's thread
+  permission mode may answer automatically: a thread set to allow everything
+  enters YOLO with no person asked. YOLO means no sandbox, no approvals, network
+  and full account access on this machine. Secrets are readable, and anything the agent reads may reach the model provider and saved session history. The discovery probe cannot
+  enter it.
 - Exact-action ACP `allow_once` / `reject_once` requests for operations that
   Neura requires approval for. Unknown options, cancellation and disconnect deny
   pending requests. Neura revalidates its existing policy after approval. T3's
@@ -122,7 +130,7 @@ to API billing. Do not assume account isolation between two provider instances.
   you want to approve each such request yourself.
 - Stop cancels the current turn without replay. Only one prompt may run at a time.
   Disconnect waits for the interrupted operation before releasing its writer lease.
-- The native offline WSL2/bubblewrap command sandbox remains mandatory. No T3
+- In Work, the native offline WSL2/bubblewrap command sandbox remains mandatory. No T3
   terminal execution or host fallback bypasses it. This isolates Work commands,
   not model inference: Neura's selected provider transport can use the network.
 

@@ -2,7 +2,7 @@
 
 Updated 2026-11-08 against the active Mastra application through `efdbde3`,
 including the local T3 Code integration and Learn prerequisite paths (#154).
-Work and Learn are the only implemented modes.
+Work and Learn are the everyday modes. YOLO is an explicit opt-out from the sandbox and approvals.
 Development/testing uses synthetic, non-sensitive data while Mastra EE scope and
 distribution approval remain unresolved. No production readiness is claimed.
 

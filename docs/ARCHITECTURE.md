@@ -38,7 +38,8 @@ schema validation, serialized effects and cancellation. Work builders have a
 | Source | Responsibility |
 | --- | --- |
 | [`src/cli.ts`](../src/cli.ts) | Startup, commands, generation fences and turn orchestration |
-| [`src/acp.ts`](../src/acp.ts) | T3 transport, Work/Learn mode mapping, streamed updates, permission requests and disconnect cleanup |
+| [`src/yolo.ts`](../src/yolo.ts) | YOLO host tools and process-tree kill: no sandbox, approvals or path policy |
+| [`src/acp.ts`](../src/acp.ts) | T3 transport, Work/Learn/YOLO mode mapping, streamed updates, permission requests and disconnect cleanup |
 | [`scripts/register-t3.mjs`](../scripts/register-t3.mjs) | Scoped, serialized local registration; metadata check and real discovery probe |
 | [`src/brand.ts`](../src/brand.ts), [`src/terminal-ui.ts`](../src/terminal-ui.ts) | Approved launch mark, width-aware status/help and plain-text fallbacks |
 | [`src/providers.ts`](../src/providers.ts), [`src/auth.ts`](../src/auth.ts) | Separate subscription, loopback local and explicitly billed API transports; explicit login/logout |
@@ -50,8 +51,8 @@ schema validation, serialized effects and cancellation. Work builders have a
 
 ### T3 is a transport, not an authority bypass
 
-T3 launches one Neura ACP process per thread. Normal sessions retain workspace
-containment and Neura's policy. Permission responses allow or reject one exact
+T3 launches one Neura ACP process per thread. Work and Learn sessions retain
+workspace containment and Neura's policy; YOLO has neither. Permission responses allow or reject one exact
 action; Neura revalidates it afterward. Cancellation/disconnection denies pending
 approvals and waits for interrupted work before releasing the writer lease.
 T3's permission mode may answer requests automatically; use Supervised for manual
@@ -143,13 +144,13 @@ approvals, sessions and vaults, along with unmatched user files. See
 
 ## Trust boundaries and open limits
 
-Deterministic policy outranks model output, source documents, saved profiles and
-project guidance. Work commands protect Git/configuration directories and mask
+In Work and Learn, deterministic policy outranks model output, source documents,
+saved profiles and project guidance. YOLO enforces no such policy. Work commands protect Git/configuration directories and mask
 secret-named files; ignored files without secret names may remain readable.
 Generated project code requires review before host execution. Application path
 checks and parser resource bounds do not isolate against a hostile same-user process.
 
-Plan, YOLO, Human Away, external MCP/LSP, delegation, context compaction, durable
+Plan, Human Away, external MCP/LSP, delegation, context compaction, durable
 effect recovery and full trusted proof are unavailable in the active application.
 Historical extensions and old tests do not establish current behavior. The
 [parity matrix](PARITY_MATRIX.md) tracks those gaps without a readiness claim.

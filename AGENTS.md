@@ -2,7 +2,7 @@
 
 ## Active Mastra v1 migration (owner-authorized 2026-10-24)
 
-- The active application is `src/cli.ts` using Mastra, with Work and Learn only.
+- The active application is `src/cli.ts` using Mastra, with Work and Learn, plus the owner-selected YOLO mode (2026-11-10).
 - The owner explicitly selected full Pi removal. Do not reintroduce Pi packages,
   the Pi TUI, acquired Pi extensions, or implicit reads from the legacy Pi profile.
 - The latest-Pi policy below applies only to retained historical Pi source, not

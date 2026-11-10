@@ -7,7 +7,7 @@ export function terminalText(text: string): string {
 }
 
 type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error';
-type Mode = 'work' | 'learn';
+export type Mode = 'work' | 'learn' | 'yolo';
 type Phase = 'requested' | 'started' | 'returned' | 'failed' | 'blocked' | 'cancelled';
 export type TerminalOptions = { isTTY?: boolean; columns?: number; env?: Record<string, string | undefined> };
 export type TerminalStatus = {
@@ -46,6 +46,8 @@ function shortLabel(text: string, limit: number): string {
   }
   return result + '…';
 }
+// Plain words, so the danger signal survives NO_COLOR and TERM=dumb.
+const modeLabel = (mode: Mode) => mode === 'yolo' ? 'YOLO · DANGER' : mode === 'learn' ? 'Learn' : 'Work';
 const reportedUsage = (usage: TerminalStatus['lastTurnUsage']) => usage &&
   Number.isSafeInteger(usage.inputTokens) && usage.inputTokens >= 0 &&
   Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0 ? usage : undefined;
@@ -77,7 +79,8 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     const groups = [
       paint('Neura · Mastra v1 development build', 'bone'),
       group('Work and Learn', [
-        ['/mode work|learn', 'Choose Work or Learn. Only these modes are implemented.'],
+        ['/mode work|learn', 'Choose Work or Learn.'],
+        ['/mode yolo', 'After a typed yes: no sandbox, no approvals, network and full account access until /mode work or exit.'],
         ['/learn', 'Lesson commands: status, path, accept-plan, next, answer <text>, hint, reveal, save, saved, resume <file>, reset, explain, deeper, example.'],
         ['/verify [quick|full|status]', 'Manual verification in Work. Detector-only is never verified.'],
       ]),
@@ -104,7 +107,9 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
       group('Request options', [
         ['-p, --prompt TEXT', 'Run one request. Known commands run in the sandbox; others fail closed.'],
         ['--cwd PATH', 'Project directory. Bare interactive launch from ~ opens a scratch workspace.'],
-        ['--mode work|learn', 'Start in Work (default) or Learn.'],
+        ['--mode work|learn', 'Start in Work (default) or Learn. Never persisted: a new process starts in Work.'],
+        ['--yolo', 'Start in YOLO with no prompt: no sandbox, no approvals, network and full account access. The flag is your consent. Use only on repositories you trust.'],
+        ...(width >= 46 ? [['--dangerously-bypass-approvals-and-sandbox', 'Same as --yolo.'] as [string, string]] : []),
         ['--provider PROVIDER', 'openai-codex (default), local, openai or anthropic.'],
         ['--model NAME · --base-url URL', 'Explicit model and endpoint. Subscription default comes from the catalog, never a guessed model.'],
       ]),
@@ -126,9 +131,9 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
     wordmark(ascii = false) { return renderLogo(columns, ascii || env.TERM === 'dumb').join('\n'); },
     status(state: TerminalStatus) {
-      const mode = state.mode === 'learn' ? 'Learn' : 'Work';
+      const mode = modeLabel(state.mode);
       const model = shortLabel(`${state.provider}/${state.model || '(not selected)'}`, width - mode.length - 3);
-      const lines = [paint(mode, 'copper') + paint(' · ' + model, 'dim')];
+      const lines = [paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim')];
       const fields = [shortLabel(state.workspaceName, Math.min(width, 24)),
         `history ${state.history}${state.history === 'off' ? '' : '/' + state.sessionState}`,
         `thinking ${state.thinking ? 'on' : 'off'}`, `${state.messageCount} msgs`, '/status'];
@@ -143,7 +148,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);
       return paint('Neura status', 'bone') + '\n' + [
-        `Mode: ${state.mode === 'learn' ? 'Learn' : 'Work'}`, `Provider: ${state.provider}`,
+        `Mode: ${modeLabel(state.mode)}`, ...(state.mode === 'yolo' ? ['Sandbox: none · Approvals: none · Network: on'] : []), `Provider: ${state.provider}`,
         `Model: ${state.model || '(not selected)'}`, `Workspace: ${state.workspace}`,
         `Session: ${state.sessionState} ${state.sessionId || '(in memory)'}`, `History: ${state.history}`,
         `Thinking: ${state.thinking ? 'on' : 'off'}`, `Conversation: ${state.messageCount} messages`,
@@ -151,7 +156,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {} }: Term
         'Context window: unknown',
       ].map(terminalLabel).join('\n') + '\n' + paint(prose('Development/testing only. Distribution is not cleared.'), 'dim');
     },
-    prompt(mode: Mode) { return paint(`${mode} > `, 'copper'); },
+    prompt(mode: Mode) { return paint(`${mode} > `, mode === 'yolo' ? 'error' : 'copper'); },
     // Move whole metadata fields to their own line when space runs out. Never shorten values.
     metadata(entries: [string, string][]) {
       const lines: string[] = [];

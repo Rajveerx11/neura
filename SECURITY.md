@@ -3,7 +3,7 @@
 ## Supported source
 
 Only current `main` receives security fixes. It is a Mastra development/testing
-build with Work and Learn, not an approved production or multi-user boundary.
+build with Work, Learn and unrestricted YOLO, not an approved production or multi-user boundary.
 Use synthetic, non-sensitive data while license/distribution approval remains
 unresolved. Historical `v2.5.1` and the withheld Pi candidate do not describe the
 active application. See [status](docs/STATUS.md).
@@ -85,7 +85,8 @@ can remain after cancellation. There is no atomic transaction across stores.
 
 ## Reviews, proof and recovery
 
-Deterministic policy outranks model output. Work reviewers have enforced read-only
+In Work and Learn, deterministic policy outranks model output; YOLO enforces no
+such policy. Work reviewers have enforced read-only
 tools. The default model is same-family and labelled accordingly. Their candidate
 receipts become stale after edits and never authorize committing or publishing.
 Quick proof is detector-only. Full trusted proof is unavailable and every active
@@ -96,9 +97,31 @@ unfinished. Inspect effects before retrying. Do not steal locks, discard invalid
 audit tails or delete private state to force success. Pattern redaction cannot
 recognize every secret.
 
+## YOLO has no boundary
+
+YOLO is an explicit opt-out from everything above, with the same meaning as
+OpenAI Codex `--yolo`. The agent acts with the signed-in user's full authority:
+no sandbox, no approvals, no path or secret checks, network on, and the full
+inherited environment. It can read and change `.env`, `.git`, `.github`, other
+projects and Neura's own checkout. Prompt injection in a file, a web page or
+command output can use all of that.
+
+Secrets are readable, and anything the agent reads may reach the model provider and saved session history. Tool data is not redacted; only the one-line terminal
+notice for a command is. Neura has no undo or checkpoint for it. Use YOLO only on
+repositories you trust.
+
+Entry needs `--yolo` at startup or a typed `yes` for `/mode yolo`. ACP clients
+enter through `session/request_permission`. A client that auto-answers permissions
+will enter YOLO without asking a person. The mode is never saved. Every YOLO tool
+call rejects a changed mode or session. That fence stops stale calls and is not a
+containment boundary. A timeout or abort kills the command's process tree, but on
+Windows a descendant whose parent already exited can survive. If Neura itself is
+killed, a running command keeps going. A report that YOLO
+can do what the user can do is not a vulnerability.
+
 ## Historical modes and release gates
 
-Plan, YOLO, Human Away, Gmail/MCP, private memory, checkpoints and old skill
+Plan, Human Away, Gmail/MCP, private memory, checkpoints and old skill
 discovery are unavailable in the active CLI. Their retained source does not
 establish current authorization or parity. Historical Plan confidentiality and
 Human Away preview obligations remain tracked by the [parity matrix](docs/PARITY_MATRIX.md)
