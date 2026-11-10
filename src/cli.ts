@@ -406,7 +406,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           if (!rl && !bridge) throw new Error('/mode yolo needs a person to confirm. Start with --yolo instead.');
           abort = new AbortController();
           let confirmed = false;
-          try { confirmed = await approve(YOLO_CONFIRMATION); }
+          try { confirmed = await approve(YOLO_CONFIRMATION) && !abort.signal.aborted; } // A cancel can land with the approval.
           catch (error) { if (!abort.signal.aborted) throw error; } // Ctrl+C or end of input is a denial.
           finally { abort = undefined; }
           if (!confirmed) { say(`YOLO not enabled. Mode: ${mode}`); return true; }

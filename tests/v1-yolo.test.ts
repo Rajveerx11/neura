@@ -95,7 +95,7 @@ async function bridgeSession(workspace: string, args: string[], approve: CliBrid
     done = main(['--cwd', workspace, ...args], { write: text => { output += text; }, approve, onModeChange: mode => modes.push(mode),
       serve: async value => { controller = value; resolve(); await lifetime; } });
   });
-  return { execute: (text: string) => controller.execute(text), modes, close: () => { close(); return done; },
+  return { execute: (text: string) => controller.execute(text), cancel: () => controller.cancel(), modes, close: () => { close(); return done; },
     output: () => output, status: async () => { output = ''; await controller.execute('/status'); return output; } };
 }
 
@@ -255,6 +255,17 @@ test('a YOLO call after the mode or session changed is stale and has no effect',
       }
       await assert.rejects(fs.stat(path.join(workspace, 'stale.txt')), { code: 'ENOENT' });
     }
+  });
+});
+
+test('a cancel that lands with the approval keeps the prior mode', async () => {
+  await scratch(async ({ workspace }) => {
+    const session: Awaited<ReturnType<typeof bridgeSession>> = await bridgeSession(workspace, ['--no-history'], async () => { session.cancel(); return true; });
+    try {
+      await session.execute('/mode yolo');
+      assert.match(await session.status(), /Mode: Work/);
+      assert.deepEqual(session.modes, []);
+    } finally { await session.close(); }
   });
 });
 
