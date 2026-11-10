@@ -356,7 +356,7 @@ test("unsupported response diagnostics expose only HTTP status and allowlisted M
 test("a provider content-filter stop keeps its reason with or without an SSE content type", async () => {
   await fresh(); await login();
   const body = new TextEncoder().encode('data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"}}}\n\n');
-  for (const headers of [{ 'Content-Type': 'text/event-stream' }, {}]) {
+  for (const headers of [{ 'Content-Type': 'text/event-stream' }, {}] as Record<string, string>[]) {
     globalThis.fetch = async () => new Response(body, { headers });
     await assert.rejects(async () => model().doGenerate({ prompt }), /content filter stopped this response/);
   }

@@ -128,7 +128,7 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
         buffer = buffer.slice(boundary.index + boundary[0].length);
         const data = event.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
         if (!data || data === "[DONE]") continue;
-        let payload: { type?: string; response?: { status?: string; output?: unknown[] } };
+        let payload: { type?: string; response?: { status?: string; output?: unknown[]; incomplete_details?: { reason?: unknown }; error?: unknown } };
         try { payload = JSON.parse(data); }
         catch { throw new Error("Invalid Codex stream event"); }
         if (!payload || typeof payload !== "object") throw new Error("Invalid Codex stream event");
