@@ -13,7 +13,7 @@ const version = JSON.parse(fs.readFileSync(new URL('../package.json', import.met
 const MODES = { currentModeId: 'work', availableModes: [{ id: 'work', name: 'Work' }, { id: 'learn', name: 'Learn' }, { id: 'yolo', name: 'YOLO' }] };
 const MAX_FRAME = 256 * 1024;
 type Controller = Parameters<CliBridge['serve']>[0];
-type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; stepLimit: boolean; currentTool?: string; mode: string };
+type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; stepLimit: boolean; currentTool?: string; mode: string; permissionError?: boolean; pendingYolo?: boolean };
 type Frame = { jsonrpc: string; id?: string | number | null; method?: string; params?: any; result?: any; error?: unknown };
 class RpcError extends Error {
   code: number;
@@ -134,12 +134,21 @@ export function serveAcp(input = stdin, output = stdout) {
       if (!['work', 'learn', 'yolo'].includes(params.modeId)) throw new RpcError(-32602, 'Only Work, Learn and YOLO are available');
       if (session.busy) throw new RpcError(-32000, 'Wait for the active turn before changing modes');
       // Busy for the whole change: approve() needs it, and a prompt must not start during the YOLO permission request.
-      session.busy = true; session.cancelled = false;
+      session.busy = true; session.cancelled = false; session.permissionError = false; session.pendingYolo = false;
       try {
         session.active = session.controller.execute(`/mode ${params.modeId}`);
         await session.active;
       } finally { session.busy = false; session.active = undefined; cancel(id); }
-      if (session.mode !== params.modeId) throw new RpcError(-32000, `YOLO was not enabled. The mode is still ${session.mode}.`);
+      if (session.mode !== params.modeId) {
+        // T3 applies a preselected mode while opening a thread, before its permission handler exists, and
+        // answers with an error. Ask again before the next task; nothing runs in YOLO until a person allows it.
+        if (params.modeId === 'yolo' && session.permissionError) {
+          session.pendingYolo = true;
+          update(id, 'YOLO needs your confirmation. Neura will ask before your next task runs.\n');
+          return {};
+        }
+        throw new RpcError(-32000, `YOLO was not enabled. The mode is still ${session.mode}.`);
+      }
       return {};
     }
     if (method === 'session/prompt') {
@@ -156,6 +165,19 @@ export function serveAcp(input = stdin, output = stdout) {
       if (/^\/(?:login|logout|new|resume|sessions|model|quit|exit)(?:\s|$)/.test(text)) throw new RpcError(-32602, 'Use the native Neura terminal for account, model and history management');
       session.busy = true; session.cancelled = false; session.stepLimit = false;
       try {
+        // A typed /mode replaces the pending choice; other commands such as /status run without it.
+        if (/^\/mode(?:\s|$)/.test(text)) session.pendingYolo = false;
+        if (session.pendingYolo && !text.startsWith('/')) {
+          session.pendingYolo = false;
+          session.active = session.controller.execute('/mode yolo');
+          await session.active;
+          if (session.mode !== 'yolo') {
+            // T3 still shows the YOLO it asked for; correct it.
+            send({ method: 'session/update', params: { sessionId: id, update: { sessionUpdate: 'current_mode_update', currentModeId: session.mode } } });
+            throw new RpcError(-32000, `YOLO was not enabled. The mode is still ${session.mode}. No task was run.`);
+          }
+        }
+        if (session.cancelled) return { stopReason: 'cancelled' };
         session.active = session.controller.execute(text);
         await session.active;
         return { stopReason: session.cancelled ? 'cancelled' : session.stepLimit ? 'max_turn_requests' : 'end_turn' };
@@ -177,6 +199,9 @@ export function serveAcp(input = stdin, output = stdout) {
       const request = typeof frame.id === 'string' ? pending.get(frame.id) : undefined;
       if (request) {
         pending.delete(frame.id as string);
+        const session = sessions.get(request.sessionId);
+        // Read only by set_mode, which resets it first: a client error, not a person's denial.
+        if (frame.error && session) session.permissionError = true;
         const outcome = frame.result?.outcome;
         request.resolve(!frame.error && outcome?.outcome === 'selected' && outcome.optionId === 'allow_once');
       }

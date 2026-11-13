@@ -118,7 +118,10 @@ to API billing. Do not assume account isolation between two provider instances.
   Every mode change, including a typed `/mode`, sends `current_mode_update`.
 - Selecting YOLO goes through `session/request_permission` first and holds the
   session busy, so a prompt cannot start during it. Denial, cancellation or
-  disconnect returns an error, keeps the mode and sends no update. T3's thread
+  disconnect returns an error, keeps the mode and sends no update. A thread
+  opened with YOLO already selected applies it before T3 can answer permission
+  requests. T3 returns an error, so Neura stays in Work and asks before the
+  first task. If you do not allow YOLO, that task does not run. T3's thread
   permission mode may answer automatically: a thread set to allow everything
   enters YOLO with no person asked. YOLO means no sandbox, no approvals, network
   and full account access on this machine. Secrets are readable, and anything the agent reads may reach the model provider and saved session history. The discovery probe cannot

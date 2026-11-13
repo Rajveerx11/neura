@@ -8,6 +8,12 @@ Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
 approval remains unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-13: T3 threads opened in YOLO
+
+- Fixed T3 threads with YOLO preselected failing to open. T3 applies the mode
+  before it can answer permission requests. Neura now asks for confirmation
+  before the next task instead, and runs no task unless you allow YOLO.
+
 ### 2026-11-08: active pedagogy and proposition graph (#154)
 
 - Integrated active pedagogy into Learn mode: Socratic guidance, progressive

@@ -327,6 +327,59 @@ test('ACP advertises YOLO and set_mode needs permission: allow enters, denial an
   }
 });
 
+test('T3 preselected YOLO: a permission handler error defers confirmation to the next prompt, which runs no task unless allowed', { skip: process.platform !== 'win32' }, async () => {
+  const handlerError = (f: Awaited<ReturnType<typeof fixture>>) => (frame: any) => f.send({ id: frame.id, error: { code: -32603, message: 'ACP request handler failed' } });
+  for (const answer of ['allow_once', 'reject_once', 'error', 'cancel']) {
+    const f = await fixture();
+    try {
+      const sessionId = await f.start();
+      // T3 opens the thread and applies its mode before its permission handler exists.
+      f.setPermission(handlerError(f));
+      assert.deepEqual((await f.rpc('session/set_mode', { sessionId, modeId: 'yolo' })).result, {});
+      assert.deepEqual(modeUpdates(f), [], 'no YOLO before a person confirms');
+      let requests = 0;
+      f.setPermission(frame => {
+        requests++;
+        if (answer === 'error') handlerError(f)(frame);
+        else if (answer === 'cancel') f.send({ method: 'session/cancel', params: { sessionId } });
+        else f.send({ id: frame.id, result: { outcome: { outcome: 'selected', optionId: answer } } });
+      });
+      const reply = await f.prompt('first task');
+      assert.equal(requests, 1);
+      if (answer === 'allow_once') {
+        assert.equal(reply.result.stopReason, 'end_turn');
+        assert.deepEqual(modeUpdates(f), ['yolo']);
+        assert.equal(f.requests.length, 1);
+        continue;
+      }
+      if (answer === 'cancel') assert.equal(reply.result.stopReason, 'cancelled');
+      else assert.match(reply.error.message, /not enabled.*No task was run/);
+      assert.deepEqual(modeUpdates(f), ['work'], 'T3 display corrected to the real mode');
+      assert.equal(f.requests.length, 0, 'the unconfirmed task never reached the model');
+      assert.equal((await f.prompt('second task')).result.stopReason, 'end_turn');
+      assert.equal(requests, 1, 'asked once, then Work');
+      assert.match(await statusText(f), /Mode: Work/);
+    } finally { await f.close(); }
+  }
+  // A later choice replaces the pending YOLO: set_mode work, a typed /mode work, or an explicit denial.
+  for (const replace of ['set_mode work', '/mode work', 'set_mode yolo denied']) {
+    const f = await fixture();
+    try {
+      const sessionId = await f.start();
+      f.setPermission(handlerError(f));
+      await f.rpc('session/set_mode', { sessionId, modeId: 'yolo' });
+      let requests = 0;
+      f.setPermission(frame => { requests++; f.send({ id: frame.id, result: { outcome: { outcome: 'selected', optionId: 'reject_once' } } }); });
+      if (replace === '/mode work') await f.prompt('/mode work');
+      else await f.rpc('session/set_mode', { sessionId, modeId: replace === 'set_mode work' ? 'work' : 'yolo' });
+      const asked = requests;
+      assert.equal((await f.prompt('next task')).result.stopReason, 'end_turn', replace);
+      assert.equal(requests, asked, `${replace}: no further YOLO request`);
+      assert.equal(f.requests.length, 1);
+    } finally { await f.close(); }
+  }
+});
+
 test('ACP reports every typed /mode change and none for a denied one', { skip: process.platform !== 'win32' }, async () => {
   const f = await fixture();
   try {
