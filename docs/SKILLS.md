@@ -1,4 +1,37 @@
-# Reproducible optional skills
+# Installed skills
+
+## Active Mastra CLI: `$` invocation (2026-11-13)
+
+Type `$` at the main prompt to browse installed skills. Up/Down selects.
+Tab or Enter fills `$NAME ` so you can add a task. Submit `$NAME TASK` to
+apply that skill. On terminals without the live menu, submit `$` to list
+names, then enter `$NAME TASK`. Unknown names and missing tasks produce an
+error without a model request. Dollar signs inside ordinary task text are
+unchanged. A leading `$` is reserved for skill invocation.
+
+Discovery checks these directories, in order:
+
+1. Workspace `.neura/skills`, `.agents/skills`, `.claude/skills`.
+2. `$NEURA_HOME/skills` (default `~/.neura/skills`).
+3. User `~/.agents/skills`, then `~/.claude/skills`.
+
+A package contains `SKILL.md`. Nested bundles are searched up to four directory
+levels. The first package with a given name wins. Linked packages may resolve
+into another listed skill root, but not outside those roots or into `.pi`.
+Linked root directories, hard-linked skill files and files over 64 KiB are
+excluded. Discovery stops after 4,000 entries. No legacy Pi profile or registry
+is read. Typing `$` collects menu metadata. Only explicit `$NAME TASK` sends
+selected guidance to the model.
+
+Skill content is untrusted user context, not system instructions. It is refreshed
+on invocation and omitted from saved conversation history. It does not change
+mode, tools, approvals or sandbox policy. Neura does not automatically run
+scripts, install dependencies or expose MCP tools requested by a skill.
+References outside the workspace may be unavailable to the current tools.
+The assistant must report checks it could not run. This is guidance loading,
+not a claim that every installed skill can execute its full workflow.
+
+## Historical Pi optional registry
 
 Historical Pi guidance reference, 2026-11-07. The active Mastra CLI does not
 implement this registry, discovery gate or `/skill-doctor`. No personal/Pi

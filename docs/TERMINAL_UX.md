@@ -283,6 +283,32 @@ Evidence: `v1-terminal-ui` renders the matrix at every supported width and drive
 the menu through real readline with a synthetic raw TTY; `v1-cli` covers the
 activity row. A manual check in a real terminal remains the owner's step.
 
+## Clear context and installed skills (2026-11-13)
+
+`/clear` starts a fresh conversation, like `/new`. It empties model conversation
+context and last-turn usage, refreshes Learn state and invalidates session-local
+review/verification receipts. The selected mode and model stay unchanged.
+Saved chats remain available through `/sessions` and `/resume`. Terminal
+scrollback and project files are not erased. Both commands reject arguments.
+
+Typing `$` opens the installed-skill menu. Up/Down selects. Tab or Enter fills
+`$NAME `, then you add the task and submit. Esc closes the menu. Without raw-mode
+support, submit `$` for a text list. `$NAME TASK` loads that installed package's
+`SKILL.md` as untrusted guidance for the request, not a new permission grant.
+No skill scripts run automatically. See [skill roots and limits](SKILLS.md).
+
+Native Windows console captures show the [command menu](../assets/screenshots/terminal-commands.png),
+[installed-skill picker](../assets/screenshots/terminal-skills.png) and
+[`/clear` confirmation](../assets/screenshots/terminal-clear.png).
+[Provenance and reproduction](../assets/screenshots/README.md#native-terminal-captures)
+distinguish these running-CLI captures from fixture-rendered previews.
+They show no model response and do not establish resize behavior.
+
+Renderer and real-readline tests cover `/clear` and skill selection. Synthetic
+CLI tests check that old context is absent after `/clear`, saved chats survive,
+skill content stays out of system instructions and saved history, and tool
+authority stays unchanged. Real terminal resize/wrapping acceptance remains manual.
+
 ## Answer-only chat (2026-11-06)
 
 A real `hi` turn still printed a model line, a review notice and a status block

@@ -1,6 +1,51 @@
 # Screenshot provenance
 
-## Current Mastra interface · 2026-11-08
+## Native terminal captures
+
+Captured 2026-11-13. These PNGs show the actual `src/cli.ts` process in a native Windows console
+host (`conhost.exe`), not an HTML/SVG reconstruction or a scripted renderer.
+Each is an unretouched 972 × 547 window capture. No generated artwork, model
+output or replacement text was composited into the images.
+
+| Asset | State shown |
+| --- | --- |
+| [terminal-commands.png](terminal-commands.png) | `/` opens the live command menu, including `/clear` |
+| [terminal-skills.png](terminal-skills.png) | `$` opens the installed-skill menu, reading this PC's shared skill directories |
+| [terminal-clear.png](terminal-clear.png) | `/clear` confirms a new chat and returns to the Work prompt |
+
+The process used an empty task-owned `neura-demo` workspace, an isolated
+`NEURA_HOME`, `--no-history`, `--provider local` and `--model offline-demo`.
+The model label was chosen for the capture. No inference, authentication,
+workspace writes or skill execution occurred. Only installed skill names and
+menu descriptions were shown. The skill count is specific to this machine.
+The `/clear` capture starts from an idle chat, so it demonstrates the command
+and prompt, not deletion of a previous model exchange. Context reset and saved
+chat preservation are covered separately by synthetic CLI tests.
+
+Capture used the Windows `PrintWindow` API on only the task-owned console,
+with per-monitor DPI awareness to avoid clipping. Console size was 106 columns
+by 25 rows. The first capture attempt had clipped window bounds and was
+discarded before these files were saved. No private desktop window, account,
+credential, document, session history or provider response was captured.
+
+To reproduce the visible states, launch the development CLI in a disposable
+empty workspace with a separate `NEURA_HOME`:
+
+```powershell
+neura --cwd C:\path\to\neura-demo --no-history --provider local --model offline-demo
+```
+
+Type `/` for the first view. Press Esc, remove `/`, then type `$` for the
+second. Press Esc, remove `$`, then enter `/clear` for the third. Capture only
+that terminal window with the operating system's screenshot tool. Do not
+submit a model task or include private paths in a public image. Exit with
+`/quit`. Remove only the workspace and home you created for the capture.
+
+The main README uses these terminal captures only. The earlier logo image,
+architecture illustration and fixture-based Learn preview are no longer
+embedded there. Their source assets remain in the repository.
+
+## Learn renderer fixture captures · 2026-11-08
 
 These are real captures of [`learn-renderer.ts`](../../agent/neura/learn-renderer.ts)
 on native Windows Microsoft Edge, using only the repository's

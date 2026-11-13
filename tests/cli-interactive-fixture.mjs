@@ -64,6 +64,13 @@ globalThis.fetch = async (url, init) => {
     assert.equal(guidance.length, 1, 'fresh guidance must be included once, not accumulated in history');
     assert.equal(guidance[0].role, 'user', 'repository guidance must stay below system authority');
   }
+  const check = config.turnChecks?.[modelRequests];
+  if (check) {
+    const input = JSON.stringify(body.input);
+    for (const text of check.present) assert.ok(input.includes(text), `Missing synthetic context: ${text}`);
+    for (const text of check.absent) assert.ok(!input.includes(text), `Stale synthetic context: ${text}`);
+    assert.ok(!body.instructions.includes('SKILL_GUIDANCE_SENTINEL'), 'skill bytes must never become system instructions');
+  }
   requests.push({ type: 'model', model: body.model, ...(config.reasoning ? { summary: body.reasoning?.summary ?? null } : {}), ...(config.recordTools ? { tools: body.tools.map(tool => tool.name), yolo: body.instructions.includes('YOLO mode') } : {}) });
   modelRequests++;
   if (config.denyModel) return new Response(JSON.stringify({ error: { code: 'model_not_found', message: 'synthetic-private-value' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });

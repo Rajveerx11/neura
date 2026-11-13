@@ -186,6 +186,8 @@ test('answers render Markdown structure without leaking markers, and code blocks
 test('slash menu lists every command, narrows by prefix and offers known arguments', () => {
   assert.equal(commandMatches('/').length, SLASH_COMMANDS.length);
   assert.deepEqual(commandMatches('/mo').map(item => item.value), ['/model', '/mode']);
+  assert.deepEqual(commandMatches('/cl').map(item => item.value), ['/clear']);
+  assert.equal(commandMatches('/clear')[0].submit, true);
   assert.deepEqual(commandMatches('/mode ').map(item => item.value), ['/mode work', '/mode learn', '/mode yolo']);
   assert.equal(commandMatches('/mode').find(item => item.value === '/mode')!.submit, false, 'commands needing an argument are completed, not run');
   assert.equal(commandMatches('/learn ans')[0].submit, false);
@@ -199,6 +201,19 @@ test('slash menu lists every command, narrows by prefix and offers known argumen
   }
 });
 
+test('skill menu filters installed names and never intercepts dollar amounts or task text', () => {
+  const skills = [{ name: 'alpha', description: 'First skill' }, { name: 'beta', description: 'Second skill' }];
+  assert.deepEqual(commandMatches('$', skills).map(item => item.value), ['$alpha', '$beta']);
+  assert.deepEqual(commandMatches('$AL', skills).map(item => item.value), ['$alpha']);
+  assert.equal(commandMatches('$alpha', skills)[0].submit, false);
+  for (const text of ['$100', 'cost $alpha', '$alpha task', '$../outside', '$missing']) assert.deepEqual(commandMatches(text, skills), []);
+  assert.deepEqual(commandMatches('$'), []);
+  for (const columns of [20, 40, 80]) {
+    const ui = createTerminalUI({ columns, env: { NO_COLOR: '' } });
+    for (const row of ui.commandMenu(commandMatches('$', skills), 0)) assert.ok(plain(row).length < columns);
+  }
+});
+
 test('live slash menu runs, completes and dismisses commands through real readline and restores raw mode', async () => {
   const stdin = Object.assign(new PassThrough(), { isTTY: true, raw: false, setRawMode(mode: boolean) { this.raw = mode; return this; } });
   const stdout = Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 });
@@ -206,7 +221,8 @@ test('live slash menu runs, completes and dismisses commands through real readli
   stdout.on('data', chunk => { screen += chunk; });
   const keyboard = createCommandKeyboard(stdin as any, stdout as any);
   const rl = createInterface({ input: keyboard.input, output: stdout as any, terminal: true });
-  keyboard.attach(rl, () => createTerminalUI({ isTTY: true, columns: 80 }), () => true);
+  keyboard.attach(rl, () => createTerminalUI({ isTTY: true, columns: 80 }), () => true,
+    line => commandMatches(line, [{ name: 'fixture-skill', description: 'Installed fixture' }]));
   const type = async (keys: string[]) => {
     const answer = rl.question('work > ');
     for (const key of keys) { stdin.write(key); await new Promise(resolve => setTimeout(resolve, 15)); }
@@ -219,6 +235,10 @@ test('live slash menu runs, completes and dismisses commands through real readli
   assert.equal(await type(['/', 'l', 'e', '\t', 'a', 'n', '\t', 'x', '\r']), '/learn answer x');
   assert.equal(await type(['/', 'q', '\x1b', '\r']), '/q', 'Esc closes the menu; Enter then submits what was typed');
   assert.equal(await type(['h', 'i', '\r']), 'hi');
+  assert.equal(await type(['/', 'c', 'l', '\r']), '/clear');
+  assert.equal(await type(['$', 'f', '\t', 'task', '\r']), '$fixture-skill task');
+  assert.equal(await type(['$', '\r', 'task', '\r']), '$fixture-skill task', 'Enter selects a skill but leaves room for its task');
+  assert.equal(await type(['$', '\x1b', '\r']), '$', 'Esc allows the bare skill-list command');
   rl.close();
   assert.equal(stdin.raw, false);
 });

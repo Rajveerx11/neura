@@ -8,6 +8,21 @@ Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
 approval remains unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-13: native terminal screenshots
+
+- Replaced the README's generated logo/architecture images and fixture-based
+  Learn preview with direct captures of the running Windows terminal CLI.
+- Added command-menu, installed-skill picker and `/clear` views with capture
+  provenance. No model response or private workspace data appears in them.
+  Existing assets remain in the repository.
+
+### 2026-11-13: clear context and installed skills
+
+- `/clear` starts a new chat, keeping saved chats and the selected mode/model.
+- `$` browses installed skills; `$NAME TASK` applies selected guidance without
+  changing tools, approvals or sandbox policy. Skill content is not saved in
+  conversation history. Neura reads no Pi profile and runs no skill scripts automatically.
+
 ### 2026-11-13: Markdown answers, activity row and slash-command menu
 
 - Interactive answers render Markdown: headings, emphasis, inline code, links,

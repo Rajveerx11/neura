@@ -6,7 +6,7 @@ type Menu = { commandMenu(items: MenuItem[], selected: number): string[]; width:
 type Raw = NodeJS.ReadStream & { setRawMode(mode: boolean): unknown };
 
 /**
- * Live slash-command menu for the real readline prompt. Raw keys pass through a filter before readline sees
+ * Live command/skill menu for the real readline prompt. Raw keys pass through a filter before readline sees
  * them, so the open menu can claim Up/Down, Tab, Enter and Esc; every other key reaches readline unchanged.
  * Only public readline APIs are used: `line`, `getCursorPos()` and `write()`.
  */
@@ -19,7 +19,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   stdin.on('data', onData);
   stdin.once('end', onEnd);
 
-  function attach(rl: Interface, ui: () => Menu, active: () => boolean) {
+  function attach(rl: Interface, ui: () => Menu, active: () => boolean, matches: (line: string) => MenuItem[] = commandMatches) {
     let items: MenuItem[] = [];
     let selected = 0;
     let shown = 0;
@@ -40,7 +40,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       const line = rl.line;
       if (line !== lastLine) { selected = 0; lastLine = line; if (line !== dismissed) dismissed = undefined; }
       // ponytail: single-row input only; a wrapped prompt would need row tracking for the redraw.
-      items = active() && line !== dismissed && rl.getCursorPos().rows === 0 ? commandMatches(line) : [];
+      items = active() && line !== dismissed && rl.getCursorPos().rows === 0 ? matches(line) : [];
       if (items.length) draw(); else clear();
     };
     const accept = (item: MenuItem, run: boolean) => {

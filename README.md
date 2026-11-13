@@ -1,5 +1,3 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png"><img src="assets/brand/neura-logo-light.png" width="420" alt="Neura logo: a prompt chevron and an n whose path lands on a dot, beside the neura wordmark"></picture></p>
-
 # Neura
 
 **Context into action.** A Windows-first terminal assistant for engineering and practical learning.
@@ -18,13 +16,34 @@ approvals. The active application uses **Mastra, not Pi**.
 [Architecture](docs/ARCHITECTURE.md) · [T3 Code](docs/T3_CODE.md) ·
 [Current status](docs/STATUS.md) · [Security](SECURITY.md)
 
-## A look inside Learn
+## Real terminal screenshots
 
-![Neura Learn on desktop: a booking-system relationship diagram, concept highlights and lesson route.](assets/screenshots/learn-workshop-desktop.png)
+These are captures of the running Neura CLI in a native Windows console window.
+They use an empty demo workspace with history off. No model request was made. `offline-demo` is a display label, not an advertised model.
+[Capture details](assets/screenshots/README.md#native-terminal-captures).
 
-*Native Edge capture at 1280 × 1000 of the current Learn renderer with synthetic
-teaching data—not a live provider session or a real PDF import.
-[Visual tour](docs/LEARN_MODE.md#visual-tour) · [Capture provenance](assets/screenshots/README.md).*
+### Commands
+
+Type `/` to open the command menu. Up/Down selects, Tab completes, Enter runs
+and Esc closes.
+
+![Running Neura terminal with its slash-command menu, including /clear and /new.](assets/screenshots/terminal-commands.png)
+
+### Installed skills
+
+Type `$` to browse installed skills. Select one, then submit `$NAME TASK`.
+Skill guidance does not change tools, approvals or sandbox policy. The list
+shown here comes from this PC's installed packages, not a bundled catalog.
+
+![Running Neura terminal with the dollar-sign skill picker showing installed packages.](assets/screenshots/terminal-skills.png)
+
+### Fresh chat
+
+`/clear` drops conversation context and starts a new chat. Saved chats remain
+available through `/sessions` and `/resume`. The selected mode and model stay
+as they were. Files and terminal scrollback are untouched.
+
+![Running Neura terminal after /clear, confirming that a new chat started and returning to the Work prompt.](assets/screenshots/terminal-clear.png)
 
 ## What Neura does
 
@@ -80,10 +99,6 @@ Secrets are readable, and anything the agent reads may reach the model provider 
 
 ## How it fits together
 
-![System diagram: native terminal and T3 ACP share one CLI controller and Mastra runtime; Work and Learn have separate tool boundaries and owned stores.](assets/diagrams/architecture.png)
-
-*DIAGRAM, not a product screenshot. [Editable SVG source](assets/diagrams/architecture.svg).*
-
 T3 is another entry point into Neura, not a replacement agent loop. Work commands
 run only in the offline sandbox; model inference uses the selected provider's
 transport, which may use the network. Learn boards return actions through copied
@@ -100,7 +115,9 @@ belongs to the historical Pi application. The existing `v2.6.0-rc.1` draft is
 withheld. Neither describes an installable release of the current application.
 See [release status](docs/releases/README.md) and the [parity matrix](docs/PARITY_MATRIX.md).
 
-Recent source changes include the local T3 Code ACP adapter, active Learn pedagogy
+Recent source changes include Markdown answers, the live `/` command menu,
+`/clear` for fresh chats and `$NAME TASK` for installed skill guidance, alongside
+the local T3 Code ACP adapter, active Learn pedagogy
 and prerequisite paths (#154), real-project Work support (#152), Learn continuity
 and vault hardening (#153), and package-closure gates (#151).
 [Dated evidence](docs/MASTRA_V1.md) distinguishes
@@ -228,7 +245,9 @@ Explicit workspaces, headless tasks and resumed sessions never silently switch.
 | `/review`, `/review status` | Review session changes or check receipt currency |
 | `/reviewer PROVIDER MODEL [URL]`, `/reviewer default` | Select a reviewer or follow the builder |
 | `/verify quick`, `/verify full`, `/verify status` | Request bounded verification or inspect its receipt |
-| `/new`, `/sessions`, `/resume <id>` | Workspace-scoped conversation history |
+| `/clear`, `/new` | Clear context and start a new chat; saved chats remain |
+| `/sessions`, `/resume <id>` | Workspace-scoped conversation history |
+| `$`, `$NAME TASK` | Browse [installed skills](docs/SKILLS.md), or apply one as guidance |
 | `/learn` | Lesson controls and answer submission, plus explicit progress recovery |
 | `/quit`, `/exit` | Close Neura. Bare interactive `quit` and `exit` also work |
 

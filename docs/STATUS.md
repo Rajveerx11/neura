@@ -15,6 +15,21 @@ the checkout, with frozen-history links in [plans](../plans/README.md) and
 authored plans/drafts, the migration reference and legacy recovery evidence remain.
 No Git history, private state or other worktree is a cleanup target.
 
+## Terminal follow-up (2026-11-13)
+
+`/clear` now starts a new chat without deleting saved conversations. `$` browses
+installed skills. `$NAME TASK` loads selected `SKILL.md` guidance from explicit
+Neura/shared skill roots. Skill text stays below system authority and outside
+saved history. Neura imports no Pi profile and runs no skill scripts automatically.
+Skills grant no extra permissions.
+See [terminal behavior](TERMINAL_UX.md) and [skill roots and limits](SKILLS.md).
+This does not implement the historical skill registry or establish release parity.
+The README now uses direct native Windows terminal captures for the command
+menu, installed-skill picker and `/clear`. [Capture provenance](../assets/screenshots/README.md#native-terminal-captures)
+records the empty workspace, offline model label and absence of model requests.
+Generated illustrations and the fixture-based Learn preview are no longer
+embedded in the README. Existing source assets remain in the repository.
+
 ## Active source: Mastra v1 development migration (2026-10-24)
 
 The owner authorized Pi-free implementation with a usable core and Learn first.

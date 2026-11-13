@@ -19,6 +19,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'model', args: '[PROVIDER MODEL [URL]]', description: 'Pick a subscription model, or set one explicitly' },
   { name: 'mode', args: 'work|learn|yolo', description: 'Switch mode', needsArg: true, options: [
     ['work', 'Sandboxed tools with approvals (default)'], ['learn', 'Guided lessons'], ['yolo', 'No sandbox, no approvals; asks for a typed yes']] },
+  { name: 'clear', description: 'Clear context and start a new chat (keeps saved chats)' },
   { name: 'new', description: 'Start a fresh conversation' },
   { name: 'sessions', description: 'List saved sessions for this workspace' },
   { name: 'resume', args: 'UUID', description: 'Resume a saved session', needsArg: true },
@@ -37,8 +38,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'quit', description: 'Exit Neura' },
 ];
 export type MenuItem = { value: string; label: string; hint: string; description: string; submit: boolean };
-/** Menu entries for a partially typed slash command: `/mo` lists commands, `/mode l` lists that command's options. */
-export function commandMatches(line: string): MenuItem[] {
+/** Slash-command options, or installed skills after `$`. Skills complete first so the user can add a task. */
+export function commandMatches(line: string, skills: readonly { name: string; description: string }[] = []): MenuItem[] {
+  const skill = /^\$([a-z0-9-]*)$/i.exec(line);
+  if (skill) return skills.filter(entry => entry.name.startsWith(skill[1].toLowerCase())).map(entry => ({
+    value: '$' + entry.name, label: '$' + entry.name, hint: 'TASK', description: entry.description, submit: false,
+  }));
   const top = /^\/(\S*)$/.exec(line);
   if (top) {
     const typed = top[1].toLowerCase();
@@ -245,7 +250,9 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       ]),
       group('Conversation', [
         ['/status', 'Mode, model, workspace, history and last-turn usage. Context window stays unknown unless verified.'],
-        ['/new · /sessions · /resume UUID', 'Start fresh, list workspace history or explicitly resume it. Never imports Pi.'],
+        ['/clear · /new', 'Clear conversation context and start a new chat. Saved chats remain available; mode and model stay selected.'],
+        ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
+        ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
         ['/help · /quit', 'Show help or exit (bare exit or quit also works). Ctrl+C cancels active work; at the input prompt it exits.'],
       ]),
     ];
@@ -298,7 +305,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       lines.push(paint('  ' + shortLabel(`${more}${plainGlyphs ? 'Up/Down' : '↑↓'} select · Tab complete · Enter run · Esc close`, width - 3), 'dim'));
       return lines;
     },
-    inputHint() { return paint(shortLabel('Type / for commands · Ctrl+C cancels a running task', width - 1), 'dim'); },
+    inputHint() { return paint(shortLabel('Type / for commands · $ for skills · Ctrl+C cancels a running task', width - 1), 'dim'); },
     // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
     wordmark(ascii = false) { return renderLogo(columns, ascii || env.TERM === 'dumb').join('\n'); },
     status(state: TerminalStatus) {

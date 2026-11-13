@@ -20,7 +20,8 @@ import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.
 import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
-import { createTerminalUI, terminalText, type Mode, type TerminalStatus } from './terminal-ui.ts';
+import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
+import { discoverSkills, skillRoots, skillGuidance, type InstalledSkill } from './skills.ts';
 import { createCommandKeyboard } from './prompt-input.ts';
 export { terminalText } from './terminal-ui.ts';
 
@@ -119,7 +120,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const keyboard = interactive && process.env.TERM !== 'dumb' && typeof stdin.setRawMode === 'function' ? createCommandKeyboard(stdin, process.stdout) : undefined;
   const rl = interactive ? createInterface({ input: keyboard?.input ?? stdin, output: process.stdout, terminal: true }) : undefined;
   let promptActive = false;
-  const menu = rl && keyboard ? keyboard.attach(rl, () => terminal(), () => promptActive) : undefined;
+  const roots = skillRoots(workspace, home);
+  let installedSkills: InstalledSkill[] | undefined;
+  const menu = rl && keyboard ? keyboard.attach(rl, () => terminal(), () => promptActive, line => {
+    if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
+    return commandMatches(line, installedSkills);
+  }) : undefined;
   let pauseActivity = () => {};
   let abort: AbortController | undefined;
   const inputClosed = new AbortController();
@@ -212,7 +218,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
       } finally { abort = undefined; }
     }
-    async function turn(text: string, learnerInput = text, reviewTurn = true) {
+    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill = '') {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
       const owned = !abort; // workflow fix turns reuse the outer request's cancellation
       abort ??= new AbortController();
@@ -259,7 +265,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
           : mode === 'yolo' ? YOLO_INSTRUCTIONS
           : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
-        const guidance = mode === 'learn' ? '' : projectInstructions(workspace);
+        const guidance = [mode === 'learn' ? '' : projectInstructions(workspace), selectedSkill].filter(Boolean).join('\n\n');
         const guidanceIndex = memory.length;
         const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         const maxSteps = mode === 'learn' ? DEFAULT_TURN_STEPS : WORK_TURN_STEPS;
@@ -345,6 +351,22 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     }
     async function input(text: string): Promise<boolean> {
       if (interactive && /^(?:exit|quit)$/i.test(text.trim())) text = '/quit'; // bare words, as in a shell
+      if (text.startsWith('$')) {
+        const match = /^\$([a-z0-9]+(?:-[a-z0-9]+)*)?(?:\s+([\s\S]*))?$/i.exec(text.trim());
+        if (!match) throw new Error('Use $ to list installed skills, or $NAME TASK to apply one.');
+        installedSkills = discoverSkills(roots);
+        const [, name, task = ''] = match;
+        if (!name) {
+          if (!installedSkills.length) say('No installed skills found. Add a package with SKILL.md under .agents/skills, .claude/skills or .neura/skills.');
+          else for (const skill of installedSkills) say(`$${skill.name} — ${skill.description || 'Installed skill'}`);
+          return true;
+        }
+        const skill = installedSkills.find(entry => entry.name === name.toLowerCase());
+        if (!skill) throw new Error('Installed skill not found. Type $ to list available skills.');
+        if (!task.trim()) throw new Error(`Use $${skill.name} TASK to apply this skill.`);
+        await turn(text, task, true, skillGuidance(skill, roots));
+        return true;
+      }
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
       if (command === 'quit' || command === 'exit') { if (interactive) say('Neura closed.'); return false; }
@@ -445,9 +467,13 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         abort = new AbortController();
         try { const reply = await learn.command(rest, abort.signal); if (reply.text) say(reply.text); if (reply.prompt) { abort = undefined; await turn(reply.prompt, ''); } }
         finally { abort = undefined; }
-      } else if (command === 'new') {
+      } else if (command === 'new' || command === 'clear') {
+        if (rest.trim()) throw new Error(`Use /${command} without arguments.`);
         await freshConversation();
-        generation++; learn.invalidate(true); say('New session; mode authority and learning state refreshed.');
+        generation++; learn.invalidate(true);
+        sessionBaseline = undefined; lastReview = undefined; unfinished = undefined;
+        lastVerification = undefined; verificationGeneration = -1; baselineWarned = false;
+        say(command === 'clear' ? 'Context cleared. New chat started; saved chats kept.' : 'New session; mode authority and learning state refreshed.');
       } else if (command === 'sessions') {
         const items = await listSessions(sessions);
         if (interactive) stdout.write(terminal().sessions(items) + '\n');
