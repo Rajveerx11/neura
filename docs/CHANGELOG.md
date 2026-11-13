@@ -8,6 +8,14 @@ Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
 approval remains unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-13: new prompt-to-result mark
+
+- Replaced the context-into-action arrow with a prompt chevron and a lowercase n
+  whose path jumps a gap to land on a node. The vector, lockups, PNGs and the
+  five-line half-block terminal mark are generated from one SVG and checked by
+  the existing raster test. Rendering is unchanged: `▀▄█` only, no color, and
+  `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals.
+
 ### 2026-11-13: T3 threads opened in YOLO
 
 - Fixed T3 threads with YOLO preselected failing to open. T3 applies the mode

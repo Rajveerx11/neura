@@ -51,6 +51,8 @@ External MCP, native ACP resume/fork and full T3 feature parity are not claimed.
 T3 local ACP commands still show the generic ACP icon. Official Neura logo
 display is blocked by T3's current icon settings and CDN allowlist, as documented
 under [provider discovery and branding](T3_CODE.md#provider-discovery-and-official-logo).
+A thread opened with YOLO already selected now opens in Work and asks for
+confirmation before its first task (2026-11-13); see [T3 YOLO behavior](T3_CODE.md#supported-behavior-and-limits).
 This does not change the existing development-only licensing/release gates.
 
 ## YOLO mode (2026-11-10)
@@ -202,8 +204,8 @@ checks and configured-host acceptance remain separate gates.
 
 ## Branding and dependency grouping (2026-11-04)
 
-The owner-approved context-into-action mark replaces the old block wordmark.
-`src/brand.ts` holds a static ten-line half-block rendering. Startup loads no
+The owner-approved prompt-to-result mark (2026-11-13) replaces the earlier context-into-action mark.
+`src/brand.ts` holds a static five-line half-block rendering. Startup loads no
 image, font or new dependency. `--ascii`, `TERM=dumb` and terminals too narrow
 for the mark print `>_ neura`. Interactive launch prints only the logo, then
 status and the prompt; headless, `--help` and `--check` print no artwork. Assets and guide are in

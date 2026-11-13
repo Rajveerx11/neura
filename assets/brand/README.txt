@@ -1,7 +1,9 @@
-NEURA / CONTEXT INTO ACTION
+NEURA / PROMPT TO RESULT
 
 Owner-approved artwork for the development harness.
-Two curved incoming paths join one forward arrow: understand context, then act.
+A prompt chevron, then a lowercase n whose path jumps a small gap to land on a node:
+you ask at the prompt, and Neura carries the signal through to a result. The n echoes
+the wordmark. Replaces the earlier context-into-action arrow (2026-11-13).
 The lowercase wordmark uses original vector paths, not an external font.
 The blue follows the existing owner-supplied artwork. No gradients are required.
 Trademark clearance has not been performed.
@@ -24,7 +26,7 @@ banner. Headless output stays clean.
 
 Use --ascii for terminals with limited glyph support. TERM=dumb also selects ASCII.
 If the full mark will not fit, the CLI uses the ASCII name instead. The last column
-is reserved to avoid wrap-induced blank rows. The mark occupies at most ten lines.
+is reserved to avoid wrap-induced blank rows. The mark occupies five lines.
 No color, emoji, Braille or private-use font glyph is needed.
 
 The CLI tests compare src/brand.ts against both text assets and a test-only raster

@@ -17,8 +17,8 @@ ten-line limits do not establish Mastra behavior.
 - Pure dependency-free presentation shared by the CLI and offline preview.
 - Copper identity/focus, neutral activity and answers, textual warning/error
   states. No alternate screen, animation, dashboard or startup model request.
-- Launch identity is the owner-approved context-into-action mark from `src/brand.ts`
-  (uncolored; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It
+- Launch identity is the owner-approved prompt-to-result mark from `src/brand.ts`
+  (five lines, mark only, uncolored; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It
   replaces the interim `o--o neura` mark used while this work was in a worktree.
 - Prompt-adjacent status and `/status` details: actual mode/model/workspace,
   history/session state, thinking-summary setting and conversation message count.

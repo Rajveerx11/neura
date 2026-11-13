@@ -1,16 +1,12 @@
-// Approved context-to-action mark, pre-rendered with standard half-block characters.
+// Approved prompt-to-result mark, pre-rendered with standard half-block characters:
+// a prompt chevron, then an n whose path jumps a gap to land on its result.
 // No image renderer, font lookup or filesystem access belongs in the runtime logo path.
 const LOGO = [
-  '▄▄',
-  '██',
-  '▀██        ▄',
-  ' ▀█▄       ██▄',
-  '  ▀▀██▄▄▄▄▄▄███▄',
-  '  ▄▄██▀▀▀▀▀▀███▀    neura',
-  ' ▄█▀       ██▀',
-  '▄█▀        ▀',
-  '██',
-  '▀▀',
+  '██▄    ▄▄███▄▄',
+  ' ▀██▄ ▄██▀ ▀██',
+  ' ▄██▀ ██    ██',
+  '██▀   ██     ▀',
+  '      ██    ███',
 ] as const;
 const ASCII_LOGO = '>_ neura';
 

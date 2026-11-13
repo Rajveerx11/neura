@@ -1,4 +1,4 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png"><img src="assets/brand/neura-logo-light.png" width="420" alt="Neura: context into action"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png"><img src="assets/brand/neura-logo-light.png" width="420" alt="Neura logo: a prompt chevron and an n whose path lands on a dot, beside the neura wordmark"></picture></p>
 
 # Neura
 

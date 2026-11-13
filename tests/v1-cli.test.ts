@@ -87,9 +87,9 @@ test('approved logo fits supported widths and preserves its ASCII fallback', () 
       assert.match(line, ascii ? /^[\x20-\x7e]+$/ : /^[\x20-\x7e▀▄█]+$/);
     }
   }
-  assert.equal(renderLogo(80).length, 10);
+  assert.equal(renderLogo(80).length, 5);
   assert.deepEqual(renderLogo(80, true), ['>_ neura']);
-  assert.deepEqual(renderLogo(20), ['>_ neura']);
+  assert.deepEqual(renderLogo(15), ['>_ neura']);
   for (const columns of [NaN, Infinity, -1, 0, 1.5]) assert.ok(renderLogo(columns).length <= 10);
   const changed = renderLogo(80); changed[0] = 'changed';
   assert.notEqual(renderLogo(80)[0], 'changed');
@@ -99,15 +99,15 @@ test('runtime terminal artwork matches the approved vector and packaged text', a
   const { createCanvas, loadImage } = createRequire(new URL('../agent/neura/package.json', import.meta.url))('@napi-rs/canvas');
   const svg = await fs.readFile(path.join(root, 'assets/brand/neura-mark.svg'));
   assert.ok(!/<(?:script|image|foreignObject|text)\b|\bhref=/.test(svg.toString()));
-  const canvas = createCanvas(24, 24); const context = canvas.getContext('2d');
-  context.drawImage(await loadImage(svg), 0, 0, 24, 24);
-  const pixels = context.getImageData(0, 0, 24, 24).data;
+  const canvas = createCanvas(16, 16); const context = canvas.getContext('2d');
+  context.drawImage(await loadImage(svg), 0, 0, 16, 16);
+  const pixels = context.getImageData(0, 0, 16, 16).data;
   const rows: string[] = [];
-  for (let y = 0; y < 24; y += 2) {
+  for (let y = 0; y < 16; y += 2) {
     let row = '';
-    for (let x = 0; x < 24; x++) {
-      const top = pixels[(y * 24 + x) * 4 + 3] >= 110;
-      const bottom = pixels[((y + 1) * 24 + x) * 4 + 3] >= 110;
+    for (let x = 0; x < 16; x++) {
+      const top = pixels[(y * 16 + x) * 4 + 3] >= 110;
+      const bottom = pixels[((y + 1) * 16 + x) * 4 + 3] >= 110;
       row += [' ', '▀', '▄', '█'][Number(top) + 2 * Number(bottom)];
     }
     rows.push(row.trimEnd());
@@ -118,7 +118,7 @@ test('runtime terminal artwork matches the approved vector and packaged text', a
   const leading = Math.min(...rows.filter(Boolean).map(row => row.length - row.trimStart().length));
   const cropped = rows.map(row => row.slice(leading));
   const width = Math.max(...cropped.map(row => row.length));
-  const expected = cropped.map((row, index) => (row.padEnd(width) + (index === Math.floor(cropped.length / 2) ? '    neura' : '')).trimEnd());
+  const expected = cropped.map(row => row.trimEnd());
   // ponytail: anti-aliasing shifts between canvas releases (1.0.11 vs 1.0.13 flips 4 edge cells), so allow
   // a few cells of edge noise; a redrawn or wrong mark differs by far more. Exact text is pinned by terminal.txt.
   const actual = renderLogo(80);
