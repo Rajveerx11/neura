@@ -21,9 +21,11 @@ import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
 import { createTerminalUI, terminalText, type Mode, type TerminalStatus } from './terminal-ui.ts';
+import { createCommandKeyboard } from './prompt-input.ts';
 export { terminalText } from './terminal-ui.ts';
 
-const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env });
+let asciiGlyphs = false;
+const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env, ascii: asciiGlyphs });
 const failure = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
 
 export type CliBridge = {
@@ -112,7 +114,13 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   catch (error) { if (scratchWorkspace) fs.rmdirSync(workspace); throw error; }
   const workspaceKey = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
   const sessions = path.join(home, 'sessions', workspaceKey);
-  const rl = interactive ? createInterface({ input: stdin, output: process.stdout }) : undefined;
+  asciiGlyphs = Boolean(values.ascii);
+  // Real terminals get the live slash menu; anything without raw mode (pipes, test doubles) keeps plain readline.
+  const keyboard = interactive && process.env.TERM !== 'dumb' && typeof stdin.setRawMode === 'function' ? createCommandKeyboard(stdin, process.stdout) : undefined;
+  const rl = interactive ? createInterface({ input: keyboard?.input ?? stdin, output: process.stdout, terminal: true }) : undefined;
+  let promptActive = false;
+  const menu = rl && keyboard ? keyboard.attach(rl, () => terminal(), () => promptActive) : undefined;
+  let pauseActivity = () => {};
   let abort: AbortController | undefined;
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
@@ -155,6 +163,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const approve = async (description: string) => {
     if (bridge) return bridge.approve(description);
     if (!rl) return false;
+    pauseActivity();
     stdout.write('\n' + terminal().approval(description) + '\n');
     const response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal });
     const approved = response.trim() === 'yes';
@@ -210,12 +219,28 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       if (owned) lastTurnUsage = undefined;
       let lineOpen = false;
       let waitingOpen = false;
-      const waiting = () => { if (!interactive || waitingOpen) return; stdout.write(terminal().boundary('waiting')); waitingOpen = true; };
+      let ticker: NodeJS.Timeout | undefined;
+      // Interactive answers render as Markdown; piped and ACP output stays byte-for-byte.
+      const markdown = interactive && !bridge ? terminal().markdownStream() : undefined;
+      const waiting = (label?: string) => {
+        if (!interactive || waitingOpen) return;
+        waitingOpen = true;
+        if (!erasable) { stdout.write(terminal().boundary('waiting')); return; }
+        const started = Date.now();
+        let frame = 0;
+        const draw = () => stdout.write('\r\x1b[2K' + terminal().activity(frame++, Math.floor((Date.now() - started) / 1000), label));
+        draw();
+        ticker = setInterval(draw, 100); ticker.unref();
+      };
       const endLine = () => {
+        if (ticker) { clearInterval(ticker); ticker = undefined; }
         if (waitingOpen) stdout.write(erasable ? '\r\x1b[2K' : '\n');
         else if (lineOpen) stdout.write('\n');
         lineOpen = false; waitingOpen = false;
+        const rest = markdown?.flush();
+        if (rest) stdout.write(rest);
       };
+      pauseActivity = endLine;
       try {
         if (!provider.model) {
           if (provider.provider !== 'openai-codex') throw new Error('Choose a model with --model or /model PROVIDER MODEL [URL].');
@@ -262,13 +287,15 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
               // Label the answer only where it must be told apart from a labelled reasoning summary.
               if (section === 'reasoning') stdout.write(terminal().boundary('answer') + '\n');
             }
-            stdout.write(text); lineOpen = !text.endsWith('\n'); section = 'answer'; answerVisible = true;
+            if (markdown) stdout.write(markdown.push(text));
+            else { stdout.write(text); lineOpen = !text.endsWith('\n'); }
+            section = 'answer'; answerVisible = true;
           },
           onToolEvent: (event, invocationId) => {
             bridge?.onToolEvent?.(event, invocationId);
             // One line per tool call; started/returned are routine. Failed, blocked and cancelled stay visible.
             if (event.phase === 'started') { mutationAttempted ||= !READ_ONLY_TOOLS.has(event.toolName); return; }
-            if (event.phase === 'returned') { if (erasable) waiting(); return; }
+            if (event.phase === 'returned') { if (erasable) waiting('Working'); return; }
             if (bridge?.onToolEvent) return;
             endLine();
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
@@ -301,7 +328,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } catch (error) {
         if (abort?.signal.aborted) throw new DOMException('Turn cancelled. No task was replayed. Inspect current state before retrying.', 'AbortError');
         throw error;
-      } finally { endLine(); if (owned) abort = undefined; }
+      } finally { endLine(); if (owned) { abort = undefined; pauseActivity = () => {}; } }
     }
     async function workflow(task: string, baseline: TreeSnapshot | null, manual: boolean) {
       const expected = generation;
@@ -437,10 +464,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     }
     if (bridge) { await bridge.serve({ execute: input, cancel: () => abort?.abort() }); return; }
     if (prompt !== undefined) { await input(prompt); return; }
-    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n'); // Once at launch. Chat shows answers only; /status has the rest.
+    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n' + (menu ? terminal().inputHint() + '\n' : '')); // Once at launch. Chat shows answers only; /status has the rest.
     for (;;) {
       let text: string;
-      try { text = await rl!.question(terminal().prompt(mode), { signal: inputClosed.signal }); } catch { say('Neura closed.'); break; }
+      promptActive = true;
+      try { text = await rl!.question(terminal().prompt(mode), { signal: inputClosed.signal }); } catch { menu?.clear(); say('Neura closed.'); break; }
+      finally { promptActive = false; }
       if (!text.trim()) continue;
       try { if (!await input(text)) break; } catch (error) {
         const message = error instanceof Error ? error.message : 'Request failed.';

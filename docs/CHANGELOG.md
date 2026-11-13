@@ -8,6 +8,16 @@ Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
 approval remains unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-13: Markdown answers, activity row and slash-command menu
+
+- Interactive answers render Markdown: headings, emphasis, inline code, links,
+  lists, quotes, rules, GFM tables and bordered code blocks. Piped, `--prompt`
+  and ACP output stay unrendered.
+- An erasable `Thinking… Ns · Ctrl+C to cancel` row replaces the static waiting
+  line in ANSI terminals. `TERM=dumb` keeps `[thinking]`.
+- Typing `/` opens a live command menu with argument completion. Up/Down select,
+  Tab completes, Enter runs, Esc closes. No new dependencies.
+
 ### 2026-11-13: new prompt-to-result mark
 
 - Replaced the context-into-action arrow with a prompt chevron and a lowercase n

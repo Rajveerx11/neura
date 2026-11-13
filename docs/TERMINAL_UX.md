@@ -1,7 +1,9 @@
 # Active terminal UX
 
-Current behavior, 2026-11-07: approved logo, startup status and prompt; chat turns
-print only the answer. Tool calls, approvals, warnings and review outcomes remain
+Current behavior, 2026-11-13: approved logo, startup status, input hint and prompt;
+chat turns print only the answer, rendered as Markdown. A live slash-command menu
+and an animated activity row are described in “Rich answers, activity and slash
+menu” below. Tool calls, approvals, warnings and review outcomes remain
 visible; `/status` holds detailed usage. The “Answer-only chat” section below
 supersedes older per-turn footer/status designs. See [current design](../DESIGN.md).
 Earlier audit/test sections remain dated evidence, not new acceptance.
@@ -16,7 +18,8 @@ ten-line limits do not establish Mastra behavior.
 
 - Pure dependency-free presentation shared by the CLI and offline preview.
 - Copper identity/focus, neutral activity and answers, textual warning/error
-  states. No alternate screen, animation, dashboard or startup model request.
+  states. No alternate screen, dashboard or startup model request. (Animation
+  was added later; see “Rich answers, activity and slash menu”.)
 - Launch identity is the owner-approved prompt-to-result mark from `src/brand.ts`
   (five lines, mark only, uncolored; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It
   replaces the interim `o--o neura` mark used while this work was in a worktree.
@@ -72,8 +75,9 @@ providers, model selection, sandbox policy, history or proof semantics.
   `/verify`, `/login`, `/logout` and `/quit` behavior. Do not borrow Pi shortcuts
   such as Shift+Tab or advertise unavailable modes/commands.
 - Preserve ordinary readline editing and Enter submission. Empty Enter is idle.
-  Do not claim multiline, autocomplete, Escape cancellation or editor parity
-  without implementation and keyboard evidence. Long pasted text cannot create
+  Do not claim multiline, Escape cancellation or editor parity without
+  implementation and keyboard evidence. Slash-command completion exists since
+  2026-11-13 (see below). Long pasted text cannot create
   an implicit approval; test queued input at the next approval boundary.
 - `/model` lists provider-advertised choices; number or exact listed ID selects.
   Bad input reprompts; Enter cancels with model unchanged. Selection starts a
@@ -126,7 +130,7 @@ establish input editing, signal handling, resize behavior or screen-reader suppo
 
 - Capable interactive TTY: canvas `#0b0c0e`, copper `#d97841`, bone `#e8e2d8`,
   dim neutrals from DESIGN.md. Semantic colors only accompany textual outcomes.
-  No cursor animation or permanent activity chrome is required.
+  The only animation is the single erasable activity row while a turn runs.
 - `NO_COLOR` present: no color escapes, including an empty value. Identity and
   safety labels remain understandable without hue.
 - `TERM=dumb`: plain text, no cursor movement, clearing, animation or dependence
@@ -249,6 +253,35 @@ Changes:
 Approval text, cancellation wording, error output and `/status` details are
 unchanged. Evidence is synthetic: the `v1-cli`, `v1-terminal-ui` and
 `v1-workflow` tests plus the full harness.
+
+## Rich answers, activity and slash menu (2026-11-13)
+
+Owner request: answers printed raw `**bold**` markers and the prompt had no
+command discovery. Changes, all dependency-free:
+
+- **Markdown answers.** Interactive answers stream through a line-buffered
+  renderer in `src/terminal-ui.ts`: headings, bold/italic/strikethrough, inline
+  code, links with their URL, bullets and numbered lists with hanging indent,
+  task items, quotes, rules, GFM tables (box grid, or labelled bullets when too
+  wide) and fenced code with a gutter. Code bytes are never wrapped or restyled.
+  Model text is sanitized before styling, so it cannot inject escapes. Piped,
+  `--prompt` and ACP output stay byte-for-byte unrendered.
+- **Activity row.** ANSI terminals show `⠋ Thinking… 3s · Ctrl+C to cancel`
+  (`Working…` after a tool returns), erased before any other output and before
+  an approval prompt. `TERM=dumb` keeps the static `[thinking]` line.
+- **Slash menu.** Typing `/` at the main prompt opens a menu under the input,
+  filtered as you type. `/mode `, `/verify `, `/learn ` and others then list
+  their arguments. Up/Down select, Tab completes, Enter runs (or completes a
+  command that still needs an argument), Esc closes. Other keys reach readline
+  unchanged, so history and editing still work. `src/prompt-input.ts` filters raw
+  keys before readline using only public readline APIs; it is enabled only when
+  stdin supports raw mode and `TERM` is not `dumb`. Approval and picker prompts
+  never show the menu.
+- `--ascii` and `TERM=dumb` switch bullets, borders and the spinner to ASCII.
+
+Evidence: `v1-terminal-ui` renders the matrix at every supported width and drives
+the menu through real readline with a synthetic raw TTY; `v1-cli` covers the
+activity row. A manual check in a real terminal remains the owner's step.
 
 ## Answer-only chat (2026-11-06)
 

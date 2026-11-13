@@ -30,17 +30,18 @@ from a decorative state.
 | Error | `#df6b63` | Blocked/failed outcomes |
 
 Use monospace in the terminal and sentence case for actions. Keep phase/verdict
-labels short. Avoid ambient gradients/glows and decorative motion. Use no emoji.
+labels short. Avoid ambient gradients/glows and decorative motion; the one
+animation is the erasable activity spinner while a turn runs. Use no emoji.
 
 ## Launch and conversation
 
 `src/brand.ts` supplies the approved static prompt-to-result mark. Startup
-loads no image/font dependency. Show the logo, prompt-adjacent status and real
-readline prompt. There is no image-backed Terminal profile or Pi editor in the
+loads no image/font dependency. Show the logo, prompt-adjacent status, a one-line
+input hint and the real readline prompt, with a live slash-command menu under it. There is no image-backed Terminal profile or Pi editor in the
 active application. Do not add a banner or readiness claim.
 
-Status prints once at launch. Chat turns print the answer, with one short line
-per tool call. Failed/blocked/cancelled outcomes remain visible. `/status` holds
+Status prints once at launch. Chat turns print the answer, rendered as Markdown
+(headings, lists, tables, code blocks), with one short line per tool call. Failed/blocked/cancelled outcomes remain visible. `/status` holds
 provider/model, workspace, history and reported last-turn tokens. Usage is not
 context occupancy. Capacity remains unknown. Label an answer only when separating
 it from a provider-supplied reasoning summary. Hidden reasoning is never displayed.

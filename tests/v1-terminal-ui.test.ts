@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripVTControlCharacters } from 'node:util';
-import { createTerminalUI, terminalText, terminalLabel, type TerminalStatus } from '../src/terminal-ui.ts';
+import { PassThrough } from 'node:stream';
+import { createInterface } from 'node:readline/promises';
+import { createTerminalUI, terminalText, terminalLabel, commandMatches, SLASH_COMMANDS, type TerminalStatus } from '../src/terminal-ui.ts';
+import { createCommandKeyboard } from '../src/prompt-input.ts';
 import { renderLogo } from '../src/brand.ts';
 
 const widths = [40, 56, 72, 92, 120];
@@ -156,4 +159,66 @@ test('YOLO danger signal survives NO_COLOR and TERM=dumb and fits every supporte
     assert.match(plain(ui.help(true)), /--yolo/);
     if (columns >= 46) assert.match(plain(ui.help(true)), /--dangerously-bypass-approvals-and-sandbox/);
   }
+});
+
+test('answers render Markdown structure without leaking markers, and code blocks keep their bytes', () => {
+  const source = '## Plan\n- **Fix bugs:** run `npm test` now\n1. First\n> quoted\n\n| A | B |\n| --- | ---: |\n| x | 10 |\n\n```ts\nconst a = **b**;\n```\n---';
+  for (const columns of widths) for (const isTTY of [false, true]) for (const ascii of [false, true]) {
+    const rendered = plain(createTerminalUI({ columns, isTTY, ascii }).markdown(source));
+    for (const line of rendered.split('\n')) assert.ok(line.length <= columns, `${columns}: ${line}`);
+    assert.doesNotMatch(rendered.replace('const a = **b**;', ''), /\*\*|^#/m);
+    assert.ok(rendered.includes('const a = **b**;'), 'code is never restyled');
+    assert.match(rendered, /^Plan$/m);
+    assert.match(rendered, new RegExp(`^${ascii ? '-' : '•'} Fix bugs: run`, 'm'));
+    assert.match(rendered, /\| x +\| +10 \||│ x +│ +10 │/);
+  }
+  const ui = createTerminalUI({ isTTY: true });
+  assert.match(ui.markdown('**bold** and `code`'), /\x1b\[1mbold\x1b\[22m and \x1b\[38;2;134;167;215mcode\x1b\[39m/);
+  // Streaming waits for whole lines, so a marker split across chunks still renders.
+  const stream = ui.markdownStream();
+  assert.equal(stream.push('**bo'), '');
+  assert.equal(stream.push('ld**\npartial'), '\x1b[1mbold\x1b[22m\n');
+  assert.equal(stream.flush(), 'partial\n');
+  assert.equal(stream.flush(), '');
+  assert.doesNotMatch(ui.markdown('\x1b[31mred\x1b[0m **x**'), /\x1b\[31m/, 'model text cannot inject terminal styles');
+});
+
+test('slash menu lists every command, narrows by prefix and offers known arguments', () => {
+  assert.equal(commandMatches('/').length, SLASH_COMMANDS.length);
+  assert.deepEqual(commandMatches('/mo').map(item => item.value), ['/model', '/mode']);
+  assert.deepEqual(commandMatches('/mode ').map(item => item.value), ['/mode work', '/mode learn', '/mode yolo']);
+  assert.equal(commandMatches('/mode').find(item => item.value === '/mode')!.submit, false, 'commands needing an argument are completed, not run');
+  assert.equal(commandMatches('/learn ans')[0].submit, false);
+  assert.deepEqual(commandMatches('hi /mode'), []);
+  assert.deepEqual(commandMatches('/mode learn now'), []);
+  for (const columns of [20, 40, 80, 120]) for (const ascii of [false, true]) {
+    const rows = createTerminalUI({ columns, isTTY: true, ascii }).commandMenu(commandMatches('/'), 3);
+    assert.equal(rows.length, 9, 'eight entries plus the key hint');
+    for (const row of rows) assert.ok(plain(row).length < columns, `${columns}: ${plain(row)}`);
+    assert.ok(createTerminalUI({ columns, isTTY: true, ascii }).activity(7, 5).length > 0);
+  }
+});
+
+test('live slash menu runs, completes and dismisses commands through real readline and restores raw mode', async () => {
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, raw: false, setRawMode(mode: boolean) { this.raw = mode; return this; } });
+  const stdout = Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 });
+  let screen = '';
+  stdout.on('data', chunk => { screen += chunk; });
+  const keyboard = createCommandKeyboard(stdin as any, stdout as any);
+  const rl = createInterface({ input: keyboard.input, output: stdout as any, terminal: true });
+  keyboard.attach(rl, () => createTerminalUI({ isTTY: true, columns: 80 }), () => true);
+  const type = async (keys: string[]) => {
+    const answer = rl.question('work > ');
+    for (const key of keys) { stdin.write(key); await new Promise(resolve => setTimeout(resolve, 15)); }
+    return answer;
+  };
+  assert.equal(stdin.raw, true);
+  assert.equal(await type(['/', 's', 't', '\r']), '/status');
+  assert.match(plain(screen), /Mode, model, workspace/);
+  assert.equal(await type(['/', 'm', 'o', '\x1b[B', '\r', 'l', '\r']), '/mode learn');
+  assert.equal(await type(['/', 'l', 'e', '\t', 'a', 'n', '\t', 'x', '\r']), '/learn answer x');
+  assert.equal(await type(['/', 'q', '\x1b', '\r']), '/q', 'Esc closes the menu; Enter then submits what was typed');
+  assert.equal(await type(['h', 'i', '\r']), 'hi');
+  rl.close();
+  assert.equal(stdin.raw, false);
 });

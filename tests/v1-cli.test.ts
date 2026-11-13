@@ -422,10 +422,11 @@ test('thinking status and provider summaries are separate from the answer and ca
   const args = ['--model', 'gpt-6.1-sol'];
   for (const jsonResponse of [false, true]) {
     const shown = await interactiveFixture({ inputs: ['hi', '/quit'], args, reasoning: true, jsonResponse });
-    assert.match(shown.stdout, /\[thinking\] Waiting for model response/);
+    // ANSI terminals animate an erasable activity row; TERM=dumb keeps the static [thinking] line.
+    assert.match(shown.stdout, /\r\x1b\[2K[\s\S]*Thinking… \d+s · Ctrl\+C to cancel/);
     assert.match(shown.stdout, /\[reasoning summary\][\s\S]*I will inspect the workspace before answering/);
     assert.match(shown.stdout, /\[answer\][\s\S]*Hello from selected model/);
-    assert.ok(shown.stdout.indexOf('[thinking]') < shown.stdout.indexOf('[reasoning summary]'));
+    assert.ok(shown.stdout.indexOf('Thinking…') < shown.stdout.indexOf('[reasoning summary]'));
     assert.ok(shown.stdout.indexOf('[reasoning summary]') < shown.stdout.indexOf('[answer]'));
     assert.deepEqual(shown.requests, [{ type: 'model', model: 'gpt-6.1-sol', summary: 'auto' }]);
   }
