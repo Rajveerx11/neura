@@ -54,7 +54,7 @@ test('risk routing is path based: tiny auth change is high, docs trivial, mixed 
 });
 
 test('changedFiles reports modify, add and delete, sorted', () => {
-  const snapshot = (files: Record<string, string>) => ({ root: 'r', fingerprint: JSON.stringify(files), files });
+  const snapshot = (files: Record<string, string>) => ({ root: 'r', head: 'a'.repeat(40), fingerprint: JSON.stringify(files), files });
   assert.deepEqual(changedFiles(snapshot({ b: '1', a: '1', gone: '1' }), snapshot({ b: '2', a: '1', added: '1' })), ['added', 'b', 'gone']);
 });
 

@@ -407,7 +407,7 @@ test('approval display keeps exact scope and defaults to denial for empty, upper
   assert.equal(transcript.split('Type yes to approve (default: no): ').length - 1, 3);
   assert.equal(transcript.split('Denied. No approval granted.').length - 1, 3);
   assert.equal(transcript.split('approval_denied').length - 1, 3);
-  assert.match(transcript, /Candidate: [a-f0-9]{64}\nTests will not run\. This cannot mark the task verified\./);
+  assert.match(transcript, /Candidate: [a-f0-9]{64}\nBase commit: [a-f0-9]{40}\nTests will not run\. This cannot mark the task verified\./);
   assert.deepEqual(reply.requests, []);
   assert.equal(reply.stderr, '');
 });

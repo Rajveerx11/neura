@@ -4,7 +4,7 @@ import type { TreeSnapshot } from '../agent/neura/verification.ts';
 import type { Finding, ReviewInput, ReviewReceipt, Risk } from '../src/review.ts';
 import { MAX_REVIEW_ROUNDS, WORKFLOW_INSTRUCTIONS, fixPrompt, formatFindings, runReviewLoop, type WorkflowDeps } from '../src/workflow.ts';
 
-const snap = (files: Record<string, string>): TreeSnapshot => ({ root: '/w', fingerprint: 'fp-' + JSON.stringify(files), files });
+const snap = (files: Record<string, string>): TreeSnapshot => ({ root: '/w', head: 'a'.repeat(40), fingerprint: 'fp-' + JSON.stringify(files), files });
 const baseline = snap({ 'src/a.ts': '1' });
 const changed = snap({ 'src/a.ts': '2' });
 const builder = { provider: 'openai-codex' as const, model: 'builder' };

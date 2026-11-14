@@ -390,6 +390,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           } else {
             lastVerification = await verifyWorkspace(workspace, rest === 'quick' ? 'detector-only' : 'full', {
               signal: abort.signal, current: () => generation === expected && mode === 'work', approve,
+              // Compare against where this session started, so a commit made mid-task stays in the diff.
+              base: sessionBaseline?.generation === expected ? sessionBaseline.snapshot?.head : undefined,
             });
             verificationGeneration = expected;
             say(JSON.stringify(lastVerification, null, 2));

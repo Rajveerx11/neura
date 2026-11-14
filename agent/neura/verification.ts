@@ -6,7 +6,10 @@ import * as path from "node:path";
 import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } from "./process-security.ts";
 import { redactSensitiveText } from "./redaction.ts";
 
-export type TreeSnapshot = { root: string; fingerprint: string; files: Record<string, string> };
+/** `head` is the full commit id HEAD resolved to when the snapshot was taken. */
+export type TreeSnapshot = { root: string; head: string; fingerprint: string; files: Record<string, string> };
+/** A full SHA-1 or SHA-256 commit id. Proof bases are interpolated into a shell command, so nothing else is accepted. */
+export const COMMIT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 export type ProofResult = { status: "passed" | "failed" | "unavailable"; reasons: string[] };
 export type IncrementalEvidence = {
   schemaVersion: 1; fingerprint: string; completedAt: string;
@@ -59,6 +62,8 @@ export async function captureWorktree(cwd: string, options: {
       run(["ls-files", "--others", "--exclude-standard", "-z"]),
     ]);
     if (!head.ok || !index.ok || !untracked.ok) return null;
+    const commit = head.stdout.trim();
+    if (!COMMIT_ID.test(commit)) return null;
     const tracked = index.stdout.split("\0").filter(Boolean).map(entry => {
       const match = /^(\d+) [0-9a-f]+ (\d)\t([\s\S]+)$/.exec(entry);
       if (!match || match[1] === "160000" || match[2] !== "0") throw new Error("unsupported index entry");
@@ -112,7 +117,7 @@ export async function captureWorktree(cwd: string, options: {
       }
     }
     const hash = createHash("sha256").update(root).update(head.stdout).update(index.stdout).update(JSON.stringify(files));
-    return { root, fingerprint: hash.digest("hex"), files };
+    return { root, head: commit, fingerprint: hash.digest("hex"), files };
   } catch { return null; }
 }
 
@@ -124,8 +129,10 @@ export function changedFiles(before: TreeSnapshot, after: TreeSnapshot): string[
 export async function runProof(cwd: string, quick: boolean, options: {
   signal?: AbortSignal; timeoutMs?: number;
   execute?: typeof execute;
+  /** Commit the candidate is compared against. Agent-facing callers pass the task-start commit. */
+  base?: string;
 } = {}): Promise<ProofResult> {
-  const args = proofRunnerArguments(quick);
+  const args = proofRunnerArguments(quick, options.base);
   if (!options.execute) return { status: "unavailable", reasons: ["Proof execution requires the isolated runner."] };
   const result = await options.execute("uvx", args, {
     cwd, signal: options.signal, timeoutMs: options.timeoutMs ?? (quick ? 90_000 : 600_000),
@@ -157,9 +164,11 @@ export function proofRuntimeArguments(): string[] {
     ...PROOF_RUNTIME_PINS.flatMap((dependency) => ["--with", dependency])];
 }
 
-export function proofRunnerArguments(quick: boolean): string[] {
+/** `base` defaults to HEAD only for the retained legacy callers. A moving ref lets later commits drop out of the diff. */
+export function proofRunnerArguments(quick: boolean, base = "HEAD"): string[] {
+  if (base !== "HEAD" && !COMMIT_ID.test(base)) throw new Error("Proof base must be a full commit id.");
   return [...proofRuntimeArguments(),
-    "proof-of-work", "check", "--json", "--base", "HEAD", ...(quick ? ["--no-tests"] : [])];
+    "proof-of-work", "check", "--json", "--base", base, ...(quick ? ["--no-tests"] : [])];
 }
 
 export function makeReceipt(scope: "quick" | "full", before: TreeSnapshot, after: TreeSnapshot | null,

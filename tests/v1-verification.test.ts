@@ -107,20 +107,23 @@ test('verification requires the exact repository root and refuses private or Neu
   await assert.rejects(verifyWorkspace(application, 'detector-only', approved, deps), /Neura itself/);
   await mkdir(process.env.NEURA_HOME!);
   await assert.rejects(verifyWorkspace(process.env.NEURA_HOME!, 'detector-only', approved, deps), /private Neura home/);
-  await assert.rejects(runDetectorProof(process.env.NEURA_HOME!, undefined, async () => { throw new Error('Must not dispatch'); }), /private Neura home/);
+  await assert.rejects(runDetectorProof(process.env.NEURA_HOME!, 'a'.repeat(40), undefined, async () => { throw new Error('Must not dispatch'); }), /private Neura home/);
 });
 
 test('isolated PoW bridge uses exact pinned offline arguments and keeps audit files outside the candidate', async () => {
   const workspace = await repository();
+  const base = (await captureWorktree(workspace))!.head;
+  assert.match(base, /^[0-9a-f]{40}$/);
   for (const scenario of ['pass', 'fail', 'forged', 'partial', 'malformed', 'unavailable']) {
     let calls = 0;
-    const result = await runDetectorProof(workspace, undefined, async (root, command, timeout) => {
+    const result = await runDetectorProof(workspace, base, undefined, async (root, command, timeout) => {
       calls++;
       assert.equal(root, workspace);
       assert.ok(command.includes('uvx 0.12.11'));
       assert.ok(command.includes('--offline --no-config --no-index'));
       assert.ok(command.includes('proof-of-work-agent==0.2.0'));
-      assert.ok(command.endsWith('--no-tests --db /tmp/neura-proof.db'));
+      assert.ok(command.endsWith(`--base ${base} --no-tests --db /tmp/neura-proof.db`));
+      assert.ok(!command.includes('--base HEAD'), 'a moving ref must never be the proof base');
       assert.equal(timeout, 90000);
       if (scenario === 'unavailable') throw new Error('synthetic-private-value');
       return { code: ['fail', 'forged'].includes(scenario) ? 1 : 0, completed: scenario !== 'partial', stdout: scenario === 'malformed' ? 'synthetic-private-value' : JSON.stringify({ passed: scenario !== 'fail', reasons: [] }), stderr: '' };
@@ -130,4 +133,30 @@ test('isolated PoW bridge uses exact pinned offline arguments and keeps audit fi
     assert.equal(result.status, expected);
     assert.ok(!JSON.stringify(result).includes('synthetic-private-value'));
   }
+});
+
+test('the proof base is the task-start commit as a full id, and anything else is refused before dispatch', async () => {
+  const root = await repository();
+  const start = (await captureWorktree(root))!.head;
+  const git = resolveExecutable('git', root)!;
+  await writeFile(path.join(root, 'later.py'), 'print("committed mid-task")\n');
+  for (const args of [['add', 'later.py'], ['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid', 'commit', '-m', 'mid-task']]) {
+    await exec(git, [...AUTOMATIC_GIT_ARGUMENTS, ...args], { cwd: root, env: automaticGitEnvironment(), timeout: 10000 });
+  }
+  const now = (await captureWorktree(root))!.head;
+  assert.notEqual(now, start);
+  const seen: string[] = [];
+  const deps = { capture: captureWorktree, proof: async (_root: string, base: string) => { seen.push(base); return { status: 'passed' as const, reasons: [] }; } };
+  const bound = await verifyWorkspace(root, 'detector-only', { ...approved, base: start }, deps);
+  assert.equal(bound.baseCommit, start, 'a commit made during the task must stay inside the compared range');
+  const unbound = await verifyWorkspace(root, 'detector-only', approved, deps);
+  assert.equal(unbound.baseCommit, now, 'without a session baseline the base is still an explicit commit id');
+  assert.deepEqual(seen, [start, now]);
+  let dispatched = 0;
+  for (const base of ['HEAD', 'main', start.slice(0, 12), start + '; touch /tmp/owned', start + ' --no-tests', '$(id)', '']) {
+    await assert.rejects(verifyWorkspace(root, 'detector-only', { ...approved, base }, deps), /full commit id/);
+    await assert.rejects(runDetectorProof(root, base, undefined, async () => { dispatched++; throw new Error('Must not dispatch'); }), /full commit id/);
+  }
+  assert.equal(dispatched, 0);
+  assert.equal(seen.length, 2);
 });
