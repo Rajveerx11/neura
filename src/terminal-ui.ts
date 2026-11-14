@@ -229,7 +229,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
   }
   function help(options = false): string {
     const groups = [
-      paint('Neura · Mastra v1 development build', 'bone'),
+      paint('Neura · development build', 'bone'),
       group('Work and Learn', [
         ['/mode work|learn', 'Choose Work or Learn.'],
         ['/mode yolo', 'After a typed yes: no sandbox, no approvals, network and full account access until /mode work or exit.'],

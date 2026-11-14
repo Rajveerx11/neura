@@ -15,6 +15,22 @@ the checkout, with frozen-history links in [plans](../plans/README.md) and
 authored plans/drafts, the migration reference and legacy recovery evidence remain.
 No Git history, private state or other worktree is a cleanup target.
 
+## Own agent loop, Mastra removed (2026-11-14)
+
+The owner chose to drop Mastra. Its `Agent` statically imported Enterprise Edition code whose
+licence permits development and testing only, and bars production use and redistribution without
+a written agreement and licence key. `src/runtime.ts` is now Neura's own loop over the AI SDK
+provider contract (specification v4): one `doGenerate` request per step, the same serialized tool
+queue, schema validation at the effect boundary, payload-free tool events, step limit, cancellation
+and usage totals. `@mastra/core` is gone from the manifest and lock, which fell from 156 to 38
+root packages. `scripts/check-pi-free.mjs` now fails on any `@mastra/*` package or import, and
+`npm run verify:release` passes that licence gate. Sessions saved by the Mastra runtime still
+resume. Text arrives per model step, as before; token streaming is not implemented.
+Evidence is synthetic: the full harness and typecheck. No real-account request was made with
+the new loop, so live subscription behaviour, including replay of provider reasoning items, is
+unverified. Installer, release rehearsal and production gates are unchanged and still open.
+Older sections below that describe Mastra record the state at their own dates.
+
 ## Terminal follow-up (2026-11-13)
 
 `/clear` now starts a new chat without deleting saved conversations. `$` browses
@@ -38,8 +54,8 @@ Learn and explicitly entered YOLO are the only exposed modes. Root dependencies,
 are being migrated together. Legacy provider/profile data is not imported.
 
 **Development/testing only. Not a release, full feature parity or production-ready.**
-Mastra's bundled EE license scope and distribution approval remain unresolved;
-`verify:release` must stay blocked. Existing metadata stays `2.6.0-rc.1`; no new
+Mastra was removed on 2026-11-14 (see above). Release packaging and distribution approval remain unresolved;
+the installer, release rehearsal and production gates stay open. Existing metadata stays `2.6.0-rc.1`; no new
 release or semantic-version decision is implied. Latest published remains `2.5.1`.
 
 Current implementation, exact test evidence and operational limitations are in
@@ -146,7 +162,7 @@ Its detector receipts bind to candidate fingerprints and stay in session memory.
 isolated runner, not a new verification engine. Every receipt retains
 `verified:false`. PoW 0.2.0 still blocks full trusted evidence. Durable receipts,
 original-task-base binding, ignored-file coverage and delivery enforcement remain
-open under #91/#28. A read-only local readiness probe reported that trusted WSL
+open under #163/#28. A read-only local readiness probe reported that trusted WSL
 proof paths are not configured. No proof tooling was installed or run on the host.
 The offline PoW execution path remains unverified on this machine. Synthetic
 bridge checks are not real-artifact acceptance. See the [manual command](../README.md#manual-verification-first-integration-slice).

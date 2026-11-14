@@ -161,6 +161,9 @@ for (const [suite, deadline] of [['runtime', 300000], ['installer', 600000]]) {
 }
 const distribution = spawnSync(process.execPath, ['scripts/check-pi-free.mjs', '--distribution'], { cwd: root, encoding: 'utf8', timeout: 20000 });
 assert.ifError(distribution.error);
-assert.equal(distribution.status, 1, 'Uncleared distribution must not succeed');
-assert.match(distribution.stderr, /Distribution blocked: the owner accepted Mastra EE license terms for local development and testing only.*still needs Mastra commercial EE terms or an EE-free upstream artifact/);
-console.log(`CI contracts: four workflows, ${mutations.length + downloadMutations.length + 6} rejected mutations, suite timeout diagnostics and current distribution denial passed.`);
+assert.equal(distribution.status, 0, distribution.stderr);
+assert.match(distribution.stdout, /Distribution licence gate: no EE-licensed Mastra package or import is present/);
+const { checkGraph } = await import('../check-pi-free.mjs');
+assert.match(checkGraph('package.json', { dependencies: { '@mastra/core': '1.82.0' } }).errors.join(' '), /EE-licensed Mastra dependency/, 'A Mastra dependency must fail the gate');
+assert.match(checkGraph('package-lock.json', { lockfileVersion: 3, packages: { '': {}, 'node_modules/@mastra/core': { version: '1.82.0', integrity: 'sha512-x', license: 'Apache-2.0' } } }).errors.join(' '), /EE-licensed Mastra package/, 'A locked Mastra package must fail the gate');
+console.log(`CI contracts: four workflows, ${mutations.length + downloadMutations.length + 6} rejected mutations, suite timeout diagnostics and the Mastra-free distribution licence gate passed.`);

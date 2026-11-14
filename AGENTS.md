@@ -1,8 +1,12 @@
 # Repository instructions
 
-## Active Mastra v1 migration (owner-authorized 2026-10-24)
+## Active application (Pi removal owner-authorized 2026-10-24; Mastra removal 2026-11-14)
 
-- The active application is `src/cli.ts` using Mastra, with Work and Learn, plus the owner-selected YOLO mode (2026-11-10).
+- The active application is `src/cli.ts` with Work and Learn, plus the owner-selected YOLO mode (2026-11-10).
+- The agent loop is Neura's own: `src/runtime.ts` calls models through the AI SDK provider contract (v4).
+  The owner chose on 2026-11-14 to drop Mastra, whose bundled EE code is not licensed for production use or
+  redistribution. Do not reintroduce `@mastra/*`; `scripts/check-pi-free.mjs` fails on it. Documents and
+  identifiers that still say "Mastra v1" name the implementation generation, not a dependency.
 - The owner explicitly selected full Pi removal. Do not reintroduce Pi packages,
   the Pi TUI, acquired Pi extensions, or implicit reads from the legacy Pi profile.
 - The latest-Pi policy below applies only to retained historical Pi source, not

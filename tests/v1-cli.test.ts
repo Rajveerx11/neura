@@ -20,7 +20,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 
 function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp|neura_git_executable)$/i.test(key)));
-  return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home, MASTRA_TELEMETRY_DISABLED: '1' };
+  return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home };
 }
 
 async function interactiveFixture(options: { inputs: string[]; skills?: boolean; turnChecks?: Array<{ present: string[]; absent: string[] }>; expectSessions?: number; exitCode?: number; projectGuidance?: string; stepPlan?: Array<{ name: string; input: unknown } | null>; reviewerPlan?: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string; recordTools?: boolean }) {
@@ -681,7 +681,7 @@ test('real readline settles idle interrupt, EOF and approval EOF and releases hi
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 
-test('CLI uses real Mastra/local transport for a Learn board, exposes no Work tools and stops at the lesson', { skip: process.platform !== 'win32' }, async () => {
+test('CLI uses the real agent loop and local transport for a Learn board, exposes no Work tools and stops at the lesson', { skip: process.platform !== 'win32' }, async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-learn-')));
   const workspace = path.join(scratch, 'workspace'); await fs.mkdir(workspace);
   const lesson = structuredClone(workshopFixture); lesson.references = [];
@@ -715,7 +715,7 @@ test('CLI source check is independent of workspace/private-home configuration an
     for (const workspace of [scratch, path.join(scratch, 'missing-workspace')]) {
       const reply = await exec(process.execPath, [path.join(root, 'src/cli.ts'), '--check', '--cwd', workspace], { cwd: scratch, env });
       const check = JSON.parse(reply.stdout);
-      assert.equal(check.framework, 'Mastra');
+      assert.equal(check.framework, 'Neura agent loop');
       assert.deepEqual(check.modes, ['work', 'learn', 'yolo']);
       assert.equal(reply.stderr, '');
     }

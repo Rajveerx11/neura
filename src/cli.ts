@@ -61,7 +61,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     for (const name of Object.keys(learnRuntime.dependencies)) {
       if (!fs.existsSync(new URL(`../agent/neura/node_modules/${name}/package.json`, import.meta.url))) throw new Error(`Learn dependency missing: ${name}. Run npm ci --prefix agent/neura --ignore-scripts.`);
     }
-    say(JSON.stringify({ framework: 'Mastra', version: runtime.dependencies['@mastra/core'], modes: ['work', 'learn', 'yolo'], node: process.version, platform: process.platform, learnFirstCreation: process.platform === 'win32' ? 'supported' : 'requires native Windows', history: 'Neura-owned; no Pi imports', status: 'development; license/distribution and real-auth gates remain' }, null, 2));
+    say(JSON.stringify({ framework: 'Neura agent loop', version: runtime.version, providers: { '@ai-sdk/openai': runtime.dependencies['@ai-sdk/openai'], '@ai-sdk/anthropic': runtime.dependencies['@ai-sdk/anthropic'] }, modes: ['work', 'learn', 'yolo'], node: process.version, platform: process.platform, learnFirstCreation: process.platform === 'win32' ? 'supported' : 'requires native Windows', history: 'Neura-owned; no Pi imports', status: 'development; release packaging and real-auth gates remain' }, null, 2));
     return;
   }
   let workspace = fs.realpathSync.native(path.resolve(values.cwd ?? process.cwd()));

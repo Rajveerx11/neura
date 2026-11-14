@@ -86,7 +86,7 @@ const scrubImages = (value: any): any => {
 
 /** Tool images stay for their own turn only: one page can exceed the whole session cap, and tools can re-read it. */
 export function withoutToolImages(messages: any[]): any[] {
-  // Mastra also copies tool output into the provider options of both the tool call and its result.
+  // Sessions saved by the retired Mastra runtime also copy tool output into the provider options of the call and its result.
   return messages.map((message) => Array.isArray(message.content) ? { ...message, content: scrubImages(message.content) } : message);
 }
 

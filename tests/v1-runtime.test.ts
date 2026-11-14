@@ -15,7 +15,6 @@ import { appendSession, createSession, listSessions, resumeSession, saveSession,
 import { fixture } from "./model-fixture.ts";
 import { windowsShortPath } from "./windows-short-path.ts";
 import { lockSession } from "../src/session-lock.ts";
-const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const user = { role: "user", content: "Synthetic test input" };
 const text = (value: string) => ({ type: "text" as const, text: value });
 const call = (name: string, input: unknown, id = name) => ({ type: "tool-call", toolCallId: id, toolName: name, input: JSON.stringify(input) });
@@ -26,7 +25,7 @@ function action(execute: ToolDefinition["execute"], name = "action"): ToolDefini
   return { name, description: "Synthetic action", parameters: Type.Object({ count: Type.Integer({ minimum: 1, maximum: 3 }) }), execute };
 }
 
-test("real Agent dispatch executes owned action and returns neutral history/text", async () => {
+test("agent loop dispatch executes owned action and returns neutral history/text", async () => {
   const { model, requests } = fixture([[call("action", { count: 2 })], done]);
   let count = 0;
   const streamed: string[] = [];
@@ -41,7 +40,7 @@ test("real Agent dispatch executes owned action and returns neutral history/text
   assert.deepEqual(result.usage, { inputTokens: 2, outputTokens: 2 }, 'Last-turn usage includes both model steps, not just the final step');
 });
 
-test('real Agent usage preserves reported zero and omits absent, partial or invalid provider counts', async () => {
+test('agent loop usage preserves reported zero and omits absent, partial or invalid provider counts', async () => {
   for (const reported of [
     { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     { inputTokens: 23, outputTokens: 7, totalTokens: 30 },
@@ -53,7 +52,7 @@ test('real Agent usage preserves reported zero and omits absent, partial or inva
   ]) {
     const base = fixture([done]).model;
     const model = { ...base,
-      doGenerate: async (options: any) => ({ ...await base.doGenerate(options), usage: reported }),
+      doGenerate: async (options: any) => ({ ...await base.doGenerate(options), usage: { inputTokens: { total: reported.inputTokens }, outputTokens: { total: reported.outputTokens } } }),
       doStream: async (options: any) => {
         const output = await base.doStream(options);
         return { ...output, stream: output.stream.pipeThrough(new TransformStream({
@@ -237,7 +236,7 @@ test("cancellation triggered by a started observer prevents the effect", async (
   assert.ok(events.includes('cancelled'));
 });
 
-test("real Agent rejects extra fields, wrong types, and bounds before effects", async () => {
+test("agent loop rejects extra fields, wrong types, and bounds before effects", async () => {
   for (const input of [{ count: 1, extra: "deny" }, { count: 0 }, { count: 4 }, { count: "1" }, {}, { count: 1.5 }]) {
     let effects = 0;
     const { model } = fixture([[call("action", input)], done]);
@@ -336,7 +335,7 @@ test("concurrent resumed calls serialize effects and cancellation denies queued 
   }
 });
 
-test("real Agent denied callback prevents mutation", async () => {
+test("agent loop denied callback prevents mutation", async () => {
   let effects = 0;
   const { model } = fixture([[call("action", { count: 1 })], done]);
   await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => { throw new Error("Denied by current mode"); effects++; })] });
@@ -418,7 +417,7 @@ test("tool images become model media parts, including after history resume", asy
   const { model, requests } = fixture([[call("image", { count: 1 })], done]);
   const result = await runTurn({ model, messages: [user], instructions: "Test", tools: [action(async () => ({ content: [{ type: "image", mimeType: "image/png", data: png }] }), "image")] });
   const toolMessage = requests[1].prompt.find((message: any) => message.role === "tool");
-  assert.deepEqual(toolMessage.content[0].output, { type: "content", value: [{ type: "media", mediaType: "image/png", data: png }] });
+  assert.deepEqual(toolMessage.content[0].output, { type: "content", value: [{ type: "file", mediaType: "image/png", data: { type: "data", data: png } }] });
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-image-")));
   try {
     const session = await createSession(directory);
@@ -516,7 +515,7 @@ test("schema failure without assistant text returns usable feedback", async () =
   assert.match(result.text, /Invalid tool input; action rejected/);
 });
 
-test("tool images leave history after their turn, in every copy Mastra keeps", async () => {
+test("tool images leave history after their turn, including copies in sessions saved by the retired framework", async () => {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-test-")));
   try {
     const data = "x".repeat(MAX_SESSION_BYTES);
@@ -657,7 +656,7 @@ test("session directory traversal terminates when a filesystem root is missing",
   assert.equal(reply.stderr, '');
 });
 
-test("clean-environment import and Agent run perform no telemetry/license network or process calls", async () => {
+test("clean-environment import and agent run perform no network or process calls", async () => {
   const source = `
     import { syncBuiltinESMExports } from 'node:module';
     import http from 'node:http'; import https from 'node:https'; import net from 'node:net';
@@ -670,16 +669,16 @@ test("clean-environment import and Agent run perform no telemetry/license networ
     for (const key of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) child[key] = deny;
     syncBuiltinESMExports();
     const { runTurn } = await import('./src/runtime.ts');
-    const model = { specificationVersion:'v2', provider:'test', modelId:'test', supportedUrls:{},
-      doGenerate: async () => ({content:[{type:'text',text:'ok'}],finishReason:'stop',usage:{inputTokens:1,outputTokens:1,totalTokens:2},warnings:[]}),
+    const model = { specificationVersion:'v4', provider:'test', modelId:'test', supportedUrls:{},
+      doGenerate: async () => ({content:[{type:'text',text:'ok'}],finishReason:{unified:'stop'},usage:{inputTokens:{total:1},outputTokens:{total:1}},warnings:[]}),
       doStream: deny };
     const result = await runTurn({model, messages:[{role:'user',content:'test'}],instructions:'Test',tools:[]});
-    if (result.text !== 'ok' || process.env.MASTRA_TELEMETRY_DISABLED !== '1' || attempts !== 0) throw new Error('Wrong result or attempted network/process call');
+    if (result.text !== 'ok' || attempts !== 0) throw new Error('Wrong result or attempted network/process call');
     console.log('isolated runtime OK');
   `;
   const { stdout, stderr } = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", source], {
     cwd: path.resolve(import.meta.dirname, ".."),
-    env: { SystemRoot: process.env.SystemRoot, PATH: path.dirname(process.execPath), MASTRA_LICENSE_KEY: "synthetic-license", MASTRA_TELEMETRY_DISABLED: "false" },
+    env: { SystemRoot: process.env.SystemRoot, PATH: path.dirname(process.execPath) },
     timeout: 20000,
   });
   assert.match(stdout, /isolated runtime OK/);

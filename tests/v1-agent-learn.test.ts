@@ -14,7 +14,7 @@ import { readLearnVaultContext } from '../agent/neura/learn-vault.ts';
 import { windowsShortPath } from './windows-short-path.ts';
 const call = (toolName: string, input: unknown) => ({ type: 'tool-call', toolCallId: toolName, toolName, input: JSON.stringify(input) });
 
-test('real Mastra Learn: material -> cited board -> learner attempt -> explicit save/resume', { skip: process.platform !== 'win32' }, async () => {
+test('real agent-loop Learn: material -> cited board -> learner attempt -> explicit save/resume', { skip: process.platform !== 'win32' }, async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-agent-learn-')));
   const oldHome = process.env.NEURA_HOME; const oldVault = process.env.NEURA_LEARN_VAULT;
   process.env.NEURA_HOME = path.join(scratch, 'private'); delete process.env.NEURA_LEARN_VAULT;

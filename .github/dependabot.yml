@@ -10,11 +10,10 @@ updates:
     target-branch: main
     open-pull-requests-limit: 5
     groups:
-      # Mastra and the AI SDK providers share @ai-sdk/provider types. Bumping one
+      # The AI SDK providers share @ai-sdk/provider types. Bumping one
       # alone duplicates LanguageModelV4 and fails strict typecheck (#141, #142).
       model-stack:
         patterns:
-          - "@mastra/*"
           - "@ai-sdk/*"
         update-types:
           - major

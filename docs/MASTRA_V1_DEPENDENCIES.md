@@ -135,6 +135,11 @@ win32-x64).
 
 ### Mastra EE scope and owner decision
 
+**Superseded 2026-11-14.** The owner chose to remove Mastra. `@mastra/core` is no longer a
+dependency; `src/runtime.ts` is Neura's own loop on the AI SDK provider contract, and
+`scripts/check-pi-free.mjs` fails on any `@mastra/*` package or import. The text below records
+the review that led to that decision.
+
 `@mastra/core@1.79.0` ships EE code that its Apache-2.0 `LICENSE.md` excludes,
 and `Agent` imports reach it. **Owner decision, 2026-11-05:** the owner accepts
 Mastra's EE license terms for local development and testing only. This is not

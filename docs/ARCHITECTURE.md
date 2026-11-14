@@ -14,7 +14,7 @@ open. Retained Pi extensions are historical evidence, outside the active import 
 Read the diagram from top to bottom:
 
 1. The native launcher and T3's local ACP command enter the **same controller**.
-2. Mastra handles model turns; Neura validates and serializes tool effects.
+2. Neura's own loop (`src/runtime.ts`) handles model turns through the AI SDK provider contract, and validates and serializes tool effects. Mastra was removed on 2026-11-14.
 3. The current mode determines tool authority. Model output cannot widen it.
 4. Credentials, learning artifacts and optional vault events have separate owners.
 
@@ -31,7 +31,7 @@ logo, prompt-adjacent status and prompt; headless and ACP output omit artwork.
 I/O/controller interface. There is no second agent loop or Pi profile lookup.
 
 The controller owns provider selection, mode, conversation history, session locks,
-approval input and cancellation. `src/runtime.ts` wraps a real Mastra Agent with
+approval input and cancellation. `src/runtime.ts` is Neura's own agent loop (no framework since 2026-11-14) with
 schema validation, serialized effects and cancellation. Work builders have a
 60-step bound; Learn and reviewers have an eight-step bound.
 
