@@ -8,6 +8,12 @@ version: 1
 
 Neura on `main` (`d44900e`) is a working development build. Work, Learn and YOLO run, the 23 test suites exist, and the last three CI runs on that commit passed. It is not shippable yet. One legal gate, three engineering gates and about ten missing agent features stand between this build and a release other people can install.
 
+<Callout id="update-2026-11-14" tone="info">
+
+**Update, 2026-11-14.** This report is a snapshot of `d44900e`. Two items below were resolved the same day: Mastra was removed for Neura's own agent loop, so the licence blocker and the licence decision no longer apply, and full verification is tracked under #163. The installer, crash recovery, sign-in proof and production gates remain open.
+
+</Callout>
+
 I read all 18 files in `src/` and the status, readiness and parity documents. I also went through the 33 open issues and the README screenshots. I changed no code.
 
 <Diagram id="state" caption="Where each part of Neura stands today.">
@@ -68,7 +74,7 @@ These four stop any release, whatever else gets built.
 
 <Callout id="stale-tracker" tone="warning">
 
-**One tracker is stale.** `docs/STATUS.md` and `docs/PRODUCTION_READINESS.md` name issue #91 as the open blocker for full verification. GitHub shows #91 closed, and `/verify full` still returns `full_evidence_unavailable`. The gap is real but nobody owns it now. It needs a new issue.
+**One tracker is stale.** `docs/STATUS.md` and `docs/PRODUCTION_READINESS.md` name issue #91 as the open blocker for full verification. GitHub shows #91 closed, and `/verify full` still returns `full_evidence_unavailable`. The gap is real but nobody owns it now. Tracked under #163 since 2026-11-14.
 
 </Callout>
 
@@ -146,7 +152,7 @@ Smaller items: `/new` and `/clear` do the same thing and could be one command. C
   id="order"
   columns={["Step", "Work", "Why first"]}
   rows={[
-    ["1", "Licence decision", "Free, and every other release step waits on it"],
+    ["1", "Licence decision", "Done 2026-11-14: Mastra removed"],
     ["2", "Terminal items 1, 5, 6, 8, 9, 11, 12, 13, 14", "Nine small changes in two files. The tool feels finished within a day or two"],
     ["3", "Compaction notice, retries, settings file", "They stop the most common ways a long session goes wrong"],
     ["4", "Diffs, checkpoints, `/undo`, then `/pr`", "This is Milestone 2 and it makes Work safe on real projects"],
@@ -160,9 +166,7 @@ Smaller items: `/new` and `/clear` do the same thing and could be one command. C
 <Checklist
   id="next"
   items={[
-    { id: "licence", label: "Decide the Mastra EE question", note: "Read the EE terms against redistribution. Nothing ships until this is answered." },
     { id: "pick", label: "Tell me which step to start", note: "My pick is step 2, the nine small terminal fixes, as one PR." },
-    { id: "issue", label: "Approve a new issue for full verification", note: "It replaces the closed #91 as the tracker." },
     { id: "4x4", label: "Tell me what `/4x4` does", note: "Still open from 2026-11-06, and step 4 needs it." },
   ]}
 />

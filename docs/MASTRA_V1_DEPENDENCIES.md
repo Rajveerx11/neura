@@ -12,6 +12,11 @@ Pi source and parent-owned migration work are outside this slice.
 
 ## Exact graph
 
+> **Historical since 2026-11-14.** `@mastra/core` was removed and is rejected by
+> `scripts/check-pi-free.mjs`. The table below records the graph that was reviewed
+> then. The active direct runtime packages are `@ai-sdk/openai`, `@ai-sdk/anthropic`,
+> `typebox` and `zod`; see `package.json`.
+
 | Direct runtime package | Version | Purpose |
 | --- | --- | --- |
 | `@mastra/core` | `1.82.0` | Real Agent execution and tool dispatch |

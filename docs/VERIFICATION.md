@@ -55,7 +55,7 @@ Use full Git history. Shallow clones need `git fetch --unshallow` first.
 | `powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1` | Secret-scanner and synthetic download-retry regressions |
 | `powershell -NoProfile -File .\scripts\download-verified.ps1 -Uri URL -OutFile PATH -Sha256 HASH` | CI's pinned-download helper. A cached file gets one hash check and no download. A missing file gets at most three attempts, only for HTTP 502/503/504 or transient network failures. The hash is checked once, after downloading, so a mismatch fails immediately |
 | `powershell -NoProfile -File .\install.ps1 -Check` | Read-only development-launcher drift check. No permission to install |
-| `npm run verify:release` | Expected refusal while Mastra EE/distribution approval remains unresolved |
+| `npm run verify:release` | Passes the licence gate when no `@mastra/*` package or import is present (Mastra was removed on 2026-11-14) and fails if one returns. Installer, release rehearsal and readiness gates are separate and still open |
 
 Windows CI keeps the required `harness` job. Ubuntu `portable-proof` runs portable
 contracts, including Work/review/workflow regressions. Hosted PR checks do not

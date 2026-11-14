@@ -6,9 +6,10 @@ this file defines order, evidence, and the meaning of done.
 
 ## Current decision
 
-Neura is **not production-ready**. Current Mastra source is restricted to
-development/testing with synthetic, non-sensitive data while EE scope and
-distribution approval remain unresolved. Work, Learn and unrestricted YOLO are exposed; Human Away
+Neura is **not production-ready**. Mastra and its EE-licensed code were removed on
+2026-11-14, so no Mastra approval is needed. Use stays development/testing with
+synthetic, non-sensitive data while release packaging and distribution approval
+remain unresolved. Work, Learn and unrestricted YOLO are exposed; Human Away
 is unavailable. Its retained historical implementation remains preview-only.
 Source-linked launcher tests and recorded live Work runs do not establish a
 supported production install. See [status](STATUS.md), the
