@@ -55,7 +55,7 @@ Use full Git history. Shallow clones need `git fetch --unshallow` first.
 | `powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1` | Secret-scanner and synthetic download-retry regressions |
 | `powershell -NoProfile -File .\scripts\download-verified.ps1 -Uri URL -OutFile PATH -Sha256 HASH` | CI's pinned-download helper. A cached file gets one hash check and no download. A missing file gets at most three attempts, only for HTTP 502/503/504 or transient network failures. The hash is checked once, after downloading, so a mismatch fails immediately |
 | `powershell -NoProfile -File .\install.ps1 -Check` | Read-only development-launcher drift check. No permission to install |
-| `npm run verify:release` | Expected refusal while Mastra EE/distribution approval remains unresolved |
+| `npm run verify:release` | Passes the licence gate when no `@mastra/*` package or import is present (Mastra was removed on 2026-11-14) and fails if one returns. Installer, release rehearsal and readiness gates are separate and still open |
 
 Windows CI keeps the required `harness` job. Ubuntu `portable-proof` runs portable
 contracts, including Work/review/workflow regressions. Hosted PR checks do not
@@ -101,9 +101,9 @@ use disposable sandbox `/tmp`, not the candidate workspace.
 
 Bare `/verify` and `/verify full` report `unavailable`: PoW `0.2.0` lacks trusted
 required-suite/candidate evidence. Detector-only PASS is not test success or
-engineering completion. Full proof remains [#91](https://github.com/Rajveerx11/neura/issues/91).
+engineering completion. Full proof remains [#163](https://github.com/Rajveerx11/neura/issues/163).
 Durable receipts, original-task-base binding, ignored-file coverage and delivery
-enforcement remain open under #28/#91. Learn cannot run proof. `/ship` is unavailable.
+enforcement remain open under #28/#163. Learn cannot run proof. `/ship` is unavailable.
 
 ## Failures and historical evidence
 

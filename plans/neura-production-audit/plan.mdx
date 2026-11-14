@@ -1,0 +1,176 @@
+---
+title: "Neura audit: what is missing for production, and how to polish the terminal"
+brief: "Read of main at d44900e on 2026-11-14. Work, Learn and YOLO run and CI is green. Four gates block a release, and the first is a licence question. The terminal needs 14 fixes, most of them small."
+version: 1
+---
+
+# Neura audit: production gaps and terminal polish
+
+Neura on `main` (`d44900e`) is a working development build. Work, Learn and YOLO run, the 23 test suites exist, and the last three CI runs on that commit passed. It is not shippable yet. One legal gate, three engineering gates and about ten missing agent features stand between this build and a release other people can install.
+
+<Callout id="update-2026-11-14" tone="info">
+
+**Update, 2026-11-14.** This report is a snapshot of `d44900e`. Two items below were resolved the same day: Mastra was removed for Neura's own agent loop, so the licence blocker and the licence decision no longer apply, and full verification is tracked under #163. The installer, crash recovery, sign-in proof and production gates remain open.
+
+</Callout>
+
+I read all 18 files in `src/` and the status, readiness and parity documents. I also went through the 33 open issues and the README screenshots. I changed no code.
+
+<Diagram id="state" caption="Where each part of Neura stands today.">
+
+```html
+<div class="grid">
+  <div class="diagram-panel col" data-rough>
+    <div class="head">Works today</div>
+    <div class="diagram-node">Work: read, search, edit, sandboxed commands</div>
+    <div class="diagram-node">Review loop, up to 3 rounds</div>
+    <div class="diagram-node">Learn: lessons, PDF/PPTX import, exercises</div>
+    <div class="diagram-node">YOLO, T3 Code adapter, skills picker</div>
+    <div class="diagram-node">Slash menu, Markdown answers, saved chats</div>
+  </div>
+  <div class="diagram-panel col" data-rough>
+    <div class="head">Half built</div>
+    <div class="diagram-node">/verify: quick only, full never passes</div>
+    <div class="diagram-node">Sign-in: works for you, no recorded proof</div>
+    <div class="diagram-node">Installer: source-linked, development only</div>
+    <div class="diagram-node">History: saved, but old turns drop silently</div>
+    <div class="diagram-node">Approvals: per command, not saved or audited</div>
+  </div>
+  <div class="diagram-panel col" data-rough>
+    <div class="head">Missing</div>
+    <div class="diagram-node">Release licence clearance (Mastra EE)</div>
+    <div class="diagram-node">Undo and checkpoints</div>
+    <div class="diagram-node">Commit and open a PR</div>
+    <div class="diagram-node">Context compaction, retries</div>
+    <div class="diagram-node">MCP, web search, memory, Plan mode</div>
+    <div class="diagram-node">Settings file, logs, macOS and Linux</div>
+  </div>
+</div>
+```
+
+```css
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.head { font-weight: 700; color: var(--wf-ink); }
+.diagram-node { font-size: 13px; padding: 7px 10px; }
+```
+
+</Diagram>
+
+## Release blockers
+
+These four stop any release, whatever else gets built.
+
+<Table
+  id="blockers"
+  columns={["Blocker", "Evidence", "What closes it"]}
+  rows={[
+    ["Mastra EE licence and distribution approval", "`npm run verify:release` is built to fail. `docs/STATUS.md` says development and testing only", "A licence decision from you: confirm the terms allow redistribution, or drop the EE-scoped parts"],
+    ["No real installer", "`install.ps1 -Development` links to this checkout. `package.json` is `private`. No update or rollback path (#21, #128)", "A packaged build with a manifest, atomic install, rollback and a clean-machine rehearsal"],
+    ["No recovery from a crash mid-task", "Session locks fail closed. No undo, checkpoint or resume of a half-done task (#28, #121)", "Checkpoints before edits, `/undo`, and a restart that knows what already ran"],
+    ["Sign-in is unproven", "All tests are synthetic. Token refresh, restart and Windows file permissions on `codex-auth.json` are unchecked (#118)", "One recorded real-account run covering login, refresh and restart, plus a permission check at startup"],
+  ]}
+/>
+
+<Callout id="stale-tracker" tone="warning">
+
+**One tracker is stale.** `docs/STATUS.md` and `docs/PRODUCTION_READINESS.md` name issue #91 as the open blocker for full verification. GitHub shows #91 closed, and `/verify full` still returns `full_evidence_unavailable`. The gap is real but nobody owns it now. Tracked under #163 since 2026-11-14.
+
+</Callout>
+
+## Features still to add
+
+Ordered by how much a daily user would feel the gap. Issue numbers are the existing owners.
+
+<Table
+  id="features"
+  columns={["Feature", "State in source", "Owner"]}
+  rows={[
+    ["Context compaction", "None. `src/session.ts:96` drops the oldest turns past 200 messages or 1 MiB with no notice, and `/status` prints `Context window: unknown`", "#117"],
+    ["Retry on network errors", "`maxRetries: 0` in `src/runtime.ts:180`. One dropped connection fails the turn", "#117"],
+    ["Undo and checkpoints", "None in any mode", "#121"],
+    ["Commit and open a PR", "Not built. Work ends at `READY FOR YOUR APPROVAL`. You chose PR-only through a typed `/pr` on 2026-11-06", "#93"],
+    ["Settings file", "None. Provider, model, reviewer and thinking need flags or environment variables on every launch", "new"],
+    ["MCP servers", "None. Also missing from the T3 adapter", "#125"],
+    ["Web search and fetch", "None. The sandbox has no network and there is no host tool", "#125"],
+    ["Dependency installs", "Refused. The user runs them by hand in WSL (`src/work.ts:32`)", "#92"],
+    ["Memory across sessions", "None", "#126"],
+    ["Plan mode", "Refused in v1", "#122"],
+    ["Image and file attachments in the prompt", "None in the terminal. Tool images work", "#124"],
+    ["Subagents and LSP", "None. The reviewer is the only second agent", "#125"],
+    ["Saved, audited approvals", "Approvals live in memory for one process", "#33, #119"],
+    ["Debug log and `--verbose`", "None. Errors are redacted and nothing is written to disk", "#30"],
+    ["macOS and Linux", "Work commands call `wsl.exe`. First Learn store needs Windows", "#120"],
+    ["Human Away, Gmail, October, Herdr", "Unavailable in v1", "#24, #34, #126"],
+  ]}
+/>
+
+### Engineering debt before a release
+
+- `main()` in `src/cli.ts` is one 470-line function holding every command, the turn loop and all state. It is the hardest file to change safely.
+- `agent/extensions/` (19 files) and `legacy/pi/` are never loaded. They ship as dead weight and confuse the source map.
+- `memory` and tool inputs are typed `any` in `cli.ts`, `runtime.ts`, `session.ts` and `acp.ts` (#26).
+- The live WSL sandbox test does not run in PR CI. A sandbox regression can merge green.
+- `docs/STATUS.md` is 397 lines and about 250 of them describe the retired Pi build. Version `2.6.0-rc.1` is a Pi-era number.
+
+## Terminal polish
+
+The base is good: quiet transcript, one activity row, a real slash menu. These are the rough spots I found by reading the renderer and the screenshots.
+
+<Table
+  id="ui"
+  columns={["#", "Problem today", "Fix", "Where", "Size"]}
+  rows={[
+    ["1", "Tool lines say `[tool] read` and never name the file or command", "Show the redacted target: `read src/cli.ts`, `run npm test`", "`src/cli.ts:307`, `terminal-ui.ts:355`", "S"],
+    ["2", "Edits are invisible. You see `[tool] edit` and no diff", "Print a short coloured diff per edit, and a changed-files list when the turn ends", "`src/work.ts:162`", "M"],
+    ["3", "Long paragraphs appear all at once. The Markdown stream holds text until a newline, and the spinner is already gone", "Flush wrapped partial lines as they arrive", "`terminal-ui.ts:202`", "M"],
+    ["4", "`/sessions` lists bare UUIDs. `/resume` makes you type one", "Save a title from the first message. Show title and age. Offer saved chats in the menu the way `$` offers skills", "`session.ts:9`, `terminal-ui.ts:369`", "M"],
+    ["5", "Approval needs the full word `yes` and shows `Timeout: 120000 ms`", "Accept `y`. Print `2 min`. Add `a` to allow the same command for the rest of the session", "`cli.ts:175`, `work.ts:203`", "S"],
+    ["6", "`/verify` prints raw JSON", "One summary line, with the JSON kept for piped output", "`cli.ts:389`", "S"],
+    ["7", "Input is one line. A wrapped prompt turns the menu off, and pasted multi-line text submits early", "Bracketed paste and a continuation key", "`prompt-input.ts:42`", "L"],
+    ["8", "Ctrl+C at an idle prompt quits at once", "First press says `Press Ctrl+C again to exit`", "`cli.ts:134`", "S"],
+    ["9", "Esc does not stop a running task", "Esc cancels, same as Ctrl+C", "`prompt-input.ts:54`", "S"],
+    ["10", "The model picker asks for a typed number. The slash menu uses arrows", "Reuse the arrow menu for models", "`cli.ts:198`", "M"],
+    ["11", "First run fails with `Not logged in... use /login`", "Detect a missing login at launch and offer sign-in before the first prompt", "`auth.ts:191`", "S"],
+    ["12", "Status line reads `history on/new · thinking on · 0 msgs · /status`", "Plain words: `new chat · saved`. Move the rest to `/status`", "`terminal-ui.ts:311`", "S"],
+    ["13", "No end-of-turn line. Tokens print unformatted and there is no elapsed time", "One dim footer: `42s · 12.4k in · 890 out`", "`cli.ts:333`", "S"],
+    ["14", "Messages read like legal notes: `No task was replayed. Inspect current state before retrying.`", "Shorter wording that keeps the meaning: `Cancelled. Nothing was re-run.`", "`cli.ts:503`", "S"],
+  ]}
+/>
+
+Smaller items: `/new` and `/clear` do the same thing and could be one command. Code blocks have no syntax colour. `/help` ends with a development notice on every call. A long task finishes with no bell or title change. Command history does not survive a restart.
+
+<Callout id="keep" tone="info">
+
+**Keep these.** The copper accent, the single erasable activity row, the `NO_COLOR` and `TERM=dumb` fallbacks, and the `YOLO · DANGER` label in plain words. All four are covered by tests and they are what makes the terminal feel calm.
+
+</Callout>
+
+## Suggested order
+
+<Table
+  id="order"
+  columns={["Step", "Work", "Why first"]}
+  rows={[
+    ["1", "Licence decision", "Done 2026-11-14: Mastra removed"],
+    ["2", "Terminal items 1, 5, 6, 8, 9, 11, 12, 13, 14", "Nine small changes in two files. The tool feels finished within a day or two"],
+    ["3", "Compaction notice, retries, settings file", "They stop the most common ways a long session goes wrong"],
+    ["4", "Diffs, checkpoints, `/undo`, then `/pr`", "This is Milestone 2 and it makes Work safe on real projects"],
+    ["5", "Installer and clean-machine rehearsal", "Needs steps 1 to 4 stable first"],
+    ["6", "MCP, web search, memory, Plan", "Largest work, least needed for a first release"],
+  ]}
+/>
+
+## Do this now
+
+<Checklist
+  id="next"
+  items={[
+    { id: "pick", label: "Tell me which step to start", note: "My pick is step 2, the nine small terminal fixes, as one PR." },
+    { id: "4x4", label: "Tell me what `/4x4` does", note: "Still open from 2026-11-06, and step 4 needs it." },
+  ]}
+/>
+
+## Key takeaway
+
+A release is blocked by its slowest gate, and here that gate is a licence question you can answer without writing code. Check the non-code blockers first. They cost nothing to start and they decide whether the code work can ship at all.

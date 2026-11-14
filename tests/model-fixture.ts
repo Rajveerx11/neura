@@ -1,14 +1,14 @@
-// Deterministic model used only in synthetic real-Agent regression tests.
-const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+// Deterministic provider-contract (v4) model used only in synthetic agent-loop regression tests.
+const usage = { inputTokens: { total: 1 }, outputTokens: { total: 1 } };
 export function fixture(steps: any[][]) {
   const requests: any[] = [];
   const next = (options: any) => {
     requests.push(options);
     const content = steps[Math.min(requests.length - 1, steps.length - 1)];
-    return { content, finishReason: content.some((part) => part.type === "tool-call") ? "tool-calls" as const : "stop" as const, usage, warnings: [] };
+    return { content, finishReason: { unified: content.some((part) => part.type === "tool-call") ? "tool-calls" as const : "stop" as const, raw: undefined }, usage, warnings: [] };
   };
   const model = {
-    specificationVersion: "v2" as const, provider: "neura-test", modelId: "deterministic", supportedUrls: {},
+    specificationVersion: "v4" as const, provider: "neura-test", modelId: "deterministic", supportedUrls: {},
     doGenerate: async (options: any) => next(options),
     doStream: async (options: any) => {
       const result = next(options);

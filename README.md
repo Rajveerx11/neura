@@ -5,10 +5,12 @@
 Neura brings two everyday modes into one CLI: **Work** reads and searches a project, makes edits, then runs tests.
 **Learn** turns concepts and local documents into cited lessons,
 diagrams and exercises. An opt-in third mode, [YOLO](#yolo), drops the sandbox and
-approvals. The active application uses **Mastra, not Pi**.
+approvals. The agent loop is Neura's own (`src/runtime.ts`), built on the AI SDK provider
+contract. It uses **neither Mastra nor Pi**.
 
 > **Development/testing only, not a production release.** Use synthetic,
-> non-sensitive projects and materials. Mastra EE scope and distribution approval
+> non-sensitive projects and materials. Mastra and its EE-licensed code were
+> removed on 2026-11-14. Release packaging and distribution approval
 > remain unresolved. Local development acceptance does not authorize processing
 > end-user, customer or business-operational data, redistribution or production use.
 
@@ -106,9 +108,9 @@ commands, not a background connection. See the [source map and trust boundaries]
 
 ## Project state
 
-The current checkout is an unreleased Mastra development build. Package metadata
+The current checkout is an unreleased development build. Package metadata
 remains `2.6.0-rc.1`. “v1” in migration documents names the implementation, not a
-published version. Mastra core is pinned to `1.82.0`.
+published version. There is no agent-framework dependency: the model providers are `@ai-sdk/openai` and `@ai-sdk/anthropic`.
 
 The [latest published release, v2.5.1](https://github.com/Rajveerx11/neura/releases/tag/v2.5.1),
 belongs to the historical Pi application. The existing `v2.6.0-rc.1` draft is
@@ -334,7 +336,7 @@ clear that gate. Read the [development guide](docs/DEVELOPMENT.md) and
 ## License
 
 Neura source is licensed under [Apache-2.0](LICENSE). Third-party dependencies
-retain their own terms, including the unresolved Mastra EE/distribution scope.
+retain their own terms, and Neura no longer depends on Mastra or its EE-licensed code.
 The current logo's trademark clearance and redistribution terms remain
 undocumented. See [brand asset notes](assets/brand/README.txt). Maintained by
 [Rajveerx11](https://github.com/Rajveerx11).

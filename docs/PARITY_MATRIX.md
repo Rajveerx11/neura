@@ -11,7 +11,7 @@ describes the Mastra v1 source on `main`, not the baseline.
 hardening issue.** An evidence path names an existing test that exercises some part of
 the row; it is not a recorded PASS for the full baseline behavior. Human Away remains
 preview-only and full proof PASS remains blocked by
-[#91](https://github.com/Rajveerx11/neura/issues/91). No row is marked `implemented`:
+[#163](https://github.com/Rajveerx11/neura/issues/163). No row is marked `implemented`:
 no v1 surface has yet been shown equivalent to its baseline behavior.
 
 `node scripts/check-parity-matrix.mjs` derives the 19 extension entry points and the
@@ -88,7 +88,7 @@ by `@spences10/pi-mcp` through the `mcp.ts` wrapper.
 | `mode:plan` | [plan-artifact.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/plan-artifact.ts) | [M8](https://github.com/Rajveerx11/neura/issues/122) | `unavailable` | none | needed | No positive v1 Plan read case exists. |
 | `mode:yolo` | [modes.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/extensions/modes.ts) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `partial` | `tests/v1-yolo.test.ts` | `tests/cli-interactive-fixture.mjs` | Host tools, `--yolo` and confirmed entry match Codex `--yolo`. Pi-era undo, checkpoints, MCP, memory and `/health` are not included. |
 | `gate:human-away` | [agent/neura/human-away-sandbox.ts](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/neura/human-away-sandbox.ts) | [M2](https://github.com/Rajveerx11/neura/issues/116) | `unavailable` | `tests/v1-cli.test.ts` | needed | Human Away was preview-only at the baseline and is not supported production behavior. Evidence covers only unavailable modes failing closed. Carried obligation [#24](https://github.com/Rajveerx11/neura/issues/24). |
-| `gate:full-proof` | [verification.ts#L139-L155](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/neura/verification.ts#L139-L155) | [M7](https://github.com/Rajveerx11/neura/issues/121) | `unavailable` | `tests/v1-verification.test.ts` | needed | Full proof PASS is blocked by [#91](https://github.com/Rajveerx11/neura/issues/91). Evidence covers the fail-closed path only. |
+| `gate:full-proof` | [verification.ts#L139-L155](https://github.com/Rajveerx11/neura/blob/3ebaac07c8320125bcc32478b5aa3865746a997c/agent/neura/verification.ts#L139-L155) | [M7](https://github.com/Rajveerx11/neura/issues/121) | `unavailable` | `tests/v1-verification.test.ts` | needed | Full proof PASS is blocked by [#163](https://github.com/Rajveerx11/neura/issues/163). Evidence covers the fail-closed path only. |
 
 ## Configuration input categories
 

@@ -113,7 +113,7 @@ test('snapshot v1 migration quarantines evidence; v2 preserves transitions and r
   assert.throws(() => guardLesson(planned, { ...card, conceptId: 'joins' }), /prerequisites/);
 });
 
-test('active Mastra pedagogy: probe, plan acceptance, explicit next, failed-check remediation, DAG completion and recovery', { skip: process.platform !== 'win32' }, async () => {
+test('active pedagogy: probe, plan acceptance, explicit next, failed-check remediation, DAG completion and recovery', { skip: process.platform !== 'win32' }, async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-pedagogy-')));
   const oldHome = process.env.NEURA_HOME; const oldVault = process.env.NEURA_LEARN_VAULT;
   process.env.NEURA_HOME = path.join(scratch, 'home'); delete process.env.NEURA_LEARN_VAULT;

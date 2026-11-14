@@ -12,6 +12,11 @@ Pi source and parent-owned migration work are outside this slice.
 
 ## Exact graph
 
+> **Historical since 2026-11-14.** `@mastra/core` was removed and is rejected by
+> `scripts/check-pi-free.mjs`. The table below records the graph that was reviewed
+> then. The active direct runtime packages are `@ai-sdk/openai`, `@ai-sdk/anthropic`,
+> `typebox` and `zod`; see `package.json`.
+
 | Direct runtime package | Version | Purpose |
 | --- | --- | --- |
 | `@mastra/core` | `1.82.0` | Real Agent execution and tool dispatch |
@@ -134,6 +139,11 @@ installed cleanly that way for this review (156 root and 21 Learn packages on
 win32-x64).
 
 ### Mastra EE scope and owner decision
+
+**Superseded 2026-11-14.** The owner chose to remove Mastra. `@mastra/core` is no longer a
+dependency; `src/runtime.ts` is Neura's own loop on the AI SDK provider contract, and
+`scripts/check-pi-free.mjs` fails on any `@mastra/*` package or import. The text below records
+the review that led to that decision.
 
 `@mastra/core@1.79.0` ships EE code that its Apache-2.0 `LICENSE.md` excludes,
 and `Agent` imports reach it. **Owner decision, 2026-11-05:** the owner accepts

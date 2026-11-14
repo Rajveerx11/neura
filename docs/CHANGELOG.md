@@ -4,9 +4,22 @@
 
 Current source is development/testing only, with synthetic, non-sensitive data.
 Package metadata remains `2.6.0-rc.1`. No new version or Mastra release is implied.
-Latest published release remains historical Pi `2.5.1`. Mastra EE/distribution
-approval remains unresolved. See [status](STATUS.md) and
+Latest published release remains historical Pi `2.5.1`. Mastra was removed on
+2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
+
+### 2026-11-14: own agent loop, Mastra removed
+
+- `src/runtime.ts` no longer uses Mastra's `Agent`. Neura runs its own loop on the
+  AI SDK provider contract (v4), keeping the serialized tool queue, effect-boundary
+  validation, payload-free tool events, step limit, cancellation and usage totals.
+- Removed `@mastra/core`. The root lock fell from 156 to 38 packages. Mastra shipped
+  EE-licensed code that barred production use and redistribution.
+- `check-pi-free.mjs` rejects any `@mastra/*` package or import. `npm run verify:release`
+  passes that licence gate; installer and readiness gates remain open.
+- Sessions saved by the Mastra runtime still resume. `neura --check` reports
+  `framework: "Neura agent loop"`.
+- Not verified with a real account. Token streaming is not implemented.
 
 ### 2026-11-13: native terminal screenshots
 

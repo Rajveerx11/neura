@@ -1,10 +1,13 @@
 // Active dependency gate (#115). Lock metadata only: it does not certify embedded source,
-// native/WASM behavior, Mastra EE scope or distribution rights.
+// native/WASM behavior or distribution rights.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const FORBIDDEN = /(?:@(?:earendil-works|mariozechner)\/pi-|(?:^|\/)pi-subagents(?:\/|$)|@(?:spences10|ollama)\/pi-)/;
+// Mastra packages bundle Enterprise Edition code that its licence bars from production use and redistribution.
+// Neura dropped Mastra on 2026-11-14 for its own agent loop (src/runtime.ts); this keeps it out.
+export const EE_LICENSED = /(?:^|\/)@mastra\//;
 const EXACT = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
 // Derived from both active locks on 2026-11-05. A new license id fails until reviewed here.
 export const PERMISSIVE = new Set(['Apache-2.0', 'MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'BlueOak-1.0.0']);
@@ -59,6 +62,7 @@ export function checkGraph(relative, json) {
   for (const group of DIRECT_GROUPS) {
     for (const [name, version] of Object.entries(direct[group] ?? {})) {
       if (FORBIDDEN.test(name)) errors.push(`Pi dependency in ${relative}: ${name}`);
+      if (EE_LICENSED.test(name)) errors.push(`EE-licensed Mastra dependency in ${relative}: ${name}`);
       if (!EXACT.test(version)) errors.push(`Non-exact direct pin in ${relative}: ${name}@${version}`);
     }
   }
@@ -74,6 +78,7 @@ export function checkGraph(relative, json) {
     const name = entry.name ?? key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
     const id = `${name}@${entry.version}`;
     if (FORBIDDEN.test(key) || FORBIDDEN.test(name)) errors.push(`Pi package in ${relative}: ${key}`);
+    if (EE_LICENSED.test(key) || EE_LICENSED.test(name)) errors.push(`EE-licensed Mastra package in ${relative}: ${key}`);
     if (!entry.integrity) errors.push(`Missing package integrity in ${relative}: ${key}`);
     if (entry.hasInstallScript && !Object.hasOwn(REVIEWED_INSTALL_SCRIPTS, id)) errors.push(`Unreviewed install script in ${relative}: ${id}`);
     if (!entry.license) errors.push(`Missing license in ${relative}: ${id}`);
@@ -93,6 +98,7 @@ export function traceImports(root, entry) {
     const source = fs.readFileSync(file, 'utf8');
     for (const [, specifier] of source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)["']([^"']+)["']/g)) {
       if (FORBIDDEN.test(specifier)) errors.push(`Pi import reachable from ${path.relative(root, file)}: ${specifier}`);
+      if (EE_LICENSED.test(specifier)) errors.push(`EE-licensed Mastra import reachable from ${path.relative(root, file)}: ${specifier}`);
       if (specifier.startsWith('.')) visit(path.resolve(path.dirname(file), specifier));
     }
   };
@@ -126,8 +132,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   }
   console.log(`PASS: ${entries} lock entries and ${trace.modules} reachable local modules checked; exact pins, integrity, reviewed install scripts and permissive or reviewed licenses; active Neura graph is Pi-free by package/import identity.`);
   console.log('This does not certify all embedded third-party source, licensing, production readiness or removal of independent/running Pi installations.');
-  if (process.argv.includes('--distribution')) {
-    console.error('Distribution blocked: the owner accepted Mastra EE license terms for local development and testing only (2026-11-05). Distribution or production use still needs Mastra commercial EE terms or an EE-free upstream artifact. Development verification cannot waive this gate.');
-    process.exit(1);
-  }
+  // The checks above already failed on any Mastra package or import, which was the distribution blocker.
+  if (process.argv.includes('--distribution')) console.log('Distribution licence gate: no EE-licensed Mastra package or import is present. Installer, release rehearsal and readiness gates are separate.');
 }
