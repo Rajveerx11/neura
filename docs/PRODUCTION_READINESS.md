@@ -24,7 +24,7 @@ Roadmap: [#31](https://github.com/Rajveerx11/neura/issues/31)
 
 ## P0 release blockers
 
-Issue state checked 2026-11-07: #21 and #24 remain open. Merged improvements
+Issue state checked 2026-11-14: #21 and #24 remain open. Merged improvements
 do not establish production readiness. Original requirements carry across
 the migration even when their historical implementation is unavailable.
 
@@ -44,7 +44,7 @@ the migration even when their historical implementation is unavailable.
 | Durable recovery | [#28](https://github.com/Rajveerx11/neura/issues/28) |
 | Evaluation and operations | [#30](https://github.com/Rajveerx11/neura/issues/30) |
 
-Full verified proof PASS is separately blocked by [#91](https://github.com/Rajveerx11/neura/issues/91);
+Full verified proof PASS is separately blocked by [#163](https://github.com/Rajveerx11/neura/issues/163), which replaces the closed #91;
 quick detector PASS does not close that delivery gate.
 
 ## Completed source milestones

@@ -101,9 +101,9 @@ use disposable sandbox `/tmp`, not the candidate workspace.
 
 Bare `/verify` and `/verify full` report `unavailable`: PoW `0.2.0` lacks trusted
 required-suite/candidate evidence. Detector-only PASS is not test success or
-engineering completion. Full proof remains [#91](https://github.com/Rajveerx11/neura/issues/91).
+engineering completion. Full proof remains [#163](https://github.com/Rajveerx11/neura/issues/163).
 Durable receipts, original-task-base binding, ignored-file coverage and delivery
-enforcement remain open under #28/#91. Learn cannot run proof. `/ship` is unavailable.
+enforcement remain open under #28/#163. Learn cannot run proof. `/ship` is unavailable.
 
 ## Failures and historical evidence
 
