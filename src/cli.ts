@@ -153,18 +153,19 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (reconciliationRequired) warning('Task outcome needs reconciliation. Inspect workspace and any external effects, then use /reconcile to acknowledge that inspection. No task was replayed. Use /new to keep this history and start a separate task.');
     else if (recovery?.stage === 'unfinished') say('Saved task is unfinished. Its original base is retained. Continue only with an explicit task.');
   };
-  async function persistRecovery(next: TaskRecovery, expected: number, messages = memory) {
+  async function persistRecovery(next: TaskRecovery, expected: number, messages?: Session['messages']) {
     const selected = session;
     if (generation !== expected) throw new Error('Session changed; task state discarded.');
     if (selected) {
       let saved: Session;
-      const write = saveSession(sessions, { ...selected, messages, recovery: next });
+      const write = saveSession(sessions, { ...selected, messages: messages ?? selected.messages, recovery: next });
       pendingSessionSave = write;
       try { saved = await write; }
       catch (error) { if (generation === expected && session?.id === selected.id) historySaveFailed = true; throw error; }
       finally { if (pendingSessionSave === write) pendingSessionSave = undefined; }
       if (generation !== expected || session?.id !== selected.id) throw new Error('Session changed; task state discarded.');
-      session = saved; memory = saved.messages; historySaveFailed = false;
+      session = saved;
+      if (messages !== undefined) { memory = saved.messages; historySaveFailed = false; }
     }
     if (recovery?.taskId !== next.taskId) { lastReview = undefined; lastVerification = undefined; verificationGeneration = -1; }
     recovery = next;
@@ -556,6 +557,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         say('Neura subscription credentials removed locally. Remote tokens were not revoked.');
       } else if (command === 'mode') {
         if (!['work', 'learn', 'yolo'].includes(rest)) throw new Error('Only /mode work, /mode learn and /mode yolo are available.');
+        const previousAbort = abort;
         if (rest === 'yolo') {
           if (!rl && !bridge) throw new Error('/mode yolo needs a person to confirm. Start with --yolo instead.');
           abort = new AbortController();
@@ -566,6 +568,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           if (!confirmed) { say(`YOLO not enabled. Mode: ${mode}`); return true; }
           warning(YOLO_WARNING);
         }
+        previousAbort?.abort();
+        while (pendingSessionSave) await pendingSessionSave.catch(() => {});
         if (recovery?.stage === 'running') reconciliationRequired = true;
         generation++; restoreTaskBaseline(); learn.invalidate(); mode = rest as Mode; say(`Mode: ${mode}`); bridge?.onModeChange?.(mode);
         recoveryNotice();

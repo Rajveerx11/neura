@@ -37,18 +37,23 @@ async function recoveryWorkspace() {
 
 async function recoveryRun(workspace: string, home: string, options: {
   actions?: string[]; resume?: string; noHistory?: boolean; limit?: boolean; write?: boolean; cancel?: boolean; cancelReview?: boolean; replace?: boolean; changeMode?: boolean;
-  saveFailure?: { at: number; afterRename?: boolean };
+  saveFailure?: { at: number; afterRename?: boolean }; modeDuringSave?: number; delayRecoverySave?: boolean; largeRead?: boolean;
 } = {}) {
   const source = String.raw`
     import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
     import { createRequire, syncBuiltinESMExports } from 'node:module';
-    const options = JSON.parse(process.argv[2]); let controller; let requests = 0; let reviews = 0;
+    const options = JSON.parse(process.argv[2]); let controller; let requests = 0; let reviews = 0; let largeHistoryRetained = false; let modeCompletedBeforeRecovery = false;
     let arrived; let release; const fetched = new Promise(resolve => { arrived = resolve; });
     const gate = new Promise(resolve => { release = resolve; });
-    if (options.saveFailure) {
+    let recoveryArrived; let releaseRecovery; const recoverySaving = new Promise(resolve => { recoveryArrived = resolve; });
+    const recoveryGate = new Promise(resolve => { releaseRecovery = resolve; });
+    if (options.saveFailure || options.modeDuringSave) {
       const module = createRequire(import.meta.url)('node:fs/promises'); const rename = module.rename; let writes = 0;
       module.rename = async (...args) => {
-        const fail = ++writes === options.saveFailure.at;
+        writes++;
+        if (writes === options.modeDuringSave) { arrived(); await gate; }
+        if (options.delayRecoverySave && writes === 2) { recoveryArrived(); await recoveryGate; }
+        const fail = writes === options.saveFailure?.at;
         if (fail && !options.saveFailure.afterRename) throw new Error('Synthetic save failure before rename');
         const result = await rename(...args);
         if (fail) throw new Error('Synthetic save failure after rename');
@@ -58,11 +63,12 @@ async function recoveryRun(workspace: string, home: string, options: {
     globalThis.fetch = async (url, init) => {
       assert.equal(new URL(String(url)).origin, 'http://127.0.0.1:8080'); requests++;
       const body = JSON.parse(init.body); const reviewer = JSON.stringify(body.messages).includes('independent code reviewer');
+      if (options.largeRead && requests > 2 && JSON.stringify(body.messages).length > 1024 * 1024) largeHistoryRetained = true;
       if (reviewer) reviews++;
       if ((options.replace || options.changeMode) && requests === 1) { arrived(); await gate; }
       if ((options.cancel && requests === 2) || (options.cancelReview && reviewer)) { controller.cancel(); init.signal.throwIfAborted(); }
-      const tool = !reviewer && (options.limit || ((options.write || options.replace || options.changeMode) && requests === 1));
-      const name = requests === 1 ? 'write' : 'read';
+      const tool = !reviewer && (options.limit || ((options.write || options.replace || options.changeMode || options.largeRead) && requests === 1));
+      const name = requests === 1 && !options.largeRead ? 'write' : 'read';
       const input = name === 'write' ? { path: 'sample.ts', content: 'changed\n', expectedHash: '' } : { path: 'sample.ts' };
       if (name === 'write') {
         const { createHash } = await import('node:crypto'); const path = await import('node:path');
@@ -80,20 +86,38 @@ async function recoveryRun(workspace: string, home: string, options: {
       write: text => output.push(text), approve: async () => false,
       serve: async control => {
         controller = control;
+        if (options.modeDuringSave) {
+          const pending = control.execute('task during mode change'); await fetched;
+          let modeFinished = false;
+          const switching = control.execute('/mode learn').then(value => { modeFinished = true; return value; }); release();
+          if (options.delayRecoverySave) {
+            await recoverySaving;
+            await new Promise(setImmediate);
+            modeCompletedBeforeRecovery = modeFinished;
+            if (modeFinished) await control.execute('/reconcile');
+            releaseRecovery();
+          }
+          try { await pending; } catch (error) { errors.push(error.message); }
+          await switching;
+          await control.execute('/status');
+          if (output.join('').includes('Task recovery: reconcile')) {
+            try { await control.execute('/reconcile'); } catch (error) { errors.push(error.message); }
+          }
+        }
         if (options.replace || options.changeMode) {
           const pending = control.execute('old task'); await fetched; await control.execute(options.changeMode ? '/mode learn' : '/new'); release();
-          await assert.rejects(pending, /Session changed/);
+          await assert.rejects(pending, options.changeMode ? /Session changed|Turn cancelled/ : /Session changed/);
         }
         for (const action of options.actions ?? []) {
           try { await control.execute(action); } catch (error) { errors.push(error.message); }
         }
       },
     });
-    process.stdout.write(JSON.stringify({ output: output.join(''), errors, requests, reviews }));
+    process.stdout.write(JSON.stringify({ output: output.join(''), errors, requests, reviews, largeHistoryRetained, modeCompletedBeforeRecovery }));
   `;
   const reply = await exec(process.execPath, ['--input-type=module', '-e', source, workspace, JSON.stringify(options)], { cwd: root, env: syntheticEnvironment(home), timeout: 30000 });
   assert.equal(reply.stderr, '');
-  return JSON.parse(reply.stdout) as { output: string; errors: string[]; requests: number; reviews: number };
+  return JSON.parse(reply.stdout) as { output: string; errors: string[]; requests: number; reviews: number; largeHistoryRetained: boolean; modeCompletedBeforeRecovery: boolean };
 }
 
 function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
@@ -201,6 +225,49 @@ test('cancellation after a tool effect requires reconciliation; no-history store
       }
     } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
   }
+});
+
+test('oversized result history cannot prevent recording inspection and continuing the task', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    await fs.writeFile(path.join(f.workspace, 'sample.ts'), 'x'.repeat(1024 * 1024));
+    const result = await recoveryRun(f.workspace, f.home, { largeRead: true, actions: ['/workflow off', 'read sample', '/status', '/reconcile', 'continue'] });
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0], /session save failed/);
+    assert.match(result.output, /History: save failed/);
+    assert.match(result.output, /Inspection acknowledged/);
+    assert.equal(result.requests, 3);
+    assert.equal(result.largeHistoryRetained, true, 'Rejected result history stays available until a later bounded save');
+    const [saved] = await f.sessions();
+    assert.equal(saved.recovery?.stage, 'completed');
+    assert.ok(Buffer.byteLength(JSON.stringify(saved)) <= 1024 * 1024);
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+});
+
+test('mode changes wait for pending recovery writes without stranding reconciliation', async () => {
+  for (const modeDuringSave of [3, 1]) {
+    const f = await recoveryWorkspace();
+    try {
+      const result = await recoveryRun(f.workspace, f.home, { modeDuringSave });
+      assert.ok(result.errors.length <= 1, result.errors.join('\n'));
+      if (result.errors.length) assert.match(result.errors[0], /Session changed|Turn cancelled/);
+      assert.equal(result.requests, modeDuringSave === 1 ? 0 : 1);
+      const [saved] = await f.sessions();
+      assert.ok(['completed', 'unfinished'].includes(saved.recovery!.stage), saved.recovery!.stage);
+      if (result.output.includes('Task recovery: reconcile')) assert.match(result.output, /Inspection acknowledged/);
+    } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+  }
+});
+
+test('mode changes drain cancellation recovery writes before later commands can publish', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    const result = await recoveryRun(f.workspace, f.home, { modeDuringSave: 1, delayRecoverySave: true });
+    assert.equal(result.modeCompletedBeforeRecovery, false);
+    assert.equal(result.requests, 0);
+    assert.match(result.output, /Inspection acknowledged/);
+    assert.equal((await f.sessions())[0].recovery?.stage, 'unfinished');
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
 });
 
 test('replacing a session fences late model/tool results and preserves the old uncertain task', async () => {

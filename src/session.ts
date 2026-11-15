@@ -34,7 +34,7 @@ function validateRecovery(value: TaskRecovery): TaskRecovery {
         typeof baseline.fingerprint !== "string" || !hashPattern.test(baseline.fingerprint) ||
         !baseline.files || Array.isArray(baseline.files) || typeof baseline.files !== "object" || Object.keys(baseline.files).length > 50_000) throw new Error("Invalid task recovery baseline");
     for (const [name, hash] of Object.entries(baseline.files)) {
-      if (!name || name.length > 4096 || path.isAbsolute(name) || name.includes("\\") || name.includes("\0") ||
+      if (!name || name.length > 4096 || path.isAbsolute(name) || (process.platform === "win32" && name.includes("\\")) || name.includes("\0") ||
           name.split("/").some(part => !part || part === "." || part === ".." || part.toLowerCase() === ".git") ||
           typeof hash !== "string" || (hash !== "missing" && !hashPattern.test(hash))) throw new Error("Invalid task recovery file hash");
     }

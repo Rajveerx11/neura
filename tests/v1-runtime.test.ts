@@ -624,6 +624,21 @@ test("task recovery rejects malformed, stale-workspace and oversized metadata ra
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("recovery preserves POSIX backslashes and rejects Windows path separators", async () => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-task-filename-")));
+  try {
+    const session = await createSession(directory);
+    const baseline = { root: directory, head: "a".repeat(40), fingerprint: "b".repeat(64), files: { "a\\b.ts": "c".repeat(64) } };
+    if (process.platform === 'win32') {
+      assert.throws(() => taskRecovery("d".repeat(64), baseline), /Invalid task recovery file hash/);
+    } else {
+      const recovery = taskRecovery("d".repeat(64), baseline);
+      await saveSession(directory, { ...session, recovery });
+      assert.deepEqual((await resumeSession(directory, session.id)).recovery?.baseline, baseline);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("session paths reject linked ancestors before creating directories or history", async () => {
   const scratch = await realpath(await mkdtemp(path.join(tmpdir(), "neura-session-links-")));
   try {
