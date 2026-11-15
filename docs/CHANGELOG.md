@@ -8,6 +8,15 @@ Latest published release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-14: proof base is the task-start commit
+
+- `/verify quick` compares the candidate against a full commit id, never the
+  moving ref `HEAD`: the session baseline's commit when one exists, else the
+  commit `HEAD` resolves to at that moment. A commit made mid-task stays in range.
+- Anything that is not a 40 or 64 character hex id is refused before dispatch.
+- Receipts gain `baseCommit`, and the approval prompt shows it.
+- Still detector-only and never verified. Full verification remains #163.
+
 ### 2026-11-14: own agent loop, Mastra removed
 
 - `src/runtime.ts` no longer uses Mastra's `Agent`. Neura runs its own loop on the
