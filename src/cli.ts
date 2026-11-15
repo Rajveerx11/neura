@@ -14,7 +14,8 @@ import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRU
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
 import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
-import { createSession, saveSession, resumeSession, listSessions, withoutToolImages, type Session } from './session.ts';
+import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
+import { createSession, saveSession, resumeSession, listSessions, withoutToolImages, taskRecovery, type Session, type TaskRecovery } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.ts';
 import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
@@ -104,8 +105,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let workflowOn = true;
   let sessionBaseline: { generation: number; snapshot: TreeSnapshot | null } | undefined;
   let lastReview: { generation: number; receipt: ReviewReceipt } | undefined;
-  // A task cut off at the step limit keeps its starting baseline, so the eventual review covers all of it.
-  let unfinished: { generation: number; snapshot: TreeSnapshot | null } | undefined;
+  let recovery: TaskRecovery | undefined;
+  let reconciliationRequired = false;
   let fixStopped = false;
   let baselineWarned = false;
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
@@ -144,19 +145,52 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let lastVerification: WorkspaceReceipt | undefined;
   let verificationGeneration = -1;
   let releaseSession: (() => Promise<void>) | undefined;
+  let pendingSessionSave: Promise<Session> | undefined;
+  const restoreTaskBaseline = () => {
+    sessionBaseline = recovery ? { generation, snapshot: recovery.baseline } : undefined;
+  };
+  const recoveryNotice = () => {
+    if (reconciliationRequired) warning('Task outcome needs reconciliation. Inspect workspace and any external effects, then use /reconcile to acknowledge that inspection. No task was replayed. Use /new to keep this history and start a separate task.');
+    else if (recovery?.stage === 'unfinished') say('Saved task is unfinished. Its original base is retained. Continue only with an explicit task.');
+  };
+  async function persistRecovery(next: TaskRecovery, expected: number, messages = memory) {
+    const selected = session;
+    if (generation !== expected) throw new Error('Session changed; task state discarded.');
+    if (selected) {
+      let saved: Session;
+      const write = saveSession(sessions, { ...selected, messages, recovery: next });
+      pendingSessionSave = write;
+      try { saved = await write; }
+      catch (error) { if (generation === expected && session?.id === selected.id) historySaveFailed = true; throw error; }
+      finally { if (pendingSessionSave === write) pendingSessionSave = undefined; }
+      if (generation !== expected || session?.id !== selected.id) throw new Error('Session changed; task state discarded.');
+      session = saved; memory = saved.messages; historySaveFailed = false;
+    }
+    if (recovery?.taskId !== next.taskId) { lastReview = undefined; lastVerification = undefined; verificationGeneration = -1; }
+    recovery = next;
+    restoreTaskBaseline();
+  }
   async function selectSession(id?: string) {
     const fresh = id ? undefined : await createSession(sessions);
     const release = await lockSession(sessions, id ?? fresh!.id);
     try {
       const next = fresh ?? await resumeSession(sessions, id!);
+      if (next.recovery && next.recovery.workspaceKey !== workspaceKey) throw new Error('Task recovery belongs to another workspace.');
+      if (session) generation++; // Fence outstanding work before releasing the old writer lease.
+      await pendingSessionSave?.catch(() => {});
       await releaseSession?.(); releaseSession = release;
       session = next; memory = next.messages;
+      recovery = next.recovery;
+      reconciliationRequired = Boolean(id && (recovery ? ['running', 'reconcile'].includes(recovery.stage) : memory.length));
+      // Old chats remain readable, but no historical task base can be inferred from today's HEAD.
+      if (!recovery && memory.length) recovery = { ...taskRecovery(workspaceKey, null), stage: 'reconcile' };
+      restoreTaskBaseline();
       sessionState = id ? 'resumed' : 'new'; lastTurnUsage = undefined; historySaveFailed = false;
     } catch (error) { await release(); throw error; }
   }
   async function freshConversation() {
     if (!values['no-history']) await selectSession();
-    else { memory = []; sessionState = 'new'; lastTurnUsage = undefined; }
+    else { memory = []; recovery = undefined; reconciliationRequired = false; restoreTaskBaseline(); sessionState = 'new'; lastTurnUsage = undefined; }
   }
   const statusSnapshot = (): TerminalStatus => ({
     mode, provider: provider.provider, model: modelLabel(provider.model),
@@ -181,6 +215,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       await selectSession(values.resume);
     } else if (values.resume) throw new Error('--resume cannot be combined with --no-history.');
     if (interactive) stdout.write(terminal().wordmark(values.ascii) + '\n\n'); // Approved logo; no false READY banner.
+    recoveryNotice();
     if (mode === 'yolo') warning(YOLO_WARNING);
     if (scratchWorkspace) {
       say(`Scratch workspace: ${workspace}`);
@@ -220,9 +255,10 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     }
     async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill = '') {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
+      if (reconciliationRequired) throw new Error('Task outcome needs reconciliation. Inspect effects and use /reconcile, or /new for a separate task. No task was replayed.');
       const owned = !abort; // workflow fix turns reuse the outer request's cancellation
       abort ??= new AbortController();
-      if (owned) lastTurnUsage = undefined;
+      if (owned) { lastTurnUsage = undefined; fixStopped = false; }
       let lineOpen = false;
       let waitingOpen = false;
       let ticker: NodeJS.Timeout | undefined;
@@ -247,6 +283,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (rest) stdout.write(rest);
       };
       pauseActivity = endLine;
+      const expected = generation;
+      let taskStarted = false;
       try {
         if (!provider.model) {
           if (provider.provider !== 'openai-codex') throw new Error('Choose a model with --model or /model PROVIDER MODEL [URL].');
@@ -255,7 +293,6 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           endLine();
           provider = { ...provider, model: choices[0].id }; modelExplicit = false;
         }
-        const expected = generation;
         const userMessage = { role: 'user', content: text };
         learn.input(learnerInput);
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
@@ -270,10 +307,26 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         const maxSteps = mode === 'learn' ? DEFAULT_TURN_STEPS : WORK_TURN_STEPS;
         const review = reviewTurn && mode === 'work' && workflowOn;
-        const needSessionBaseline = mode === 'work' && sessionBaseline?.generation !== expected;
-        const carried = review && unfinished?.generation === expected ? unfinished.snapshot : null;
-        const baseline = carried ?? (review || needSessionBaseline ? await captureWorktree(workspace, { signal: abort.signal }) : null);
-        if (needSessionBaseline) sessionBaseline = { generation: expected, snapshot: baseline };
+        if (mode !== 'learn') {
+          const next = recovery && recovery.stage !== 'completed' ? { ...recovery, stage: 'running' as const }
+            : taskRecovery(workspaceKey, await captureWorktree(workspace, { signal: abort.signal }));
+          abort.signal.throwIfAborted();
+          // Save intent before any model/tool effect. A failed write must prevent execution.
+          try { await persistRecovery(next, expected); }
+          catch (error) {
+            if (generation !== expected) throw error;
+            // Rename may have succeeded before an error was reported. Re-read only; never retry effects.
+            try {
+              const stored = session && await resumeSession(sessions, session.id);
+              if (stored?.recovery?.taskId === next.taskId) { recovery = stored.recovery; reconciliationRequired = true; }
+            } catch { recovery = next; reconciliationRequired = true; }
+            restoreTaskBaseline(); recoveryNotice();
+            throw error;
+          }
+          taskStarted = true;
+          abort.signal.throwIfAborted();
+        }
+        const baseline = recovery?.baseline ?? null;
         waiting();
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
@@ -309,29 +362,55 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         endLine();
         const stopped = outcome.stopReason === 'step-limit';
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
-        if (generation !== expected) throw new Error('Session changed; result discarded.');
+        if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');
         // Repository context is lower-priority user data, refreshed each turn rather than persisted into history.
         memory = withoutToolImages(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages);
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
         lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
           ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;
-        if (session) {
+        if (taskStarted) {
+          try { await persistRecovery({ ...recovery!, stage: 'running' }, expected, memory); }
+          catch (error) {
+            if (generation !== expected) throw error;
+            reconciliationRequired = true;
+            warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.');
+            throw new Error('Task outcome needs reconciliation because session save failed. No task was replayed.');
+          }
+        } else if (session) {
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; historySaveFailed = false; }
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
         if (stopped) {
           bridge?.onStepLimit?.();
           if (!rl && !bridge) process.exitCode = 1;
-          if (!reviewTurn) { fixStopped = true; throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`); }
-          if (review) unfinished = { generation: expected, snapshot: baseline };
+          if (!reviewTurn) {
+            fixStopped = true;
+            await persistRecovery({ ...recovery!, stage: 'unfinished' }, expected);
+            taskStarted = false;
+            throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`);
+          }
           say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
-        } else if (review && baseline) { unfinished = undefined; await workflow(text, baseline, false); }
+        } else if (review && baseline) { await workflow(text, baseline, false); }
         else if (review && mutationAttempted && !baselineWarned) {
           baselineWarned = true; // once per session, and only when something may have changed: plain chat stays answer-only
           stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');
         }
+        if (taskStarted && owned) {
+          abort.signal.throwIfAborted();
+          let stage: TaskRecovery['stage'] = stopped || fixStopped ? 'unfinished' : 'completed';
+          if (reconciliationRequired) stage = 'reconcile';
+          await persistRecovery({ ...recovery!, stage }, expected);
+          abort.signal.throwIfAborted();
+        }
         if (owned && interactive) stdout.write('\n');
       } catch (error) {
+        if (taskStarted && generation === expected) {
+          reconciliationRequired = true;
+          recovery = { ...recovery!, stage: 'reconcile' };
+          try { await persistRecovery(recovery, expected); }
+          catch { warning('Task recovery could not be saved. Inspect effects before retrying; saved state may still be running.'); }
+          recoveryNotice();
+        }
         if (abort?.signal.aborted) throw new DOMException('Turn cancelled. No task was replayed. Inspect current state before retrying.', 'AbortError');
         throw error;
       } finally { endLine(); if (owned) { abort = undefined; pauseActivity = () => {}; } }
@@ -339,14 +418,24 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     async function workflow(task: string, baseline: TreeSnapshot | null, manual: boolean) {
       const expected = generation;
       fixStopped = false;
+      const current = baseline ? await captureWorktree(workspace, { signal: abort?.signal }) : null;
+      if (generation !== expected || mode !== 'work' || abort?.signal.aborted) return;
+      if (baseline && current?.head !== baseline.head) {
+        fixStopped = true;
+        say('Review unavailable: HEAD changed since the original task base. The reviewer diffs current HEAD and cannot attest historical task changes. Original base retained; inspect committed changes separately.');
+        return;
+      }
       const outcome = await runReviewLoop({ workspace, task, baseline, reviewer: reviewer(), builder: provider, signal: abort?.signal, manual }, {
-        capture: (root, signal) => captureWorktree(root, { signal }),
+        capture: async (root, signal) => {
+          const snapshot = await captureWorktree(root, { signal });
+          return baseline && snapshot?.head !== baseline.head ? null : snapshot;
+        },
         review: input => reviewCandidate(input), assessRisk,
         fixTurn: prompt => turn(prompt, prompt, false),
         current: () => generation === expected && mode === 'work',
         report: line => say(line),
       });
-      if (fixStopped) unfinished = { generation: expected, snapshot: baseline }; // The next review must still cover the whole task.
+      if (outcome.state === 'blocked') fixStopped = true;
       if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
     }
     async function input(text: string): Promise<boolean> {
@@ -370,36 +459,49 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
       if (command === 'quit' || command === 'exit') { if (interactive) say('Neura closed.'); return false; }
+      if (command === 'verify' && rest !== 'status' && recovery && (!recovery.baseline || reconciliationRequired)) throw new Error('Verification unavailable: original task base snapshot or reconciliation is missing. Inspect effects; no newer HEAD was substituted.');
       if (command === 'help') stdout.write(terminal().help() + '\n');
       else if (command === 'status') {
         if (rest.trim()) throw new Error('Use /status without arguments.');
         const ui = interactive ? terminal() : createTerminalUI({ columns: stdout.columns });
         stdout.write(ui.statusDetails(statusSnapshot()) + '\n');
+        if (recovery) say(`Task recovery: ${reconciliationRequired ? 'reconcile' : recovery.stage}. This records progress only, not verification or approval.`);
       }
       else if (command === 'verify') {
         if (mode !== 'work') throw new Error('Verification is available only in Work. Learn cannot execute proof.');
         if (!['', 'quick', 'full', 'status'].includes(rest)) throw new Error('Use /verify quick, /verify full or /verify status.');
         abort = new AbortController();
         const expected = generation;
+        const verificationSession = values['no-history'] ? undefined : session?.id;
+        const verificationOptions = { signal: abort.signal, current: () => generation === expected && mode === 'work' && (values['no-history'] || session?.id === verificationSession) };
         try {
           if (rest === 'status') {
+            if (verificationSession) {
+              lastVerification = await loadWorkspaceReceipt(sessions, verificationSession, workspace, verificationOptions);
+              verificationGeneration = expected;
+            }
             if (!lastVerification || verificationGeneration !== generation) { say('No verification receipt in this session. Run /verify quick or /verify full.'); return true; }
             const status = await workspaceReceiptStatus(workspace, lastVerification, abort.signal);
-            if (generation !== expected || mode !== 'work') throw new Error('Verification mode/session changed; result discarded.');
+            abort.signal.throwIfAborted();
+            if (!verificationOptions.current()) throw new Error('Verification mode/session changed; result discarded.');
             say(JSON.stringify(status, null, 2));
           } else {
-            lastVerification = await verifyWorkspace(workspace, rest === 'quick' ? 'detector-only' : 'full', {
-              signal: abort.signal, current: () => generation === expected && mode === 'work', approve,
+            const receipt = await verifyWorkspace(workspace, rest === 'quick' ? 'detector-only' : 'full', {
+              ...verificationOptions, approve,
               // Compare against where this session started, so a commit made mid-task stays in the diff.
               base: sessionBaseline?.generation === expected ? sessionBaseline.snapshot?.head : undefined,
             });
+            if (verificationSession) await saveWorkspaceReceipt(sessions, verificationSession, workspace, receipt, verificationOptions);
+            abort.signal.throwIfAborted();
+            if (!verificationOptions.current()) throw new Error('Verification mode/session changed; result discarded.');
+            lastVerification = receipt;
             verificationGeneration = expected;
             say(JSON.stringify(lastVerification, null, 2));
             if (!rl && !bridge && lastVerification.status !== 'detector-only') process.exitCode = 1;
             if (lastVerification.reason === 'full_evidence_unavailable') say('Full verification is blocked: PoW 0.2.0 lacks trusted suite/candidate evidence. No tests were run.');
             else if (lastVerification.reason === 'snapshot_unavailable') say('Use a committed Git repository root within the snapshot limits. No proof command was run.');
             else if (lastVerification.reason === 'runner_unavailable') say('Pinned offline PoW/WSL sandbox unavailable. No host fallback was used.');
-            say('This receipt is session-local metadata, not signed attestation or task completion. Detector-only is never verified.');
+            say('This receipt is session metadata, not signed attestation, automatic approval or task completion. Detector-only is never verified.');
           }
         } finally { abort = undefined; }
       } else if (command === 'workflow') {
@@ -423,11 +525,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             if (generation !== expected || mode !== 'work') throw new Error('Review mode/session changed; result discarded.');
             say(`Last review (${lastReview.receipt.status}) is ${current ? 'current for the workspace' : 'stale: the workspace changed since it was reviewed'}.`);
           } else {
-            if (sessionBaseline?.generation !== generation) {
+            if (!recovery && sessionBaseline?.generation !== generation) {
               say('No session baseline yet; capturing one now, so only later changes can be reviewed.');
               sessionBaseline = { generation, snapshot: await captureWorktree(workspace, { signal: abort.signal }) };
             }
-            await workflow('Manual /review of all workspace changes since the session baseline.', sessionBaseline.snapshot, true);
+            if (reconciliationRequired) throw new Error('Reconcile the interrupted task before review. No task was replayed.');
+            await workflow('Manual /review of all workspace changes since the original task baseline.', sessionBaseline?.snapshot ?? null, true);
           }
         } finally { abort = undefined; }
       } else if (command === 'thinking') {
@@ -463,7 +566,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           if (!confirmed) { say(`YOLO not enabled. Mode: ${mode}`); return true; }
           warning(YOLO_WARNING);
         }
-        generation++; learn.invalidate(); mode = rest as Mode; say(`Mode: ${mode}`); bridge?.onModeChange?.(mode);
+        if (recovery?.stage === 'running') reconciliationRequired = true;
+        generation++; restoreTaskBaseline(); learn.invalidate(); mode = rest as Mode; say(`Mode: ${mode}`); bridge?.onModeChange?.(mode);
+        recoveryNotice();
       } else if (command === 'learn') {
         if (mode !== 'learn') throw new Error('Enter /mode learn first.');
         abort = new AbortController();
@@ -473,7 +578,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (rest.trim()) throw new Error(`Use /${command} without arguments.`);
         await freshConversation();
         generation++; learn.invalidate(true);
-        sessionBaseline = undefined; lastReview = undefined; unfinished = undefined;
+        sessionBaseline = undefined; lastReview = undefined;
         lastVerification = undefined; verificationGeneration = -1; baselineWarned = false;
         say(command === 'clear' ? 'Context cleared. New chat started; saved chats kept.' : 'New session; mode authority and learning state refreshed.');
       } else if (command === 'sessions') {
@@ -483,7 +588,14 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } else if (command === 'resume') {
         if (values['no-history']) throw new Error('History disabled.');
         await selectSession(rest);
-        generation++; learn.invalidate(true); mode = 'work'; say('Workspace history resumed in Work. Use /mode learn and explicitly /learn resume to restore a lesson.'); bridge?.onModeChange?.(mode);
+        generation++; restoreTaskBaseline(); lastReview = undefined; lastVerification = undefined; verificationGeneration = -1;
+        learn.invalidate(true); mode = 'work'; say('Workspace history resumed in Work. Use /mode learn and explicitly /learn resume to restore a lesson.'); recoveryNotice(); bridge?.onModeChange?.(mode);
+      } else if (command === 'reconcile') {
+        if (rest.trim()) throw new Error('Use /reconcile without arguments after inspecting the workspace and any external effects.');
+        if (!reconciliationRequired || !recovery) throw new Error('No task outcome awaiting reconciliation.');
+        await persistRecovery({ ...recovery, stage: 'unfinished' }, generation);
+        reconciliationRequired = false;
+        say('Inspection acknowledged. Original task base retained; no actions replayed, approvals restored or verification granted. Give an explicit task to continue.');
       } else if (command === 'model') {
         if (!rest.trim()) { await pickModel(); return true; }
         await changeModel(parseProvider(rest, 'model'));

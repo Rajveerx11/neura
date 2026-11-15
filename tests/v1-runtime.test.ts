@@ -10,7 +10,7 @@ import { once } from "node:events";
 import { Type } from "typebox";
 import { createTurnTools, DEFAULT_TURN_STEPS, runTurn, ToolFeedbackError, WORK_TURN_STEPS, type ToolDefinition } from "../src/runtime.ts";
 import { createConfiguredModel } from "../src/providers.ts";
-import { appendSession, createSession, listSessions, resumeSession, saveSession, withoutToolImages, MAX_SESSION_MESSAGES, MAX_SESSION_BYTES } from "../src/session.ts";
+import { appendSession, createSession, listSessions, resumeSession, saveSession, withoutToolImages, taskRecovery, MAX_RECOVERY_BYTES, MAX_SESSION_MESSAGES, MAX_SESSION_BYTES } from "../src/session.ts";
 
 import { fixture } from "./model-fixture.ts";
 import { windowsShortPath } from "./windows-short-path.ts";
@@ -564,6 +564,63 @@ test("session create/list/append/resume is bounded and rejects incomplete effect
     await assert.rejects(createSession(path.join(alias, "sessions")), /outside .pi|Linked session/);
     await writeFile(path.join(directory, `${session.id}.json`), "x".repeat(MAX_SESSION_BYTES + 1));
     await assert.rejects(resumeSession(directory, session.id), /exceeds/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("task recovery retains immutable original hashes through trims and a fresh process without serializing authority", async () => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-task-recovery-")));
+  try {
+    const session = await createSession(directory);
+    assert.equal((await resumeSession(directory, session.id)).recovery, undefined, "legacy v1 remains readable");
+    const baseline = { root: directory, head: "a".repeat(40), fingerprint: "b".repeat(64), files: { "dirty.ts": "c".repeat(64), "deleted.ts": "missing" } };
+    const recovery = taskRecovery("d".repeat(64), baseline);
+    let saved = await saveSession(directory, { ...session, recovery });
+    await assert.rejects(saveSession(directory, { ...saved, recovery: undefined }), /Original task/);
+    await assert.rejects(saveSession(directory, { ...saved, recovery: { ...recovery, baseHead: "e".repeat(40), baseline: { ...baseline, head: "e".repeat(40) } } }), /Original task/);
+    await assert.rejects(saveSession(directory, { ...saved, recovery: taskRecovery(recovery.workspaceKey, baseline) }), /Original task/);
+    saved = await saveSession(directory, { ...saved, messages: Array.from({ length: 120 }, () => [user, { role: "assistant", content: "answer" }]).flat(), recovery: { ...recovery, stage: "unfinished" } });
+    assert.equal(saved.messages.length, MAX_SESSION_MESSAGES);
+    const source = `import assert from 'node:assert/strict'; import { resumeSession } from './src/session.ts'; const s = await resumeSession(process.argv[1], process.argv[2]); assert.equal(s.recovery.stage, 'unfinished'); assert.equal(s.recovery.baseHead, 'a'.repeat(40)); assert.equal(s.recovery.baseline.files['dirty.ts'], 'c'.repeat(64)); assert.deepEqual(Object.keys(s.recovery).sort(), ['baseHead','baseline','stage','taskId','version','workspaceKey']);`;
+    await promisify(execFile)(process.execPath, ["--input-type=module", "-e", source, directory, session.id], { cwd: path.resolve(import.meta.dirname, ".."), timeout: 10000 });
+    saved = await saveSession(directory, { ...saved, recovery: { ...recovery, stage: "completed" } });
+    await assert.rejects(saveSession(directory, { ...saved, recovery }), /Original task/);
+    const next = taskRecovery(recovery.workspaceKey, null);
+    assert.notEqual(next.taskId, recovery.taskId);
+    assert.equal((await saveSession(directory, { ...saved, recovery: next })).recovery?.taskId, next.taskId);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("task recovery rejects malformed, stale-workspace and oversized metadata rather than importing grants", async () => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "neura-task-invalid-")));
+  try {
+    const session = await createSession(directory);
+    const baseline = { root: directory, head: "a".repeat(40), fingerprint: "b".repeat(64), files: { "safe.ts": "c".repeat(64) } };
+    const recovery = taskRecovery("d".repeat(64), baseline);
+    for (const bad of [null, { ...recovery, version: 2 }, { ...recovery, taskId: "bad" }, { ...recovery, stage: "approved" },
+      { ...recovery, taskId: [recovery.taskId] }, { ...recovery, workspaceKey: [recovery.workspaceKey] },
+      { ...recovery, baseHead: [baseline.head], baseline: null },
+      { ...recovery, baseline: { ...baseline, fingerprint: [baseline.fingerprint] } },
+      { ...recovery, baseline: { ...baseline, files: { "safe.ts": ["c".repeat(64)] } } },
+      { ...recovery, approvals: ["old-grant"] }, { ...recovery, workspaceKey: "bad" }, { ...recovery, baseHead: "HEAD" },
+      { ...recovery, baseline: { ...baseline, head: "e".repeat(40) } }, { ...recovery, baseline: { ...baseline, root: "relative" } },
+      { ...recovery, baseline: { ...baseline, files: { "../escape": "c".repeat(64) } } },
+      { ...recovery, baseline: { ...baseline, files: { "safe.ts": "raw payload" } } },
+      { ...recovery, baseline: { ...baseline, files: { ["x".repeat(MAX_RECOVERY_BYTES)]: "c".repeat(64) } } },
+    ]) {
+      await assert.rejects(saveSession(directory, { ...session, recovery: bad as never }), /task recovery/i);
+      await writeFile(path.join(directory, `${session.id}.json`), JSON.stringify({ ...session, recovery: bad }));
+      await assert.rejects(resumeSession(directory, session.id), /task recovery/i);
+      await writeFile(path.join(directory, `${session.id}.json`), JSON.stringify(session));
+    }
+    const large = taskRecovery(recovery.workspaceKey, { ...baseline, files: Object.fromEntries(Array.from({ length: 6000 }, (_, i) => [`file-${i}.ts`, "c".repeat(64)])) });
+    assert.equal(large.baseHead, baseline.head);
+    assert.equal(large.baseline, null, "oversized snapshot must not be replaced with current state");
+    assert.ok(Buffer.byteLength(JSON.stringify(large)) < MAX_RECOVERY_BYTES);
+    const saved = await saveSession(directory, { ...session, recovery });
+    await assert.rejects(saveSession(directory, { ...saved, recovery: { ...recovery, workspaceKey: "e".repeat(64) } }), /Original task/);
+    await writeFile(path.join(directory, `${session.id}.lock`), "synthetic-crash-lock");
+    await assert.rejects(lockSession(directory, session.id), /unreconciled crash lock/);
+    assert.equal(await (await import("node:fs/promises")).readFile(path.join(directory, `${session.id}.lock`), "utf8"), "synthetic-crash-lock");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

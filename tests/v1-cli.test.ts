@@ -15,13 +15,220 @@ import { windowsShortPath } from './windows-short-path.ts';
 import { createRequire } from 'node:module';
 import { renderLogo } from '../src/brand.ts';
 import { automaticGitEnvironment, AUTOMATIC_GIT_ARGUMENTS, resolveExecutable } from '../agent/neura/process-security.ts';
+import { createSession, saveSession, type Session } from '../src/session.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('..', import.meta.url));
+
+async function recoveryWorkspace() {
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-recovery-')));
+  const workspace = path.join(scratch, 'workspace'); const home = path.join(scratch, 'home');
+  await fs.mkdir(workspace); await fs.writeFile(path.join(workspace, 'sample.ts'), 'original\n');
+  const git = resolveExecutable('git', workspace); assert.ok(git);
+  const run = (args: string[]) => exec(git, [...AUTOMATIC_GIT_ARGUMENTS, ...args], { cwd: workspace, env: automaticGitEnvironment(), timeout: 10000 });
+  await run(['init', '--initial-branch=main']); await run(['add', 'sample.ts']);
+  const commit = () => run(['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid', 'commit', '-am', 'fixture']);
+  await commit();
+  const key = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
+  const directory = path.join(home, 'sessions', key);
+  return { scratch, workspace, home, directory, commit, async sessions(): Promise<Session[]> {
+    return Promise.all((await fs.readdir(directory)).filter(name => name.endsWith('.json')).map(async name => JSON.parse(await fs.readFile(path.join(directory, name), 'utf8'))));
+  } };
+}
+
+async function recoveryRun(workspace: string, home: string, options: {
+  actions?: string[]; resume?: string; noHistory?: boolean; limit?: boolean; write?: boolean; cancel?: boolean; cancelReview?: boolean; replace?: boolean; changeMode?: boolean;
+  saveFailure?: { at: number; afterRename?: boolean };
+} = {}) {
+  const source = String.raw`
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
+    import { createRequire, syncBuiltinESMExports } from 'node:module';
+    const options = JSON.parse(process.argv[2]); let controller; let requests = 0; let reviews = 0;
+    let arrived; let release; const fetched = new Promise(resolve => { arrived = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    if (options.saveFailure) {
+      const module = createRequire(import.meta.url)('node:fs/promises'); const rename = module.rename; let writes = 0;
+      module.rename = async (...args) => {
+        const fail = ++writes === options.saveFailure.at;
+        if (fail && !options.saveFailure.afterRename) throw new Error('Synthetic save failure before rename');
+        const result = await rename(...args);
+        if (fail) throw new Error('Synthetic save failure after rename');
+        return result;
+      }; syncBuiltinESMExports();
+    }
+    globalThis.fetch = async (url, init) => {
+      assert.equal(new URL(String(url)).origin, 'http://127.0.0.1:8080'); requests++;
+      const body = JSON.parse(init.body); const reviewer = JSON.stringify(body.messages).includes('independent code reviewer');
+      if (reviewer) reviews++;
+      if ((options.replace || options.changeMode) && requests === 1) { arrived(); await gate; }
+      if ((options.cancel && requests === 2) || (options.cancelReview && reviewer)) { controller.cancel(); init.signal.throwIfAborted(); }
+      const tool = !reviewer && (options.limit || ((options.write || options.replace || options.changeMode) && requests === 1));
+      const name = requests === 1 ? 'write' : 'read';
+      const input = name === 'write' ? { path: 'sample.ts', content: 'changed\n', expectedHash: '' } : { path: 'sample.ts' };
+      if (name === 'write') {
+        const { createHash } = await import('node:crypto'); const path = await import('node:path');
+        input.expectedHash = createHash('sha256').update(await fs.readFile(path.join(process.argv[1], 'sample.ts'))).digest('hex');
+      }
+      return new Response(JSON.stringify({ id: 'synthetic', object: 'chat.completion', created: 1, model: 'fixture',
+        choices: [{ index: 0, finish_reason: tool ? 'tool_calls' : 'stop', message: tool ? { role: 'assistant', content: null,
+          tool_calls: [{ id: 'call-' + requests, type: 'function', function: { name, arguments: JSON.stringify(input) } }] }
+          : { role: 'assistant', content: reviewer ? '{"findings":[]}' : 'Synthetic answer' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }), { headers: { 'Content-Type': 'application/json' } });
+    };
+    const output = []; const errors = []; const { main } = await import('./src/cli.ts');
+    await main(['--cwd', process.argv[1], '--provider', 'local', '--model', 'fixture',
+      ...(options.resume ? ['--resume', options.resume] : []), ...(options.noHistory ? ['--no-history'] : [])], {
+      write: text => output.push(text), approve: async () => false,
+      serve: async control => {
+        controller = control;
+        if (options.replace || options.changeMode) {
+          const pending = control.execute('old task'); await fetched; await control.execute(options.changeMode ? '/mode learn' : '/new'); release();
+          await assert.rejects(pending, /Session changed/);
+        }
+        for (const action of options.actions ?? []) {
+          try { await control.execute(action); } catch (error) { errors.push(error.message); }
+        }
+      },
+    });
+    process.stdout.write(JSON.stringify({ output: output.join(''), errors, requests, reviews }));
+  `;
+  const reply = await exec(process.execPath, ['--input-type=module', '-e', source, workspace, JSON.stringify(options)], { cwd: root, env: syntheticEnvironment(home), timeout: 30000 });
+  assert.equal(reply.stderr, '');
+  return JSON.parse(reply.stdout) as { output: string; errors: string[]; requests: number; reviews: number };
+}
 
 function syntheticEnvironment(home: string): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp|neura_git_executable)$/i.test(key)));
   return { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home };
 }
+
+test('task recovery survives a fresh CLI process and a mid-task commit without rebinding historical review', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    await fs.writeFile(path.join(f.workspace, 'dirty.txt'), 'original dirty state');
+    const first = await recoveryRun(f.workspace, f.home, { actions: ['first task'], limit: true });
+    assert.equal(first.errors.length, 0); assert.equal(first.requests, 60); assert.equal(first.reviews, 0);
+    const [saved] = await f.sessions(); const original = saved.recovery!;
+    assert.equal(original.stage, 'unfinished'); assert.ok(original.baseline?.files['dirty.txt']);
+    assert.equal(await fs.readFile(path.join(f.workspace, 'sample.ts'), 'utf8'), 'changed\n');
+    await f.commit();
+    const idle = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['/status'] });
+    assert.equal(idle.requests, 0, 'loading saved state must not replay a tool or request a model');
+    assert.match(idle.output, /Saved task is unfinished/);
+    const second = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['continue', '/review'] });
+    assert.deepEqual(second.errors, []); assert.equal(second.requests, 1); assert.equal(second.reviews, 0);
+    assert.match(second.output, /Review unavailable: HEAD changed since the original task base/);
+    assert.doesNotMatch(second.output, /READY FOR YOUR APPROVAL/);
+    const [continued] = await f.sessions();
+    assert.deepEqual(continued.recovery, original, 'task identity, stage and original dirty snapshot survive continuation');
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+});
+
+test('completed tasks retain their base on resume and only a new explicit turn starts another task', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    await recoveryRun(f.workspace, f.home, { actions: ['first task'] });
+    const [saved] = await f.sessions(); assert.equal(saved.recovery?.stage, 'completed');
+    await fs.writeFile(path.join(f.workspace, 'sample.ts'), 'committed later\n'); await f.commit();
+    const idle = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['/status', '/review'] });
+    assert.equal(idle.requests, 0); assert.match(idle.output, /Review unavailable: HEAD changed/);
+    assert.deepEqual((await f.sessions())[0].recovery, saved.recovery);
+    const next = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['new task'] });
+    assert.deepEqual(next.errors, []);
+    const [updated] = await f.sessions();
+    assert.notEqual(updated.recovery?.taskId, saved.recovery?.taskId);
+    assert.notEqual(updated.recovery?.baseHead, saved.recovery?.baseHead);
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+});
+
+test('legacy sessions stay readable, require inspection and never infer an original task base', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    const session = await createSession(f.directory);
+    await saveSession(f.directory, { ...session, messages: [{ role: 'user', content: 'old task' }, { role: 'assistant', content: 'old answer' }] });
+    const idle = await recoveryRun(f.workspace, f.home, { resume: session.id, actions: ['/status', 'continue', '/verify full'] });
+    assert.equal(idle.requests, 0); assert.equal(idle.errors.length, 2); assert.match(idle.output, /needs reconciliation/);
+    const resumed = await recoveryRun(f.workspace, f.home, { resume: session.id, actions: ['/reconcile', '/workflow off', 'continue', '/verify full'] });
+    assert.equal(resumed.requests, 1); assert.equal(resumed.errors.length, 1); assert.match(resumed.errors[0], /original task base/);
+    const [stored] = await f.sessions(); assert.equal(stored.recovery?.baseHead, null); assert.equal(stored.recovery?.baseline, null);
+    assert.deepEqual(stored.messages.slice(0, 2), [{ role: 'user', content: 'old task' }, { role: 'assistant', content: 'old answer' }]);
+    await fs.writeFile(path.join(f.directory, `${session.id}.json`), JSON.stringify({ ...stored, recovery: { ...stored.recovery, workspaceKey: 'f'.repeat(64) } }));
+    await assert.rejects(recoveryRun(f.workspace, f.home, { resume: session.id }), /another workspace/);
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+});
+
+test('save failures before intent prevent effects; failures around result save require inspection without replay', async () => {
+  for (const failure of [{ at: 1 }, { at: 1, afterRename: true }, { at: 2 }, { at: 2, afterRename: true }, { at: 3 }, { at: 3, afterRename: true }]) {
+    const f = await recoveryWorkspace();
+    try {
+      const result = await recoveryRun(f.workspace, f.home, { actions: ['/workflow off', 'change sample'], write: true, saveFailure: failure });
+      assert.equal(result.errors.length, 1);
+      const [saved] = await f.sessions();
+      if (failure.at === 1) {
+        assert.equal(result.requests, 0); assert.equal(saved.recovery?.stage, failure.afterRename ? 'running' : undefined);
+        assert.equal(await fs.readFile(path.join(f.workspace, 'sample.ts'), 'utf8'), 'original\n');
+        if (failure.afterRename) {
+          const idle = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['continue'] });
+          assert.equal(idle.requests, 0); assert.match(idle.errors[0], /needs reconciliation/);
+        }
+      } else {
+        assert.equal(result.requests, 2); assert.equal(saved.recovery?.stage, 'reconcile');
+        assert.equal(await fs.readFile(path.join(f.workspace, 'sample.ts'), 'utf8'), 'changed\n');
+        const idle = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['/status', 'continue'] });
+        assert.equal(idle.requests, 0); assert.match(idle.errors[0], /needs reconciliation/);
+        const reconciled = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['/reconcile', '/status'] });
+        assert.equal(reconciled.requests, 0); assert.match(reconciled.output, /Inspection acknowledged/);
+        assert.equal((await f.sessions())[0].recovery?.taskId, saved.recovery?.taskId);
+        assert.equal((await f.sessions())[0].recovery?.stage, 'unfinished');
+      }
+    } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+  }
+});
+
+test('cancellation after a tool effect requires reconciliation; no-history stores no recovery files', async () => {
+  for (const noHistory of [false, true]) {
+    const f = await recoveryWorkspace();
+    try {
+      const result = await recoveryRun(f.workspace, f.home, { actions: ['change sample', 'continue', '/status'], write: true, cancel: true, noHistory });
+      assert.equal(result.requests, 2); assert.equal(result.errors.length, 2);
+      assert.match(result.errors[0], /cancelled/); assert.match(result.errors[1], /needs reconciliation/);
+      assert.match(result.output, /Task recovery: reconcile/);
+      assert.equal(await fs.readFile(path.join(f.workspace, 'sample.ts'), 'utf8'), 'changed\n');
+      if (noHistory) await assert.rejects(fs.stat(path.join(f.home, 'sessions')), { code: 'ENOENT' });
+      else {
+        const [saved] = await f.sessions(); assert.equal(saved.recovery?.stage, 'reconcile');
+        const idle = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['/status'] });
+        assert.equal(idle.requests, 0); assert.match(idle.output, /needs reconciliation/);
+      }
+    } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+  }
+});
+
+test('replacing a session fences late model/tool results and preserves the old uncertain task', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    const result = await recoveryRun(f.workspace, f.home, { replace: true, actions: ['/status'] });
+    assert.equal(result.reviews, 0); assert.equal(result.errors.length, 0);
+    const sessions = await f.sessions(); assert.equal(sessions.length, 2);
+    assert.equal(sessions.find(session => session.recovery)?.recovery?.stage, 'running');
+    assert.equal(sessions.find(session => !session.recovery)?.messages.length, 0);
+    assert.equal(await fs.readFile(path.join(f.workspace, 'sample.ts'), 'utf8'), 'original\n');
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+});
+
+test('mode changes fence active tasks and review cancellation cannot mark a task completed', async () => {
+  for (const options of [{ changeMode: true }, { write: true, cancelReview: true, actions: ['change sample'] }]) {
+    const f = await recoveryWorkspace();
+    try {
+      const result = await recoveryRun(f.workspace, f.home, { ...options, actions: [...(options.actions ?? []), '/status', 'continue'] });
+      assert.match(result.output, /Task recovery: reconcile/);
+      assert.match(result.errors.at(-1)!, /needs reconciliation/);
+      const [saved] = await f.sessions();
+      assert.ok(['running', 'reconcile'].includes(saved.recovery!.stage));
+      const idle = await recoveryRun(f.workspace, f.home, { resume: saved.id, actions: ['/status'] });
+      assert.equal(idle.requests, 0); assert.match(idle.output, /needs reconciliation/);
+    } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+  }
+});
 
 async function interactiveFixture(options: { inputs: string[]; skills?: boolean; turnChecks?: Array<{ present: string[]; absent: string[] }>; expectSessions?: number; exitCode?: number; projectGuidance?: string; stepPlan?: Array<{ name: string; input: unknown } | null>; reviewerPlan?: string[]; args?: string[]; tool?: boolean; denyModel?: boolean; catalogError?: unknown; jsonResponse?: boolean; launchFromHome?: boolean; omitCwd?: boolean; writeTool?: boolean; history?: boolean; sseContentType?: string | null; reasoning?: boolean; gitWorkspace?: boolean; columns?: number; term?: string; recordTools?: boolean }) {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-cli-models-')));
@@ -329,7 +536,7 @@ test('status resets usage on resume and after failed or cancelled attempts, pres
     Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
     Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 80 });
-    const inputs = ['hi', '/status', '/new', '/status', '[RESUME]', '/status', '/model local fixture-next', '/status', 'hi', '/status', 'hi', '/status', 'hi', '/status', 'hi', '/status', '/quit'];
+    const inputs = ['hi', '/status', '/new', '/status', '[RESUME]', '/status', '/model local fixture-next', '/status', 'hi', '/status', 'hi', '/status', '/reconcile', 'hi', '/status', 'hi', '/status', '/quit'];
     class Readline extends EventEmitter {
       async question(prompt, options) {
         options?.signal?.throwIfAborted(); process.stdout.write(prompt + '\n');

@@ -1,6 +1,6 @@
 # Verification
 
-Updated 2026-11-15 for the active application through `1c5be43`.
+Updated 2026-11-15 for the active application. Receipt persistence is unreleased source.
 Repository tests, Work review and manual proof are separate checks. None authorizes publication or establishes
 production readiness. Historical Pi tests are retained separately.
 
@@ -28,7 +28,7 @@ behavior without requiring successful Work execution on an unconfigured host.
 | `learn`, `agent-learn` | Active Learn tools, provenance, explicit recovery, title bounds and stale async operations |
 | `work-tools`, `review`, `workflow` | Workspace policy/search/mutations, read-only review, candidate currency and bounded repair |
 | `yolo` | Host tools with no policy, network, process-tree kill, truncation, stale-call fence, startup flags, confirmed entry and unchanged Work/Learn policy |
-| `verification` | Work-only manual proof admission, fingerprints and unavailable/full-proof boundaries |
+| `verification` | Work-only manual proof admission, fingerprints, private receipt storage/resume and unavailable/full-proof boundaries |
 | `installer` | Development launcher ownership, path refusals and preservation, including reversible retirement contracts |
 | `parity-matrix`, `dependency-gate` | Frozen-baseline inventory and package/license closure rules |
 | `learn-materials`, `learn-workshop`, `learn-storage`, `learn-vault` | Shared parser/OCR, exercises, store and vault integrity/race regressions |
@@ -65,7 +65,7 @@ audits must be evaluated on the actual proposed commit.
 ## Work review
 
 Automatic review is on by default. `/workflow on|off` controls it. `/review`
-requests review of changes since the session baseline and `/review status`
+requests review of changes since the original task baseline and `/review status`
 checks the last receipt. A committed Git root within snapshot bounds is required.
 Docs-only changes are skipped by path-based risk routing. A turn with no changes
 ends silently. Missing baseline means review is unavailable, not a clean review.
@@ -78,7 +78,11 @@ non-low confidence as must-fix. The builder may repair them for up to three roun
 
 Review receipts bind to candidate fingerprints and become stale after later edits.
 They remain session-local. Work's 60-step limit preserves an unfinished task's
-starting baseline for continuation and skips premature review. Reviewers keep an
+starting baseline for continuation and explicit saved-session resume, and skips premature review.
+If HEAD moved from the task base, review remains unavailable because the reviewer
+diffs current HEAD. Unknown or oversized original snapshots cannot be replaced
+with current state. Interrupted outcomes require inspection and `/reconcile` before
+another task turn. The command restores no authority or crash lock. Reviewers keep an
 eight-step bound. Outcomes are `READY FOR YOUR APPROVAL`, `BLOCKED` or
 `Review skipped`. They never commit, push or merge. Recorded live same-family
 runs are in [Mastra evidence](MASTRA_V1.md#real-project-work-2026-11-06). They do
@@ -94,16 +98,34 @@ cannot approve execution and fails when verification is unavailable.
 
 Receipts record before/after fingerprints of HEAD/index, tracked bytes/modes and
 nonignored untracked files. Ignored files are outside this fingerprint.
-`/verify status` rechecks currency. Receipts are process/session metadata with
-`verified:false`. They are not signed, durable, imported from workspace reports,
-saved in conversation history or used to grant delivery authority. Audit files
-use disposable sandbox `/tmp`, not the candidate workspace.
+`/verify status` loads the selected saved conversation's receipt and recalculates
+currency against current workspace bytes. An edit makes the receipt stale. Missing
+snapshots cannot make it current. With `--no-history`, receipts stay in memory.
+
+Each saved conversation has at most one versioned receipt, bounded to 4 KiB, under
+`NEURA_HOME/sessions/<workspace-digest>/verification/<session-uuid>.json`. It contains
+fixed outcome metadata and candidate/base digests. Identifiers and completion time
+are also recorded.
+There are no raw runner payloads, transcripts, paths or secrets. Session/workspace
+bindings and schema are checked on every load. Storage reuses canonical directory
+checks and single-writer locks, refuses links/hardlinks, bounds reads and replaces
+the receipt atomically after syncing a temporary file. Cancellation or session
+replacement before publication discards the pending receipt. Failed publication
+preserves the previous one. Crash locks fail closed for manual reconciliation.
+
+Receipts always retain `verified:false` and `testsRun:false`. Stored bytes are
+unauthenticated metadata: schema checks cannot detect every valid-looking edit.
+They are not signed attestation, automatic approval or delivery authority. Workspace
+reports are never imported, and receipts are separate from conversation history.
+Audit files use disposable sandbox `/tmp`, not the candidate workspace.
 
 Bare `/verify` and `/verify full` report `unavailable`: PoW `0.2.0` lacks trusted
 required-suite/candidate evidence. Detector-only PASS is not test success or
 engineering completion. Full proof remains [#163](https://github.com/Rajveerx11/neura/issues/163).
-Durable receipts, original-task-base binding, ignored-file coverage and delivery
-enforcement remain open under #28/#163. Learn cannot run proof. `/ship` is unavailable.
+This slice adds durable receipt and original-task-base metadata. It closes neither
+#163 nor #28. Checkpoints, undo, crash-lock recovery, budget continuity, ignored-file
+coverage, trusted full evidence and delivery enforcement remain open. Learn cannot
+run proof. `/ship` is unavailable.
 
 ## Failures and historical evidence
 

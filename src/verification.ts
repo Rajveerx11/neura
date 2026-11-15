@@ -45,7 +45,7 @@ type Options = { signal?: AbortSignal; current: () => boolean; approve: (descrip
   /** Task-start commit. Without it the commit HEAD resolves to now is used, as an explicit id. */
   base?: string };
 
-/** Session-local metadata, not authenticated attestation or authority to deliver a task. */
+/** Session metadata, not authenticated attestation or authority to deliver a task. */
 export async function verifyWorkspace(workspace: string, scope: WorkspaceReceipt['scope'], options: Options, deps = dependencies): Promise<WorkspaceReceipt> {
   const fence = () => {
     options.signal?.throwIfAborted();

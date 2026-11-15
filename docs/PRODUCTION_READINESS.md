@@ -48,6 +48,32 @@ the migration even when their historical implementation is unavailable.
 Full verified proof PASS is separately blocked by [#163](https://github.com/Rajveerx11/neura/issues/163), which replaces the closed #91;
 quick detector PASS does not close that delivery gate.
 
+### Full-proof prerequisites
+
+Durable detector receipts and recovery metadata do not close #163. Before enabling
+full verified PASS, require:
+
+- A reviewed, published PoW release and exact artifact hashes. The
+  [configured-suite contract](https://github.com/Rajveerx11/proof-of-work/blob/ed5ec8e4a566ccc88671b5f97c111797241769d4/docs/configured-suites.md)
+  is merged in source but absent from the published `0.2.0` engine. Do not invent an
+  unreleased wheel or weaken the existing pin.
+- Operator-controlled suite policy outside candidate writes, with complete required
+  suite results. Exit-code evidence under `test-only` policy is not coverage evidence.
+  Missing or incomplete checks cannot produce PASS.
+- Evidence bound to the original task base, trusted policy identity and unchanged
+  candidate fingerprints before and after execution. A runner's `passed: true` or
+  log-row hash alone does not establish this binding or authenticated attestation.
+- A protected verifier runtime and separate log/signing authority. The current
+  proof sandbox uses writable `/tmp/uv-cache` and `/tmp/neura-proof.db`. Candidate
+  subprocesses sharing that UID and filesystem must not control trusted evidence.
+  Read-only wheel mounts alone do not establish that separation.
+- Configured-host acceptance with supported toolchains and real negative cases.
+  Linux checks do not establish native Windows/PowerShell acceptance. Keep Git
+  protection read-only, and do not enable writes just to support staged checks.
+
+This list states rollout requirements. It is not an exploit-test result or a
+provisioning record. Full verification stays unavailable until the applicable gates pass.
+
 ## Completed source milestones
 
 | Delivery | Covered outcome |
