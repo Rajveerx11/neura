@@ -1,12 +1,30 @@
 # Changelog
 
-## Unreleased: Mastra Work and Learn
+## Unreleased: Neura agent loop with Work, Learn and YOLO
 
 Current source is development/testing only, with synthetic, non-sensitive data.
-Package metadata remains `2.6.0-rc.1`. No new version or Mastra release is implied.
+Package metadata remains `2.6.0-rc.1`. No new version or published release is implied.
 Latest published release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
+
+### 2026-11-15: durable receipts and restart metadata (#169)
+
+- Saved sessions retain one bounded detector receipt. `/verify status` reloads
+  that session's receipt and checks currency against the current candidate.
+  `--no-history` sessions are not saved. Receipts stay unverified and record no test runs.
+- Work/YOLO retain the original task ID, commit and snapshot hashes across resume
+  and continuation. Interrupted or uncertain outcomes require manual inspection
+  and `/reconcile`. Effects are never replayed automatically.
+  Snapshots over the metadata cap omit hashes, leaving historical review and
+  manual verification unavailable after resume.
+- Recovery metadata can still be saved after oversized result history fails to save.
+  Mode changes wait for pending recovery saves, and POSIX filenames may contain
+  literal backslashes. Windows separator restrictions remain enforced.
+- Merged as `f331b09` after 24 local suites and required Windows/Linux CI passed
+  at `81f72b5`. Checkpoints, undo, crash-lock recovery, budget continuity and
+  authenticated full proof remain open. See [status](STATUS.md) and
+  [verification](VERIFICATION.md).
 
 ### 2026-11-14: proof base is the task-start commit
 
