@@ -1,12 +1,11 @@
 # Neura status
 
-Documentation and public-metadata reconciliation: 2026-11-08, source through
-`efdbde3` (T3 integration; Learn pedagogy in #154). The [official README](../README.md) and [documentation index](README.md)
-describe the active Mastra Work/Learn application. The [release inventory](releases/README.md)
+Documentation reconciliation: 2026-11-15, source through `f331b09` (#169).
+The [official README](../README.md) and [documentation index](README.md)
+describe Neura's own agent loop with Work, Learn and YOLO. The [release inventory](releases/README.md)
 separates unreleased source, the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
-Latest source changes include active pedagogy and proposition graph (#154),
-real-project Work (#152), Learn continuity/vault hardening (#153), answer-only chat
-and M1 package-closure enforcement (#151).
+Latest source changes include durable session receipts and restart metadata (#169),
+the task-start proof base (#165) and Mastra removal (#164).
 Original migration/security issues remain open; this documentation pass closes none.
 
 Obsolete standalone HTML plans and old LinkedIn graphics have been removed from
@@ -31,7 +30,7 @@ the new loop, so live subscription behaviour, including replay of provider reaso
 unverified. Installer, release rehearsal and production gates are unchanged and still open.
 Older sections below that describe Mastra record the state at their own dates.
 
-## Task identity and restart metadata (2026-11-15, local implementation slice)
+## Task identity and restart metadata (2026-11-15, merged #169)
 
 Work/YOLO turns now save a versioned task ID, workspace identity, original Git HEAD,
 original snapshot hashes and a progress stage in the existing Neura session file.
@@ -51,6 +50,19 @@ snapshots retain their original HEAD but omit hashes. For those snapshots, histo
 review and manual verification remain unavailable. Nothing is persisted with `--no-history`.
 The existing reviewer diffs current HEAD, so review is unavailable if HEAD moved
 from the task base. No review is claimed for committed task changes.
+
+Each saved session can retain one bounded detector receipt. `/verify status`
+reloads it and recalculates currency against the current candidate. Stored metadata
+never becomes trusted proof. Receipts retain `verified:false` and `testsRun:false`.
+See [verification](VERIFICATION.md) for storage and evidence limits.
+
+Reconciliation can publish recovery metadata after oversized result history fails
+to save, while preserving the save-failure status. Mode changes drain pending saves
+before changing task state. POSIX snapshots accept literal backslashes in filenames.
+Windows keeps its separator restrictions. Before merge, all 24 local verification
+suites and required Windows/Linux CI passed at `81f72b5`. CodeRabbit's hosted
+re-review was rate-limited. OCR, local CodeRabbit and independent review were recorded
+separately. These checks do not establish production readiness.
 
 This is a partial slice of [#28](https://github.com/Rajveerx11/neura/issues/28) and
 [#121](https://github.com/Rajveerx11/neura/issues/121), not closure. Full structured
