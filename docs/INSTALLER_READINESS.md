@@ -1,9 +1,9 @@
 # Installer readiness
 
-Updated 2026-11-07. The active installer creates a **source-linked development
+Updated 2026-11-15. The active installer creates a **source-linked development
 launcher**, not a complete distributable runtime. Work/Learn testing remains
-limited to synthetic, non-sensitive data while Mastra EE/distribution approval
-is unresolved. See [setup](../README.md#quick-start-from-source).
+limited to synthetic, non-sensitive data while release packaging and distribution approval
+are unresolved. Mastra was removed on 2026-11-14, so its licence no longer blocks distribution. See [setup](../README.md#quick-start-from-source).
 
 ## Current behavior
 
@@ -37,7 +37,7 @@ agents' worktrees are not cleanup targets.
 `scripts/retire-pi-neura.ps1` defaults to read-only inventory. Its separate,
 explicitly authorized `-Apply` operation moves only receipt/hash-matched managed
 files reversibly and refuses while Pi agents are active. It does not uninstall
-standalone Pi or wipe profiles. Retirement is not needed to evaluate the Mastra
+standalone Pi or wipe profiles. Retirement is not needed to evaluate the current
 launcher. The owner's prior authorized retirement is recorded in
 [dated evidence](MASTRA_V1.md#legacy-source-and-machine-state). It does not
 authorize another installation or cleanup of unmatched data.
@@ -53,7 +53,7 @@ data. Do not downgrade standalone Pi or delete audit/history files to force succ
 
 | Gate | Required outcome |
 | --- | --- |
-| Licensing | Resolve Mastra EE scope, third-party notices, artwork rights and owner distribution approval |
+| Licensing | Mastra EE scope resolved by removal (2026-11-14). Third-party notices, artwork rights and owner distribution approval remain |
 | Runtime closure | Define a complete Pi-free runtime manifest with exact packages/platforms and integrity, backed by ownership receipts |
 | Bootstrap | Review delivery/authenticity and Node/runtime provisioning. Source archives are insufficient |
 | WSL setup | Explicit administrator/reboot handling, distro/bubblewrap/toolchain provisioning and offline proof artifacts |
@@ -62,7 +62,7 @@ data. Do not downgrade standalone Pi or delete audit/history files to force succ
 | Clean-host acceptance | Verify a new unprivileged Windows profile without relying on the maintainer's installed state |
 | Release | Independent review, required candidate CI, audits/signatures, secret scan and [release checklist](RELEASING.md) |
 
-`verify:release` remains blocked. The archived Pi installer at `legacy/pi/install.ps1`
+`verify:release` now passes its licence gate only; every other gate above remains open. The archived Pi installer at `legacy/pi/install.ps1`
 has old path assumptions and is not a current installation path. Historical
 [2026-10-20 installer evidence](https://github.com/Rajveerx11/neura/blob/6a63952/docs/INSTALLER_READINESS.md)
-belongs to the earlier Pi candidate. It does not certify the Mastra launcher.
+belongs to the earlier Pi candidate. It does not certify the current launcher.

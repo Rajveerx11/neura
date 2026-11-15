@@ -1,9 +1,9 @@
 # Development
 
 Develop against the checkout. The current entry point is `src/cli.ts`, using
-Mastra with Work, Learn and YOLO. Do not install into or develop against a Pi profile.
+Neura's own agent loop (`src/runtime.ts`) with Work, Learn and YOLO. Do not install into or develop against a Pi profile.
 Development/testing remains limited to synthetic, non-sensitive data while the
-[license/distribution gate](MASTRA_V1_DEPENDENCIES.md) remains open.
+[release and distribution gates](RELEASING.md) remain open.
 
 ## Setup
 
@@ -49,7 +49,7 @@ the reviewed uv/CPython/wheel closure. Setup never provisions these silently.
 
 The active runner defines 23 suites, including `acp` and `yolo`, in `scripts/verify-harness.mjs`.
 Unknown suite names fail. There is no active `test:changed` or `test:accessibility` npm
-script. Historical Pi runners remain separate and do not certify Mastra parity.
+script. Historical Pi runners remain separate and do not certify parity of the active application.
 
 ## Invariants
 
@@ -70,10 +70,10 @@ script. Historical Pi runners remain separate and do not certify Mastra parity.
 
 ## Dependencies and CI
 
-Root `package.json`/`package-lock.json` own the active Mastra/provider graph.
+Root `package.json`/`package-lock.json` own the active provider graph.
 `agent/neura/package.json` and its lock own document/OCR dependencies. New runtime
 dependencies require exact pins, source/lifecycle review, documentation and tests.
-Update the Mastra/AI SDK model stack together when contracts require it. See
+Update the AI SDK provider packages together when contracts require it. Never add `@mastra/*`. See
 [dependency policy](DEPENDENCIES.md) and the [closure review](MASTRA_V1_DEPENDENCIES.md).
 
 ```powershell
@@ -85,8 +85,8 @@ powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
 
 CI retains required `harness` and `portable-proof` checks, with Windows full
 verification and Ubuntu portable contracts. Secret/signature checks, CodeQL and
-Learn browser checks remain separate evidence. `verify:release` intentionally
-fails while distribution approval is unresolved. Do not bypass it.
+Learn browser checks remain separate evidence. `verify:release` checks only
+the licence gate, which now passes; other release gates remain open. Do not bypass a failure.
 
 ## Development launcher and rollback
 

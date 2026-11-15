@@ -1,8 +1,8 @@
 # Dependency policy and review
 
-## Active Mastra graphs (2026-11-09)
+## Active graphs (2026-11-15)
 
-Current runtime pins are `@mastra/core@1.82.0`, `@ai-sdk/openai@4.0.106`,
+Current runtime pins are `@ai-sdk/openai@4.0.106`,
 `@ai-sdk/anthropic@4.0.93`, `typebox@1.4.4` and `zod@4.6.7`. Root development
 pins and the separate Learn graph are recorded in the
 [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05).
@@ -14,12 +14,13 @@ Install both locked graphs with `npm ci --ignore-scripts` and
 direct pins, graph closure, integrity, install-script and license rules as well
 as the reachable import boundary. Audit both graphs with `npm run audit:all`.
 No Pi package or latest-Pi registry check belongs to the active application.
-Update coupled Mastra/AI SDK contracts together; new runtime packages require
+Update coupled AI SDK provider contracts together; new runtime packages require
 source/lifecycle review, documentation and tests. Third-party terms remain
 separate from Neura's Apache-2.0 source license.
 
-Mastra EE scope and distribution approval remain unresolved. The owner accepted
-local development/testing only; `verify:release` stays blocked. See the full
+`@mastra/core` was removed on 2026-11-14 because its bundled EE code is not licensed for
+production use or redistribution; `check:pi-free` fails if any `@mastra/*` package or import
+returns. `verify:release` now passes that licence gate. Other release gates remain open. See the full
 [current dependency review](MASTRA_V1_DEPENDENCIES.md) and
 [document runtime review](LEARN_DEPENDENCIES.md).
 
@@ -27,7 +28,7 @@ local development/testing only; `verify:release` stays blocked. See the full
 
 Everything below records the retained Pi baseline and dated dependency evidence.
 Its installer, package and latest-Pi instructions apply only to that historical
-source, not current setup. Do not reinstall or downgrade Pi to run Mastra.
+source, not current setup. Do not reinstall or downgrade Pi to run Neura.
 
 Pi/development source review: 2026-10-19 (Pi 1.3.0). Learn runtime review: 2026-09-07.
 MCP lifecycle and automatic-execution review: 2026-09-13. Public-default
@@ -444,7 +445,7 @@ branch. A successful target check alone does not establish runtime compatibility
 
 ## Update policy
 
-1. Change one independent direct pin at a time. Treat Mastra core and `@ai-sdk/*` providers as
+1. Change one independent direct pin at a time. Treat the `@ai-sdk/*` providers as
    one coupled upgrade; Dependabot groups them as `model-stack`, but cannot update
    Neura's contract, release hashes, migration documentation, or review evidence.
 2. Review repository ownership, published files, dependency changes, and every

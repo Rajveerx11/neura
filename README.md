@@ -327,9 +327,9 @@ npm run verify:sandbox
 ```
 
 PR CI keeps required `harness` and `portable-proof` checks, audits both dependency
-graphs, and runs browser/security contracts. `verify:release` deliberately fails
-while license/distribution approval remains unresolved. A green suite does not
-clear that gate. Read the [development guide](docs/DEVELOPMENT.md) and
+graphs, and runs browser/security contracts. `verify:release` checks only the licence
+gate, which now passes. A green suite does not clear the remaining release and
+distribution gates. Read the [development guide](docs/DEVELOPMENT.md) and
 [contribution rules](CONTRIBUTING.md). Future publication follows the
 [release policy](docs/RELEASING.md).
 

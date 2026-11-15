@@ -1,7 +1,7 @@
 # Support
 
-Neura is experimental and community-supported. Current `main` is a Mastra
-development build with Work and Learn. `v2.5.1` is the historical Pi release.
+Neura is experimental and community-supported. Current `main` is a
+development build with Work, Learn and YOLO on Neura's own agent loop. `v2.5.1` is the historical Pi release.
 There is no production-support or response-time commitment.
 
 ## Get help
@@ -35,7 +35,7 @@ vulnerabilities privately through [Security](SECURITY.md).
 | Board answers do not reach Neura | Copy the revision-bound command into the terminal. Browser state does not sync automatically. |
 | Resumed citations are historical | Reimport the original document. Snapshots omit images and do not prove current source contents. |
 | PPTX layout or OCR is incomplete | Export full slide layouts or legacy `.ppt` to PDF/PPTX. English OCR can misread formulas and handwriting. |
-| An old command or mode is missing | Plan, YOLO, Human Away, `/health`, `/undo`, `/ship`, MCP/LSP and delegation are unavailable in the active CLI. |
+| An old command or mode is missing | Plan, Human Away, `/health`, `/undo`, `/ship`, MCP/LSP and delegation are unavailable in the active CLI. |
 
 ## Provider errors
 

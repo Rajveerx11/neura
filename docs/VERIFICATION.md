@@ -1,6 +1,6 @@
 # Verification
 
-Updated 2026-11-08 for the active Mastra application through `efdbde3`.
+Updated 2026-11-15 for the active application through `1c5be43`.
 Repository tests, Work review and manual proof are separate checks. None authorizes publication or establishes
 production readiness. Historical Pi tests are retained separately.
 
@@ -22,7 +22,7 @@ behavior without requiring successful Work execution on an unconfigured host.
 
 | Suites | Scope |
 | --- | --- |
-| `runtime`, `auth` | Mastra dispatch, schemas, bounded turns, serialized effects, cancellation and synthetic subscription transport/storage |
+| `runtime`, `auth` | Agent-loop dispatch, schemas, bounded turns, serialized effects, cancellation and synthetic subscription transport/storage |
 | `cli`, `terminal-ui` | Real CLI with synthetic providers, commands, history, approvals, quiet output, widths and fallbacks |
 | `acp` | ACP negotiation, isolated discovery, retained Work/Learn state, exact-action permissions, tool cards, cancellation and disconnect cleanup |
 | `learn`, `agent-learn` | Active Learn tools, provenance, explicit recovery, title bounds and stale async operations |
