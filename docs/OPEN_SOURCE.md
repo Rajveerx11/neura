@@ -1,17 +1,18 @@
 # Open-source publication checklist
 
-## Current source and distribution (2026-11-07)
+## Current source and distribution (2026-11-15)
 
-The repository is public, but the active Mastra Work/Learn build is restricted
-to development/testing with synthetic, non-sensitive data. Mastra EE scope and
-distribution approval remain unresolved. `verify:release` intentionally fails.
+The repository is public, but the active Work/Learn/YOLO build is restricted
+to development/testing with synthetic, non-sensitive data. Mastra and its EE-licensed
+code were removed on 2026-11-14, so `verify:release` passes its licence gate. Release
+packaging, installer and distribution approval remain unresolved.
 The source license does not relicense dependencies. New logo trademark clearance
 and redistribution terms remain undocumented. The historical artwork's terms
 do not clear the new assets. See [releasing](RELEASING.md) and
 [dependency review](MASTRA_V1_DEPENDENCIES.md).
 
 The latest published release is historical Pi `v2.5.1`. `v2.6.0-rc.1` stays a
-withheld draft. Current user/contributor docs describe Mastra only. Old exported
+withheld draft. Current user/contributor docs describe Neura's own agent loop. Old exported
 plans and marketing graphics have frozen-history links instead of checkout copies.
 GitHub About/topics and both existing release descriptions were reconciled with
 this scope on 2026-11-07. The candidate remains a draft and the published release

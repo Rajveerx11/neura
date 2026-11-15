@@ -2,7 +2,7 @@
 
 Focused bug reports, documentation fixes and tested changes are welcome. Neura
 is experimental, Windows-first and maintained on a best-effort basis. The active
-application uses Mastra with Work and Learn. Older Pi extensions are migration evidence.
+application runs Neura's own agent loop with Work, Learn and YOLO. Older Pi extensions are migration evidence.
 
 Follow the [code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities through
 [Security](SECURITY.md), not public issues. Keep credentials, private code,
@@ -32,7 +32,7 @@ git diff --check
 
 Use full history for the frozen-baseline parity suite. No global Pi, provider
 credential or live installation is needed for these checks. Development/testing
-uses synthetic, non-sensitive data while Mastra EE/distribution review remains open.
+uses synthetic, non-sensitive data while release packaging and distribution approval remain open.
 
 ## Change standard
 
@@ -80,5 +80,5 @@ not clear release gates.
 ## Licensing
 
 Contributions use [Apache-2.0](LICENSE). Submit only material you have the right
-to license. Third-party packages retain their own terms. The current Mastra
-EE/distribution boundary is documented in the [dependency review](docs/MASTRA_V1_DEPENDENCIES.md).
+to license. Third-party packages retain their own terms. Mastra was removed on
+2026-11-14; the [dependency review](docs/MASTRA_V1_DEPENDENCIES.md) records why and must not be undone.

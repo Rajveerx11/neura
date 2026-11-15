@@ -1,7 +1,7 @@
 # Support
 
-Neura is experimental and community-supported. Current `main` is a Mastra
-development build with Work and Learn. `v2.5.1` is the historical Pi release.
+Neura is experimental and community-supported. Current `main` is a
+development build with Work, Learn and YOLO on Neura's own agent loop. `v2.5.1` is the historical Pi release.
 There is no production-support or response-time commitment.
 
 ## Get help

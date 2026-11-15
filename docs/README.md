@@ -1,10 +1,11 @@
 # Neura documentation
 
-Updated 2026-11-08 against the active Mastra application through `efdbde3`,
-including the local T3 Code integration and Learn prerequisite paths (#154).
+Updated 2026-11-15 against the active application through `1c5be43`,
+including Neura's own agent loop (#164), the task-start proof base (#165),
+the local T3 Code integration and Learn prerequisite paths (#154).
 Work and Learn are the everyday modes. YOLO is an explicit opt-out from the sandbox and approvals.
-Development/testing uses synthetic, non-sensitive data while Mastra EE scope and
-distribution approval remain unresolved. No production readiness is claimed.
+Development/testing uses synthetic, non-sensitive data while release packaging and
+distribution approval remain unresolved. Mastra was removed on 2026-11-14. No production readiness is claimed.
 
 ## Start here
 
@@ -36,7 +37,7 @@ distribution approval remain unresolved. No production readiness is claimed.
 ## History and migration evidence
 
 The latest published release is the Pi-based `v2.5.1`. Package metadata remains
-`2.6.0-rc.1`, whose GitHub draft is withheld. Neither is a published Mastra build.
+`2.6.0-rc.1`, whose GitHub draft is withheld. Neither is a published build of the current application.
 See the [changelog](CHANGELOG.md) for current unreleased changes before the
 historical release record.
 

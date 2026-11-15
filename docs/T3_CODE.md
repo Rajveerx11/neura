@@ -2,8 +2,8 @@
 
 Neura integrates with T3 Code as a **Local ACP command**, not as Pi, a renamed
 built-in provider, or a public ACP Registry distribution. This is a source-linked
-Windows development integration, not a production release. Existing Mastra
-licensing/distribution gates remain in force.
+Windows development integration, not a production release. Existing
+release and distribution gates remain in force.
 
 ## Register this checkout
 
@@ -164,7 +164,7 @@ shows the separate local browser boards, not T3's own interface.
 
 ## Verification
 
-`tests/v1-acp.test.ts` runs the real native CLI and Mastra loop against an isolated
+`tests/v1-acp.test.ts` runs the real native CLI and Neura's agent loop against an isolated
 synthetic local model. It covers version negotiation, provider-free setup,
 workspace/session validation, retained multi-turn history, Work/Learn selection,
 permission allow/deny/invalid/cancel, tool cards and interrupted inference.

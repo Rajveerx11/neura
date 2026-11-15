@@ -2,13 +2,14 @@
 
 ## Current release decision
 
-**Release blocked.** The active Mastra application is for development/testing
-with synthetic, non-sensitive data. Mastra EE scope and distribution approval
-remain unresolved. `npm run verify:release` intentionally refuses distribution.
-Do not bypass it, promote a draft or infer production readiness from passing tests.
+**Release blocked.** The active application is for development/testing
+with synthetic, non-sensitive data. Mastra and its EE-licensed code were removed on
+2026-11-14, so `npm run verify:release` now passes its licence gate. That is one gate
+of many: the unchecked items below still block a release. Do not promote a draft or
+infer production readiness from passing tests.
 
-Package metadata and `VERSION` remain `2.6.0-rc.1`. “v1” means the Mastra
-implementation, not a selected public version. The latest published release is
+Package metadata and `VERSION` remain `2.6.0-rc.1`. “v1” names the current
+implementation generation, not a selected public version. The latest published release is
 the historical Pi-based `v2.5.1`. The existing `v2.6.0-rc.1` draft remains
 unpublished/withheld. See the [release inventory](releases/README.md) and [status](STATUS.md).
 The [dependency review](MASTRA_V1_DEPENDENCIES.md) records the license boundary.
@@ -29,11 +30,12 @@ For a future candidate, reconcile `VERSION`, root package/lock identity and
 `docs/releases/v<version>.md` with reviewed packaging/runtime contracts. The
 private Learn runtime has its own version. Its manifest and lock must agree.
 Historical Pi manifests are evidence and must not be treated as an active
-Mastra distribution manifest.
+distribution manifest.
 
 ## Gates before any release
 
-- [ ] Resolve the Mastra EE/distribution scope with recorded owner approval.
+- [x] Resolve the Mastra EE scope. Done 2026-11-14 by removing Mastra (#164); owner
+      distribution approval is still required.
 - [ ] Define the supported features and platform. Name the exact source revision. Reconcile
       the [parity matrix](PARITY_MATRIX.md) without promoting mock evidence to parity.
 - [ ] Pass `npm run verify`, Learn browser checks and `git diff --check` on the candidate.
@@ -67,12 +69,12 @@ not authorize unattended operation. Full trusted proof remains unavailable. Dete
 tag whose target is contained in `origin/main`, installs both locked graphs and
 checks the active dependency boundary. It calls `verify:release` before audits,
 repository verification, configured-host Work acceptance, browser checks and
-secret-history/installer checks. It currently stops at the license gate.
+secret-history/installer checks. It no longer stops at the licence gate, so the later steps now run and must pass.
 
 Later jobs contain source/archive/SBOM/checksum and draft-prerelease machinery
-inherited from the Pi pipeline. Those retained steps are not certified Mastra
-packaging. Reconcile their scripts, runtime ownership and manifests before
-unblocking release. Removing a license denial alone is insufficient. Source
+inherited from the Pi pipeline. Those retained steps are not certified
+packaging for the current application. Reconcile their scripts, runtime ownership and manifests before
+unblocking release. The licence gate passing is not sufficient. Source
 archives do not bundle Node, WSL, bubblewrap or a complete runtime.
 
 No tag command is a current setup step. Do not run archived `check:pi-latest`,

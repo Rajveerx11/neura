@@ -2,9 +2,9 @@
 
 ## Supported source
 
-Only current `main` receives security fixes. It is a Mastra development/testing
+Only current `main` receives security fixes. It is a development/testing
 build with Work, Learn and unrestricted YOLO, not an approved production or multi-user boundary.
-Use synthetic, non-sensitive data while license/distribution approval remains
+Use synthetic, non-sensitive data while release packaging and distribution approval remain
 unresolved. Historical `v2.5.1` and the withheld Pi candidate do not describe the
 active application. See [status](docs/STATUS.md).
 
