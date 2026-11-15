@@ -63,7 +63,7 @@ Edge is required for browser checks. Actual Work acceptance/replay requires a
 configured Windows/WSL2/bubblewrap host. Audits need registry access. See
 [verification](docs/VERIFICATION.md) for scope and focused suites. State skipped
 or unavailable checks explicitly. Do not call them passing. `verify:release`
-deliberately fails while distribution approval remains unresolved.
+checks only the licence gate, which now passes. A failure there is real; other release gates remain open.
 
 ## Pull requests
 

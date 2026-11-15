@@ -359,8 +359,8 @@ this UI change; no all-provider no-retry guarantee is made.
 ## Readiness boundary
 
 Development/testing only, not production-ready or feature parity. As documented
-in [status](STATUS.md) and [Mastra v1](MASTRA_V1.md), bundled Mastra EE scope and
-distribution approval remain unresolved; `verify:release` stays blocked. Full
+in [status](STATUS.md), Mastra was removed on 2026-11-14 and `verify:release` passes its
+licence gate; release packaging and distribution approval remain unresolved. Full
 trusted proof, durable effect recovery, clean-host installation/recovery and
 original security hardening remain open. Human Away is unavailable in v1.
 UI snapshots do not close those gates or certify live credentials, entitlement,

@@ -85,8 +85,8 @@ powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
 
 CI retains required `harness` and `portable-proof` checks, with Windows full
 verification and Ubuntu portable contracts. Secret/signature checks, CodeQL and
-Learn browser checks remain separate evidence. `verify:release` intentionally
-fails while distribution approval is unresolved. Do not bypass it.
+Learn browser checks remain separate evidence. `verify:release` checks only
+the licence gate, which now passes; other release gates remain open. Do not bypass a failure.
 
 ## Development launcher and rollback
 

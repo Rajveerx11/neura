@@ -53,8 +53,8 @@ and production readiness are separate decisions.
 - [x] Historical release records remain labelled with channel that applied when
       published.
 
-The `2.6.0-rc.1` source candidate includes Work, Learn, Pi `1.3.0`, and the
-18-suite verifier. Candidate metadata and a GitHub draft do not establish a
+The `2.6.0-rc.1` source candidate includes Work, Learn, YOLO and the
+23-suite verifier. The earlier Pi `1.3.0` candidate is superseded and frozen in Git history. Candidate metadata and a GitHub draft do not establish a
 published release or completion of the remaining gates.
 
 ## Remaining public-release work
