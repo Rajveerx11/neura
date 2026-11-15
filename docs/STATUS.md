@@ -31,6 +31,37 @@ the new loop, so live subscription behaviour, including replay of provider reaso
 unverified. Installer, release rehearsal and production gates are unchanged and still open.
 Older sections below that describe Mastra record the state at their own dates.
 
+## Task identity and restart metadata (2026-11-15, local implementation slice)
+
+Work/YOLO turns now save a versioned task ID, workspace identity, original Git HEAD,
+original snapshot hashes and a progress stage in the existing Neura session file.
+Intent saves before model/tool execution. Result history and progress use the same
+atomic replacement and CLI writer lease. Step-limit continuation and explicit
+session resume retain that task's original base, including pre-existing dirty hashes.
+No objective copy, approval grants, mode privileges, budgets or verification
+authority are restored. `completed` means the turn/workflow ended. It is not proof
+of task acceptance. A blocked workflow remains `unfinished`.
+
+Running/uncertain outcomes and old nonempty chats without task metadata require
+manual inspection, then `/reconcile` to acknowledge inspection before another turn.
+The command replays nothing and cannot clear a crash lock. `/new` preserves the old
+chat and starts separately. Legacy history remains readable, but its original base is
+unknown. Metadata has a 256-KiB cap within the existing 1-MiB session limit. Oversized
+snapshots retain their original HEAD but omit hashes. For those snapshots, historical
+review and manual verification remain unavailable. Nothing is persisted with `--no-history`.
+The existing reviewer diffs current HEAD, so review is unavailable if HEAD moved
+from the task base. No review is claimed for committed task changes.
+
+This is a partial slice of [#28](https://github.com/Rajveerx11/neura/issues/28) and
+[#121](https://github.com/Rajveerx11/neura/issues/121), not closure. Full structured
+task contracts, durable checkpoints/index bytes, undo, retention/garbage collection,
+budget continuity, authenticated tamper evidence and external-action reconciliation
+remain open. Crash locks still fail closed and require separate manual recovery.
+No automatic effect replay or exactly-once claim is made. Session history keeps its
+existing bounded transcript behavior. Recovery hashes contain no file bytes and
+are unsigned local metadata, never trusted evidence or approval storage for
+[#33](https://github.com/Rajveerx11/neura/issues/33).
+
 ## Terminal follow-up (2026-11-13)
 
 `/clear` now starts a new chat without deleting saved conversations. `$` browses

@@ -3,12 +3,51 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { assertUnlinkedDirectoryAncestors } from "../agent/neura/directory-path.ts";
+import { COMMIT_ID, type TreeSnapshot } from "../agent/neura/verification.ts";
 
 export const MAX_SESSION_MESSAGES = 200;
 export const MAX_SESSION_BYTES = 1024 * 1024;
-export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[] };
+export const MAX_RECOVERY_BYTES = 256 * 1024;
+export type TaskRecovery = {
+  version: 1; taskId: string; workspaceKey: string;
+  stage: "running" | "unfinished" | "completed" | "reconcile";
+  baseHead: string | null; baseline: TreeSnapshot | null;
+};
+export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery };
 export type SessionSummary = Pick<Session, "id" | "createdAt" | "updatedAt">;
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const hashPattern = /^[0-9a-f]{64}$/;
+
+function validateRecovery(value: TaskRecovery): TaskRecovery {
+  const keys = ["version", "taskId", "workspaceKey", "stage", "baseHead", "baseline"];
+  if (!value || Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key)) ||
+      value.version !== 1 || typeof value.taskId !== "string" || !idPattern.test(value.taskId) ||
+      typeof value.workspaceKey !== "string" || !hashPattern.test(value.workspaceKey) ||
+      !["running", "unfinished", "completed", "reconcile"].includes(value.stage) ||
+      (value.baseHead !== null && (typeof value.baseHead !== "string" || !COMMIT_ID.test(value.baseHead)))) throw new Error("Invalid task recovery metadata");
+  if (Buffer.byteLength(JSON.stringify(value)) > MAX_RECOVERY_BYTES) throw new Error("Task recovery metadata exceeds limits");
+  const baseline = value.baseline;
+  if (baseline !== null) {
+    if (!baseline || Object.keys(baseline).sort().join(",") !== "files,fingerprint,head,root" ||
+        typeof baseline.root !== "string" || !path.isAbsolute(baseline.root) || baseline.root.length > 4096 ||
+        typeof baseline.head !== "string" || !COMMIT_ID.test(baseline.head) || baseline.head !== value.baseHead ||
+        typeof baseline.fingerprint !== "string" || !hashPattern.test(baseline.fingerprint) ||
+        !baseline.files || Array.isArray(baseline.files) || typeof baseline.files !== "object" || Object.keys(baseline.files).length > 50_000) throw new Error("Invalid task recovery baseline");
+    for (const [name, hash] of Object.entries(baseline.files)) {
+      if (!name || name.length > 4096 || path.isAbsolute(name) || (process.platform === "win32" && name.includes("\\")) || name.includes("\0") ||
+          name.split("/").some(part => !part || part === "." || part === ".." || part.toLowerCase() === ".git") ||
+          typeof hash !== "string" || (hash !== "missing" && !hashPattern.test(hash))) throw new Error("Invalid task recovery file hash");
+    }
+  }
+  return value;
+}
+
+/** Hashes only; large snapshots keep the original HEAD but cannot support historical review. */
+export function taskRecovery(workspaceKey: string, baseline: TreeSnapshot | null): TaskRecovery {
+  const recovery: TaskRecovery = { version: 1, taskId: randomUUID(), workspaceKey, stage: "running", baseHead: baseline?.head ?? null, baseline };
+  if (Buffer.byteLength(JSON.stringify(recovery)) > MAX_RECOVERY_BYTES) recovery.baseline = null;
+  return validateRecovery(recovery);
+}
 
 function checkDirectory(directory: string) {
   if (!path.isAbsolute(directory) || directory.split(/[\\/]/).some((part) => part.replace(/[ .]+$/, "").toLowerCase() === ".pi")) {
@@ -93,6 +132,7 @@ export function withoutToolImages(messages: any[]): any[] {
 function normalizedSession(session: Session, trim: boolean): Session {
   if (session.version !== 1 || !idPattern.test(session.id) || !Number.isFinite(Date.parse(session.createdAt)) || !Number.isFinite(Date.parse(session.updatedAt))) throw new Error("Invalid session envelope");
   const result: Session = { version: 1, id: session.id, createdAt: session.createdAt, updatedAt: session.updatedAt, messages: validateMessages(session.messages) };
+  if (session.recovery !== undefined) result.recovery = validateRecovery(session.recovery);
   while (result.messages.length > MAX_SESSION_MESSAGES || Buffer.byteLength(JSON.stringify(result)) > MAX_SESSION_BYTES) {
     if (!trim) throw new Error("Session exceeds history limits");
     const nextTurn = result.messages.findIndex((message, index) => index > 0 && message.role === "user");
@@ -140,6 +180,15 @@ export async function saveSession(directory: string, session: Session): Promise<
   const filename = sessionPath(root, session.id);
   await rejectLinkedFile(filename);
   const saved = normalizedSession({ ...session, updatedAt: new Date().toISOString() }, true);
+  const previous = (await resumeSession(root, session.id)).recovery;
+  if (previous) {
+    const next = saved.recovery;
+    const sameTask = next?.taskId === previous.taskId;
+    if (!next || next.workspaceKey !== previous.workspaceKey ||
+        (sameTask && (next.baseHead !== previous.baseHead || JSON.stringify(next.baseline) !== JSON.stringify(previous.baseline) ||
+          (previous.stage === "completed" && !["completed", "reconcile"].includes(next.stage)))) ||
+        (!sameTask && (previous.stage !== "completed" || next.stage !== "running"))) throw new Error("Original task identity/base cannot be replaced before completion");
+  }
   const temporary = path.join(root, `.${session.id}.${randomUUID()}.tmp`);
   const file = await open(temporary, "wx", 0o600);
   try {

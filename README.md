@@ -264,8 +264,10 @@ or Learn-artifact writes. Model changes start a fresh conversation.
 interactive approval. It needs an exact Git root with committed HEAD and already
 configured trusted proof artifacts. Missing prerequisites report `unavailable`.
 `/verify full` and bare `/verify` remain unavailable because trusted full evidence
-is missing. Receipts are session-local, exclude ignored files and always retain
-`verified:false`. A detector result or review approval is not proof of completion.
+is missing. Receipts persist as bounded private metadata for saved conversations.
+`--no-history` keeps them in memory. `/verify status` reloads the selected session's
+receipt and recalculates currency. Receipts exclude ignored files and always retain
+`verified:false` and `testsRun:false`. A detector result or review approval is not proof of completion.
 See [verification](docs/VERIFICATION.md).
 
 ## Terminal experience

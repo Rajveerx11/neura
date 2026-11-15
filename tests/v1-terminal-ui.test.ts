@@ -188,6 +188,8 @@ test('slash menu lists every command, narrows by prefix and offers known argumen
   assert.deepEqual(commandMatches('/mo').map(item => item.value), ['/model', '/mode']);
   assert.deepEqual(commandMatches('/cl').map(item => item.value), ['/clear']);
   assert.equal(commandMatches('/clear')[0].submit, true);
+  assert.equal(commandMatches('/reconcile')[0].submit, true);
+  assert.match(createTerminalUI().help(), /\/reconcile/);
   assert.deepEqual(commandMatches('/mode ').map(item => item.value), ['/mode work', '/mode learn', '/mode yolo']);
   assert.equal(commandMatches('/mode').find(item => item.value === '/mode')!.submit, false, 'commands needing an argument are completed, not run');
   assert.equal(commandMatches('/learn ans')[0].submit, false);
