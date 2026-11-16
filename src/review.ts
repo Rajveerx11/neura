@@ -158,6 +158,7 @@ export async function reviewCandidate(input: ReviewInput, deps: Partial<ReviewDe
   });
   if (!candidate) return receipt('unavailable', [], 'Candidate snapshot unavailable (not a Git repository with a commit, or the worktree is unsupported).');
   if (candidate.root !== baseline.root) return receipt('unavailable', [], 'Candidate and baseline belong to different repositories.');
+  if (candidate.head !== baseline.head) return receipt('unavailable', [], 'HEAD changed since the original task base; current-HEAD diffs cannot review committed task changes.');
   if (!changed.length) return receipt('clean', [], 'No changes since baseline; nothing to review.');
   let findings: Finding[];
   try {
@@ -171,8 +172,10 @@ export async function reviewCandidate(input: ReviewInput, deps: Partial<ReviewDe
       `<diff>\n${await candidateDiff(root, candidate, changed, signal)}\n</diff>`,
     ].join('\n\n');
     let generation = 0;
-    const { text, stopReason } = await turn({ model, instructions: REVIEW_INSTRUCTIONS, messages: [{ role: 'user', content: prompt }], tools: createReadOnlyTools(workspace, () => generation), signal });
-    generation++; // Reviewer tool authority ends with its turn.
+    let result: Awaited<ReturnType<typeof turn>>;
+    try { result = await turn({ model, instructions: REVIEW_INSTRUCTIONS, messages: [{ role: 'user', content: prompt }], tools: createReadOnlyTools(workspace, () => generation), signal }); }
+    finally { generation++; } // Reviewer authority ends on success, failure and cancellation.
+    const { text, stopReason } = result;
     if (stopReason === 'step-limit') return receipt('unavailable', [], 'Reviewer stopped at its step limit before finishing.');
     try { findings = parseFindings(text); }
     catch { return receipt('unavailable', [], 'Reviewer output was not the required strict JSON findings object.'); }

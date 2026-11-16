@@ -73,6 +73,37 @@ test('stale receipt or receipt for a different fingerprint blocks', async () => 
   }
 });
 
+test('post-review drift blocks approval and repair of unreviewed bytes', async () => {
+  for (const r of [receipt('clean'), receipt('findings', [finding('F1', 'blocker', true)])]) {
+    const h = harness({ snapshots: [changed, snap({ 'src/a.ts': 'different bytes' })], receipts: [r] });
+    assert.equal((await h.run()).state, 'blocked');
+    assert.equal(h.fixes.length, 0);
+    assert.doesNotMatch(h.lines.join('\n'), /READY FOR YOUR APPROVAL/);
+  }
+});
+
+test('a workspace edit during repair notification cannot authorize repair of different bytes', async () => {
+  let candidate = changed; let fixes = 0;
+  const result = await runReviewLoop({ workspace: '/w', task: 't', baseline, reviewer: builder, builder }, {
+    capture: async () => candidate, review: async () => receipt('findings', [finding('F1', 'blocker', true)]),
+    assessRisk: () => ({ level: 'normal', reasons: [] }), current: () => true,
+    fixTurn: async () => { fixes++; throw new Error('must not run'); },
+    report: line => { if (line.startsWith('Sending ')) candidate = snap({ 'src/a.ts': 'different bytes' }); },
+  });
+  assert.equal(result.state, 'blocked'); assert.equal(fixes, 0);
+});
+
+test('report callbacks cannot revoke authority then trigger repair or approval', async () => {
+  for (const r of [receipt('clean'), receipt('findings', [finding('F1', 'blocker', true)])]) {
+    let live = true; let fixes = 0;
+    const result = await runReviewLoop({ workspace: '/w', task: 't', baseline, reviewer: builder, builder }, {
+      capture: async () => changed, review: async () => r, assessRisk: () => ({ level: 'normal', reasons: [] }),
+      current: () => live, fixTurn: async () => { fixes++; }, report: line => { if (line.startsWith('Reviewer:') || line.startsWith('Sending ')) live = false; },
+    });
+    assert.equal(result.state, 'blocked'); assert.equal(fixes, 0);
+  }
+});
+
 test('no change and trivial change skip review; manual review still reviews trivial', async () => {
   const none = harness({ snapshots: [baseline] });
   assert.deepEqual([(await none.run()).state, none.reviews.length], ['skipped', 0]);

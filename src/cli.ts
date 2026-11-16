@@ -332,7 +332,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
-        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, maxSteps, hideToolText: mode === 'yolo',
+        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode === 'yolo',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
             endLine();
@@ -392,9 +392,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           }
           say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
         } else if (review && baseline) { await workflow(text, baseline, false); }
-        else if (review && mutationAttempted && !baselineWarned) {
-          baselineWarned = true; // once per session, and only when something may have changed: plain chat stays answer-only
-          stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');
+        else if (review) {
+          fixStopped = true; // An unavailable original base must never become a completed/rebased task.
+          if (mutationAttempted && !baselineWarned) {
+            baselineWarned = true; // once per session; plain chat stays answer-only
+            stdout.write(terminal().feedback('Review unavailable: no workspace baseline (needs a committed Git repository within snapshot limits), so changes here are not reviewed. /workflow off hides this note.') + '\n');
+          }
         }
         if (taskStarted && owned) {
           abort.signal.throwIfAborted();

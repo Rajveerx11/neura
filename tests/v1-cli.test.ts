@@ -48,15 +48,27 @@ async function recoveryRun(workspace: string, home: string, options: {
     let recoveryArrived; let releaseRecovery; const recoverySaving = new Promise(resolve => { recoveryArrived = resolve; });
     const recoveryGate = new Promise(resolve => { releaseRecovery = resolve; });
     if (options.saveFailure || options.modeDuringSave) {
-      const module = createRequire(import.meta.url)('node:fs/promises'); const rename = module.rename; let writes = 0;
-      module.rename = async (...args) => {
-        writes++;
-        if (writes === options.modeDuringSave) { arrived(); await gate; }
-        if (options.delayRecoverySave && writes === 2) { recoveryArrived(); await recoveryGate; }
-        const fail = writes === options.saveFailure?.at;
-        if (fail && !options.saveFailure.afterRename) throw new Error('Synthetic save failure before rename');
-        const result = await rename(...args);
-        if (fail) throw new Error('Synthetic save failure after rename');
+      const require = createRequire(import.meta.url);
+      const module = require('node:fs/promises'); const open = module.open;
+      const native = require('node:fs'); const renameSync = native.renameSync; let writes = 0;
+      // Pause the last asynchronous write phase; publication itself is now synchronous.
+      module.open = async (...args) => {
+        const file = await open(...args);
+        if (controller && args[1] === 'wx' && String(args[0]).endsWith('.tmp')) {
+          const sync = file.sync.bind(file);
+          file.sync = async () => {
+            writes++;
+            if (writes === options.modeDuringSave) { arrived(); await gate; }
+            if (options.delayRecoverySave && writes === 2) { recoveryArrived(); await recoveryGate; }
+            if (writes === options.saveFailure?.at && !options.saveFailure.afterRename) throw new Error('Synthetic save failure before rename');
+            return sync();
+          };
+        }
+        return file;
+      };
+      native.renameSync = (...args) => {
+        const result = renameSync(...args);
+        if (writes === options.saveFailure?.at && options.saveFailure.afterRename) throw new Error('Synthetic save failure after rename');
         return result;
       }; syncBuiltinESMExports();
     }
@@ -106,7 +118,7 @@ async function recoveryRun(workspace: string, home: string, options: {
         }
         if (options.replace || options.changeMode) {
           const pending = control.execute('old task'); await fetched; await control.execute(options.changeMode ? '/mode learn' : '/new'); release();
-          await assert.rejects(pending, options.changeMode ? /Session changed|Turn cancelled/ : /Session changed/);
+          await assert.rejects(pending, options.changeMode ? /Session changed|Turn cancelled|authority changed/ : /Session changed|authority changed/);
         }
         for (const action of options.actions ?? []) {
           try { await control.execute(action); } catch (error) { errors.push(error.message); }
@@ -177,6 +189,20 @@ test('legacy sessions stay readable, require inspection and never infer an origi
     assert.deepEqual(stored.messages.slice(0, 2), [{ role: 'user', content: 'old task' }, { role: 'assistant', content: 'old answer' }]);
     await fs.writeFile(path.join(f.directory, `${session.id}.json`), JSON.stringify({ ...stored, recovery: { ...stored.recovery, workspaceKey: 'f'.repeat(64) } }));
     await assert.rejects(recoveryRun(f.workspace, f.home, { resume: session.id }), /another workspace/);
+  } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
+});
+
+test('a task with no historical baseline stays unfinished when automatic review is unavailable', async () => {
+  const f = await recoveryWorkspace();
+  try {
+    const session = await createSession(f.directory);
+    await saveSession(f.directory, { ...session, messages: [{ role: 'user', content: 'legacy task' }, { role: 'assistant', content: 'legacy answer' }] });
+    const result = await recoveryRun(f.workspace, f.home, { resume: session.id, write: true, actions: ['/reconcile', 'change sample', '/status', 'continue'] });
+    assert.deepEqual(result.errors, []);
+    assert.match(result.output, /Review unavailable: no workspace baseline/);
+    assert.match(result.output, /Task recovery: unfinished/);
+    const [saved] = await f.sessions();
+    assert.equal(saved.recovery?.stage, 'unfinished'); assert.equal(saved.recovery?.baseline, null);
   } finally { await fs.rm(f.scratch, { recursive: true, force: true }); }
 });
 
@@ -275,6 +301,7 @@ test('replacing a session fences late model/tool results and preserves the old u
   try {
     const result = await recoveryRun(f.workspace, f.home, { replace: true, actions: ['/status'] });
     assert.equal(result.reviews, 0); assert.equal(result.errors.length, 0);
+    assert.doesNotMatch(result.output, /Synthetic answer/, 'late results cannot appear in the replacement conversation');
     const sessions = await f.sessions(); assert.equal(sessions.length, 2);
     assert.equal(sessions.find(session => session.recovery)?.recovery?.stage, 'running');
     assert.equal(sessions.find(session => !session.recovery)?.messages.length, 0);

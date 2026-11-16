@@ -38,6 +38,8 @@ export type RunTurnOptions = {
   instructions: string;
   tools: ToolDefinition[];
   signal?: AbortSignal;
+  /** Live session/mode-generation fence; revocation never grants new authority. */
+  current?: () => boolean;
   onText?: (text: string) => void;
   /** Provider-exposed summary text only; never signatures, encrypted content or inferred thoughts. */
   onReasoning?: (summary: string) => void;
@@ -70,22 +72,33 @@ function closedSchema(schema: any): any {
 
 const feedback = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 
+/** Observe synchronously without assimilating arbitrary thenables or leaking rejected promises. */
+function observe(callback: () => unknown): void {
+  const observed = callback();
+  if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
+    if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
+    throw new Error("Observers must be synchronous");
+  }
+}
+
+function validToolResult(result: ToolResult): boolean {
+  return !!result && Array.isArray(result.content) && Array.from(result.content).every(part => part && (
+    part.type === "text" ? typeof part.text === "string" : part.type === "image" && typeof part.mimeType === "string" && typeof part.data === "string"
+  )) && (result.terminate === undefined || typeof result.terminate === "boolean") && (result.display === undefined || typeof result.display === "string");
+}
+
 /** A tool's own refusal. Its message reaches the model; any other thrown error stays generic. */
 export class ToolFeedbackError extends Error {}
 
 /** One invocation owns its queue and authority; never persist or reuse this object. */
-export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal, onToolEvent?: (event: ToolEvent, invocationId?: string) => void) {
+export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSignal, onToolEvent?: (event: ToolEvent, invocationId?: string) => void, current: () => boolean = () => true) {
   let queue = Promise.resolve();
   let terminated = false;
   let closed = false;
   let reportingFailed = false;
   const report = (event: ToolEvent, invocationId?: string): boolean => {
     try {
-      const observed: unknown = onToolEvent?.(event, invocationId);
-      if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
-        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
-        throw new Error("Tool observers must be synchronous");
-      }
+      observe(() => onToolEvent?.(event, invocationId));
       return true;
     }
     catch { reportingFailed = true; terminated = true; closed = true; return false; }
@@ -104,10 +117,11 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
     tools[definition.name] = {
       execute: (input) => {
         const invocationId = randomUUID(); // Runtime-owned identity; never a model-provided payload.
+        report({ toolName: definition.name, phase: "requested" }, invocationId);
         const pending = queue.then(async () => {
           const emit = (phase: ToolEvent["phase"]) => report({ toolName: definition.name, phase }, invocationId);
           if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
-          if (closed || terminated) { emit("blocked"); return feedback("Turn closed; no further actions allowed."); }
+          if (closed || terminated || !current()) { emit("blocked"); return feedback("Turn closed; no further actions allowed."); }
           // The effect boundary validates every input itself; nothing upstream is trusted to have done it.
           if (!validate(input)) {
             emit("blocked");
@@ -120,6 +134,8 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
             results.push(blocked);
             return blocked;
           }
+          // Observers can revoke authority or mutate direct-call input. Recheck at the actual effect boundary.
+          if (closed || terminated || !current() || !validate(input)) { emit("blocked"); return feedback("Turn closed or input changed; action rejected."); }
           let result: ToolResult;
           let failed = false;
           try {
@@ -129,6 +145,11 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
             if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
             failed = true;
             result = feedback(error instanceof ToolFeedbackError ? error.message : "Tool callback rejected or failed. Check current state before retrying.");
+          }
+          if (!validToolResult(result)) {
+            closed = true; terminated = true;
+            emit("failed");
+            throw new Error("Invalid tool result. Inspect current state before retrying.");
           }
           // Record effect/termination state before any fallible post-action notification.
           if (result.terminate) terminated = true;
@@ -182,9 +203,15 @@ export function modelPrompt(instructions: string, messages: any[]): any[] {
 
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
-export async function runTurn({ model, messages, instructions, tools, signal, onText, onReasoning, onToolEvent, hideToolText, maxSteps = DEFAULT_TURN_STEPS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | "step-limit"; usage?: TurnUsage }> {
+export async function runTurn({ model, messages, instructions, tools, signal, current = () => true, onText, onReasoning, onToolEvent, hideToolText, maxSteps = DEFAULT_TURN_STEPS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | "step-limit"; usage?: TurnUsage }> {
   signal?.throwIfAborted();
-  const turn = createTurnTools(tools, signal, onToolEvent);
+  if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) throw new Error("Invalid turn step limit");
+  const checkCurrent = () => {
+    signal?.throwIfAborted();
+    if (!current()) throw new Error("Turn authority changed; result discarded. Inspect current state before retrying.");
+  };
+  checkCurrent();
+  const turn = createTurnTools(tools, signal, onToolEvent, current);
   const history: any[] = [];
   let streamed = "";
   let answer = "";
@@ -193,26 +220,48 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
   // Missing provider counts make the total unknown; zero is a valid reported count.
   let usage: TurnUsage | undefined = { inputTokens: 0, outputTokens: 0 };
   const showReasoning = (text: string) => {
+    checkCurrent();
     const summary = text.slice(0, 32000).trim();
     if (!summary) return;
     try {
-      const observed: unknown = onReasoning?.(summary);
-      if (observed && (typeof observed === "object" || typeof observed === "function") && "then" in observed) {
-        if (utilTypes.isPromise(observed)) void Promise.prototype.then.call(observed, () => undefined, () => undefined);
-        throw new Error("Reasoning observers must be synchronous");
-      }
+      observe(() => onReasoning?.(summary));
     } catch { reasoningFailed = true; turn.close(); }
+  };
+  const showText = (text: string) => {
+    checkCurrent();
+    try { observe(() => onText?.(text)); }
+    catch { turn.close(); throw new Error("Text display failed. Some actions may already have completed; inspect current state before retrying."); }
   };
   try {
     for (let step = 0; step < maxSteps; step++) {
-      signal?.throwIfAborted();
+      checkCurrent();
       let reply: Awaited<ReturnType<TurnModel["doGenerate"]>>;
       // ponytail: one request per step, no automatic retry. A retry policy belongs here when it is added.
       try { reply = await model.doGenerate({ prompt: modelPrompt(instructions, [...messages, ...history]), tools: turn.declarations, toolChoice: { type: "auto" }, abortSignal: signal }); }
       catch (error) { signal?.throwIfAborted(); throw error; }
-      signal?.throwIfAborted();
+      checkCurrent();
+      // Validate the whole batch before dispatch: an ignored malformed sibling must not leave partial effects/history.
+      if (!reply || !Array.isArray(reply.content)) throw new Error("Invalid model response; action batch rejected.");
+      const ids = new Set<string>();
+      for (const part of reply.content) {
+        // Pinned providers emit URL/document citations as metadata; they carry no local action authority.
+        if (part && typeof part === "object" && part.type === "source" && typeof part.id === "string" && (
+          (part.sourceType === "url" && typeof part.url === "string") ||
+          (part.sourceType === "document" && typeof part.mediaType === "string" && typeof part.title === "string")
+        )) continue;
+        if (!part || typeof part !== "object" || !["text", "reasoning", "tool-call"].includes(part.type) ||
+            (part.type === "tool-call" && (typeof part.toolCallId !== "string" || !part.toolCallId || typeof part.toolName !== "string" || !part.toolName || (part.providerExecuted !== undefined && part.providerExecuted !== false) || ids.has(part.toolCallId))) ||
+            (["text", "reasoning"].includes(part.type) && typeof part.text !== "string")) {
+          throw new Error("Invalid model response; action batch rejected.");
+        }
+        if (part.type === "tool-call") ids.add(part.toolCallId);
+      }
+      const reason = reply.finishReason?.unified;
+      if (reason === "error" || reason === "content-filter") throw new Error("Model did not complete; action batch rejected.");
       const input = reply.usage?.inputTokens?.total, output = reply.usage?.outputTokens?.total;
       usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output } : undefined;
+      // Truncated output cannot authorize even a syntactically complete-looking action.
+      if (reason === "length") { answer = ""; stopReason = "step-limit"; break; }
       const said: any[] = [];
       const calls: any[] = [];
       answer = "";
@@ -226,12 +275,10 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
           said.push({ type: "text", text: part.text, ...partOptions(part) });
         } else if (part?.type === "tool-call" && typeof part.toolCallId === "string" && typeof part.toolName === "string") {
           let args: unknown = part.input;
-          if (typeof args === "string") { try { args = args.trim() ? JSON.parse(args) : {}; } catch { args = undefined; } }
+          if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = undefined; } }
           const known = Object.hasOwn(turn.tools, part.toolName);
           calls.push({ part, args, known });
           said.push({ type: "tool-call", toolCallId: part.toolCallId, toolName: part.toolName, input: args ?? {}, ...partOptions(part) });
-          // A model-chosen name is untrusted text, so an unknown one is never shown.
-          turn.report({ toolName: known ? part.toolName : "unknown", phase: "requested" });
         }
       }
       if (reasoningFailed) break;
@@ -239,7 +286,7 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
         // Text from separate steps must not run together on one line.
         const chunk = (streamed && !streamed.endsWith("\n") ? "\n" : "") + answer;
         streamed += chunk;
-        onText?.(chunk);
+        showText(chunk);
       }
       if (said.length) history.push({ role: "assistant", content: said });
       if (!calls.length) break;
@@ -247,7 +294,13 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
       for (const { part, args, known } of calls) {
         let result: ToolResult;
         if (known) result = await turn.tools[part.toolName].execute(args);
-        else { turn.report({ toolName: "unknown", phase: "failed" }); result = feedback("Unknown tool; action rejected."); }
+        else {
+          // A model-chosen name is untrusted text, so an unknown one is never shown.
+          const invocationId = randomUUID();
+          turn.report({ toolName: "unknown", phase: "requested" }, invocationId);
+          turn.report({ toolName: "unknown", phase: "failed" }, invocationId);
+          result = feedback("Unknown tool; action rejected.");
+        }
         outputs.push({ type: "tool-result", toolCallId: part.toolCallId, toolName: part.toolName, output: { type: "content", value: result.content.map((item) =>
           item.type === "image" ? { type: "media", mediaType: item.mimeType, data: item.data } : item) } });
       }
@@ -256,15 +309,16 @@ export async function runTurn({ model, messages, instructions, tools, signal, on
       // Still asking for tools on the last allowed step means the budget ran out, not that the work finished.
       if (step === maxSteps - 1) stopReason = "step-limit";
     }
-    signal?.throwIfAborted();
+    checkCurrent();
     if (reasoningFailed) throw new Error("Reasoning display failed. Some actions may already have completed; inspect current state before retrying.");
     if (turn.reportingFailed()) throw new Error("Tool status output failed. Some actions may already have completed; inspect current state before retrying.");
     const toolText = turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
     const display = turn.results.flatMap((result) => result.display ? [result.display] : []).join("\n");
     const fallback = stopReason === "finished" ? display || (hideToolText ? "" : toolText) || "Turn ended without assistant text." : "";
     const text = answer && display ? `${answer}\n${display}` : answer || fallback;
-    if (!streamed && text) onText?.(text);
-    else if (streamed && display) onText?.(`\n${display}`);
+    if (!streamed && text) showText(text);
+    else if (streamed && display) showText(`\n${display}`);
+    checkCurrent();
     return { text, messages: [...messages, ...history], stopReason, ...(usage ? { usage } : {}) };
   } finally {
     turn.close();

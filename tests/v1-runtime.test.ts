@@ -411,6 +411,126 @@ test("a tool's own refusal reaches the model; any other failure stays generic", 
   assert.match(generic, /Tool callback rejected or failed/);
 });
 
+test('malformed provider action batches fail before any callback or unsavable history', async () => {
+  for (const invalid of [
+    { type: 'tool-call', toolCallId: 1, toolName: 'action', input: '{"count":1}' },
+    { ...call('action', { count: 1 }), providerExecuted: true },
+    { type: 'tool-result', toolCallId: 'action', toolName: 'action', result: {} },
+    call('action', { count: 1 }), // duplicate id in the same assistant message
+    null,
+    { type: 'unknown', content: [call('action', { count: 1 })] },
+    { type: 'source', sourceType: 'unknown', id: 'unverified', content: [call('action', { count: 1 })] },
+    { content: [call('action', { count: 1 })] },
+  ]) {
+    let effects = 0;
+    const model = { doGenerate: async () => ({ content: [call('action', { count: 1 }), invalid] }) };
+    await assert.rejects(runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [] }; })] }), /Invalid model response/);
+    assert.equal(effects, 0);
+  }
+  for (const content of [null, {}, 'not a content array']) {
+    await assert.rejects(runTurn({ model: { doGenerate: async () => ({ content }) } as any, messages: [user], instructions: 'Test', tools: [] }), /Invalid model response/);
+  }
+});
+
+test('provider citation sources remain harmless alongside local action calls', async () => {
+  for (const source of [
+    { type: 'source', sourceType: 'url', id: 'url', url: 'https://example.invalid/citation', title: 'Synthetic citation' },
+    { type: 'source', sourceType: 'document', id: 'document', mediaType: 'text/plain', title: 'Synthetic document' },
+  ]) {
+    let effects = 0;
+    const { model } = fixture([[source, call('action', { count: 1 })], done]);
+    const result = await runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [] }; })] });
+    assert.equal(effects, 1);
+    assert.equal(result.text, 'Done');
+    assert.doesNotMatch(JSON.stringify(result.messages), /Synthetic citation|Synthetic document/);
+  }
+});
+
+test('empty or malformed JSON cannot become valid no-argument tool input', async () => {
+  for (const input of ['{}', '', '  ', '{', 'null', '[]']) {
+    let effects = 0;
+    const { model } = fixture([[{ type: 'tool-call', toolCallId: 'empty', toolName: 'empty', input }], done]);
+    await runTurn({ model, messages: [user], instructions: 'Test', tools: [{ name: 'empty', description: 'Synthetic', parameters: Type.Object({}),
+      execute: async () => { effects++; return { content: [] }; } }] });
+    assert.equal(effects, input === '{}' ? 1 : 0);
+  }
+});
+
+test('text observers fail closed without exposing rejection details or running later tools', async () => {
+  for (const observer of [() => { throw new Error('synthetic-private-value'); }, async () => { throw new Error('synthetic-private-value'); }]) {
+    let effects = 0;
+    const { model } = fixture([[text('Preamble'), call('action', { count: 1 })], done]);
+    await assert.rejects(runTurn({ model, messages: [user], instructions: 'Test', onText: observer, tools: [action(async () => { effects++; return { content: [] }; })] }),
+      (error: Error) => /Text display failed/.test(error.message) && !error.message.includes('synthetic-private-value'));
+    assert.equal(effects, 0);
+  }
+  await new Promise<void>(resolve => setImmediate(resolve));
+});
+
+test('started observers cannot reopen closed authority or alter validated arguments', async () => {
+  for (const close of [true, false]) {
+    let effects = 0; const input = { count: 1 };
+    const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined, event => {
+      if (event.phase === 'started') { if (close) turn.close(); else input.count = 0; }
+    });
+    await turn.tools.action.execute(input);
+    assert.equal(effects, 0);
+  }
+});
+
+test('malformed tool results close the queue after uncertain effects', async () => {
+  for (const invalid of [null, {}, { content: [null] }, { content: new Array(1) }, { content: [{ type: 'text', text: 1 }] }, { content: [], terminate: 'yes' }]) {
+    let effects = 0;
+    const turn = createTurnTools([action(async input => { effects++; return input.count === 1 ? invalid as any : { content: [] }; })]);
+    const settled = await Promise.allSettled([turn.tools.action.execute({ count: 1 }), turn.tools.action.execute({ count: 2 })]);
+    assert.equal(settled[0].status, 'rejected');
+    assert.equal(effects, 1);
+    assert.equal(turn.isTerminated(), true);
+  }
+});
+
+test('tool lifecycle events correlate each request with its runtime-owned outcome', async () => {
+  const events: Array<{ phase: string; id: string | undefined }> = [];
+  const { model } = fixture([[call('action', { count: 1 }), call('unknown-name', {}, 'other')], done]);
+  await runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => ({ content: [] }))], onToolEvent: (event, id) => { events.push({ phase: event.phase, id }); } });
+  assert.ok(events.every(event => typeof event.id === 'string' && event.id !== 'action' && event.id !== 'other'));
+  const ids = [...new Set(events.map(event => event.id))];
+  assert.equal(ids.length, 2);
+  assert.deepEqual(ids.map(id => events.filter(event => event.id === id).map(event => event.phase)), [['requested', 'started', 'returned'], ['requested', 'failed']]);
+});
+
+test('revoked turn authority rejects late provider text and queued callbacks', async () => {
+  let live = true; let effects = 0; const shown: string[] = [];
+  const model = { doGenerate: async () => { live = false; return { content: [text('Stale answer'), call('action', { count: 1 })] }; } };
+  await assert.rejects(runTurn({ model, messages: [user], instructions: 'Test', current: () => live,
+    onText: chunk => shown.push(chunk), tools: [action(async () => { effects++; return { content: [] }; })] }), /authority changed/);
+  assert.equal(shown.length, 0); assert.equal(effects, 0);
+  live = true;
+  const observed = fixture([[{ type: 'reasoning', text: 'Summary' }, text('Stale answer')]]);
+  await assert.rejects(runTurn({ model: observed.model, messages: [user], instructions: 'Test', tools: [], current: () => live,
+    onReasoning: () => { live = false; }, onText: chunk => shown.push(chunk) }), /authority changed/);
+  assert.deepEqual(shown, []);
+  live = true;
+  const turn = createTurnTools([action(async () => { effects++; return { content: [] }; })], undefined,
+    event => { if (event.phase === 'started') live = false; }, () => live);
+  await turn.tools.action.execute({ count: 1 });
+  assert.equal(effects, 0);
+});
+
+test('provider truncation stays unfinished and provider error cannot authorize tools', async () => {
+  for (const reason of ['length', 'error', 'content-filter']) {
+    let effects = 0;
+    const model = { doGenerate: async () => ({ content: reason === 'length' ? [text('Partial'), call('action', { count: 1 })] : [call('action', { count: 1 })], finishReason: { unified: reason }, usage: { inputTokens: { total: 2 }, outputTokens: { total: 3 } } }) };
+    const pending = runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [] }; })] });
+    if (reason === 'length') {
+      const result = await pending;
+      assert.equal(result.stopReason, 'step-limit'); assert.deepEqual(result.usage, { inputTokens: 2, outputTokens: 3 });
+    }
+    else await assert.rejects(pending, /Model did not complete/);
+    assert.equal(effects, 0);
+  }
+});
+
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
 
 test("tool images become model media parts, including after history resume", async () => {
