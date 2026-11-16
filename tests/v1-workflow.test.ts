@@ -94,13 +94,19 @@ test('a workspace edit during repair notification cannot authorize repair of dif
 });
 
 test('report callbacks cannot revoke authority then trigger repair or approval', async () => {
-  for (const r of [receipt('clean'), receipt('findings', [finding('F1', 'blocker', true)])]) {
+  for (const { r, revokeAt } of [
+    { r: receipt('clean'), revokeAt: 'Reviewer:' },
+    { r: receipt('findings', [finding('F1', 'blocker', true)]), revokeAt: 'Reviewer:' },
+    { r: receipt('findings', [finding('F1', 'blocker', true)]), revokeAt: 'Sending ' },
+  ]) {
     let live = true; let fixes = 0;
     const result = await runReviewLoop({ workspace: '/w', task: 't', baseline, reviewer: builder, builder }, {
       capture: async () => changed, review: async () => r, assessRisk: () => ({ level: 'normal', reasons: [] }),
-      current: () => live, fixTurn: async () => { fixes++; }, report: line => { if (line.startsWith('Reviewer:') || line.startsWith('Sending ')) live = false; },
+      current: () => live, fixTurn: async () => { fixes++; }, report: line => { if (line.startsWith(revokeAt)) live = false; },
     });
+    assert.equal(live, false, `${revokeAt} callback must be reached`);
     assert.equal(result.state, 'blocked'); assert.equal(fixes, 0);
+    assert.match(result.reason, /^review aborted/);
   }
 });
 

@@ -41,7 +41,8 @@ export function serveAcp(input = stdin, output = stdout) {
   const send = (frame: object) => {
     if (closed) return;
     const line = JSON.stringify({ jsonrpc: '2.0', ...frame }) + '\n';
-    if (output.writableLength + Buffer.byteLength(line) > MAX_QUEUED_OUTPUT) { close(); input.destroy(); return; }
+    // Discard pending writes: a non-reading client would keep the process alive even after input closes.
+    if (output.writableLength + Buffer.byteLength(line) > MAX_QUEUED_OUTPUT) { close(); input.destroy(); output.destroy(); return; }
     output.write(line);
   };
   const update = (sessionId: string, text: string) => {

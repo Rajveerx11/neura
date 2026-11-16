@@ -153,8 +153,40 @@ test('ACP disconnects a blocked output consumer before queued responses grow wit
     input.write(lines.join('\n') + '\n');
     await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(input.destroyed, true);
+    assert.equal(output.destroyed, true, 'Overflow must tear down output without waiting for its consumer');
     assert.ok(output.writableLength <= 1024 * 1024, 'Queued output stays within its one-MiB budget');
   } finally { server.close(); input.destroy(); output.destroy(); }
+});
+
+test('ACP exits after output overflow on an unread asynchronous pipe with stdin still open', async () => {
+  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'neura-acp-overflow-'));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp)$/i.test(key)));
+  // Windows stdout writes block synchronously before they can queue. Use an owned async OS pipe.
+  const script = `import { Socket } from 'node:net';
+    import { serveAcp } from ${JSON.stringify(new URL('../src/acp.ts', import.meta.url).href)};
+    serveAcp(process.stdin, new Socket({ fd: 3, readable: false, writable: true }));`;
+  const child = spawn(process.execPath, ['--input-type=module', '--eval', script], { cwd: root, env: { ...env, HOME: scratch, USERPROFILE: scratch, NEURA_HOME: scratch,
+    TEMP: scratch, TMP: scratch, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
+  const exited = once(child, 'exit');
+  let stderr = ''; child.stderr.on('data', data => { stderr += data; });
+  child.stdin.on('error', () => {}); // The server may close input before the flood finishes writing.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const lines = [JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1 } })];
+    for (let id = 2; id <= 30000; id++) lines.push(JSON.stringify({ jsonrpc: '2.0', id, method: 'unknown' }));
+    child.stdin.write(lines.join('\n') + '\n');
+    // Do not end stdin or consume fd 3: either would hide an output-side lifecycle leak.
+    const [code] = await Promise.race([exited, new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`ACP did not exit with an unread output pipe: ${stderr}`)), 10000);
+    })]);
+    assert.equal(code, 0, stderr);
+  } finally {
+    clearTimeout(timer);
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await exited;
+    child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); child.stdio[3]?.destroy();
+    await fs.rm(scratch, { recursive: true, force: true });
+  }
 });
 
 test('ACP negotiates v1 without a session, model request, banner or credentials', async () => {
