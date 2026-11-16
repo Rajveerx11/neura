@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import childProcess, { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
+import { syncBuiltinESMExports } from 'node:module';
+import { PassThrough } from 'node:stream';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createYoloTools } from '../src/yolo.ts';
@@ -216,18 +218,181 @@ test('exec keeps both ends of each stream and flags the cut without killing the 
   });
 });
 
-test('a command flooding output does not grow memory with it', async () => {
+test('exec capture preserves exact byte boundaries without per-chunk allocation', async t => {
+  await scratch(async ({ workspace }) => {
+    const part = 64 * 1024;
+    const bytes = Buffer.from('héllo界🙂'.repeat(40000));
+    let chunks: Buffer[] = [];
+    let capturing = false;
+    let allocations = 0;
+    // Count every allocating Buffer factory, not just concat: alloc/copy-per-chunk is the same regression.
+    const allocationMocks = (['alloc', 'allocUnsafe', 'allocUnsafeSlow', 'from', 'concat'] as const).map(name => {
+      const original = Buffer[name];
+      return t.mock.method(Buffer, name, function (...args: unknown[]) {
+        if (capturing) allocations++;
+        return Reflect.apply(original, Buffer, args);
+      });
+    });
+    const spawnMock = t.mock.method(childProcess, 'spawn', () => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+      queueMicrotask(() => {
+        capturing = true;
+        try {
+          for (const chunk of chunks) {
+            child.stdout.emit('data', chunk);
+            child.stderr.emit('data', chunk);
+          }
+        } finally { capturing = false; }
+        child.emit('exit', 0);
+        child.emit('close', 0);
+      });
+      return child as unknown as ReturnType<typeof childProcess.spawn>;
+    });
+    syncBuiltinESMExports();
+    try {
+      for (const size of [0, 1, part - 1, part, part + 1, 2 * part - 1, 2 * part, 2 * part + 1, bytes.length]) {
+        const input = bytes.subarray(0, size);
+        const expected = size <= 2 * part ? input.toString('utf8')
+          : `${input.subarray(0, part).toString('utf8')}\n[${size - 2 * part} bytes omitted]\n${input.subarray(-part).toString('utf8')}`;
+        for (const multiChunk of [false, true]) {
+          chunks = multiChunk ? [Buffer.alloc(0), ...Array.from({ length: Math.ceil(size / 997) }, (_, index) => input.subarray(index * 997, (index + 1) * 997))] : [input];
+          const result = await call(toolset(workspace).exec, { command: 'synthetic output' });
+          assert.equal(result.stdout, expected, `stdout size=${size}, multiChunk=${multiChunk}`);
+          assert.equal(result.stderr, expected, `stderr size=${size}, multiChunk=${multiChunk}`);
+          assert.deepEqual([result.exitCode, result.timedOut, result.truncated], [0, false, size > 2 * part]);
+        }
+      }
+      assert.equal(allocations, 0, 'capture must not allocate Buffer storage for each incoming chunk');
+    } finally { spawnMock.mock.restore(); for (const mock of allocationMocks) mock.mock.restore(); syncBuiltinESMExports(); }
+  });
+});
+
+test('exec settlement after drain ignores the later close event', async t => {
+  await scratch(async ({ workspace }) => {
+    const stdout = new PassThrough(); const stderr = new PassThrough();
+    const child = Object.assign(new EventEmitter(), { stdout, stderr });
+    const spawnMock = t.mock.method(childProcess, 'spawn', () => child as unknown as ReturnType<typeof childProcess.spawn>);
+    const destroy = t.mock.method(stdout, 'destroy');
+    syncBuiltinESMExports();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const pending = call(toolset(workspace).exec, { command: 'synthetic inherited pipe' });
+      stdout.emit('data', Buffer.from('before exit'));
+      child.emit('exit', 0);
+      stdout.emit('data', Buffer.from(' after exit'));
+      t.mock.timers.tick(2000);
+      assert.equal((await pending).stdout, 'before exit after exit');
+      child.emit('close', 0);
+      assert.equal(destroy.mock.callCount(), 1, 'drain timeout and close must settle only once');
+    } finally { spawnMock.mock.restore(); destroy.mock.restore(); syncBuiltinESMExports(); t.mock.timers.reset(); }
+  });
+});
+
+test('exec spawn failure rejects once and clears abort and deadline cleanup', async t => {
+  await scratch(async ({ workspace }) => {
+    const stdout = new PassThrough(); const stderr = new PassThrough();
+    const child = Object.assign(new EventEmitter(), { stdout, stderr });
+    const spawnMock = t.mock.method(childProcess, 'spawn', () => child as unknown as ReturnType<typeof childProcess.spawn>);
+    const destroy = t.mock.method(stdout, 'destroy');
+    const controller = new AbortController();
+    syncBuiltinESMExports();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const pending = call(toolset(workspace).exec, { command: 'synthetic spawn failure' }, controller.signal);
+      child.emit('error', new Error('synthetic spawn failure'));
+      await assert.rejects(pending, /synthetic spawn failure/);
+      child.emit('close', -1);
+      controller.abort();
+      t.mock.timers.tick(120000);
+      assert.equal(destroy.mock.callCount(), 1);
+    } finally { spawnMock.mock.restore(); destroy.mock.restore(); syncBuiltinESMExports(); t.mock.timers.reset(); }
+  });
+});
+
+test('exec does not start a command cancelled by its notice callback', async () => {
+  await scratch(async ({ workspace }) => {
+    const controller = new AbortController();
+    const tools = toolset(workspace, undefined, undefined, () => controller.abort());
+    await assert.rejects(call(tools.exec, { command: 'echo unexpected > cancelled.txt' }, controller.signal), { name: 'AbortError' });
+    await assert.rejects(fs.stat(path.join(workspace, 'cancelled.txt')), { code: 'ENOENT' });
+  });
+});
+
+test('repeated command floods keep live and settled capture memory bounded', async t => {
+  // Native pipes alone can exceed 128 MiB of uncollected arrayBuffers. That peak is not retention.
+  // Expose GC only in a fresh test process; never change V8 flags or the application's GC behavior.
+  const collectGarbage = global.gc;
+  if (!collectGarbage) {
+    const result = await exec(process.execPath, ['--expose-gc', '--test',
+      '--test-name-pattern=^repeated command floods keep live and settled capture memory bounded$', '--test-reporter=spec', fileURLToPath(import.meta.url)], {
+      timeout: 120000, env: { ...process.env, NODE_TEST_CONTEXT: undefined },
+    });
+    assert.match(result.stdout, /round 2: raw peak delta/, 'the isolated test must execute all three floods');
+    t.diagnostic(result.stdout.trim());
+    return;
+  }
+  const retained = async () => {
+    // Separate collection from measurement with fixed turn boundaries, never a retry-until-pass loop.
+    for (let pass = 0; pass < 2; pass++) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      collectGarbage();
+    }
+    await new Promise<void>(resolve => setImmediate(resolve));
+    return process.memoryUsage();
+  };
   await scratch(async ({ workspace }) => {
     const script = path.join(workspace, 'flood.cjs');
-    await fs.writeFile(script, `const line=Buffer.alloc(65536,120);line[65535]=10;let left=4096;(function write(){while(left-->0){if(!process.stdout.write(line))return process.stdout.once('drain',write);}})();`);
-    const baseline = process.memoryUsage().arrayBuffers;
-    let peak = baseline;
-    const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().arrayBuffers); }, 10);
-    try {
-      const result = await call(toolset(workspace).exec, { command: runNode(script), timeoutMs: 120000 });
-      assert.equal(result.truncated, true);
-    } finally { clearInterval(sampler); }
-    assert.ok(peak - baseline < 128 * MIB, `retained ${Math.round((peak - baseline) / MIB)} MiB of a 256 MiB flood`);
+    await fs.writeFile(script, `const fs=require('node:fs');const {once}=require('node:events');
+const line=Buffer.alloc(65536,120);line[65535]=10;
+(async()=>{for(let phase=1;phase<=2;phase++){
+  for(let i=0;i<2048;i++){
+    if(!process.stdout.write(line))await once(process.stdout,'drain');
+    if(!process.stderr.write(line))await once(process.stderr,'drain');
+  }
+  fs.writeFileSync(process.argv[2]+'.'+phase+'.ready','');
+  while(!fs.existsSync(process.argv[2]+'.'+phase+'.go'))await new Promise(resolve=>setTimeout(resolve,10));
+}})().catch(error=>{console.error(error);process.exitCode=1;});`);
+    const tools = toolset(workspace);
+    // Warm module/decoder paths before taking a baseline, but keep one baseline across all flood commands.
+    await call(tools.exec, { command: process.platform === 'win32' ? 'echo warm' : 'printf warm' });
+    const baseline = await retained();
+    const limit = 8 * MIB; // 256 KiB capture plus pipe/decoder slack, independent of total bytes or command count.
+    for (let round = 0; round < 3; round++) {
+      const prefix = path.join(workspace, `round-${round}`);
+      const controller = new AbortController();
+      let peak = process.memoryUsage().arrayBuffers;
+      const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().arrayBuffers); }, 10);
+      const pending = call(tools.exec, { command: `${runNode(script)} "${prefix}"`, timeoutMs: 30000 }, controller.signal);
+      const checkpoints: NodeJS.MemoryUsage[] = [];
+      const measuring = (async () => {
+        for (let phase = 1; phase <= 2; phase++) {
+          await until(() => {
+            controller.signal.throwIfAborted();
+            return fs.stat(`${prefix}.${phase}.ready`).then(() => true, () => false);
+          }, 'the flood checkpoint');
+          checkpoints.push(await retained());
+          controller.signal.throwIfAborted();
+          await fs.writeFile(`${prefix}.${phase}.go`, '');
+        }
+      })();
+      try {
+        const [result] = await Promise.all([pending, measuring]);
+        assert.deepEqual([result.exitCode, result.timedOut, result.truncated], [0, false, true]);
+        const expected = `${'x'.repeat(65535)}\n\n[${256 * MIB - 128 * 1024} bytes omitted]\n${'x'.repeat(65535)}\n`;
+        assert.equal(result.stdout, expected);
+        assert.equal(result.stderr, expected);
+      } finally {
+        clearInterval(sampler);
+        controller.abort();
+        await Promise.allSettled([pending, measuring]);
+      }
+      checkpoints.push(await retained());
+      t.diagnostic(`round ${round}: raw peak delta ${((peak - baseline.arrayBuffers) / MIB).toFixed(2)} MiB; live/live/settled arrayBuffers deltas ${checkpoints.map(sample => ((sample.arrayBuffers - baseline.arrayBuffers) / MIB).toFixed(2)).join('/')} MiB; heap deltas ${checkpoints.map(sample => ((sample.heapUsed - baseline.heapUsed) / MIB).toFixed(2)).join('/')} MiB`);
+      for (const [index, sample] of checkpoints.entries()) {
+        assert.ok(sample.arrayBuffers - baseline.arrayBuffers < limit, `round ${round} checkpoint ${index}: retained arrayBuffers exceed 8 MiB`);
+        assert.ok(sample.heapUsed - baseline.heapUsed < limit, `round ${round} checkpoint ${index}: retained heap exceeds 8 MiB`);
+      }
+    }
   });
 });
 
