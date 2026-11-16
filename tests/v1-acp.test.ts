@@ -382,7 +382,7 @@ test('T3 registration preserves other providers, is idempotent and refuses an ex
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
 });
 
-test('ACP rejects task notifications and disconnects on duplicate active command IDs', { skip: process.platform !== 'win32' }, async () => {
+test('ACP rejects task notifications and disconnects on duplicate active command IDs', async () => {
   const f = await fixture();
   try {
     const sessionId = await f.start();

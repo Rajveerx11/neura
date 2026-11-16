@@ -39,6 +39,15 @@ test('clean first round is ready for approval and never claims commit', async ()
   assert.equal(h.fixes.length, 0);
 });
 
+test('workflow forwards the live parent authority predicate into review', async () => {
+  let live = true; const current = () => live;
+  const h = harness({ receipts: [receipt('clean')], current });
+  assert.equal((await h.run()).state, 'ready');
+  assert.equal(h.reviews[0].current, current);
+  assert.equal(h.reviews[0].current!(), true); live = false;
+  assert.equal(h.reviews[0].current!(), false);
+});
+
 test('must-fix then clean is ready after two rounds; fix prompt carries only must-fix findings', async () => {
   const first = receipt('findings', [finding('F1', 'blocker', true, { likelihood: 'rare', confidence: 'low' }), finding('F2', 'minor', false)]);
   const h = harness({ receipts: [first, receipt('clean')] });

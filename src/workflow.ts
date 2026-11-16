@@ -64,7 +64,7 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
     if (risk.level === 'trivial' && !args.manual) return finish('skipped', `trivial change (${risk.reasons.map(reason => reason.replace(/\.$/, '')).join('; ') || 'documentation only'}).`);
     rounds++;
     deps.report(`Review round ${rounds}/${maxRounds}: ${changed.length} changed file(s), risk ${risk.level}${risk.reasons.length ? ` (${risk.reasons.join('; ')})` : ''}.`);
-    receipt = await deps.review({ workspace: args.workspace, task, baseline: args.baseline, reviewer: args.reviewer, builder: args.builder, signal: args.signal });
+    receipt = await deps.review({ workspace: args.workspace, task, baseline: args.baseline, reviewer: args.reviewer, builder: args.builder, signal: args.signal, current: deps.current });
     if (fenced()) return finish('blocked', aborted);
     if (receipt.status === 'unavailable') return finish('blocked', `reviewer unavailable: ${clip(receipt.reason ?? 'no reason given', 300)}`);
     // A receipt binds only the code it reviewed; never let it vouch for a different candidate.

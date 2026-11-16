@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { SECRET_PATH } from '../agent/neura/action-paths.ts';
+import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { createReadOnlyTools, createWorkspaceTools, projectInstructions, type WorkToolOptions } from '../src/work.ts';
 import type { ToolDefinition } from '../src/runtime.ts';
 
@@ -125,6 +126,19 @@ test('every .github write needs a person and must fit in the prompt', async () =
   }
   await body(named(work(root, async () => true), 'write'), { path: '.github/workflows/crlf.yml', content: 'on: push\r\n', expectedHash: null });
   assert.equal(await fs.readFile(path.join(root, '.github/workflows/crlf.yml'), 'utf8'), 'on: push\r\n', 'ordinary CRLF files remain writable');
+});
+
+test('CI approval rejects redaction spanning the destination and content boundary', async () => {
+  const root = await repository();
+  const file = '.github/TOKEN='; const content = '"$(touch effect.txt)"';
+  assert.equal(redactSensitiveText(file, 1024), file);
+  assert.equal(redactSensitiveText(content, 32768), content);
+  const description = `Write CI file?\n${file}\n${content}\nApproval applies once to this exact write.`;
+  assert.notEqual(redactSensitiveText(description, 32768), description);
+  let approvals = 0;
+  await assert.rejects(named(work(root, async () => { approvals++; return true; }), 'write').execute({ path: file, content, expectedHash: null }, {}), /cannot be shown in full/);
+  assert.equal(approvals, 0, 'No approval may authorize content hidden by bridge redaction');
+  assert.equal(await exists(path.join(root, '.github')), false);
 });
 
 test('CI approval cannot leave directories or temporary bytes through a replaced parent', async () => {

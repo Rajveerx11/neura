@@ -38,6 +38,7 @@ export type ReviewInput = {
   reviewer: ProviderConfig;
   builder: ProviderConfig;
   signal?: AbortSignal;
+  current?: () => boolean;
 };
 export type ReviewDeps = { capture: typeof captureWorktree; runTurn: typeof runTurn; createModel: typeof createConfiguredModel };
 
@@ -173,7 +174,7 @@ export async function reviewCandidate(input: ReviewInput, deps: Partial<ReviewDe
     ].join('\n\n');
     let generation = 0;
     let result: Awaited<ReturnType<typeof turn>>;
-    try { result = await turn({ model, instructions: REVIEW_INSTRUCTIONS, messages: [{ role: 'user', content: prompt }], tools: createReadOnlyTools(workspace, () => generation), signal }); }
+    try { result = await turn({ model, instructions: REVIEW_INSTRUCTIONS, messages: [{ role: 'user', content: prompt }], tools: createReadOnlyTools(workspace, () => generation), signal, current: input.current }); }
     finally { generation++; } // Reviewer authority ends on success, failure and cancellation.
     const { text, stopReason } = result;
     if (stopReason === 'step-limit') return receipt('unavailable', [], 'Reviewer stopped at its step limit before finishing.');

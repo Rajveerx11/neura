@@ -143,7 +143,9 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       if (content.length > CI_PROMPT_CHARS) throw new Error('This CI file is too long to show for approval. Ask the user to edit it manually.');
       const shownContent = redactSensitiveText(content, CI_PROMPT_CHARS * 2);
       if (shownContent !== content || terminalText(content) !== content.replaceAll('\r\n', '\n') || terminalText(requested) !== requested || redactSensitiveText(requested, 1024) !== requested) throw new Error('This CI file cannot be shown in full for approval. Ask the user to edit it manually.');
-      if (!await approve(`Write CI file?\n${redactSensitiveText(requested, 1024)}\n${shownContent}\nApproval applies once to this exact write.`)) throw new Error('Write denied; nothing changed.');
+      const description = `Write CI file?\n${requested}\n${shownContent}\nApproval applies once to this exact write.`;
+      if (redactSensitiveText(description, CI_PROMPT_CHARS * 2) !== description) throw new Error('This CI file cannot be shown in full for approval. Ask the user to edit it manually.');
+      if (!await approve(description)) throw new Error('Write denied; nothing changed.');
       check(signal, true);
       // Approval yielded to external code. Reauthorize before even creating folders or temporary bytes.
       if (fileTarget(requested) !== file) throw new Error('Target changed after approval; nothing written.');
