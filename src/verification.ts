@@ -24,7 +24,7 @@ export type WorkspaceReceipt = {
 export async function runDetectorProof(workspace: string, base: string, signal?: AbortSignal, sandbox = runProofInSandbox): Promise<ProofResult> {
   signal?.throwIfAborted();
   // The base reaches a shell command line. A ref name such as HEAD could also move under the candidate.
-  if (!COMMIT_ID.test(base)) throw new Error('Proof base must be a full commit id.');
+  if (typeof base !== 'string' || !COMMIT_ID.test(base)) throw new Error('Proof base must be a full commit id.');
   assertWorkspaceExecutionAllowed(workspace);
   try {
     return await runProof(workspace, true, { signal, base, execute: async (file, args, execution) => {
@@ -50,11 +50,12 @@ export async function verifyWorkspace(workspace: string, scope: WorkspaceReceipt
   const fence = () => {
     options.signal?.throwIfAborted();
     if (!options.current()) throw new Error('Verification mode/session changed; result discarded.');
+    options.signal?.throwIfAborted();
   };
   fence();
   if (!['detector-only', 'full'].includes(scope)) throw new Error('Unknown verification scope.');
   assertWorkspaceExecutionAllowed(workspace);
-  if (options.base !== undefined && !COMMIT_ID.test(options.base)) throw new Error('Proof base must be a full commit id.');
+  if (options.base !== undefined && (typeof options.base !== 'string' || !COMMIT_ID.test(options.base))) throw new Error('Proof base must be a full commit id.');
   const receipt: WorkspaceReceipt = {
     schemaVersion: 1, id: randomUUID(), scope, status: 'unavailable', verified: false, testsRun: false,
     fingerprintScope: 'tracked-and-nonignored-untracked',

@@ -11,7 +11,7 @@ import { automaticGitEnvironment, AUTOMATIC_GIT_ARGUMENTS, resolveExecutable } f
 import { captureWorktree } from '../agent/neura/verification.ts';
 import { runDetectorProof, verifyWorkspace, workspaceReceiptStatus } from '../src/verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt, MAX_VERIFICATION_RECEIPT_BYTES } from '../src/verification-store.ts';
-import { createSession, saveSession, taskRecovery } from '../src/session.ts';
+import { createSession, resumeSession, saveSession, taskRecovery, MAX_SESSION_BYTES } from '../src/session.ts';
 import { lockSession } from '../src/session-lock.ts';
 import { main } from '../src/cli.ts';
 
@@ -158,7 +158,7 @@ test('the proof base is the task-start commit as a full id, and anything else is
   assert.equal(unbound.baseCommit, now, 'without a session baseline the base is still an explicit commit id');
   assert.deepEqual(seen, [start, now]);
   let dispatched = 0;
-  for (const base of ['HEAD', 'main', start.slice(0, 12), start + '; touch /tmp/owned', start + ' --no-tests', '$(id)', '']) {
+  for (const base of ['HEAD', 'main', start.slice(0, 12), start + '; touch /tmp/owned', start + ' --no-tests', '$(id)', '', [start], { toString: () => start }] as string[]) {
     await assert.rejects(verifyWorkspace(root, 'detector-only', { ...approved, base }, deps), /full commit id/);
     await assert.rejects(runDetectorProof(root, base, undefined, async () => { dispatched++; throw new Error('Must not dispatch'); }), /full commit id/);
   }
@@ -220,7 +220,7 @@ test('receipt storage refuses cross-workspace/session copies and workspace-autho
   const authored = path.join(a.workspace, 'verification'); await mkdir(authored);
   await copyFile(a.filename, path.join(authored, `${a.session.id}.json`));
   await assert.rejects(loadWorkspaceReceipt(a.workspace, a.session.id, a.workspace, operation), /private Neura home/);
-  for (const id of ['../receipt', 'HEAD', 'a'.repeat(36)]) await assert.rejects(loadWorkspaceReceipt(a.directory, id, a.workspace, operation), /Invalid verification session id/);
+  for (const id of ['../receipt', 'HEAD', 'a'.repeat(36), [a.session.id]] as string[]) await assert.rejects(loadWorkspaceReceipt(a.directory, id, a.workspace, operation), /Invalid verification session id/);
   await assert.rejects(loadWorkspaceReceipt(path.join(scratch, '.pi', 'sessions'), a.session.id, a.workspace, operation), /outside .pi/);
 });
 
@@ -386,6 +386,178 @@ test('--no-history verification never creates a private receipt or session direc
     cwd: fileURLToPath(new URL('..', import.meta.url)), env: { ...process.env, NEURA_HOME: home }, timeout: 15000,
   }), (error: Error & { code?: number; stdout?: string }) => error.code === 1 && /full_evidence_unavailable/.test(error.stdout ?? '') && /"testsRun": false/.test(error.stdout ?? ''));
   await assert.rejects(readdir(home), { code: 'ENOENT' });
+});
+
+test('cancellation triggered inside the final currency callback cannot publish receipt bytes', async () => {
+  const f = await storedReceipt();
+  await saveWorkspaceReceipt(f.directory, f.session.id, f.workspace, f.receipt, operation);
+  const original = await readFile(f.filename, 'utf8');
+  const controller = new AbortController(); let checks = 0;
+  await assert.rejects(saveWorkspaceReceipt(f.directory, f.session.id, f.workspace, { ...f.receipt, id: randomUUID() }, {
+    signal: controller.signal, current: () => { if (++checks === 4) controller.abort(); return true; },
+  }), { name: 'AbortError' });
+  assert.equal(checks, 4);
+  assert.equal(await readFile(f.filename, 'utf8'), original);
+  assert.deepEqual(await readdir(f.root), [`${f.session.id}.json`]);
+  const beforeCapture = new AbortController(); let captures = 0;
+  await assert.rejects(verifyWorkspace(f.workspace, 'full', {
+    signal: beforeCapture.signal, current: () => { beforeCapture.abort(); return true; }, approve: approved.approve,
+  }, { capture: async () => { captures++; return null; }, proof: async () => { throw new Error('Must not dispatch'); } }), { name: 'AbortError' });
+  assert.equal(captures, 0);
+});
+
+test('session metadata rejects coerced envelopes and unmatched malformed tool results', async () => {
+  const f = await storedReceipt();
+  const filename = path.join(f.directory, `${f.session.id}.json`);
+  const malformed = [
+    { ...f.session, createdAt: 1 }, { ...f.session, updatedAt: [f.session.updatedAt] },
+    { ...f.session, createdAt: '2026-01-01' }, { ...f.session, authority: 'ignored-extra' },
+    { ...f.session, messages: [{ role: 'tool', content: [{ type: 'tool-result' }] }] },
+    { ...f.session, messages: [{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'unknown' }] }] },
+  ];
+  for (const invalid of malformed) {
+    await writeFile(filename, JSON.stringify(invalid));
+    await assert.rejects(resumeSession(f.directory, f.session.id));
+  }
+  await writeFile(filename, JSON.stringify(f.session));
+  const inherited = Object.assign(Object.create({ role: 'user' }), { content: 'synthetic' });
+  await assert.rejects(saveSession(f.directory, { ...f.session, messages: [inherited] }));
+  const messages = [
+    { role: 'user', content: 'synthetic' },
+    { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'one', toolName: 'read', input: {} }] },
+    { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'one', toolName: 'read', output: { type: 'text', value: 'synthetic' } }] },
+  ];
+  await saveSession(f.directory, { ...f.session, messages });
+  assert.deepEqual((await resumeSession(f.directory, f.session.id)).messages, messages);
+  await writeFile(filename, ' '.repeat(MAX_SESSION_BYTES + 1));
+  await assert.rejects(resumeSession(f.directory, f.session.id), /exceeds/);
+});
+
+test('session publication snapshots validated messages and recovery before awaiting filesystem work', async () => {
+  const f = await storedReceipt();
+  const baseline = (await captureWorktree(f.workspace))!;
+  const recovery = taskRecovery(path.basename(f.directory), baseline);
+  const draft = { ...f.session, messages: [{ role: 'user', content: 'original synthetic task' }], recovery };
+  const pending = saveSession(f.directory, draft);
+  draft.messages[0].content = 'changed after dispatch'; recovery.baseHead = 'HEAD'; baseline.files['forged.ts'] = 'raw payload';
+  await pending;
+  const saved = await resumeSession(f.directory, f.session.id);
+  assert.equal(saved.messages[0].content, 'original synthetic task');
+  assert.notEqual(saved.recovery?.baseHead, 'HEAD');
+  assert.equal(saved.recovery?.baseline?.files['forged.ts'], undefined);
+});
+
+test('failed new-session cleanup rolls back only its own published link and preserves other sessions', async () => {
+  const f = await storedReceipt();
+  const source = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises'; import path from 'node:path';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { createSession, listSessions } from './src/session.ts';
+    const unlink = fs.unlink;
+    for (const replace of [false, true]) {
+      const directory = path.join(process.argv[1], replace ? 'replaced-cleanup' : 'owned-cleanup');
+      const previous = await createSession(directory);
+      const previousPath = path.join(directory, previous.id + '.json');
+      const previousBytes = await fs.readFile(previousPath, 'utf8');
+      let published; let replacement;
+      fs.unlink = async filename => {
+        if (String(filename).endsWith('.tmp')) {
+          const id = path.basename(filename).slice(1, 37); published = path.join(directory, id + '.json');
+          if (replace) {
+            const session = JSON.parse(await fs.readFile(published, 'utf8'));
+            session.messages = [{ role: 'user', content: 'synthetic human replacement' }];
+            replacement = JSON.stringify(session);
+            await unlink(published); await fs.writeFile(published, replacement);
+          }
+          throw Object.assign(new Error('Synthetic temporary-unlink failure'), { code: 'EPERM' });
+        }
+        return unlink(filename);
+      }; syncBuiltinESMExports();
+      try { await assert.rejects(createSession(directory), /Synthetic temporary-unlink failure/); }
+      finally { fs.unlink = unlink; syncBuiltinESMExports(); }
+      assert.equal(await fs.readFile(previousPath, 'utf8'), previousBytes);
+      if (replace) assert.equal(await fs.readFile(published, 'utf8'), replacement);
+      else await assert.rejects(fs.lstat(published), { code: 'ENOENT' });
+      assert.equal((await listSessions(directory)).length, replace ? 2 : 1);
+    }
+  `;
+  await exec(process.execPath, ['--input-type=module', '-e', source, f.directory], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)), timeout: 15000,
+  });
+});
+
+test('partial session reads, truncated temporary writes, replacement and lost receipt leases fail without replacing prior bytes', async () => {
+  const f = await storedReceipt();
+  await saveWorkspaceReceipt(f.directory, f.session.id, f.workspace, f.receipt, operation);
+  const source = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises'; import path from 'node:path';
+    import { syncBuiltinESMExports } from 'node:module'; import { randomUUID } from 'node:crypto';
+    import { createSession, resumeSession, saveSession, listSessions } from './src/session.ts';
+    import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './src/verification-store.ts';
+    const [directory, id, workspace] = process.argv.slice(1);
+    const filename = path.join(directory, id + '.json'); const receiptFile = path.join(directory, 'verification', id + '.json');
+    const original = await fs.readFile(filename, 'utf8'); const receiptBytes = await fs.readFile(receiptFile, 'utf8');
+    const session = await resumeSession(directory, id); const options = { current: () => true };
+    const receipt = await loadWorkspaceReceipt(directory, id, workspace, options); const open = fs.open;
+    for (const method of ['writeFile', 'sync']) {
+      const failedRoot = path.join(directory, 'failed-create-' + method);
+      fs.open = async (...args) => {
+        const file = await open(...args);
+        if (String(args[0]).startsWith(failedRoot)) file[method] = async () => {
+          if (method === 'writeFile') await file.write('{');
+          throw new Error('Synthetic session ' + method + ' failure');
+        };
+        return file;
+      }; syncBuiltinESMExports();
+      try {
+        await assert.rejects(createSession(failedRoot), /Synthetic session/);
+        assert.deepEqual(await listSessions(failedRoot), []);
+        assert.deepEqual(await fs.readdir(failedRoot), []);
+      } finally { fs.open = open; syncBuiltinESMExports(); }
+    }
+    try {
+      await fs.writeFile(filename, original + ' '.repeat(128));
+      fs.open = async (...args) => {
+        const file = await open(...args);
+        if (args[0] === filename) {
+          const read = file.read.bind(file);
+          file.read = (buffer, offset, length, position) => read(buffer, offset, Buffer.byteLength(original), position);
+        }
+        return file;
+      }; syncBuiltinESMExports();
+      await assert.rejects(resumeSession(directory, id), /changed while reading/);
+    } finally { fs.open = open; syncBuiltinESMExports(); await fs.writeFile(filename, original); }
+    for (const mode of ['history-truncated', 'history-replaced', 'receipt-truncated', 'receipt-lock-lost']) {
+      const target = mode.startsWith('history') ? filename : receiptFile;
+      const before = await fs.readFile(target, 'utf8'); let injected = 0;
+      fs.open = async (...args) => {
+        const file = await open(...args);
+        if (String(args[0]).endsWith('.tmp')) {
+          const sync = file.sync.bind(file);
+          file.sync = async () => {
+            if (mode.endsWith('truncated')) await file.truncate(1);
+            if (mode === 'history-replaced') { await fs.rename(filename, filename + '.retained'); await fs.writeFile(filename, original); }
+            if (mode === 'receipt-lock-lost') await fs.writeFile(path.join(directory, 'verification', id + '.lock'), 'replacement-owner');
+            injected++; await sync();
+          };
+        }
+        return file;
+      }; syncBuiltinESMExports();
+      try {
+        const save = mode.startsWith('history') ? saveSession(directory, { ...session, messages: [{ role: 'user', content: 'must not publish' }] })
+          : saveWorkspaceReceipt(directory, id, workspace, { ...receipt, id: randomUUID() }, options);
+        await assert.rejects(save, /changed/);
+        assert.equal(injected, 1);
+        assert.equal(await fs.readFile(target, 'utf8'), before);
+        assert.ok(!(await fs.readdir(path.dirname(target))).some(name => name.endsWith('.tmp')));
+        if (mode === 'receipt-lock-lost') assert.equal(await fs.readFile(path.join(directory, 'verification', id + '.lock'), 'utf8'), 'replacement-owner');
+      } finally { fs.open = open; syncBuiltinESMExports(); }
+    }
+    assert.equal(await fs.readFile(receiptFile, 'utf8'), receiptBytes);
+  `;
+  await exec(process.execPath, ['--input-type=module', '-e', source, f.directory, f.session.id, f.workspace], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)), timeout: 15000,
+  });
 });
 
 test('resumed verification keeps the original task base and uncertain recovery cannot replace its stored receipt', async () => {

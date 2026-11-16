@@ -16,6 +16,7 @@ type Operation = { signal?: AbortSignal; current: () => boolean };
 function fence(options: Operation) {
   options.signal?.throwIfAborted();
   if (!options.current()) throw new Error('Verification mode/session changed; result discarded.');
+  options.signal?.throwIfAborted();
 }
 
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
@@ -45,7 +46,7 @@ function receiptMetadata(value: unknown): WorkspaceReceipt {
 }
 
 async function location(directory: string, id: string, workspace: string, create: boolean) {
-  if (!uuid.test(id)) throw new Error('Invalid verification session id.');
+  if (typeof id !== 'string' || !uuid.test(id)) throw new Error('Invalid verification session id.');
   const sessions = await sessionDirectory(directory);
   const candidate = await realpath(workspace);
   assertWorkspaceOutsideNeuraHome(candidate, sessions);
@@ -65,7 +66,7 @@ async function inspect(filename: string): Promise<Stats | undefined> {
 }
 
 function sameFile(before: Stats | undefined, after: Stats | undefined) {
-  return before === undefined ? after === undefined : after !== undefined && before.dev === after.dev && before.ino === after.ino && before.size === after.size && before.mtimeMs === after.mtimeMs;
+  return before === undefined ? after === undefined : after !== undefined && before.dev === after.dev && before.ino === after.ino && before.size === after.size && before.mtimeMs === after.mtimeMs && before.ctimeMs === after.ctimeMs;
 }
 
 async function readMetadata(target: Awaited<ReturnType<typeof location>>, id: string) {
@@ -121,7 +122,8 @@ export async function saveWorkspaceReceipt(directory: string, id: string, worksp
     let written: Stats;
     try { await file.writeFile(bytes); await file.sync(); written = await file.stat(); safeFile(written); }
     finally { await file.close(); }
-    if (await sessionDirectory(target.root) !== target.root || !sameFile(before, await inspect(target.filename)) || !sameFile(written, await inspect(temporary))) throw new Error('Verification receipt changed before publication.');
+    if (written.size !== Buffer.byteLength(bytes) || await sessionDirectory(target.root) !== target.root || !sameFile(before, await inspect(target.filename)) || !sameFile(written, await inspect(temporary))) throw new Error('Verification receipt changed before publication.');
+    await release.assertOwned();
     // Synchronous rename keeps the final ownership/cancellation fence and publication in one event-loop turn.
     fence(options);
     deps.publish(temporary, target.filename);
