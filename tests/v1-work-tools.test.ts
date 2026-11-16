@@ -111,6 +111,52 @@ test('every .github write needs a person and must fit in the prompt', async () =
     assert.equal(approvals, 0, 'redaction must never hide the bytes a person approves');
     assert.equal(await exists(path.join(root, '.github/workflows/hidden.yml')), false);
   }
+  for (const content of ['#!/bin/sh\nprintf approved; \x1b]0; printf hidden > effect.txt; #\x07\n', 'run: echo \u202ehidden', 'run: echo hidden\rbytes']) {
+    let approvals = 0;
+    await assert.rejects(named(work(root, async () => { approvals++; return true; }), 'write').execute({ path: '.github/hidden.sh', content, expectedHash: null }, {}), /cannot be shown in full/);
+    assert.equal(approvals, 0, 'terminal filtering must never hide the bytes a person approves');
+    assert.equal(await exists(path.join(root, '.github/hidden.sh')), false);
+  }
+  for (const file of ['.github/hidden\u202e.sh', `.github/sk-${'s'.repeat(20)}.sh`]) {
+    let approvals = 0;
+    await assert.rejects(named(work(root, async () => { approvals++; return true; }), 'write').execute({ path: file, content: 'printf approved', expectedHash: null }, {}), /cannot be shown in full/);
+    assert.equal(approvals, 0, 'the exact destination must be visible too');
+    assert.equal(await exists(path.join(root, file)), false);
+  }
+  await body(named(work(root, async () => true), 'write'), { path: '.github/workflows/crlf.yml', content: 'on: push\r\n', expectedHash: null });
+  assert.equal(await fs.readFile(path.join(root, '.github/workflows/crlf.yml'), 'utf8'), 'on: push\r\n', 'ordinary CRLF files remain writable');
+});
+
+test('CI approval cannot leave directories or temporary bytes through a replaced parent', async () => {
+  const root = await repository();
+  const outside = path.join(scratch, `approval-outside-${count++}`); await fs.mkdir(outside);
+  const write = named(work(root, async () => {
+    await fs.symlink(outside, path.join(root, '.github'), 'junction');
+    return true;
+  }), 'write');
+  await assert.rejects(write.execute({ path: '.github/workflows/ci.yml', content: 'on: push', expectedHash: null }, {}), /Linked parent/);
+  assert.deepEqual(await fs.readdir(outside), [], 'authorization must be refreshed before mkdir or temporary-file writes');
+});
+
+test('CI approval preserves changed bytes and rejects stale mode or cancellation', async () => {
+  for (const transition of ['hash', 'mode', 'cancel']) {
+    const root = await repository();
+    const file = '.github/workflows/ci.yml';
+    await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await fs.writeFile(path.join(root, file), 'on: push');
+    let mode: 'work' | 'learn' = 'work';
+    const controller = new AbortController();
+    const tools = createWorkspaceTools(root, () => mode, () => 0, async () => {
+      if (transition === 'hash') await fs.writeFile(path.join(root, file), 'human edit');
+      if (transition === 'mode') mode = 'learn';
+      if (transition === 'cancel') controller.abort();
+      return true;
+    });
+    const read = await body(named(tools, 'read'), { path: file });
+    await assert.rejects(named(tools, 'write').execute({ path: file, content: 'approved replacement', expectedHash: read.sha256 }, { signal: controller.signal }), /changed|stale|aborted/i);
+    assert.equal(await fs.readFile(path.join(root, file), 'utf8'), transition === 'hash' ? 'human edit' : 'on: push');
+    assert.deepEqual(await fs.readdir(path.dirname(path.join(root, file))), ['ci.yml']);
+  }
 });
 
 test('Neura cannot edit its own CI or dotfiles even when the workspace is its checkout', async () => {

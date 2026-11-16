@@ -10,7 +10,7 @@ import { readPlanFileSnapshot, inspectPlanFiles } from '../agent/neura/plan-file
 import { runInHumanAwaySandbox } from '../agent/neura/human-away-sandbox.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { ToolFeedbackError, type ToolDefinition } from './runtime.ts';
-import type { Mode } from './terminal-ui.ts';
+import { terminalText, type Mode } from './terminal-ui.ts';
 
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 const inside = (root: string, file: string) => { const relative = path.relative(root, file); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
@@ -142,9 +142,11 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
     if (ci) {
       if (content.length > CI_PROMPT_CHARS) throw new Error('This CI file is too long to show for approval. Ask the user to edit it manually.');
       const shownContent = redactSensitiveText(content, CI_PROMPT_CHARS * 2);
-      if (shownContent !== content) throw new Error('This CI file cannot be shown in full for approval. Ask the user to edit it manually.');
+      if (shownContent !== content || terminalText(content) !== content.replaceAll('\r\n', '\n') || terminalText(requested) !== requested || redactSensitiveText(requested, 1024) !== requested) throw new Error('This CI file cannot be shown in full for approval. Ask the user to edit it manually.');
       if (!await approve(`Write CI file?\n${redactSensitiveText(requested, 1024)}\n${shownContent}\nApproval applies once to this exact write.`)) throw new Error('Write denied; nothing changed.');
       check(signal, true);
+      // Approval yielded to external code. Reauthorize before even creating folders or temporary bytes.
+      if (fileTarget(requested) !== file) throw new Error('Target changed after approval; nothing written.');
     }
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const temporary = path.join(path.dirname(file), `.neura-write-${randomUUID()}`);

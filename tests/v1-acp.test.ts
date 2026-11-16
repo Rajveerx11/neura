@@ -9,6 +9,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PassThrough } from 'node:stream';
+import { serveAcp } from '../src/acp.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 async function fixture() {
@@ -83,6 +85,78 @@ async function fixture() {
   };
 }
 
+test('ACP validates request envelopes before executing provider-free initialization', async () => {
+  const invalid = [
+    { method: 'initialize', params: { protocolVersion: 1 } },
+    { id: null, method: 'initialize', params: { protocolVersion: 1 } },
+    { id: 1, method: 'initialize', params: { protocolVersion: 1 }, result: {} },
+    { id: 1, method: 'initialize', params: { protocolVersion: 1 }, error: null },
+    { id: 1, method: 42 },
+  ];
+  for (const frame of invalid) {
+    const input = new PassThrough(); const output = new PassThrough();
+    const frames: any[] = [];
+    createInterface({ input: output }).on('line', line => frames.push(JSON.parse(line)));
+    const server = serveAcp(input as unknown as typeof process.stdin, output as unknown as typeof process.stdout);
+    try {
+      input.write(JSON.stringify({ jsonrpc: '2.0', ...frame }) + '\n');
+      input.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: 1 } }) + '\n');
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(frames[0]?.error?.code, -32600, JSON.stringify(frame));
+      assert.equal(frames[1]?.result?.protocolVersion, 1, 'Invalid frames must not change initialization state');
+    } finally { server.close(); input.destroy(); output.destroy(); }
+  }
+});
+
+test('ACP permits reuse of a request ID after its previous command completes', async () => {
+  const input = new PassThrough(); const output = new PassThrough();
+  const frames: any[] = [];
+  createInterface({ input: output }).on('line', line => frames.push(JSON.parse(line)));
+  const server = serveAcp(input as unknown as typeof process.stdin, output as unknown as typeof process.stdout);
+  try {
+    input.write('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}\n');
+    await new Promise<void>(resolve => setImmediate(resolve));
+    input.write('{"jsonrpc":"2.0","id":1,"method":"unknown"}\n');
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(frames[0].result.protocolVersion, 1);
+    assert.equal(frames[1].error.code, -32601);
+    assert.equal(input.destroyed, false);
+  } finally { server.close(); input.destroy(); output.destroy(); }
+});
+
+test('ACP bounds individual frames, not coalesced transport chunks', async () => {
+  const input = new PassThrough(); const output = new PassThrough();
+  const frames: any[] = [];
+  createInterface({ input: output }).on('line', line => frames.push(JSON.parse(line)));
+  const server = serveAcp(input as unknown as typeof process.stdin, output as unknown as typeof process.stdout);
+  try {
+    const lines = [JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1 } })];
+    for (let id = 2; id <= 10; id++) lines.push(JSON.stringify({ jsonrpc: '2.0', id, method: 'unknown', params: { text: 'x'.repeat(32000) } }));
+    input.write(lines.join('\n') + '\n');
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(frames.length, 10);
+    assert.equal(frames[0].result.protocolVersion, 1);
+    assert.ok(frames.slice(1).every(frame => frame.error.code === -32601));
+    input.write('x'.repeat(256 * 1024 + 1));
+    input.write(JSON.stringify({ jsonrpc: '2.0', id: 11, method: 'unknown' }) + '\n');
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(frames.length, 10, 'An oversized partial frame closes the connection');
+  } finally { server.close(); input.destroy(); output.destroy(); }
+});
+
+test('ACP disconnects a blocked output consumer before queued responses grow without bound', async () => {
+  const input = new PassThrough(); const output = new PassThrough();
+  const server = serveAcp(input as unknown as typeof process.stdin, output as unknown as typeof process.stdout);
+  try {
+    const lines = [JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1 } })];
+    for (let id = 2; id <= 20000; id++) lines.push(JSON.stringify({ jsonrpc: '2.0', id, method: 'unknown' }));
+    input.write(lines.join('\n') + '\n');
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(input.destroyed, true);
+    assert.ok(output.writableLength <= 1024 * 1024, 'Queued output stays within its one-MiB budget');
+  } finally { server.close(); input.destroy(); output.destroy(); }
+});
+
 test('ACP negotiates v1 without a session, model request, banner or credentials', async () => {
   const f = await fixture();
   try {
@@ -134,6 +208,7 @@ test('ACP shares real Work turns and history, rejects unsupported input, and ret
     assert.equal((await f.rpc('session/prompt', { sessionId, prompt: [{ type: 'image', data: 'x' }] })).error.code, -32602);
     assert.equal((await f.prompt('/logout')).error.code, -32602);
     assert.equal((await f.prompt('first synthetic task')).result.stopReason, 'end_turn');
+    assert.equal((await f.prompt('/clear')).error.code, -32602, 'The /new alias cannot reset native history behind the client');
     assert.equal((await f.prompt('second synthetic task')).result.stopReason, 'end_turn');
     assert.equal(f.requests.length, 2);
     assert.ok(JSON.stringify(f.requests[1].messages).includes('first synthetic task'));
@@ -146,7 +221,7 @@ test('ACP shares real Work turns and history, rejects unsupported input, and ret
 });
 
 test('ACP exact-once approvals allow only the advertised option, deny malformed grants and settle cancellation', { skip: process.platform !== 'win32' }, async () => {
-  for (const optionId of ['allow_once', 'reject_once', 'allow_always', 'cancel']) {
+  for (const optionId of ['allow_once', 'reject_once', 'allow_always', 'cancel', 'malformed-method', 'malformed-envelope']) {
     const f = await fixture();
     try {
       const sessionId = await f.start();
@@ -154,7 +229,10 @@ test('ACP exact-once approvals allow only the advertised option, deny malformed 
       f.setPermission(frame => {
         assert.equal(frame.params.sessionId, sessionId);
         assert.deepEqual(frame.params.options.map((option: any) => option.optionId), ['allow_once', 'reject_once']);
+        f.send({ id: frame.id + '-unrelated', result: { outcome: { outcome: 'selected', optionId: 'allow_once' } } });
         if (optionId === 'cancel') f.send({ method: 'session/cancel', params: { sessionId } });
+        else if (optionId === 'malformed-method') f.send({ id: frame.id, method: '', result: { outcome: { outcome: 'selected', optionId: 'allow_once' } } });
+        else if (optionId === 'malformed-envelope') f.send({ id: frame.id, result: { outcome: { outcome: 'selected', optionId: 'allow_once' } }, error: null });
         else f.send({ id: frame.id, result: { outcome: { outcome: 'selected', optionId } } });
       });
       const result = await f.prompt('write the synthetic workflow');
@@ -270,6 +348,25 @@ test('T3 registration preserves other providers, is idempotent and refuses an ex
     assert.equal(calls, 1);
     assert.equal(JSON.parse(await fs.readFile(settings, 'utf8')).providerInstances.neura.config.commandPath, 'other-agent.exe');
   } finally { await fs.rm(scratch, { recursive: true, force: true }); }
+});
+
+test('ACP rejects task notifications and disconnects on duplicate active command IDs', { skip: process.platform !== 'win32' }, async () => {
+  const f = await fixture();
+  try {
+    const sessionId = await f.start();
+    const prompt = [{ type: 'text', text: 'synthetic task' }];
+    f.send({ method: 'session/prompt', params: { sessionId, prompt } });
+    assert.deepEqual((await f.prompt('/status')).result, { stopReason: 'end_turn' });
+    assert.equal(f.requests.length, 0, 'A task without a request ID must not execute');
+    const arrived = f.holdNext();
+    f.send({ id: 9999, method: 'session/prompt', params: { sessionId, prompt } });
+    await arrived;
+    f.send({ id: 9999, method: 'session/prompt', params: { sessionId, prompt } });
+    await f.waitForExit();
+    assert.equal(f.requests.length, 1, 'The duplicate must not execute or replay');
+    assert.ok(f.frames.some(frame => frame.id === null && frame.error?.code === -32600));
+    assert.ok(!f.frames.some(frame => frame.id === 9999), 'No ambiguous success/error correlated to a duplicated ID');
+  } finally { await f.close(); }
 });
 
 test('ACP Stop interrupts an active model request and rejects concurrent prompts', { skip: process.platform !== 'win32' }, async () => {
