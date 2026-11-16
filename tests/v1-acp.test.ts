@@ -38,7 +38,7 @@ async function fixture() {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:path|pathext|systemroot|windir|comspec|temp|tmp|neura_git_executable)$/i.test(key)));
   const child = spawn(process.execPath, ['src/acp.ts'], { cwd: root, env: { ...env, HOME: home, USERPROFILE: home, NEURA_HOME: home,
     NEURA_PROVIDER: 'local', NEURA_MODEL: 'fixture', NEURA_BASE_URL: `http://127.0.0.1:${(server.address() as any).port}/v1`, TEMP: scratch, TMP: scratch, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
-  const exited = once(child, 'exit');
+  const closed = once(child, 'close');
   let stderr = ''; child.stderr.on('data', data => { stderr += data; });
   const frames: any[] = [];
   const waiting = new Map<number, (frame: any) => void>();
@@ -61,7 +61,7 @@ async function fixture() {
     workspace, home, scratch, frames, requests, rpc, send,
     disconnect() { child.stdin.end(); },
     disconnectOutput() { child.stdout.destroy(); },
-    async waitForExit() { const [code] = await exited; assert.equal(code, 0, stderr); },
+    async waitForExit() { const [code] = await closed; assert.equal(code, 0, stderr); },
     async start() {
       const init = await rpc('initialize', { protocolVersion: 2, clientCapabilities: {} });
       assert.equal(init.result.protocolVersion, 1);
@@ -79,7 +79,7 @@ async function fixture() {
     async close() {
       child.stdin.end();
       const timer = setTimeout(() => child.kill(), 10000);
-      try { const [code] = await exited; assert.equal(code, 0, stderr); }
+      try { const [code] = await closed; assert.equal(code, 0, stderr); }
       finally { clearTimeout(timer); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await fs.rm(scratch, { recursive: true, force: true }); }
     },
   };

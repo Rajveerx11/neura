@@ -114,6 +114,51 @@ test('lease reads stay bounded; failed acquisition writes and syncs retain crash
   await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { cwd: path.resolve(import.meta.dirname, '..'), timeout: 15000 });
 });
 
+test('lease acquisition accepts finalized close metadata and still rejects changed owners and later edits', async () => {
+  const source = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises'; import os from 'node:os'; import path from 'node:path';
+    import { randomUUID } from 'node:crypto'; import { lockSession } from './src/session-lock.ts';
+    const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-lease-close-')));
+    const open = fs.open;
+    try {
+      for (const mode of ['finalized', 'later-edit', 'replacement']) {
+        const id = randomUUID(); const filename = path.join(scratch, id + '.lock');
+        fs.open = async (...args) => {
+          const file = await open(...args);
+          if (args[0] === filename && args[1] === 'wx') {
+            const close = file.close.bind(file);
+            file.close = async () => {
+              const before = await file.stat(); await close();
+              if (mode === 'replacement') {
+                const bytes = await fs.readFile(filename); await fs.rename(filename, filename + '.owner');
+                await fs.writeFile(filename, bytes);
+              } else await fs.utimes(filename, new Date(), new Date(before.mtimeMs + 5000));
+            };
+          }
+          return file;
+        };
+        let release;
+        try {
+          if (mode === 'replacement') await assert.rejects(lockSession(scratch, id), /changed/);
+          else release = await lockSession(scratch, id);
+        } finally { fs.open = open; }
+        if (mode === 'replacement') {
+          assert.equal(await fs.readFile(filename, 'utf8'), await fs.readFile(filename + '.owner', 'utf8'));
+          continue;
+        }
+        await release.assertOwned();
+        if (mode === 'later-edit') {
+          const bytes = await fs.readFile(filename, 'utf8'); const stat = await fs.lstat(filename);
+          await fs.utimes(filename, new Date(), new Date(stat.mtimeMs + 5000));
+          await assert.rejects(release.assertOwned(), /changed/); await assert.rejects(release(), /changed/);
+          assert.equal(await fs.readFile(filename, 'utf8'), bytes);
+        } else { await release(); await assert.rejects(fs.lstat(filename), { code: 'ENOENT' }); }
+      }
+    } finally { fs.open = open; await fs.rm(scratch, { recursive: true, force: true }); }
+  `;
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { cwd: path.resolve(import.meta.dirname, '..'), timeout: 15000 });
+});
+
 test('session lease rejects concurrent and unreconciled writers; only its owner releases it', async () => {
   const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neura-session-lock-')));
   try {

@@ -17,11 +17,14 @@ export async function lockSession(directory: string, id: string): Promise<(() =>
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('Session is in use or has an unreconciled crash lock. Start a new session; do not replay an uncertain mutation.');
     throw error;
   }
-  let acquired: Stats;
-  try { await handle.writeFile(token); await handle.sync(); acquired = await handle.stat(); } finally { await handle.close(); }
+  let written: Stats;
+  try { await handle.writeFile(token); await handle.sync(); written = await handle.stat(); } finally { await handle.close(); }
   const sameFile = (left: Stats, right: Stats) => left.dev === right.dev && left.ino === right.ino
     && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
   const changed = () => new Error('Session lock changed; retained for manual reconciliation.');
+  // Write timestamps may finalize on close; bind later checks to the closed file without accepting another inode.
+  const acquired = await fs.lstat(filename);
+  if (written.dev !== acquired.dev || written.ino !== acquired.ino || written.size !== acquired.size) throw changed();
   const assertOwned = async () => {
     if (await sessionDirectory(directory) !== canonical) throw changed();
     const root = await fs.lstat(canonical);
