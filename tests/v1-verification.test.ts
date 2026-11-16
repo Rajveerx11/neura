@@ -447,6 +447,37 @@ test('session publication snapshots validated messages and recovery before await
   assert.equal(saved.recovery?.baseline?.files['forged.ts'], undefined);
 });
 
+test('unsupported session hardlinks give recovery guidance and preserve existing history', async () => {
+  const f = await storedReceipt();
+  const source = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
+    import { syncBuiltinESMExports } from 'node:module'; import path from 'node:path';
+    import { createSession, listSessions } from './src/session.ts';
+    const directory = path.join(process.argv[1], 'unsupported-hardlinks');
+    const previous = await createSession(directory);
+    const previousPath = path.join(directory, previous.id + '.json');
+    const previousBytes = await fs.readFile(previousPath, 'utf8');
+    const link = fs.link;
+    for (const code of ['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EEXIST', 'EIO']) {
+      const failure = Object.assign(new Error('Synthetic link failure'), { code });
+      fs.link = async () => { throw failure; }; syncBuiltinESMExports();
+      try {
+        await assert.rejects(createSession(directory), error => {
+          if (['EEXIST', 'EIO'].includes(code)) return error === failure;
+          assert.match(error.message, /hardlink.*NEURA_HOME.*--no-history/i);
+          assert.equal(error.cause, failure); return true;
+        });
+      } finally { fs.link = link; syncBuiltinESMExports(); }
+      assert.deepEqual(await fs.readdir(directory), [previous.id + '.json']);
+      assert.equal(await fs.readFile(previousPath, 'utf8'), previousBytes);
+      assert.equal((await listSessions(directory)).length, 1);
+    }
+  `;
+  await exec(process.execPath, ['--input-type=module', '-e', source, f.directory], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)), timeout: 15000,
+  });
+});
+
 test('failed new-session cleanup rolls back only its own published link and preserves other sessions', async () => {
   const f = await storedReceipt();
   const source = `

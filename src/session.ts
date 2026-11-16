@@ -181,7 +181,14 @@ export async function createSession(directory: string): Promise<Session> {
     finally { await file.close(); }
     if (written.size !== Buffer.byteLength(bytes) || await sessionDirectory(root) !== root || !sameFile(written, await rejectLinkedFile(temporary))) throw new Error("Session changed before publication");
     // Publish complete bytes without replacing an existing name; removing the temporary link leaves nlink === 1.
-    await link(temporary, filename);
+    try { await link(temporary, filename); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS"].includes(code ?? "")) {
+        throw new Error(`Cannot create session history hardlink (${code}). Check directory permissions or set NEURA_HOME to a filesystem supporting hardlinks. Use --no-history for in-memory history.`, { cause: error });
+      }
+      throw error;
+    }
     published = written;
   } finally {
     await unlink(temporary).catch(async (error: NodeJS.ErrnoException) => {

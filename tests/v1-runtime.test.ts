@@ -519,12 +519,14 @@ test('revoked turn authority rejects late provider text and queued callbacks', a
 
 test('provider truncation stays unfinished and provider error cannot authorize tools', async () => {
   for (const reason of ['length', 'error', 'content-filter']) {
-    let effects = 0;
+    let effects = 0; const shown: string[] = [];
     const model = { doGenerate: async () => ({ content: reason === 'length' ? [text('Partial'), call('action', { count: 1 })] : [call('action', { count: 1 })], finishReason: { unified: reason }, usage: { inputTokens: { total: 2 }, outputTokens: { total: 3 } } }) };
-    const pending = runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [] }; })] });
+    const pending = runTurn({ model, messages: [user], instructions: 'Test', tools: [action(async () => { effects++; return { content: [] }; })], onText: chunk => shown.push(chunk) });
     if (reason === 'length') {
       const result = await pending;
       assert.equal(result.stopReason, 'step-limit'); assert.deepEqual(result.usage, { inputTokens: 2, outputTokens: 3 });
+      assert.equal(result.text, 'Partial'); assert.deepEqual(shown, ['Partial']);
+      assert.deepEqual(result.messages, [user], 'Truncated actions must not enter resumable history');
     }
     else await assert.rejects(pending, /Model did not complete/);
     assert.equal(effects, 0);

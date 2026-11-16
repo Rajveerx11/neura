@@ -261,7 +261,14 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
       const input = reply.usage?.inputTokens?.total, output = reply.usage?.outputTokens?.total;
       usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output } : undefined;
       // Truncated output cannot authorize even a syntactically complete-looking action.
-      if (reason === "length") { answer = ""; stopReason = "step-limit"; break; }
+      if (reason === "length") {
+        answer = reply.content.filter(part => part.type === "text").map(part => part.text).join("");
+        if (answer) {
+          const chunk = (streamed && !streamed.endsWith("\n") ? "\n" : "") + answer;
+          streamed += chunk; showText(chunk);
+        }
+        stopReason = "step-limit"; break;
+      }
       const said: any[] = [];
       const calls: any[] = [];
       answer = "";
