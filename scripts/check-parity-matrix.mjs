@@ -1,5 +1,5 @@
 // M0 parity matrix gate (#114). Checks inventory coverage, honest status labels, that source
-// links resolve to files in the frozen baseline tree and that evidence names test files.
+// links resolve to files in the frozen baseline tree and that historical evidence names test files.
 // It does not run or certify the evidence tests the matrix names.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const BASELINE = '3ebaac07c8320125bcc32478b5aa3865746a997c';
+export const EVIDENCE_BASELINE = '1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d';
 export const STATUSES = Object.freeze(['implemented', 'partial', 'unavailable', 'future']);
 const PERMALINK = `https://github.com/Rajveerx11/neura/blob/${BASELINE}/`;
 const EVIDENCE = /^(?:tests\/[^/]+\.test\.ts|scripts\/tests\/[^/]+\.mjs)$/;
@@ -89,10 +90,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const root = fileURLToPath(new URL('..', import.meta.url));
   const inventory = baselineInventory(root);
   const text = fs.readFileSync(path.join(root, 'docs/PARITY_MATRIX.md'), 'utf8');
-  const errors = validateMatrix(text, { ...inventory, exists: file => fs.existsSync(path.join(root, file)) });
+  const evidence = spawnSync('git', ['ls-tree', '-r', '--name-only', EVIDENCE_BASELINE],
+    { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 20_000 });
+  if (evidence.status !== 0) throw new Error('Historical evidence requires a full-history checkout.');
+  const evidenceFiles = new Set(evidence.stdout.split('\n').filter(Boolean));
+  const errors = validateMatrix(text, { ...inventory, exists: file => evidenceFiles.has(file) });
   if (errors.length) {
     console.error(errors.map(error => `FAIL: ${error}`).join('\n'));
     process.exit(1);
   }
-  console.log(`PASS: ${parseMatrix(text).length} matrix rows cover ${inventory.extensions.length} baseline extensions and ${inventory.commands.length} commands. Coverage only; evidence tests are not certified by this check.`);
+  console.log(`PASS: ${parseMatrix(text).length} matrix rows cover ${inventory.extensions.length} baseline extensions and ${inventory.commands.length} commands. Historical evidence at ${EVIDENCE_BASELINE} only; no runtime tests ran.`);
 }

@@ -28,3 +28,17 @@ node_modules/
 # unrelated local ComfyUI dependency compilation artifacts
 /requirements.compiled
 /override.txt
+
+# Owner policy: keep test sources, fixtures and test-only runners out of main.
+**/test/
+**/tests/
+**/__tests__/
+**/fixture/
+**/fixtures/
+**/__fixtures__/
+*.test.*
+*.tests.*
+*.spec.*
+*-fixture.*
+*-fixtures.*
+/scripts/test-suites.mjs

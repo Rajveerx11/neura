@@ -19,37 +19,27 @@ node src/cli.ts --check
 ```
 
 No global Pi, provider credential or live installation is needed for default
-verification. Use a full-history clone: `parity-matrix` reads frozen commit
-`3ebaac07c8320125bcc32478b5aa3865746a997c`. For a shallow clone, run
-`git fetch --unshallow` before tests. Keep synthetic stores separate per checkout.
+verification. Use a full-history clone for historical parity inventory checks.
+Keep synthetic stores separate per checkout.
 
 WSL2/bubblewrap and the selected distro's `/usr` tools are needed for actual
-Work commands. Edge is needed for browser tests. Offline proof additionally needs
+Work commands. Browser regression tests are no longer included. Offline proof additionally needs
 the reviewed uv/CPython/wheel closure. Setup never provisions these silently.
 
 ## Change loop
 
-1. Read [status](STATUS.md), [repository rules](../AGENTS.md), affected callers
-   and the relevant tests. Current source and [parity](PARITY_MATRIX.md) outrank
-   historical plans and extension fixtures.
-2. Make a scoped change. Add meaningful regression coverage for nontrivial logic. Security boundaries require allowed and denied cases. Active Node tests live
-   in `tests/v1-*.test.ts`. Retained shared-service tests live in `scripts/tests/`.
-3. Run a focused suite while editing, then the required repository checks:
+1. Read [status](STATUS.md), affected callers and the relevant source.
+2. Make a scoped change. Keep test files, fixtures and test-only runners outside
+   this repository, as requested by the owner on 2026-11-17.
+3. Run `npm run verify` and `git diff --check`. These check repository policy,
+   source types, dependency boundaries and documentation. They run no runtime tests.
+4. Validate changed behavior separately, including allowed and denied cases for
+   security boundaries. Report actual results and missing regression coverage.
 
-   ```powershell
-   node scripts/verify-harness.mjs --suite work-tools
-   npm run verify
-   git diff --check
-   ```
-
-4. Run separate browser, configured-host sandbox or dependency checks when the
-   change reaches those boundaries. [Verification](VERIFICATION.md) lists them.
-5. Inspect the complete diff for unrelated edits and private data. Report actual
-   results, skipped checks and limitations. A green local suite is not CI or release approval.
-
-The active runner defines 23 suites, including `acp` and `yolo`, in `scripts/verify-harness.mjs`.
-Unknown suite names fail. There is no active `test:changed` or `test:accessibility` npm
-script. Historical Pi runners remain separate and do not certify parity of the active application.
+`node scripts/verify-harness.mjs` checks the test-file policy. Former suite
+arguments fail explicitly. `npm test` fails to report unavailable tests.
+The removed regression suites remain in Git history at
+`1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d`. They are not current test evidence.
 
 ## Invariants
 
@@ -80,12 +70,11 @@ Update the AI SDK provider packages together when contracts require it. Never ad
 npm run audit:dependencies
 npm run audit:signatures
 powershell -NoProfile -File .\scripts\verify-secrets.ps1
-powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
 ```
 
-CI retains required `harness` and `portable-proof` checks, with Windows full
-verification and Ubuntu portable contracts. Secret/signature checks, CodeQL and
-Learn browser checks remain separate evidence. `verify:release` checks only
+CI retains required `harness` and `portable-proof` names for repository checks.
+Secret/signature scans and CodeQL remain enabled. Runtime, browser, sandbox and
+secret-scanner regression suites were removed. Green CI does not cover them. `verify:release` checks only
 the licence gate, which now passes; other release gates remain open. Do not bypass a failure.
 
 ## Development launcher and rollback

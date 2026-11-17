@@ -1,14 +1,19 @@
 # Pi-to-Mastra parity acceptance matrix (M0)
 
+Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
+were removed at the owner request. CI checks repository policy, source types,
+dependencies and documentation. Runtime regression tests are unavailable.
+Earlier test evidence below belongs to its recorded revision. See [verification](VERIFICATION.md).
+
 Matrix version 1, 2026-11-05. Owner issue: [M0 #114](https://github.com/Rajveerx11/neura/issues/114),
 epic [#113](https://github.com/Rajveerx11/neura/issues/113).
 
 Frozen baseline: `3ebaac07c8320125bcc32478b5aa3865746a997c` (Pi `1.3.0`, candidate
 `2.6.0-rc.1`). Every source link below is a permalink to that commit. Current status
-describes the Mastra v1 source on `main`, not the baseline.
+describes the Mastra v1 source before test removal, not the baseline.
 
 **This matrix does not certify unrun tests, does not claim parity, and closes no
-hardening issue.** An evidence path names an existing test that exercises some part of
+hardening issue.** An evidence path names a historical test that exercises some part of
 the row; it is not a recorded PASS for the full baseline behavior. Human Away remains
 preview-only and full proof PASS remains blocked by
 [#163](https://github.com/Rajveerx11/neura/issues/163). No row is marked `implemented`:
@@ -28,8 +33,9 @@ status, names a non-test evidence file, or marks Human Away or full proof `imple
 | `unavailable` | Baseline behavior depends on a mode or gate v1 refuses or that is blocked: Plan, Human Away, full proof, or the removed Pi profile, or on a Pi-era YOLO extra v1 YOLO does not include |
 | `future` | No v1 code path yet; porting is pending under its owner |
 
-Evidence is `none` when no current test covers the row. Fixture is `needed` when no
-existing synthetic fixture covers it. Mock-only evidence is `partial` at best. An API-key
+Evidence and fixture paths resolve at `1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d`,
+before removal. `none` and `needed` describe gaps at that revision.
+Mock-only evidence is `partial` at best. An API-key
 provider is never subscription-authentication evidence.
 
 ## Extension entry points (19)

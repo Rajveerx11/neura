@@ -1,66 +1,42 @@
 # Verification
 
-Updated 2026-11-15 for the active application. Receipt persistence is unreleased source.
-Repository tests, Work review and manual proof are separate checks. None authorizes publication or establishes
-production readiness. Historical Pi tests are retained separately.
+Updated 2026-11-17. The owner requested removal of repository test files,
+fixtures and test-only runners. Runtime regression coverage is unavailable.
+Work review and manual proof remain separate checks and cannot establish
+production readiness or authorize publication.
 
 ## Repository checks
-
-Install both locked graphs with scripts disabled, then run:
 
 ```powershell
 npm run verify
 git diff --check
 ```
 
-`verify` runs strict active-source types, Pi-free/package-closure checks,
-`node scripts/verify-harness.mjs` and registered documentation checks. The active
-runner defines 23 suites, using synthetic stores/models and isolated test
-processes. It does not require credentials, install into a live profile or prove
-live provider access. Default sandbox tests check contracts and fail-closed
-behavior without requiring successful Work execution on an unconfigured host.
+`verify` checks the test-file policy, strict active-source types, dependency
+boundaries and current documentation. `node scripts/verify-harness.mjs` checks
+only the file policy. It rejects former suite arguments. `npm test` fails with
+an explicit unavailable message, so no empty test run can appear to pass.
 
-| Suites | Scope |
+Both required CI jobs, `harness` and `portable-proof`, run repository checks.
+Their success is not runtime, browser, sandbox or secret-scanner regression evidence.
+CodeQL, dependency review, dependency/signature audits, complete-history secret
+scanning and the disposable development-launcher check remain configured.
+
+Separate checks remain available:
+
+| Command | Scope |
 | --- | --- |
-| `runtime`, `auth` | Agent-loop dispatch, schemas, bounded turns, serialized effects, cancellation and synthetic subscription transport/storage |
-| `cli`, `terminal-ui` | Real CLI with synthetic providers, commands, history, approvals, quiet output, widths and fallbacks |
-| `acp` | ACP negotiation, isolated discovery, retained Work/Learn state, exact-action permissions, tool cards, cancellation and disconnect cleanup |
-| `learn`, `agent-learn` | Active Learn tools, provenance, explicit recovery, title bounds and stale async operations |
-| `work-tools`, `review`, `workflow` | Workspace policy/search/mutations, read-only review, candidate currency and bounded repair |
-| `yolo` | Host tools with no policy, network, process-tree kill, truncation, stale-call fence, startup flags, confirmed entry and unchanged Work/Learn policy |
-| `verification` | Work-only manual proof admission, fingerprints, private receipt storage/resume and unavailable/full-proof boundaries |
-| `installer` | Development launcher ownership, path refusals and preservation, including reversible retirement contracts |
-| `parity-matrix`, `dependency-gate` | Frozen-baseline inventory and package/license closure rules |
-| `learn-materials`, `learn-workshop`, `learn-storage`, `learn-vault` | Shared parser/OCR, exercises, store and vault integrity/race regressions |
-| `sandbox`, `process-contract`, `workspace-read`, `ci-contract` | Isolation arguments, process cancellation, canonical traversal and CI gates |
+| `npm run audit:dependencies` | Both locked dependency graphs; requires registry access |
+| `npm run audit:signatures` | Registry signatures for both installed graphs |
+| `powershell -NoProfile -File .\scripts\verify-secrets.ps1` | Complete-history secret scan with redacted output |
+| `powershell -NoProfile -File .\install.ps1 -Check` | Read-only launcher drift check; no install authorization |
+| `node scripts/check-parity-matrix.mjs` | Frozen inventory and historical evidence paths; runs no tests |
+| `npm run verify:release` | Licence gate only; other release gates remain open |
 
-Run a focused suite with `node scripts/verify-harness.mjs --suite work-tools`.
-Unknown names fail. Definitions live in `scripts/verify-harness.mjs`, not the
-historical `scripts/test-suites.mjs`. No active `test:changed`, `test:release`,
-`test:accessibility` or `check:pi-latest` npm command exists.
-
-The parity suite reads baseline commit `3ebaac07c8320125bcc32478b5aa3865746a997c`.
-Use full Git history. Shallow clones need `git fetch --unshallow` first.
-
-## Separate acceptance checks
-
-| Command | Prerequisite and meaning |
-| --- | --- |
-| `npm run test:browser:learn` | Real Edge. Standalone Learn boards, narrow/desktop interaction, keyboard, axe, CSP and terminal handoff |
-| `npm run test:v1:work-sandbox` | Native Windows, WSL2, selected distro and bubblewrap. Actual Work commands, exact file output and protected-path regressions. Fails if unavailable |
-| `npm run verify:sandbox` | Independent real WSL isolation replay. Not replaced by synthetic command contracts |
-| `npm run audit:dependencies` | Vulnerability audit of both locked graphs. Requires registry access |
-| `npm run audit:signatures` | Registry signatures/attestations for both installed graphs |
-| `powershell -NoProfile -File .\scripts\verify-secrets.ps1` | Complete-history scan. Requires the reviewed scanner and history |
-| `powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1` | Secret-scanner and synthetic download-retry regressions |
-| `powershell -NoProfile -File .\scripts\download-verified.ps1 -Uri URL -OutFile PATH -Sha256 HASH` | CI's pinned-download helper. A cached file gets one hash check and no download. A missing file gets at most three attempts, only for HTTP 502/503/504 or transient network failures. The hash is checked once, after downloading, so a mismatch fails immediately |
-| `powershell -NoProfile -File .\install.ps1 -Check` | Read-only development-launcher drift check. No permission to install |
-| `npm run verify:release` | Passes the licence gate when no `@mastra/*` package or import is present (Mastra was removed on 2026-11-14) and fails if one returns. Installer, release rehearsal and readiness gates are separate and still open |
-
-Windows CI keeps the required `harness` job. Ubuntu `portable-proof` runs portable
-contracts, including Work/review/workflow regressions. Hosted PR checks do not
-establish configured-host WSL acceptance. Required CI, CodeQL and dependency
-audits must be evaluated on the actual proposed commit.
+Historical regression sources are preserved at
+`1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d`. Full Git history is required to inspect
+them. The parity matrix validates evidence paths against that revision,
+without certifying that the tests passed or that current behavior matches them.
 
 ## Work review
 
@@ -134,8 +110,7 @@ Never relabel a skipped, partial or failed check as passing. Crash locks and
 invalid state fail closed. Do not steal locks, repair an audit tail or delete
 private state to force a pass. Inspect uncertain effects before retrying.
 
-Older evidence belongs to its recorded revision. `scripts/verify-legacy-harness.mjs`
-and `scripts/check-legacy-docs.mjs` retain the Pi baseline and may fail without its
-retired dependencies. They are not current Mastra checks or permission to restore Pi.
+Older evidence belongs to its recorded revision. Legacy regression runners were
+removed. Historical evidence is not permission to restore Pi or claim a current pass.
 See [status](STATUS.md), [implementation evidence](MASTRA_V1.md) and
 [release policy](RELEASING.md).

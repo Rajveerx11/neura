@@ -1,5 +1,10 @@
 # Neura documentation
 
+Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
+were removed at the owner request. CI checks repository policy, source types,
+dependencies and documentation. Runtime regression tests are unavailable.
+Earlier test evidence below belongs to its recorded revision. See [verification](VERIFICATION.md).
+
 Updated 2026-11-15 against the active application through `1c5be43`,
 including Neura's own agent loop (#164), the task-start proof base (#165),
 the local T3 Code integration and Learn prerequisite paths (#154).

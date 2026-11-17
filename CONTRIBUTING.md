@@ -1,5 +1,10 @@
 # Contributing to Neura
 
+Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
+were removed at the owner request. CI checks repository policy, source types,
+dependencies and documentation. Runtime regression tests are unavailable.
+Earlier test evidence below belongs to its recorded revision. See [verification](docs/VERIFICATION.md).
+
 Focused bug reports, documentation fixes and tested changes are welcome. Neura
 is experimental, Windows-first and maintained on a best-effort basis. The active
 application runs Neura's own agent loop with Work, Learn and YOLO. Older Pi extensions are migration evidence.
@@ -51,17 +56,12 @@ uses synthetic, non-sensitive data while release packaging and distribution appr
 Run `npm run verify` and `git diff --check`. Run relevant separate checks:
 
 ```powershell
-npm run test:browser:learn
-npm run test:v1:work-sandbox
-npm run verify:sandbox
 npm run audit:all
 powershell -NoProfile -File .\scripts\verify-secrets.ps1
-powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
 ```
 
-Edge is required for browser checks. Actual Work acceptance/replay requires a
-configured Windows/WSL2/bubblewrap host. Audits need registry access. See
-[verification](docs/VERIFICATION.md) for scope and focused suites. State skipped
+Runtime, browser and sandbox regression suites are unavailable. Audits need
+registry access. See [verification](docs/VERIFICATION.md) for scope. State skipped
 or unavailable checks explicitly. Do not call them passing. `verify:release`
 checks only the licence gate, which now passes. A failure there is real; other release gates remain open.
 

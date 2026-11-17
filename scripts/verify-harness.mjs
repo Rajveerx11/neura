@@ -1,53 +1,19 @@
-// Active Mastra v1 verification. Historical Pi harness is retained separately, not claimed passing.
-import { spawnSync } from 'node:child_process';
+// Repository policy only. Runtime regression suites were removed at the owner's request.
+import { execFileSync } from 'node:child_process';
+import { lstatSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const SUITE_TIMEOUT_MS = 300_000;
-const suites = {
-  runtime: ['--test', 'tests/v1-runtime.test.ts'],
-  auth: ['--test', 'tests/v1-auth.test.ts'],
-  verification: ['--test', 'tests/v1-verification.test.ts'],
-  learn: ['--test', 'tests/v1-learn.test.ts', 'tests/v1-learn-pedagogy.test.ts'],
-  'agent-learn': ['--test', 'tests/v1-agent-learn.test.ts'],
-  installer: ['--test', 'tests/v1-install.test.ts'],
-  cli: ['--test', 'tests/v1-cli.test.ts'],
-  acp: ['--test', 'tests/v1-acp.test.ts'],
-  'work-tools': ['--test', 'tests/v1-work-tools.test.ts'],
-  yolo: ['--test', 'tests/v1-yolo.test.ts'],
-  review: ['--test', 'tests/v1-review.test.ts'],
-  workflow: ['--test', 'tests/v1-workflow.test.ts'],
-  'terminal-ui': ['--test', 'tests/v1-terminal-ui.test.ts'],
-  skills: ['--test', 'tests/v1-skills.test.ts'],
-  'parity-matrix': ['--test', 'tests/v1-parity-matrix.test.ts'],
-  'dependency-gate': ['--test', 'tests/v1-dependency-gate.test.ts'],
-  'learn-materials': ['scripts/tests/learn-materials.mjs'],
-  'learn-workshop': ['scripts/tests/learn-workshop.mjs'],
-  'learn-storage': ['scripts/tests/learn-storage.mjs'],
-  'learn-vault': ['scripts/tests/learn-vault.mjs'],
-  sandbox: ['scripts/tests/sandbox.mjs'],
-  'process-contract': ['scripts/tests/process-contract.mjs'],
-  'workspace-read': ['scripts/tests/plan-traversal.mjs'],
-  'ci-contract': ['scripts/tests/ci-contract.mjs'],
-};
-const args = process.argv.slice(2);
-if (args.length && (args.length !== 2 || args[0] !== '--suite' || !Object.hasOwn(suites, args[1]))) {
-  console.error('Use --suite ' + Object.keys(suites).join('|') + '. Legacy Pi suites are not active Mastra parity tests.');
+if (process.argv.length !== 2) {
+  console.error('Test suites are unavailable. Run without arguments to check repository policy.');
   process.exit(2);
 }
-if (Number(process.versions.node.split('.')[0]) < 24) { console.error('Native Node 24.15+ required. WSL Node18 cannot run this harness.'); process.exit(1); }
-const chosen = args.length ? [[args[1], suites[args[1]]]] : Object.entries(suites);
-let failures = 0;
-for (const [name, command] of chosen) {
-  console.log(`\n=== ${name} ===`);
-  // Installer phases measured 12-24s on hosted Windows against under 1s locally; the cause is unknown. Each case uses isolated processes.
-  const timeout = name === 'installer' ? 600_000 : SUITE_TIMEOUT_MS;
-  const result = spawnSync(process.execPath, command, { cwd: root, stdio: 'inherit', env: process.env, timeout });
-  if (result.error || result.status !== 0) {
-    failures++;
-    const detail = result.error?.code === 'ETIMEDOUT' ? `timed out after ${timeout} ms` : `exit ${result.status ?? 'unavailable'}`;
-    console.error(`${name}: FAILED (${detail})`);
-  }
-  else console.log(`${name}: PASS`);
+const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+  { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 10_000 }).split('\0').filter(Boolean);
+const forbidden = /(?:^|\/)(?:tests?|__tests__|fixtures?|__fixtures__)(?:\/|$)|\.(?:tests?|spec)\.|-fixtures?\.|(?:^|\/)test-suites\.mjs$/i;
+const found = files.filter(file => forbidden.test(file) && lstatSync(path.join(root, file), { throwIfNoEntry: false }));
+if (found.length) {
+  console.error('Test files are forbidden in this repository:\n' + [...new Set(found)].join('\n'));
+  process.exit(1);
 }
-console.log(`\nMastra v1 suites: ${chosen.length - failures}/${chosen.length} passed. This is not full legacy-feature/production parity.`);
-process.exitCode = failures ? 1 : 0;
+console.log('PASS: repository test-file policy. Runtime regression tests are unavailable; this is not test evidence.');

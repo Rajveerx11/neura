@@ -83,22 +83,14 @@ jobs:
           Write-Warning 'npm cache EBUSY (transient Windows file lock); retrying the full audit once.'
           npm run audit:all
           exit $LASTEXITCODE
-      - name: Verify deterministic repository contracts
+      - name: Verify repository policy, types, dependency boundary and docs
         run: npm run verify
-      - name: Require configured-host Work sandbox acceptance
-        run: npm run test:v1:work-sandbox
-      - name: Verify browser contracts
-        shell: pwsh
-        env:
-          NEURA_LEARN_BROWSER_OUTPUT: ${{ runner.temp }}\neura-release-learn
-        run: npm run test:browser
+      - name: Require runtime regression evidence (unavailable after test removal)
+        run: npm test
       - name: Verify complete history secret scan
         shell: pwsh
         timeout-minutes: 8
-        run: |
-          powershell -NoProfile -File .\scripts\verify-secrets.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          powershell -NoProfile -File .\scripts\verify-secrets.tests.ps1
+        run: powershell -NoProfile -File .\scripts\verify-secrets.ps1
       - name: Verify installer on ephemeral runner
         shell: pwsh
         run: |

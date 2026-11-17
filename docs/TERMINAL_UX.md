@@ -9,7 +9,7 @@ supersedes older per-turn footer/status designs. See [current design](../DESIGN.
 Earlier audit/test sections remain dated evidence, not new acceptance.
 
 Audit baseline: `5f53c11`, 2026-11-02. Scope: [active CLI](../src/cli.ts),
-[CLI tests](../tests/v1-cli.test.ts), [status](STATUS.md), and
+[CLI tests](https://github.com/Rajveerx11/neura/blob/1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d/tests/v1-cli.test.ts), [status](STATUS.md), and
 [design direction](../DESIGN.md). Findings describe that baseline; replacement
 rendering is evaluated separately below. Retained Pi widgets, shortcuts and
 ten-line limits do not establish Mastra behavior.

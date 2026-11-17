@@ -15,12 +15,10 @@
 - [ ] `node scripts\verify-harness.mjs`
 - [ ] `npm run typecheck`
 - [ ] `npm run check:pi-free`
-- [ ] `npm run test:browser:learn` (or reason not relevant/available)
-- [ ] `npm run test:v1:work-sandbox` (when Work execution changes; configured host required)
-- [ ] `node scripts\verify-sandbox.mjs` (or reason not run)
 - [ ] `node scripts\check-docs.mjs`
 - [ ] `git diff --check`
-- [ ] Security-boundary changes include negative tests
+- [ ] Security-boundary changes include allowed and denied checks outside this repository
+- [ ] No test sources, fixtures or test-only runners included; unavailable runtime coverage stated
 - [ ] Verification names the source commit and distinguishes local checks, CI, and live-install evidence
 - [ ] Dependency changes review and audit both affected lockfile graphs
 - [ ] Documentation and changelog updated

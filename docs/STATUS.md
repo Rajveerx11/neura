@@ -1,5 +1,10 @@
 # Neura status
 
+Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
+were removed at the owner request. CI checks repository policy, source types,
+dependencies and documentation. Runtime regression tests are unavailable.
+Earlier test evidence below belongs to its recorded revision. See [verification](VERIFICATION.md).
+
 Documentation reconciliation: 2026-11-15, source through `f331b09` (#169).
 The [official README](../README.md) and [documentation index](README.md)
 describe Neura's own agent loop with Work, Learn and YOLO. The [release inventory](releases/README.md)

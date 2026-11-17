@@ -1,5 +1,10 @@
 # Neura
 
+Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
+were removed at the owner request. CI checks repository policy, source types,
+dependencies and documentation. Runtime regression tests are unavailable.
+Earlier test evidence below belongs to its recorded revision. See [verification](docs/VERIFICATION.md).
+
 **Context into action.** A Windows-first terminal assistant for engineering and practical learning.
 
 Neura brings two everyday modes into one CLI: **Work** reads and searches a project, makes edits, then runs tests.
@@ -311,26 +316,16 @@ backups. See [installer limits](docs/INSTALLER_READINESS.md).
 
 ```powershell
 npm run verify
-npm run test:browser:learn
 git diff --check
 ```
 
-`npm run verify` includes strict types, the Pi-free/dependency-closure gate,
-23 active suites (including ACP and YOLO) and registered documentation checks. Tests use
-synthetic state. Default verification does not require a successful live WSL
-command. Edge is needed for the separate Learn browser check. In a shallow clone,
-fetch full history before verification with `git fetch --unshallow`.
-
-On a configured native Windows/WSL2/bubblewrap host, also run:
-
-```powershell
-npm run test:v1:work-sandbox
-npm run verify:sandbox
-```
+`npm run verify` checks the test-file policy, strict types, dependency boundaries
+and documentation. Runtime regression suites were removed on 2026-11-17.
+`npm test` fails explicitly because tests are unavailable.
 
 PR CI keeps required `harness` and `portable-proof` checks, audits both dependency
-graphs, and runs browser/security contracts. `verify:release` checks only the licence
-gate, which now passes. A green suite does not clear the remaining release and
+graphs, and runs secret scans. CodeQL remains separate. `verify:release` checks only the licence
+gate. Release automation remains blocked without runtime regression evidence. Repository checks do not clear release and
 distribution gates. Read the [development guide](docs/DEVELOPMENT.md) and
 [contribution rules](CONTRIBUTING.md). Future publication follows the
 [release policy](docs/RELEASING.md).
