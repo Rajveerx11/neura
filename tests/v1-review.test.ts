@@ -177,6 +177,47 @@ test('no change since baseline is clean without calling a model; abort propagate
     { createModel: (() => ({})) as any, runTurn: async () => { controller.abort(); throw new Error('aborted'); } }));
 });
 
+test('review rejects a moved HEAD even through the direct review entry point', async () => {
+  const { root, baseline } = await repository();
+  await writeFile(path.join(root, 'app.ts'), 'export const value = 2;\n');
+  const git = resolveExecutable('git', root)!;
+  await exec(git, [...AUTOMATIC_GIT_ARGUMENTS, '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid', 'commit', '-am', 'task change'], { cwd: root, env: automaticGitEnvironment(), timeout: 10000 });
+  const result = await reviewCandidate({ workspace: root, task: 't', baseline, reviewer: openai, builder: anthropic }, {
+    createModel: () => { assert.fail('historical changes cannot be reviewed using current HEAD'); },
+  });
+  assert.equal(result.status, 'unavailable'); assert.match(result.reason!, /HEAD changed/);
+});
+
+test('reviewer tool authority expires even when its turn fails', async () => {
+  const { root, baseline } = await repository(); await writeFile(path.join(root, 'app.ts'), 'changed\n');
+  let retained: Parameters<typeof runTurn>[0]['tools'] = [];
+  const result = await reviewCandidate({ workspace: root, task: 't', baseline, reviewer: openai, builder: anthropic }, {
+    createModel: (() => ({})) as any,
+    runTurn: async options => { retained = options.tools; throw new Error('Synthetic failure'); },
+  });
+  assert.equal(result.status, 'unavailable');
+  await assert.rejects(retained.find(tool => tool.name === 'read')!.execute({ path: 'app.ts' }, {}), /stale tool authority/);
+});
+
+test('parent authority revocation prevents reviewer reads and further provider requests', async () => {
+  for (const phase of ['before-turn', 'model-response']) {
+    const { root, baseline } = await repository(); await writeFile(path.join(root, 'app.ts'), 'changed\n');
+    let live = phase !== 'before-turn'; let reads = 0;
+    const provider = fixture([[{ type: 'tool-call', toolCallId: 'r', toolName: 'read', input: '{"path":"app.ts"}' }], [{ type: 'text', text: '{"findings":[]}' }]]);
+    let retained: Parameters<typeof runTurn>[0]['tools'] = [];
+    const result = await reviewCandidate({ workspace: root, task: 't', baseline, reviewer: openai, builder: anthropic, current: () => live }, {
+      createModel: (() => ({ ...provider.model, doGenerate: async (options: Parameters<typeof provider.model.doGenerate>[0]) => { const reply = await provider.model.doGenerate(options); live = false; return reply; } })) as unknown as typeof import('../src/providers.ts').createConfiguredModel,
+      runTurn: options => {
+        retained = options.tools;
+        return runTurn({ ...options, tools: options.tools.map(tool => ({ ...tool, execute: (input, context) => { reads++; return tool.execute(input, context); } })) });
+      },
+    });
+    assert.equal(result.status, 'unavailable'); assert.match(result.reason!, /authority changed/);
+    assert.equal(provider.requests.length, phase === 'before-turn' ? 0 : 1); assert.equal(reads, 0);
+    await assert.rejects(retained.find(tool => tool.name === 'read')!.execute({ path: 'app.ts' }, {}), /stale tool authority/);
+  }
+});
+
 test('a reviewer model cannot write even when it requests an effectful tool', async () => {
   const { root, baseline } = await repository();
   const candidate = 'export const value = 2;\n';

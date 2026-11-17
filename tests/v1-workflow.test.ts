@@ -39,6 +39,15 @@ test('clean first round is ready for approval and never claims commit', async ()
   assert.equal(h.fixes.length, 0);
 });
 
+test('workflow forwards the live parent authority predicate into review', async () => {
+  let live = true; const current = () => live;
+  const h = harness({ receipts: [receipt('clean')], current });
+  assert.equal((await h.run()).state, 'ready');
+  assert.equal(h.reviews[0].current, current);
+  assert.equal(h.reviews[0].current!(), true); live = false;
+  assert.equal(h.reviews[0].current!(), false);
+});
+
 test('must-fix then clean is ready after two rounds; fix prompt carries only must-fix findings', async () => {
   const first = receipt('findings', [finding('F1', 'blocker', true, { likelihood: 'rare', confidence: 'low' }), finding('F2', 'minor', false)]);
   const h = harness({ receipts: [first, receipt('clean')] });
@@ -70,6 +79,43 @@ test('stale receipt or receipt for a different fingerprint blocks', async () => 
     const h = harness({ receipts: [r] });
     assert.equal((await h.run()).state, 'blocked');
     assert.match(h.last(), /^BLOCKED: workspace changed during review/);
+  }
+});
+
+test('post-review drift blocks approval and repair of unreviewed bytes', async () => {
+  for (const r of [receipt('clean'), receipt('findings', [finding('F1', 'blocker', true)])]) {
+    const h = harness({ snapshots: [changed, snap({ 'src/a.ts': 'different bytes' })], receipts: [r] });
+    assert.equal((await h.run()).state, 'blocked');
+    assert.equal(h.fixes.length, 0);
+    assert.doesNotMatch(h.lines.join('\n'), /READY FOR YOUR APPROVAL/);
+  }
+});
+
+test('a workspace edit during repair notification cannot authorize repair of different bytes', async () => {
+  let candidate = changed; let fixes = 0;
+  const result = await runReviewLoop({ workspace: '/w', task: 't', baseline, reviewer: builder, builder }, {
+    capture: async () => candidate, review: async () => receipt('findings', [finding('F1', 'blocker', true)]),
+    assessRisk: () => ({ level: 'normal', reasons: [] }), current: () => true,
+    fixTurn: async () => { fixes++; throw new Error('must not run'); },
+    report: line => { if (line.startsWith('Sending ')) candidate = snap({ 'src/a.ts': 'different bytes' }); },
+  });
+  assert.equal(result.state, 'blocked'); assert.equal(fixes, 0);
+});
+
+test('report callbacks cannot revoke authority then trigger repair or approval', async () => {
+  for (const { r, revokeAt } of [
+    { r: receipt('clean'), revokeAt: 'Reviewer:' },
+    { r: receipt('findings', [finding('F1', 'blocker', true)]), revokeAt: 'Reviewer:' },
+    { r: receipt('findings', [finding('F1', 'blocker', true)]), revokeAt: 'Sending ' },
+  ]) {
+    let live = true; let fixes = 0;
+    const result = await runReviewLoop({ workspace: '/w', task: 't', baseline, reviewer: builder, builder }, {
+      capture: async () => changed, review: async () => r, assessRisk: () => ({ level: 'normal', reasons: [] }),
+      current: () => live, fixTurn: async () => { fixes++; }, report: line => { if (line.startsWith(revokeAt)) live = false; },
+    });
+    assert.equal(live, false, `${revokeAt} callback must be reached`);
+    assert.equal(result.state, 'blocked'); assert.equal(fixes, 0);
+    assert.match(result.reason, /^review aborted/);
   }
 });
 

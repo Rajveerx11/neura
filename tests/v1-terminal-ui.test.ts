@@ -216,6 +216,44 @@ test('skill menu filters installed names and never intercepts dollar amounts or 
   }
 });
 
+test('command keyboard ignores stale menu choices before a queued redraw and after deactivation', async () => {
+  for (const transition of ['line', 'inactive']) {
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return this; } });
+    const stdout = Object.assign(new PassThrough(), { isTTY: true, columns: 80 });
+    stdout.resume();
+    const keyboard = createCommandKeyboard(stdin as any, stdout as any);
+    const rl = createInterface({ input: keyboard.input, output: stdout as any, terminal: true });
+    let active = true;
+    keyboard.attach(rl, () => createTerminalUI(), () => active);
+    try {
+      const answer = rl.question('work > ');
+      stdin.write('/q');
+      await new Promise(resolve => setImmediate(resolve));
+      if (transition === 'line') stdin.write('x'); else active = false;
+      stdin.write('\r');
+      assert.equal(await answer, transition === 'line' ? '/qx' : '/q', 'Enter must not submit a choice from an older prompt state');
+    } finally { rl.close(); }
+  }
+});
+
+test('command keyboard close removes listeners and cancels queued menu redraws', async () => {
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return this; } });
+  const stdout = Object.assign(new PassThrough(), { isTTY: true, columns: 80 });
+  stdout.resume();
+  const keyboard = createCommandKeyboard(stdin as any, stdout as any);
+  const rl = createInterface({ input: keyboard.input, output: stdout as any, terminal: true });
+  let matches = 0;
+  keyboard.attach(rl, () => createTerminalUI(), () => true, line => { matches++; return commandMatches(line); });
+  stdin.write('/q');
+  rl.close();
+  const atClose = matches;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(matches, atClose, 'queued callbacks must not inspect or draw a closed prompt');
+  assert.equal(keyboard.input.listenerCount('keypress'), 0);
+  assert.equal(stdout.listenerCount('resize'), 0);
+  assert.equal(stdin.listenerCount('data'), 0);
+});
+
 test('live slash menu runs, completes and dismisses commands through real readline and restores raw mode', async () => {
   const stdin = Object.assign(new PassThrough(), { isTTY: true, raw: false, setRawMode(mode: boolean) { this.raw = mode; return this; } });
   const stdout = Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 });

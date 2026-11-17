@@ -12,6 +12,7 @@ import { redactSensitiveText } from '../agent/neura/redaction.ts';
 const version = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const MODES = { currentModeId: 'work', availableModes: [{ id: 'work', name: 'Work' }, { id: 'learn', name: 'Learn' }, { id: 'yolo', name: 'YOLO' }] };
 const MAX_FRAME = 256 * 1024;
+const MAX_QUEUED_OUTPUT = 1024 * 1024;
 type Controller = Parameters<CliBridge['serve']>[0];
 type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; stepLimit: boolean; currentTool?: string; mode: string; permissionError?: boolean; pendingYolo?: boolean };
 type Frame = { jsonrpc: string; id?: string | number | null; method?: string; params?: any; result?: any; error?: unknown };
@@ -36,7 +37,14 @@ export function serveAcp(input = stdin, output = stdout) {
   const sessions = new Map<string, Session>();
   const opening = new Set<Promise<unknown>>();
   const pending = new Map<string, { sessionId: string; resolve: (value: boolean) => void }>();
-  const send = (frame: object) => { if (!closed) output.write(JSON.stringify({ jsonrpc: '2.0', ...frame }) + '\n'); };
+  const requests = new Set<string | number>();
+  const send = (frame: object) => {
+    if (closed) return;
+    const line = JSON.stringify({ jsonrpc: '2.0', ...frame }) + '\n';
+    // Discard pending writes: a non-reading client would keep the process alive even after input closes.
+    if (output.writableLength + Buffer.byteLength(line) > MAX_QUEUED_OUTPUT) { close(); input.destroy(); output.destroy(); return; }
+    output.write(line);
+  };
   const update = (sessionId: string, text: string) => {
     if (text) send({ method: 'session/update', params: { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
   };
@@ -162,7 +170,7 @@ export function serveAcp(input = stdin, output = stdout) {
         throw new RpcError(-32602, 'Images, audio and embedded resources are not supported');
       }).join('\n');
       if (!text.trim() || text.length > 32000) throw new RpcError(-32602, 'Task must contain 1-32000 characters');
-      if (/^\/(?:login|logout|new|resume|sessions|model|quit|exit)(?:\s|$)/.test(text)) throw new RpcError(-32602, 'Use the native Neura terminal for account, model and history management');
+      if (/^\/(?:login|logout|new|clear|resume|sessions|model|quit|exit)(?:\s|$)/.test(text)) throw new RpcError(-32602, 'Use the native Neura terminal for account, model and history management');
       session.busy = true; session.cancelled = false; session.stepLimit = false;
       try {
         // A typed /mode replaces the pending choice; other commands such as /status run without it.
@@ -189,13 +197,28 @@ export function serveAcp(input = stdin, output = stdout) {
     throw new RpcError(-32601, 'Method not found');
   }
   async function receive(line: string) {
+    if (closed) return;
     let frame: Frame;
     try { frame = JSON.parse(line); }
     catch { send({ id: null, error: { code: -32700, message: 'Parse error' } }); return; }
-    if (!frame || frame.jsonrpc !== '2.0' || (frame.id !== undefined && frame.id !== null && typeof frame.id !== 'string' && typeof frame.id !== 'number')) {
-      send({ id: null, error: { code: -32600, message: 'Invalid request' } }); return;
+    const invalid = () => {
+      // A malformed reply must deny the correlated permission, never become a grant.
+      const request = typeof frame?.id === 'string' ? pending.get(frame.id) : undefined;
+      if (request) { pending.delete(frame.id as string); request.resolve(false); }
+      send({ id: null, error: { code: -32600, message: 'Invalid request' } });
+    };
+    if (!frame || typeof frame !== 'object' || Array.isArray(frame) || frame.jsonrpc !== '2.0' ||
+      (frame.id !== undefined && frame.id !== null && typeof frame.id !== 'string' && (typeof frame.id !== 'number' || !Number.isFinite(frame.id)))) {
+      invalid(); return;
     }
-    if (!frame.method) {
+    const hasMethod = Object.hasOwn(frame, 'method');
+    const hasResult = Object.hasOwn(frame, 'result');
+    const hasError = Object.hasOwn(frame, 'error');
+    if (!hasMethod) {
+      if (frame.id === undefined || frame.id === null || hasResult === hasError || (hasError &&
+        (!frame.error || typeof frame.error !== 'object' || !Number.isInteger((frame.error as { code?: unknown }).code) || typeof (frame.error as { message?: unknown }).message !== 'string'))) {
+        invalid(); return;
+      }
       const request = typeof frame.id === 'string' ? pending.get(frame.id) : undefined;
       if (request) {
         pending.delete(frame.id as string);
@@ -207,13 +230,20 @@ export function serveAcp(input = stdin, output = stdout) {
       }
       return;
     }
+    if (typeof frame.method !== 'string' || !frame.method || hasResult || hasError ||
+      ((frame.id === undefined || frame.id === null) && frame.method !== 'session/cancel')) { invalid(); return; }
+    // Correlation IDs are reusable after completion, never while a command is active.
+    if (frame.id !== undefined && frame.id !== null) {
+      if (requests.has(frame.id)) { invalid(); close(); input.destroy(); return; }
+      requests.add(frame.id);
+    }
     try {
       const result = await dispatch(frame.method, frame.params);
       if (frame.id !== undefined) send({ id: frame.id, result });
     } catch (error) {
       if (frame.id !== undefined) send({ id: frame.id, error: { code: error instanceof RpcError ? error.code : -32603,
         message: failureMessage(error) } });
-    }
+    } finally { if (frame.id !== undefined && frame.id !== null) requests.delete(frame.id); }
   }
   const close = () => {
     if (closed) return;
@@ -221,18 +251,22 @@ export function serveAcp(input = stdin, output = stdout) {
     for (const [id, session] of sessions) {
       cancel(id);
       // Release the native writer lease only after an interrupted effect has settled.
-      void Promise.resolve(session.active).catch(() => undefined).then(session.close);
+      // A synchronous bridge write can close the pipe before execute() returns its promise.
+      void Promise.resolve().then(() => session.active).catch(() => undefined).then(session.close);
     }
   };
   input.setEncoding('utf8');
   input.on('data', (chunk: string) => {
+    if (closed) return;
     buffer += chunk;
-    if (Buffer.byteLength(buffer) > MAX_FRAME) { close(); input.pause(); return; }
     let index: number;
-    while ((index = buffer.indexOf('\n')) >= 0) {
+    while (!closed && (index = buffer.indexOf('\n')) >= 0) {
       const line = buffer.slice(0, index); buffer = buffer.slice(index + 1);
+      if (Buffer.byteLength(line) > MAX_FRAME) { close(); break; }
       if (line.trim()) void receive(line);
     }
+    if (Buffer.byteLength(buffer) > MAX_FRAME) close();
+    if (closed) { buffer = ''; input.destroy(); }
   });
   input.once('end', close); input.once('error', close);
   output.once('error', () => { close(); input.destroy(); });

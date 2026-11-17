@@ -128,6 +128,7 @@ async function save(root: string, credential: Credential, signal: AbortSignal) {
 }
 
 async function tokenRequest(body: URLSearchParams, signal: AbortSignal, previous?: Credential): Promise<Credential> {
+  const deadline = performance.now() + 15_000;
   let response: Response;
   try {
     response = await fetch(TOKEN_URL, { method: "POST", redirect: "error", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal });
@@ -146,7 +147,9 @@ async function tokenRequest(body: URLSearchParams, signal: AbortSignal, previous
         signal.throwIfAborted();
         const { value: chunk, done } = await reader.read();
         signal.throwIfAborted();
+        if (performance.now() >= deadline) throw new Error("deadline");
         if (done) break;
+        if (!chunk.length) continue;
         size += chunk.length;
         if (size > MAX_AUTH_BYTES) throw new Error("size");
         buffers.push(chunk);

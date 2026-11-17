@@ -25,6 +25,8 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
     let shown = 0;
     let lastLine = '';
     let dismissed: string | undefined;
+    let closed = false;
+    let pending: NodeJS.Immediate | undefined;
     const column = () => rl.getCursorPos().cols + 1;
     const clear = () => {
       if (!shown) return;
@@ -37,6 +39,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       shown = rows.length;
     };
     const update = () => {
+      if (closed) return;
       const line = rl.line;
       if (line !== lastLine) { selected = 0; lastLine = line; if (line !== dismissed) dismissed = undefined; }
       // ponytail: single-row input only; a wrapped prompt would need row tracking for the redraw.
@@ -52,6 +55,8 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       else update();
     };
     claim = key => {
+      // A queued redraw is not authority to complete a different line or a non-command prompt.
+      if (closed || !active() || rl.line !== lastLine || rl.getCursorPos().rows !== 0) { clear(); items = []; return false; }
       if (!shown || !items.length) { if (/[\r\n]/.test(key)) clear(); return false; }
       const item = items[selected];
       if (key === '\x1b[A' || key === '\x1bOA') { selected = (selected + items.length - 1) % items.length; draw(); return true; }
@@ -67,10 +72,16 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       return false;
     };
     // Readline registered its keypress listener first, so this runs after it has updated `rl.line`.
-    input.on('keypress', () => setImmediate(update));
+    const onKeypress = () => {
+      if (!closed && !pending) pending = setImmediate(() => { pending = undefined; update(); });
+    };
+    input.on('keypress', onKeypress);
     stdout.on('resize', update);
     rl.once('close', () => {
+      closed = true;
+      if (pending) { clearImmediate(pending); pending = undefined; }
       claim = undefined;
+      input.off('keypress', onKeypress);
       stdin.off('data', onData); stdin.off('end', onEnd); stdout.off('resize', update);
       stdin.pause();
     });

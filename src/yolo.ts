@@ -41,41 +41,59 @@ function killTree(child: ChildProcess, killed: () => void) {
 /** executeProcess kills on overflow and only signals the direct child; this keeps draining and kills the tree. */
 function runOnHost(command: string, cwd: string, timeoutMs: number, signal?: AbortSignal) {
   return new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean; truncated: boolean }>((resolve, reject) => {
+    signal?.throwIfAborted();
     const [file, args] = shellCommand(command);
     const child = spawn(file, args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });
-    let timedOut = false; let truncated = false; let exitCode: number | null = null;
+    let timedOut = false; let truncated = false; let exitCode: number | null = null; let settled = false;
     let drain: ReturnType<typeof setTimeout> | undefined;
     const capture = () => {
-      let head = Buffer.alloc(0); let tail = Buffer.alloc(0); let total = 0;
+      // Reuse storage: concatenating each chunk churns external memory even though the retained output is bounded.
+      const storage = Buffer.alloc(2 * OUTPUT_PART_BYTES);
+      let headLength = 0; let tailLength = 0; let total = 0;
       return {
         add(chunk: Buffer) {
           total += chunk.length;
-          const room = OUTPUT_PART_BYTES - head.length;
-          if (room > 0) head = Buffer.concat([head, chunk.subarray(0, room)]);
-          const rest = chunk.subarray(Math.max(room, 0));
-          if (rest.length) tail = Buffer.concat([tail, rest]).subarray(-OUTPUT_PART_BYTES);
+          const headAdded = Math.min(OUTPUT_PART_BYTES - headLength, chunk.length);
+          chunk.copy(storage, headLength, 0, headAdded);
+          headLength += headAdded;
+          const rest = chunk.length - headAdded;
+          if (rest >= OUTPUT_PART_BYTES) {
+            chunk.copy(storage, OUTPUT_PART_BYTES, chunk.length - OUTPUT_PART_BYTES);
+            tailLength = OUTPUT_PART_BYTES;
+          } else if (rest > 0) {
+            const keep = Math.min(tailLength, OUTPUT_PART_BYTES - rest);
+            storage.copy(storage, OUTPUT_PART_BYTES, OUTPUT_PART_BYTES + tailLength - keep, OUTPUT_PART_BYTES + tailLength);
+            chunk.copy(storage, OUTPUT_PART_BYTES + keep, headAdded);
+            tailLength = keep + rest;
+          }
         },
         text() {
-          const omitted = total - head.length - tail.length;
-          if (omitted <= 0) return Buffer.concat([head, tail]).toString('utf8');
+          const omitted = total - headLength - tailLength;
+          if (omitted <= 0) return storage.toString('utf8', 0, headLength + tailLength);
           truncated = true;
-          return `${head.toString('utf8')}\n[${omitted} bytes omitted]\n${tail.toString('utf8')}`;
+          return `${storage.toString('utf8', 0, headLength)}\n[${omitted} bytes omitted]\n${storage.toString('utf8', OUTPUT_PART_BYTES, OUTPUT_PART_BYTES + tailLength)}`;
         },
       };
     };
     const stdout = capture(); const stderr = capture();
     const clear = () => { clearTimeout(deadline); clearTimeout(drain); signal?.removeEventListener('abort', stop); };
     const finish = () => {
+      if (settled) return;
+      settled = true;
       clear(); child.stdout.destroy(); child.stderr.destroy();
       const output = { stdout: stdout.text(), stderr: stderr.text() }; // text() records any cut in truncated.
       resolve({ ...output, exitCode: timedOut ? null : exitCode, timedOut, truncated });
     };
-    const settle = () => { drain ??= setTimeout(finish, DRAIN_MS); };
+    const settle = () => { if (!settled) drain ??= setTimeout(finish, DRAIN_MS); };
     const stop = () => { killTree(child, settle); };
     const deadline = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
     signal?.addEventListener('abort', stop, { once: true });
     child.stdout.on('data', stdout.add); child.stderr.on('data', stderr.add);
-    child.once('error', error => { clear(); reject(error); });
+    child.once('error', error => {
+      if (settled) return;
+      settled = true;
+      clear(); child.stdout.destroy(); child.stderr.destroy(); reject(error);
+    });
     child.once('exit', code => { exitCode = code; clearTimeout(deadline); settle(); });
     child.once('close', finish);
   });

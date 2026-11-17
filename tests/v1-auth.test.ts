@@ -139,6 +139,50 @@ test("malformed/expired token responses and redirects never save credentials or 
   await pending;
 });
 
+test("token exchange deadline includes headers and continuously fulfilled empty reads", async (context) => {
+  await fresh();
+  const now = performance.now.bind(performance);
+  let elapsed = 0; let reads = 0; let cancelled = false;
+  context.mock.method(performance, "now", () => now() + elapsed);
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), TOKEN_URL);
+    elapsed = 14_000;
+    return new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++reads <= 10) { elapsed += 400; controller.enqueue(new Uint8Array(0)); }
+        else { controller.enqueue(new TextEncoder().encode(JSON.stringify(tokens()))); controller.close(); }
+      },
+      cancel() { cancelled = true; },
+    }, { highWaterMark: 0 }), { headers: { "Content-Type": "application/json" } });
+  };
+  let sent!: Promise<number>;
+  await assert.rejects(loginCodex({ onAuthorize: url => { sent = callback(new URL(url)); } }), /Invalid Codex token response/);
+  assert.equal(await sent, 200);
+  assert.ok(reads < 6, "Headers must not create another full body-read budget");
+  assert.equal(cancelled, true);
+  await assert.rejects(readFile(filename()), { code: "ENOENT" });
+});
+
+test('token exchange cancels a stalled body at its own deadline during interactive login', async context => {
+  await fresh();
+  const caller = new AbortController(); const deadline = new AbortController();
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  context.mock.method(AbortSignal, 'timeout', (milliseconds: number) => milliseconds === 15000 ? deadline.signal : timeout(milliseconds));
+  let reading!: () => void; const started = new Promise<void>(resolve => { reading = resolve; });
+  let cancelled = false; let sent!: Promise<number>;
+  globalThis.fetch = async () => new Response(new ReadableStream({ pull() { reading(); }, cancel() { cancelled = true; } }, { highWaterMark: 0 }), { headers: { 'Content-Type': 'application/json' } });
+  const pending = loginCodex({ signal: caller.signal, onAuthorize: url => { sent = callback(new URL(url)); } });
+  const rejected = assert.rejects(pending, { name: 'TimeoutError' });
+  try {
+    await started;
+    deadline.abort(new DOMException('Synthetic token deadline', 'TimeoutError'));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(cancelled, true, 'the 15-second token budget must cancel a stalled read without waiting for the 10-minute login deadline');
+  } finally { caller.abort(); await rejected; }
+  assert.equal(await sent, 200);
+  await assert.rejects(readFile(filename()), { code: 'ENOENT' });
+});
+
 test("subscription model discovery uses only the fixed authenticated catalog and ignores remote instructions", async () => {
   await fresh(); await login();
   let calls = 0;

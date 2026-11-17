@@ -64,19 +64,27 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
     if (risk.level === 'trivial' && !args.manual) return finish('skipped', `trivial change (${risk.reasons.map(reason => reason.replace(/\.$/, '')).join('; ') || 'documentation only'}).`);
     rounds++;
     deps.report(`Review round ${rounds}/${maxRounds}: ${changed.length} changed file(s), risk ${risk.level}${risk.reasons.length ? ` (${risk.reasons.join('; ')})` : ''}.`);
-    receipt = await deps.review({ workspace: args.workspace, task, baseline: args.baseline, reviewer: args.reviewer, builder: args.builder, signal: args.signal });
+    receipt = await deps.review({ workspace: args.workspace, task, baseline: args.baseline, reviewer: args.reviewer, builder: args.builder, signal: args.signal, current: deps.current });
     if (fenced()) return finish('blocked', aborted);
     if (receipt.status === 'unavailable') return finish('blocked', `reviewer unavailable: ${clip(receipt.reason ?? 'no reason given', 300)}`);
     // A receipt binds only the code it reviewed; never let it vouch for a different candidate.
     if (receipt.status === 'stale' || receipt.fingerprint !== candidate.fingerprint) return finish('blocked', 'workspace changed during review; the review is stale. Run /review again.');
     if (receipt.status !== 'clean' && receipt.status !== 'findings') return finish('blocked', 'reviewer returned an unknown status.');
     deps.report(`Reviewer: ${clip(receipt.reviewer.model, 100)} (${receipt.reviewer.provider}, ${independence(receipt)}).\n${formatFindings(receipt)}`);
+    if (fenced()) return finish('blocked', aborted);
+    const afterReview = await deps.capture(args.workspace, args.signal);
+    if (fenced()) return finish('blocked', aborted);
+    if (!afterReview || afterReview.fingerprint !== receipt.fingerprint) return finish('blocked', 'workspace changed after review; the review is stale. Run /review again.');
     const mustFix = receipt.findings.filter(f => f.mustFix);
     if (!mustFix.length) return finish('ready', `${receipt.status === 'clean' ? 'clean review' : `${receipt.findings.length} non-blocking finding(s) shown above`} at ${candidate.fingerprint.slice(0, 12)} after ${rounds} round(s); ${independence(receipt)} reviewer.`);
     if (rounds >= maxRounds) return finish('blocked', `${mustFix.length} must-fix finding(s) remain after ${rounds} review round(s): ${mustFix.map(f => clip(f.id, 20)).join(', ')}.`);
     const prompt = fixPrompt(receipt);
     task = `${args.task}\n\nRound ${rounds} must-fix findings sent to the builder:\n${mustFix.map(f => `- ${clip(f.summary, 300)}`).join('\n')}`;
     deps.report(`Sending ${mustFix.length} must-fix finding(s) to the builder.`);
+    if (fenced()) return finish('blocked', aborted);
+    const beforeFix = await deps.capture(args.workspace, args.signal);
+    if (fenced()) return finish('blocked', aborted);
+    if (!beforeFix || beforeFix.fingerprint !== receipt.fingerprint) return finish('blocked', 'workspace changed before repair; the review is stale. Run /review again.');
     try { await deps.fixTurn(prompt); }
     catch (error) { return finish('blocked', `fix turn failed: ${clip(error instanceof Error ? error.message : 'unknown error', 300)}`); }
   }
