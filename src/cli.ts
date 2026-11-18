@@ -12,7 +12,7 @@ import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
 import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
-import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent } from './runtime.ts';
+import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
 import { createSession, saveSession, resumeSession, listSessions, withoutToolImages, taskRecovery, type Session, type TaskRecovery } from './session.ts';
@@ -22,8 +22,9 @@ import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
 import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
-import { discoverSkills, skillRoots, skillGuidance, type InstalledSkill } from './skills.ts';
-import { createCommandKeyboard } from './prompt-input.ts';
+import { discoverSkills, skillName, skillRoots, skillTurn, SKILL_TOOL, withoutSkillResults, type InstalledSkill } from './skills.ts';
+import { clearDraft, createCommandKeyboard } from './prompt-input.ts';
+import { createSchedules, parseSchedule, scheduleTime } from './schedules.ts';
 export { terminalText } from './terminal-ui.ts';
 
 let asciiGlyphs = false;
@@ -35,7 +36,7 @@ export type CliBridge = {
   approve: (description: string) => Promise<boolean>;
   onToolEvent?: (event: ToolEvent, invocationId?: string) => void;
   onReasoning?: (text: string) => void;
-  onStepLimit?: () => void;
+  onTurnLimit?: (limit: TurnLimit) => void;
   onModeChange?: (mode: Mode) => void;
   serve: (session: { execute: (text: string) => Promise<boolean>; cancel: () => void }) => Promise<void>;
 };
@@ -91,7 +92,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const configuredModel = values.model ?? process.env.NEURA_MODEL;
   if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
   let modelExplicit = configuredModel !== undefined;
-  let showReasoning = !values['no-thinking'];
+  let showReasoning = Boolean(bridge && !values['no-thinking']);
   let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? defaultBaseURL(providerKind) };
   const modelLabel = (value: string) => terminalText(redactSensitiveText(value || '(not selected)', 200));
   // Explicit reviewer only; otherwise the reviewer follows the current builder model (same-family, labelled weaker).
@@ -110,6 +111,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let fixStopped = false;
   let baselineWarned = false;
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
+  const schedules = createSchedules();
   const scratchWorkspace = values.cwd === undefined && interactive && !values.resume && path.relative(fs.realpathSync.native(os.homedir()), workspace) === '';
   if (scratchWorkspace) workspace = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'neura-workspace-')));
   try { assertWorkspaceOutsideNeuraHome(workspace, home); }
@@ -117,13 +119,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const workspaceKey = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
   const sessions = path.join(home, 'sessions', workspaceKey);
   asciiGlyphs = Boolean(values.ascii);
-  // Real terminals get the live slash menu; anything without raw mode (pipes, test doubles) keeps plain readline.
+  // ANSI-capable terminals with raw input get the composer and command menus.
   const keyboard = interactive && process.env.TERM !== 'dumb' && typeof stdin.setRawMode === 'function' ? createCommandKeyboard(stdin, process.stdout) : undefined;
   const rl = interactive ? createInterface({ input: keyboard?.input ?? stdin, output: process.stdout, terminal: true }) : undefined;
-  let promptActive = false;
   const roots = skillRoots(workspace, home);
   let installedSkills: InstalledSkill[] | undefined;
-  const menu = rl && keyboard ? keyboard.attach(rl, () => terminal(), () => promptActive, line => {
+  const composer = rl && keyboard ? keyboard.attach(rl, () => terminal(), line => {
     if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
     return commandMatches(line, installedSkills);
   }) : undefined;
@@ -132,7 +133,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
   const onClose = () => { inputClosed.abort(); abort?.abort(); };
-  const onInterrupt = () => { if (abort) abort.abort(); else rl?.close(); };
+  const onInterrupt = () => { if (abort) abort.abort(); else inputClosed.abort(); };
   process.on('SIGINT', onInterrupt);
   rl?.on('SIGINT', onInterrupt);
   rl?.once('close', onClose);
@@ -142,6 +143,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let sessionState: TerminalStatus['sessionState'] = 'new';
   let lastTurnUsage: TurnUsage | undefined;
   let historySaveFailed = false;
+  const canRunScheduled = () => mode === 'work' && !reconciliationRequired && !historySaveFailed &&
+    (!recovery || recovery.stage === 'completed');
   let lastVerification: WorkspaceReceipt | undefined;
   let verificationGeneration = -1;
   let releaseSession: (() => Promise<void>) | undefined;
@@ -195,16 +198,18 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   }
   const statusSnapshot = (): TerminalStatus => ({
     mode, provider: provider.provider, model: modelLabel(provider.model),
-    workspace: redactSensitiveText(workspace), workspaceName: redactSensitiveText(path.basename(workspace) || workspace),
+    workspace: redactSensitiveText(workspace),
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
   });
-  // ANSI-capable terminals erase the transient waiting line; plain ones keep it as a record.
+  // Transient activity only belongs on terminals that can erase it.
   const erasable = interactive && process.env.TERM !== 'dumb';
   const approve = async (description: string) => {
     if (bridge) return bridge.approve(description);
     if (!rl) return false;
     pauseActivity();
+    // Typeahead entered during a turn is not a response to this action.
+    clearDraft(rl);
     stdout.write('\n' + terminal().approval(description) + '\n');
     const response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal });
     const approved = response.trim() === 'yes';
@@ -218,10 +223,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (interactive) stdout.write(terminal().wordmark(values.ascii) + '\n\n'); // Approved logo; no false READY banner.
     recoveryNotice();
     if (mode === 'yolo') warning(YOLO_WARNING);
-    if (scratchWorkspace) {
-      say(`Scratch workspace: ${workspace}`);
-      say('Files remain here after exit, but OS temp cleanup may remove them. Use --cwd PATH for a project.');
-    }
+    if (scratchWorkspace) warning('OS temp cleanup can remove scratch files. Use /status for the workspace path.');
     async function changeModel(next: ProviderConfig) {
       createConfiguredModel(next);
       abort?.signal.throwIfAborted();
@@ -254,9 +256,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
       } finally { abort = undefined; }
     }
-    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill = '') {
+    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill?: InstalledSkill) {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
       if (reconciliationRequired) throw new Error('Task outcome needs reconciliation. Inspect effects and use /reconcile, or /new for a separate task. No task was replayed.');
+      const resumingTask = Boolean(recovery && recovery.stage !== 'completed');
+      const skills = skillTurn(reviewTurn ? installedSkills ??= discoverSkills(roots) : [], selectedSkill);
       const owned = !abort; // workflow fix turns reuse the outer request's cancellation
       abort ??= new AbortController();
       if (owned) { lastTurnUsage = undefined; fixStopped = false; }
@@ -266,9 +270,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       // Interactive answers render as Markdown; piped and ACP output stays byte-for-byte.
       const markdown = interactive && !bridge ? terminal().markdownStream() : undefined;
       const waiting = (label?: string) => {
-        if (!interactive || waitingOpen) return;
+        if (!erasable || waitingOpen) return;
         waitingOpen = true;
-        if (!erasable) { stdout.write(terminal().boundary('waiting')); return; }
         const started = Date.now();
         let frame = 0;
         const draw = () => stdout.write('\r\x1b[2K' + terminal().activity(frame++, Math.floor((Date.now() - started) / 1000), label));
@@ -277,7 +280,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       };
       const endLine = () => {
         if (ticker) { clearInterval(ticker); ticker = undefined; }
-        if (waitingOpen) stdout.write(erasable ? '\r\x1b[2K' : '\n');
+        if (waitingOpen) stdout.write('\r\x1b[2K');
         else if (lineOpen) stdout.write('\n');
         lineOpen = false; waitingOpen = false;
         const rest = markdown?.flush();
@@ -299,11 +302,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
         const notice = (line: string) => { endLine(); say(line); };
         const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation, { notice })
-          : [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice }), ...(mode === 'learn' ? learn.tools() : [])];
+          : [...createWorkspaceTools(workspace, () => mode, () => generation, approve), ...(mode === 'learn' ? learn.tools() : [])];
+        if (skills.tool) tools.push(skills.tool);
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
           : mode === 'yolo' ? YOLO_INSTRUCTIONS
           : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
-        const guidance = [mode === 'learn' ? '' : projectInstructions(workspace), selectedSkill].filter(Boolean).join('\n\n');
+        const guidance = [mode === 'learn' ? '' : projectInstructions(workspace), skills.guidance].filter(Boolean).join('\n\n');
         const guidanceIndex = memory.length;
         const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         const maxSteps = mode === 'learn' ? DEFAULT_TURN_STEPS : WORK_TURN_STEPS;
@@ -332,7 +336,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
-        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode === 'yolo',
+        let failedEffect = false;
+        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
             endLine();
@@ -353,19 +358,27 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           },
           onToolEvent: (event, invocationId) => {
             bridge?.onToolEvent?.(event, invocationId);
-            // One line per tool call; started/returned are routine. Failed, blocked and cancelled stay visible.
-            if (event.phase === 'started') { mutationAttempted ||= !READ_ONLY_TOOLS.has(event.toolName); return; }
-            if (event.phase === 'returned') { if (erasable) waiting('Working'); return; }
+            const effect = event.toolName !== 'unknown' && event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName);
+            if (event.phase === 'started') { mutationAttempted ||= effect; return; }
+            if (event.phase === 'failed') failedEffect ||= effect;
             if (bridge?.onToolEvent) return;
+            if (event.phase === 'requested' || event.phase === 'returned') {
+              if (erasable) {
+                endLine();
+                waiting(event.phase === 'requested' ? terminalText(redactSensitiveText(event.toolName, 128)) : undefined);
+              }
+              return;
+            }
             endLine();
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
           } });
         endLine();
-        const stopped = outcome.stopReason === 'step-limit';
+        const stopped = outcome.stopReason !== 'finished';
+        let actionFailed = outcome.actionFailed;
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');
-        // Repository context is lower-priority user data, refreshed each turn rather than persisted into history.
-        memory = withoutToolImages(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages);
+        // Guidance and raw skill results expire at the end of the turn.
+        memory = withoutToolImages(withoutSkillResults(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages));
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
         lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
           ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;
@@ -381,18 +394,24 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; historySaveFailed = false; }
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
-        if (stopped) {
-          bridge?.onStepLimit?.();
+        if (outcome.stopReason !== 'finished') {
+          const limit = outcome.stopReason === 'step-limit' ? `${maxSteps}-step limit` : 'model output limit';
+          bridge?.onTurnLimit?.(outcome.stopReason);
           if (!rl && !bridge) process.exitCode = 1;
           if (!reviewTurn) {
             fixStopped = true;
             await persistRecovery({ ...recovery!, stage: 'unfinished' }, expected);
             taskStarted = false;
-            throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`);
+            throw new Error(`The fix reached the ${limit} and is unfinished. Say "continue" to go on.`);
           }
-          say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
-        } else if (review && baseline) { await workflow(text, baseline, false); }
-        else if (review) {
+          say(`Reached the ${limit}. Task unfinished. Say "continue" to go on.`);
+        } else if (mode === 'work' && failedEffect) {
+          fixStopped = true;
+          say('Task unfinished after a failed Work action. Inspect its effects before continuing.');
+        } else if (review && baseline) {
+          if (!await workflow(text, baseline, false)) actionFailed = true;
+        }
+        else if (review && (mutationAttempted || resumingTask)) {
           fixStopped = true; // An unavailable original base must never become a completed/rebased task.
           if (mutationAttempted && !baselineWarned) {
             baselineWarned = true; // once per session; plain chat stays answer-only
@@ -407,7 +426,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           abort.signal.throwIfAborted();
         }
         if (owned && interactive) stdout.write('\n');
+        const succeeded = !stopped && !fixStopped && !actionFailed;
+        if (owned && !succeeded && prompt !== undefined && !bridge) process.exitCode = 1;
+        return succeeded;
       } catch (error) {
+        endLine();
         if (taskStarted && generation === expected) {
           reconciliationRequired = true;
           recovery = { ...recovery!, stage: 'reconcile' };
@@ -423,11 +446,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       const expected = generation;
       fixStopped = false;
       const current = baseline ? await captureWorktree(workspace, { signal: abort?.signal }) : null;
-      if (generation !== expected || mode !== 'work' || abort?.signal.aborted) return;
+      if (generation !== expected || mode !== 'work' || abort?.signal.aborted) return false;
       if (baseline && current?.head !== baseline.head) {
         fixStopped = true;
         say('Review unavailable: HEAD changed since the original task base. The reviewer diffs current HEAD and cannot attest historical task changes. Original base retained; inspect committed changes separately.');
-        return;
+        return false;
       }
       const outcome = await runReviewLoop({ workspace, task, baseline, reviewer: reviewer(), builder: provider, signal: abort?.signal, manual }, {
         capture: async (root, signal) => {
@@ -441,28 +464,30 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       });
       if (outcome.state === 'blocked') fixStopped = true;
       if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
+      return outcome.state !== 'blocked';
     }
     async function input(text: string): Promise<boolean> {
       if (interactive && /^(?:exit|quit)$/i.test(text.trim())) text = '/quit'; // bare words, as in a shell
       if (text.startsWith('$')) {
-        const match = /^\$([a-z0-9]+(?:-[a-z0-9]+)*)?(?:\s+([\s\S]*))?$/i.exec(text.trim());
-        if (!match) throw new Error('Use $ to list installed skills, or $NAME TASK to apply one.');
+        const match = /^\$(\S+)?(?:\s+([\s\S]*))?$/.exec(text.trim());
+        const [, rawName, task = ''] = match ?? [];
+        const name = rawName && skillName(rawName.normalize('NFKC').toLowerCase());
+        if (!match || (rawName && !name)) throw new Error('Use $ to list installed skills, or $NAME TASK to apply one.');
         installedSkills = discoverSkills(roots);
-        const [, name, task = ''] = match;
         if (!name) {
           if (!installedSkills.length) say('No installed skills found. Add a package with SKILL.md under .agents/skills, .claude/skills or .neura/skills.');
           else for (const skill of installedSkills) say(`$${skill.name} — ${skill.description || 'Installed skill'}`);
           return true;
         }
-        const skill = installedSkills.find(entry => entry.name === name.toLowerCase());
+        const skill = installedSkills.find(entry => entry.name === name);
         if (!skill) throw new Error('Installed skill not found. Type $ to list available skills.');
         if (!task.trim()) throw new Error(`Use $${skill.name} TASK to apply this skill.`);
-        await turn(text, task, true, skillGuidance(skill, roots));
+        await turn(text, task, true, skill);
         return true;
       }
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
-      if (command === 'quit' || command === 'exit') { if (interactive) say('Neura closed.'); return false; }
+      if (command === 'quit' || command === 'exit') return false;
       if (command === 'verify' && rest !== 'status' && recovery && (!recovery.baseline || reconciliationRequired)) throw new Error('Verification unavailable: original task base snapshot or reconciliation is missing. Inspect effects; no newer HEAD was substituted.');
       if (command === 'help') stdout.write(terminal().help() + '\n');
       else if (command === 'status') {
@@ -508,6 +533,28 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             say('This receipt is session metadata, not signed attestation, automatic approval or task completion. Detector-only is never verified.');
           }
         } finally { abort = undefined; }
+      } else if (command === 'schedule' || command === 'loop') {
+        if (!interactive || mode !== 'work') throw new Error('Schedules require an interactive Work terminal.');
+        if (command === 'schedule' && (!rest || rest === 'list')) {
+          const jobs = schedules.list();
+          if (!jobs.length) say('No schedules.');
+          else {
+            if (!canRunScheduled()) say('Schedules paused. Resolve the current task to resume.');
+            for (const job of jobs) {
+              const label = terminalText(redactSensitiveText(job.task, 120)).replace(/\s+/g, ' ').trim();
+              say(`#${job.id} · ${scheduleTime(job)}${job.interval ? ' · repeats' : ''} · ${label}`);
+            }
+          }
+        } else if (command === 'schedule' && rest.startsWith('cancel ')) {
+          const id = rest.slice(7);
+          if (!/^\d+$/.test(id) || !schedules.remove(Number(id))) throw new Error('Schedule ID not found. Use /schedule list.');
+          say(`Cancelled schedule #${id}.`);
+        } else {
+          if (!canRunScheduled()) throw new Error('Resolve the current task before scheduling a new one.');
+          if (command === 'loop' && !rest) throw new Error('Use /loop DURATION TASK.');
+          const job = schedules.add(parseSchedule(command === 'loop' ? `every ${rest}` : rest));
+          say(`Schedule #${job.id} · ${scheduleTime(job)}`);
+        }
       } else if (command === 'workflow') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /workflow on or /workflow off.');
         if (rest) workflowOn = rest === 'on';
@@ -540,7 +587,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } else if (command === 'thinking') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /thinking on or /thinking off.');
         if (rest) showReasoning = rest === 'on';
-        say(`Provider reasoning summaries: ${showReasoning ? 'on' : 'off'}. Hidden internal reasoning is not available.`);
+        say(`Provider reasoning summaries: ${showReasoning ? 'on' : 'off'}.`);
       } else if (command === 'login') {
         if (!rl || rest.trim()) throw new Error('Use /login without arguments in an interactive Neura terminal.');
         abort = new AbortController();
@@ -611,14 +658,37 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     }
     if (bridge) { await bridge.serve({ execute: input, cancel: () => abort?.abort() }); return; }
     if (prompt !== undefined) { await input(prompt); return; }
-    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n' + (menu ? terminal().inputHint() + '\n' : '')); // Once at launch. Chat shows answers only; /status has the rest.
+    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n');
+    let scheduleGeneration = generation;
     for (;;) {
-      let text: string;
-      promptActive = true;
-      try { text = await rl!.question(terminal().prompt(mode), { signal: inputClosed.signal }); } catch { menu?.clear(); say('Neura closed.'); break; }
-      finally { promptActive = false; }
-      if (!text.trim()) continue;
-      try { if (!await input(text)) break; } catch (error) {
+      if (scheduleGeneration !== generation) {
+        schedules.clear();
+        scheduleGeneration = generation;
+      }
+      let text: string | undefined;
+      const wake = new AbortController();
+      const stopTimer = canRunScheduled() ? schedules.wake(() => {
+        if (rl!.line || inputClosed.signal.aborted) return false;
+        wake.abort();
+        return true;
+      }) : undefined;
+      try { text = await (composer ?? rl!).question(terminal().prompt(mode), { signal: AbortSignal.any([inputClosed.signal, wake.signal]) }); }
+      catch (error) {
+        if (inputClosed.signal.aborted) break;
+        if (!wake.signal.aborted) throw error;
+      } finally { stopTimer?.(); }
+      const job = text === undefined ? schedules.takeDue() : undefined;
+      try {
+        if (job) {
+          say(`Running schedule #${job.id}.`);
+          const succeeded = await turn(job.task);
+          if (job.interval) {
+            if (succeeded && canRunScheduled()) schedules.repeat(job);
+            else say(`Loop #${job.id} stopped. Use /loop to schedule it again.`);
+          }
+        } else if (text?.trim() && !await input(text)) break;
+      } catch (error) {
+        if (job?.interval) say(`Loop #${job.id} stopped. Use /loop to schedule it again.`);
         const message = error instanceof Error ? error.message : 'Request failed.';
         if (error instanceof Error && error.name === 'AbortError') {
           stderr.write(terminal(process.stderr).feedback('Cancelled. No task was replayed. Inspect current state before retrying.', 'cancelled') + '\n');

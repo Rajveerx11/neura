@@ -51,20 +51,31 @@ function codexHeaders(access: string, accountId: string, accept: string): Header
   return new Headers({ "Content-Type": "application/json", Accept: accept, Authorization: `Bearer ${access}`, "ChatGPT-Account-ID": accountId, originator: "neura", "User-Agent": "neura" });
 }
 
-type CodexResponse = { status: "completed"; output: Record<string, unknown>[]; [key: string]: unknown };
+type CodexResponse = {
+  status: "completed" | "incomplete";
+  incomplete_details?: { reason?: unknown };
+  output: Record<string, unknown>[];
+  [key: string]: unknown;
+};
 
-function completedCodexResponse(value: unknown): CodexResponse {
+function terminalCodexResponse(value: unknown, allowOutputLimit = false): CodexResponse {
   const response = value as CodexResponse | null;
-  if (!response || response.status !== "completed" || (response.error !== undefined && response.error !== null) || !Array.isArray(response.output) || response.output.some(item => !item || typeof item !== "object" || Array.isArray(item))) {
+  const limited = allowOutputLimit && response?.status === "incomplete" && response.incomplete_details?.reason === "max_output_tokens";
+  if (!response || (response.status !== "completed" && !limited) || (response.error !== undefined && response.error !== null) || !Array.isArray(response.output) || response.output.some(item => !item || typeof item !== "object" || Array.isArray(item))) {
     throw new Error(`Codex response did not complete; ${codexDenialReason(value)}; no API billing fallback was used`);
+  }
+  if (!limited && response.output.some(item => item.type === "function_call" &&
+    item.status !== undefined && item.status !== null && item.status !== "completed")) {
+    throw new Error("Codex completed response contained an unfinished action. Action batch rejected.");
   }
   return response;
 }
 
-/** Replay an already completed response through the SDK's existing SSE decoder. */
-function codexCompletedStream(response: CodexResponse): Response {
+/** Replay a validated terminal snapshot through the SDK's SSE decoder. */
+function codexTerminalStream(response: CodexResponse): Response {
   const events: Record<string, unknown>[] = [{ type: "response.created", response: { ...response, output: [] } }];
   for (const [output_index, item] of response.output.entries()) {
+    if (response.status === "incomplete" && item.type !== "message") continue;
     if (typeof item.type !== "string" || !["message", "function_call", "reasoning"].includes(item.type)) throw new Error("Unsupported completed Codex output; raw details withheld");
     events.push({ type: "response.output_item.added", output_index, item: { ...item, content: [], arguments: "", summary: [] } });
     if (item.type === "message") {
@@ -85,7 +96,7 @@ function codexCompletedStream(response: CodexResponse): Response {
     }
     events.push({ type: "response.output_item.done", output_index, item });
   }
-  events.push({ type: "response.completed", response });
+  events.push({ type: `response.${response.status}`, response });
   return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
 }
 
@@ -100,7 +111,7 @@ function codexStopReason(payload: { response?: { incomplete_details?: { reason?:
   return denial.startsWith("No recognized") ? undefined : denial;
 }
 
-/** The terminal completed snapshot is authoritative; truncated streams must not become successful turns. */
+/** Only a valid terminal snapshot can end the stream. The SDK maps an output limit to `length`. */
 async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<Response> {
   if (!response.body) throw new Error("Codex response has no stream");
   const reader = response.body.getReader();
@@ -135,12 +146,14 @@ async function codexSnapshot(response: Response, signal?: AbortSignal): Promise<
         idleDeadline = performance.now() + STREAM_IDLE_TIMEOUT_MS;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(expire, STREAM_IDLE_TIMEOUT_MS);
+        const limited = payload.type === "response.incomplete" && payload.response?.status === "incomplete" &&
+          payload.response.incomplete_details?.reason === "max_output_tokens";
+        if (payload.type === "response.completed" || limited) {
+          return new Response(JSON.stringify(terminalCodexResponse(payload.response, limited)), { headers: { "Content-Type": "application/json" } });
+        }
         if (["error", "response.error", "response.failed", "response.incomplete"].includes(payload.type ?? "")) {
           const reason = codexStopReason(payload);
           throw reason ? new CodexStopError(`Codex response did not complete; ${reason}; no API billing fallback was used`) : new Error("Codex response did not complete");
-        }
-        if (payload.type === "response.completed") {
-          return new Response(JSON.stringify(completedCodexResponse(payload.response)), { headers: { "Content-Type": "application/json" } });
         }
       }
       if (done) throw new Error("Codex stream ended without a completed response");
@@ -249,14 +262,14 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
     let value: unknown;
     try { value = await readJsonResponse(response, MAX_RESPONSE_BYTES, 30_000, signal); }
     catch { signal?.throwIfAborted(); throw new Error("Codex JSON response was invalid, oversized or stalled; raw details withheld"); }
-    const completed = completedCodexResponse(value);
-    return streaming ? codexCompletedStream(completed) : new Response(JSON.stringify(completed), { headers: { "Content-Type": "application/json" } });
+    const snapshot = terminalCodexResponse(value, true);
+    return streaming ? codexTerminalStream(snapshot) : new Response(JSON.stringify(snapshot), { headers: { "Content-Type": "application/json" } });
   }
   // The official Codex HTTP transport parses successful response bytes as SSE without a MIME gate.
   // Buffer mismatched/missing MIME until completion so HTML and partial streams cannot become success.
   try {
     const snapshot = await codexSnapshot(response, signal);
-    return streaming ? codexCompletedStream(completedCodexResponse(await snapshot.json())) : snapshot;
+    return streaming ? codexTerminalStream(terminalCodexResponse(await snapshot.json(), true)) : snapshot;
   } catch (error) {
     signal?.throwIfAborted();
     if (error instanceof CodexStopError) throw error;

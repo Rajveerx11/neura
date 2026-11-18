@@ -38,9 +38,10 @@ and Esc closes.
 
 ### Installed skills
 
-Type `$` to browse installed skills. Select one, then submit `$NAME TASK`.
-Skill guidance does not change tools, approvals or sandbox policy. The list
-shown here comes from this PC's installed packages, not a bundled catalog.
+Type `$` to browse installed skills, then submit `$NAME TASK` to choose one.
+On ordinary tasks, Neura gives the model skill names and descriptions so it can
+open relevant guidance as needed. CLI and ACP share the same
+[skill discovery and read limits](docs/SKILLS.md).
 
 ![Running Neura terminal with the dollar-sign skill picker showing installed packages.](assets/screenshots/terminal-skills.png)
 
@@ -235,7 +236,8 @@ Teach one concept about database joins. Show a diagram and an example, then give
 ```
 
 Bare interactive launch from your user home creates a temporary scratch workspace
-and prints its path. For lasting work, launch in your project or pass `--cwd`.
+whose path is available in `/status`. For lasting work, launch in your project
+or pass `--cwd`.
 Explicit workspaces, headless tasks and resumed sessions never silently switch.
 
 ## Commands
@@ -249,6 +251,9 @@ Explicit workspaces, headless tasks and resumed sessions never silently switch.
 | `/login`, `/logout` | Explicit subscription authorization or local credential removal |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries |
 | `/workflow on\|off` | Toggle automatic Work review |
+| `/loop DURATION TASK`, `/schedule every DURATION TASK` | Repeat a Work task in this terminal |
+| `/schedule in DURATION TASK`, `/schedule at TIMESTAMP TASK` | Run a Work task once |
+| `/schedule list`, `/schedule cancel ID` | List or cancel pending tasks |
 | `/review`, `/review status` | Review session changes or check receipt currency |
 | `/reviewer PROVIDER MODEL [URL]`, `/reviewer default` | Select a reviewer or follow the builder |
 | `/verify quick`, `/verify full`, `/verify status` | Request bounded verification or inspect its receipt |
@@ -262,6 +267,20 @@ Ctrl+C cancels a running turn. `--prompt "TASK"` runs a headless task. Headless
 requests cannot grant approvals. Policy-allowed sandbox commands can still run
 without approval. `--no-history` disables conversation persistence, not credential
 or Learn-artifact writes. Model changes start a fresh conversation.
+
+### Loops and schedules
+
+`/loop 15m Summarize recent commits` repeats a Work task. Use `/schedule in 30m TASK`
+for a one-time delay, or `/schedule at 2027-01-15T09:30+05:30 TASK` for an exact
+time with a time zone. Durations accept `s`, `m`, `h` and `d`. Repeat intervals
+start at one minute.
+
+Schedules run one at a time when the Work terminal is idle and the input box is
+empty. Normal sandboxing and approvals apply. A loop stops if an action fails
+or is denied, or if the turn ends unfinished. Missed intervals are skipped.
+Pending schedules wait while a task needs recovery. Leaving the terminal or
+changing mode, model or conversation clears the queue. Use `/schedule list` to
+see times in UTC.
 
 ### Manual verification: first integration slice
 
@@ -277,10 +296,11 @@ See [verification](docs/VERIFICATION.md).
 
 ## Terminal experience
 
-Interactive launch shows the approved logo, prompt-adjacent status and prompt.
-Chat turns print the answer. Tool calls, approvals and meaningful review outcomes
-stay visible. `/status` holds detailed usage. Provider-supplied reasoning summaries
-are optional. Hidden reasoning is never displayed.
+Interactive launch shows the approved logo, one status line, and a bordered
+prompt on supported terminals. Chat turns print the answer. Successful tool
+activity clears as the turn moves on. Warnings, approvals and review outcomes
+stay visible. Use `/status` for details and `/thinking on` to show provider
+reasoning summaries.
 
 `--ascii`, `TERM=dumb` and narrow terminals use `>_ neura`. `NO_COLOR` disables
 color. Headless requests, `--help` and `--check` omit artwork. See

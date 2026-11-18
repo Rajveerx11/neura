@@ -26,6 +26,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'reconcile', description: 'Acknowledge inspection of an interrupted task before continuing' },
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
   { name: 'workflow', args: '[on|off]', description: 'Independent read-only review of Work changes', options: [['on', 'Review each change'], ['off', 'No automatic review']] },
+  { name: 'loop', args: 'DURATION TASK', description: 'Repeat a task in this Work terminal', needsArg: true },
+  { name: 'schedule', args: '[list|cancel ID|in DURATION TASK|at TIMESTAMP TASK|every DURATION TASK]', description: 'Run a task later in this Work terminal', options: [
+    ['list', 'List schedules'], ['cancel ID', 'Cancel by ID'], ['in DURATION TASK', 'Run after a delay'],
+    ['at TIMESTAMP TASK', 'Run at an ISO timestamp'], ['every DURATION TASK', 'Repeat at an interval']] },
   { name: 'review', args: '[status]', description: 'Review changes since the session baseline', options: [['status', 'Is the last review still current?']] },
   { name: 'reviewer', args: '[PROVIDER MODEL [URL]|default]', description: 'Show or choose the independent reviewer', options: [['default', 'Follow the builder model']] },
   { name: 'verify', args: '[quick|full|status]', description: 'Manual verification in Work', options: [['quick', 'Detector-only check'], ['full', 'Full verification'], ['status', 'Check the last receipt']] },
@@ -41,8 +45,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 export type MenuItem = { value: string; label: string; hint: string; description: string; submit: boolean };
 /** Slash-command options, or installed skills after `$`. Skills complete first so the user can add a task. */
 export function commandMatches(line: string, skills: readonly { name: string; description: string }[] = []): MenuItem[] {
-  const skill = /^\$([a-z0-9-]*)$/i.exec(line);
-  if (skill) return skills.filter(entry => entry.name.startsWith(skill[1].toLowerCase())).map(entry => ({
+  const skill = line.startsWith('$') ? line.slice(1).normalize('NFKC').toLowerCase() : undefined;
+  if (skill !== undefined && /^[\p{L}\p{M}\p{N}-]*$/u.test(skill)) return skills.filter(entry => entry.name.startsWith(skill)).map(entry => ({
     value: '$' + entry.name, label: '$' + entry.name, hint: 'TASK', description: entry.description, submit: false,
   }));
   const top = /^\/(\S*)$/.exec(line);
@@ -56,12 +60,13 @@ export function commandMatches(line: string, skills: readonly { name: string; de
   const command = sub && SLASH_COMMANDS.find(entry => entry.name === sub[1].toLowerCase());
   if (!sub || !command?.options) return [];
   return command.options.filter(([option]) => option.startsWith(sub[2].toLowerCase())).map(([option, description]) => {
-    const [name, hint = ''] = option.split(' ');
+    const [name, ...args] = option.split(' ');
+    const hint = args.join(' ');
     return { value: `/${command.name} ${name}`, label: name, hint, description, submit: !hint };
   });
 }
 export type TerminalStatus = {
-  mode: Mode; provider: string; model: string; workspace: string; workspaceName: string;
+  mode: Mode; provider: string; model: string; workspace: string;
   history: 'on' | 'off' | 'save failed'; sessionState: 'new' | 'resumed'; sessionId?: string;
   thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number };
 };
@@ -243,6 +248,12 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/reviewer PROVIDER MODEL [URL]', 'Choose an independent reviewer. Use a different provider for cross-family review.'],
         ['/reviewer [default]', 'Show the reviewer, or reset it to follow the builder model (labelled same-family).'],
       ]),
+      group('Schedules in Work', [
+        ['/loop DURATION TASK', 'Repeat a task in this terminal. Minimum interval is 1m. Also available as /schedule every DURATION TASK.'],
+        ['/schedule in DURATION TASK', 'Run once after a delay, such as 15m.'],
+        ['/schedule at TIMESTAMP TASK', 'Run once at an ISO timestamp with a time zone.'],
+        ['/schedule list · /schedule cancel ID', 'Inspect or cancel schedules. Schedules expire when you exit or change mode, model or conversation.'],
+      ]),
       group('Models and sign-in', [
         ['/model', 'Subscription picker: enter a number or listed model ID; Enter cancels.'],
         ['/model PROVIDER MODEL [URL]', 'Select openai-codex, local, openai or anthropic explicitly.'],
@@ -286,7 +297,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
     width, color, help, markdownStream,
     markdown(text: string) { const stream = markdownStream(); return (stream.push(text) + stream.flush()).replace(/\n$/, ''); },
     /** One erasable row: spinner, label, elapsed seconds and the cancel key. */
-    activity(frame: number, seconds: number, label = 'Thinking') {
+    activity(frame: number, seconds: number, label = 'Working') {
       const glyph = spinner[frame % spinner.length];
       return paint(glyph, 'copper') + ' ' + paint(shortLabel(`${label}… ${seconds}s · Ctrl+C to cancel`, width - 3), 'dim');
     },
@@ -307,23 +318,23 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       lines.push(paint('  ' + shortLabel(`${more}${plainGlyphs ? 'Up/Down' : '↑↓'} select · Tab complete · Enter run · Esc close`, width - 3), 'dim'));
       return lines;
     },
-    inputHint() { return paint(shortLabel('Type / for commands · $ for skills · Ctrl+C cancels a running task', width - 1), 'dim'); },
+    composer(prompt: string) {
+      const edge = box.h.repeat(Math.max(0, columns - 3));
+      const side = paint(box.v, 'dim');
+      return {
+        query: paint(box.tl + edge + box.tr, 'dim') + '\r\n' + side + ' ' + prompt,
+        side,
+        bottom: paint(box.bl + edge + box.br, 'dim'),
+      };
+    },
     // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
     wordmark(ascii = false) { return renderLogo(columns, ascii || env.TERM === 'dumb').join('\n'); },
     status(state: TerminalStatus) {
       const mode = modeLabel(state.mode);
-      const model = shortLabel(`${state.provider}/${state.model || '(not selected)'}`, width - mode.length - 3);
-      const lines = [paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim')];
-      const fields = [shortLabel(state.workspaceName, Math.min(width, 24)),
-        `history ${state.history}${state.history === 'off' ? '' : '/' + state.sessionState}`,
-        `thinking ${state.thinking ? 'on' : 'off'}`, `${state.messageCount} msgs`, '/status'];
-      let line = '';
-      for (const field of fields) {
-        if (line && cells(line + ' · ' + field) > width) { lines.push(paint(line, 'dim')); line = ''; }
-        line += (line ? ' · ' : '') + field;
-      }
-      if (line) lines.push(paint(line, 'dim'));
-      return lines.join('\n');
+      const available = Math.max(1, Math.min(width, columns) - 1);
+      if (available <= mode.length + 3) return paint(shortLabel(mode, available), state.mode === 'yolo' ? 'error' : 'copper');
+      const model = shortLabel(`${state.provider}/${state.model || '(not selected)'}`, available - mode.length - 3);
+      return paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim');
     },
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);
