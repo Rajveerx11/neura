@@ -43,8 +43,8 @@
     "audit:all": "npm run audit:dependencies && npm run audit:signatures"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.93",
-    "@ai-sdk/openai": "4.0.106",
+    "@ai-sdk/anthropic": "4.0.105",
+    "@ai-sdk/openai": "4.0.118",
     "typebox": "1.4.4",
     "yaml": "2.9.1",
     "zod": "4.6.7"
