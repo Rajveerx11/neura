@@ -319,7 +319,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       return lines;
     },
     composer(prompt: string) {
-      const edge = box.h.repeat(width - 3);
+      const edge = box.h.repeat(Math.max(0, columns - 3));
       const side = paint(box.v, 'dim');
       return {
         query: paint(box.tl + edge + box.tr, 'dim') + '\r\n' + side + ' ' + prompt,
