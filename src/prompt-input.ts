@@ -7,6 +7,12 @@ type Raw = NodeJS.ReadStream & { setRawMode(mode: boolean): unknown };
 const moveRows = (rows: number) => rows ? `\x1b[${Math.abs(rows)}${rows < 0 ? 'A' : 'B'}` : '';
 const column = (cols: number) => `\x1b[${cols + 1}G`;
 
+export function clearDraft(rl: Interface) {
+  if (!rl.line) return;
+  rl.write(null, { ctrl: true, name: 'e' });
+  rl.write(null, { ctrl: true, name: 'u' });
+}
+
 /**
  * Readline owns the draft and its cursor. Draw the lower border and menus outside its edit area.
  */
@@ -96,8 +102,12 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
           return true;
         }
       }
-      if (frame && /[\r\n]/.test(key)) unframe(prompt);
       return false;
+    };
+    // Only an unmodified Return submits readline's question, even when a chunk contains several keys.
+    const beforeKeypress = (_text: string, key?: { name?: string; meta?: boolean; ctrl?: boolean; shift?: boolean }) => {
+      if (frame && prompt !== undefined && key && !key.meta && !key.ctrl && !key.shift &&
+        (key.name === 'return' || key.name === 'enter')) unframe(prompt);
     };
     // Readline registered its keypress listener first, so this runs after it has updated `rl.line`.
     const onKeypress = () => {
@@ -110,15 +120,16 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       rl.setPrompt(frame?.query ?? prompt);
     };
     const onResize = () => { shown = false; update(); };
+    input.prependListener('keypress', beforeKeypress);
     input.on('keypress', onKeypress);
     rl.on('SIGCONT', onKeypress);
     stdout.prependListener('resize', onResizeStart);
     stdout.on('resize', onResize);
     rl.once('close', () => {
       closed = true;
-      if (prompt !== undefined) stdout.write(moveRows(-rl.getCursorPos().rows) + column(0) + '\x1b[J');
       if (pending) { clearImmediate(pending); pending = undefined; }
       claim = undefined;
+      input.off('keypress', beforeKeypress);
       input.off('keypress', onKeypress);
       rl.off('SIGCONT', onKeypress);
       stdin.off('data', onData); stdin.off('end', onEnd);
@@ -134,10 +145,11 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
         let erasedRows = 0;
         const listener = addAbortListener(options.signal, () => {
           if (closed) return;
-          // Readline advances past the draft on abort. Remove the frame first so only the draft rows need erasing.
+          // Remove the draft and frame before readline settles the question and advances one row.
+          clear();
+          clearDraft(rl);
           unframe('');
-          rl.write(null, { ctrl: true, name: 'e' });
-          erasedRows = rl.getCursorPos().rows + 1;
+          erasedRows = 1;
         });
         try {
           const answer = rl.question(frame?.query ?? query, options);

@@ -98,7 +98,8 @@ function parseSkill(text: string, file: string) {
       || typeof description !== 'string' || !description.trim() || Array.from(description).length > 1024) {
     throw new Error('Skill needs a matching name and a description.');
   }
-  return { name, description: redactSensitiveText(description.replace(/\s+/g, ' ').trim(), 1024), body: text.slice(match[0].length).trim() };
+  const label = Array.from(redactSensitiveText(description.replace(/\s+/g, ' ').trim())).slice(0, 1024).join('');
+  return { name, description: label, body: text.slice(match[0].length).trim() };
 }
 
 export function discoverSkills(roots: readonly string[]): InstalledSkill[] {
@@ -125,17 +126,15 @@ export function discoverSkills(roots: readonly string[]): InstalledSkill[] {
         return;
       }
       if (depth === 4 || entries >= MAX_ENTRIES) return;
-      const dirs: string[] = [];
       const scan = fs.opendirSync(directory);
       try {
         while (entries < MAX_ENTRIES) {
           const entry = scan.readSync();
           if (!entry) break;
           entries++;
-          if ((entry.isDirectory() || entry.isSymbolicLink()) && searchable(entry.name)) dirs.push(entry.name);
+          if ((entry.isDirectory() || entry.isSymbolicLink()) && searchable(entry.name)) visit(path.join(directory, entry.name), depth + 1);
         }
       } finally { scan.closeSync(); }
-      for (const dir of dirs.sort()) visit(path.join(directory, dir), depth + 1);
     } catch { /* Missing, unreadable, linked and malformed packages are not offered. */ }
   }
   for (const root of allowed) visit(root, 0);

@@ -238,6 +238,8 @@ export function modelPrompt(instructions: string, messages: any[]): any[] {
 }
 
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+const answerText = (parts: { type: string; text?: string; providerMetadata?: { openai?: { phase?: string } } }[]) =>
+  parts.filter(part => part.type === "text" && part.providerMetadata?.openai?.phase !== "commentary").map(part => part.text).join("");
 
 export async function runTurn({ model, messages, instructions, tools, signal, current = () => true, onText, onReasoning, onToolEvent, hideToolText, maxSteps = DEFAULT_TURN_STEPS, requestTimeoutMs = MODEL_REQUEST_TIMEOUT_MS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | TurnLimit; actionFailed: boolean; usage?: TurnUsage }> {
   signal?.throwIfAborted();
@@ -278,6 +280,18 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
       checkCurrent();
       // Validate the whole batch before dispatch: an ignored malformed sibling must not leave partial effects/history.
       if (!reply || !Array.isArray(reply.content)) throw new Error("Invalid model response; action batch rejected.");
+      const reason = reply.finishReason?.unified;
+      if (reason === "error" || reason === "content-filter") throw new Error("Model did not complete; action batch rejected.");
+      const input = reply.usage?.inputTokens?.total, output = reply.usage?.outputTokens?.total;
+      usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output } : undefined;
+      // Truncated output can preserve text only. Its action batch is never dispatched.
+      if (reason === "length") {
+        const parts = reply.content.filter(part => part?.type === "text");
+        if (parts.some(part => typeof part.text !== "string")) throw new Error("Invalid text in truncated model response.");
+        answer = answerText(parts);
+        if (answer) history.push({ role: "assistant", content: [{ type: "text", text: answer }] });
+        stopReason = "output-limit"; break;
+      }
       const ids = new Set<string>();
       for (const part of reply.content) {
         // Pinned providers emit URL/document citations as metadata; they carry no local action authority.
@@ -295,18 +309,9 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
           if (ids.size > MAX_STEP_TOOL_CALLS) throw new Error("Model requested too many actions in one step; action batch rejected.");
         }
       }
-      const reason = reply.finishReason?.unified;
-      if (reason === "error" || reason === "content-filter") throw new Error("Model did not complete; action batch rejected.");
       if (reason === "tool-calls" && !ids.size) throw new Error("Model returned no requested actions.");
-      const input = reply.usage?.inputTokens?.total, output = reply.usage?.outputTokens?.total;
-      usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output } : undefined;
       // The Responses adapter marks commentary separately. Keep it in history for the provider.
-      answer = reply.content.filter(part => part.type === "text" && part.providerMetadata?.openai?.phase !== "commentary").map(part => part.text).join("");
-      // Truncated output cannot authorize even a syntactically complete-looking action.
-      if (reason === "length") {
-        if (answer) history.push({ role: "assistant", content: [{ type: "text", text: answer }] });
-        stopReason = "output-limit"; break;
-      }
+      answer = answerText(reply.content);
       const said: any[] = [];
       const calls: any[] = [];
       for (const part of Array.isArray(reply.content) ? reply.content : []) {

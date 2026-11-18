@@ -23,8 +23,8 @@ import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
 import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
 import { discoverSkills, skillName, skillRoots, skillTurn, SKILL_TOOL, withoutSkillResults, type InstalledSkill } from './skills.ts';
-import { createCommandKeyboard } from './prompt-input.ts';
-import { createSchedules, parseSchedule } from './schedules.ts';
+import { clearDraft, createCommandKeyboard } from './prompt-input.ts';
+import { createSchedules, parseSchedule, scheduleTime } from './schedules.ts';
 export { terminalText } from './terminal-ui.ts';
 
 let asciiGlyphs = false;
@@ -133,7 +133,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
   const onClose = () => { inputClosed.abort(); abort?.abort(); };
-  const onInterrupt = () => { if (abort) abort.abort(); else rl?.close(); };
+  const onInterrupt = () => { if (abort) abort.abort(); else inputClosed.abort(); };
   process.on('SIGINT', onInterrupt);
   rl?.on('SIGINT', onInterrupt);
   rl?.once('close', onClose);
@@ -208,6 +208,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (bridge) return bridge.approve(description);
     if (!rl) return false;
     pauseActivity();
+    // Typeahead entered during a turn is not a response to this action.
+    clearDraft(rl);
     stdout.write('\n' + terminal().approval(description) + '\n');
     const response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal });
     const approved = response.trim() === 'yes';
@@ -334,6 +336,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
+        let failedEffect = false;
         const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
@@ -355,7 +358,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           },
           onToolEvent: (event, invocationId) => {
             bridge?.onToolEvent?.(event, invocationId);
-            if (event.phase === 'started') { mutationAttempted ||= event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName); return; }
+            const effect = event.toolName !== 'unknown' && event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName);
+            if (event.phase === 'started') { mutationAttempted ||= effect; return; }
+            if (event.phase === 'failed') failedEffect ||= effect;
             if (bridge?.onToolEvent) return;
             if (event.phase === 'requested' || event.phase === 'returned') {
               if (erasable) {
@@ -400,6 +405,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             throw new Error(`The fix reached the ${limit} and is unfinished. Say "continue" to go on.`);
           }
           say(`Reached the ${limit}. Task unfinished. Say "continue" to go on.`);
+        } else if (mode === 'work' && failedEffect) {
+          fixStopped = true;
+          say('Task unfinished after a failed Work action. Inspect its effects before continuing.');
         } else if (review && baseline) {
           if (!await workflow(text, baseline, false)) actionFailed = true;
         }
@@ -418,7 +426,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           abort.signal.throwIfAborted();
         }
         if (owned && interactive) stdout.write('\n');
-        return !actionFailed;
+        const succeeded = !stopped && !fixStopped && !actionFailed;
+        if (owned && !succeeded && prompt !== undefined && !bridge) process.exitCode = 1;
+        return succeeded;
       } catch (error) {
         endLine();
         if (taskStarted && generation === expected) {
@@ -442,20 +452,19 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         say('Review unavailable: HEAD changed since the original task base. The reviewer diffs current HEAD and cannot attest historical task changes. Original base retained; inspect committed changes separately.');
         return false;
       }
-      let actionsSucceeded = true;
       const outcome = await runReviewLoop({ workspace, task, baseline, reviewer: reviewer(), builder: provider, signal: abort?.signal, manual }, {
         capture: async (root, signal) => {
           const snapshot = await captureWorktree(root, { signal });
           return baseline && snapshot?.head !== baseline.head ? null : snapshot;
         },
         review: input => reviewCandidate(input), assessRisk,
-        fixTurn: async prompt => { if (!await turn(prompt, prompt, false)) actionsSucceeded = false; },
+        fixTurn: prompt => turn(prompt, prompt, false),
         current: () => generation === expected && mode === 'work',
         report: line => say(line),
       });
       if (outcome.state === 'blocked') fixStopped = true;
       if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
-      return actionsSucceeded && outcome.state !== 'blocked';
+      return outcome.state !== 'blocked';
     }
     async function input(text: string): Promise<boolean> {
       if (interactive && /^(?:exit|quit)$/i.test(text.trim())) text = '/quit'; // bare words, as in a shell
@@ -533,7 +542,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             if (!canRunScheduled()) say('Schedules paused. Resolve the current task to resume.');
             for (const job of jobs) {
               const label = terminalText(redactSensitiveText(job.task, 120)).replace(/\s+/g, ' ').trim();
-              say(`#${job.id} · ${new Date(job.due).toISOString()}${job.interval ? ' · repeats' : ''} · ${label}`);
+              say(`#${job.id} · ${scheduleTime(job)}${job.interval ? ' · repeats' : ''} · ${label}`);
             }
           }
         } else if (command === 'schedule' && rest.startsWith('cancel ')) {
@@ -544,7 +553,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           if (!canRunScheduled()) throw new Error('Resolve the current task before scheduling a new one.');
           if (command === 'loop' && !rest) throw new Error('Use /loop DURATION TASK.');
           const job = schedules.add(parseSchedule(command === 'loop' ? `every ${rest}` : rest));
-          say(`Schedule #${job.id} · ${new Date(job.due).toISOString()}`);
+          say(`Schedule #${job.id} · ${scheduleTime(job)}`);
         }
       } else if (command === 'workflow') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /workflow on or /workflow off.');
@@ -673,12 +682,13 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (job) {
           say(`Running schedule #${job.id}.`);
           const succeeded = await turn(job.task);
-          if (job.interval && canRunScheduled()) {
-            if (succeeded) schedules.repeat(job);
-            else say(`Loop #${job.id} stopped after a failed action.`);
+          if (job.interval) {
+            if (succeeded && canRunScheduled()) schedules.repeat(job);
+            else say(`Loop #${job.id} stopped. Use /loop to schedule it again.`);
           }
         } else if (text?.trim() && !await input(text)) break;
       } catch (error) {
+        if (job?.interval) say(`Loop #${job.id} stopped. Use /loop to schedule it again.`);
         const message = error instanceof Error ? error.message : 'Request failed.';
         if (error instanceof Error && error.name === 'AbortError') {
           stderr.write(terminal(process.stderr).feedback('Cancelled. No task was replayed. Inspect current state before retrying.', 'cancelled') + '\n');

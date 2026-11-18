@@ -71,10 +71,11 @@ function terminalCodexResponse(value: unknown, allowOutputLimit = false): CodexR
   return response;
 }
 
-/** Replay an already completed response through the SDK's existing SSE decoder. */
-function codexCompletedStream(response: CodexResponse): Response {
+/** Replay a validated terminal snapshot through the SDK's SSE decoder. */
+function codexTerminalStream(response: CodexResponse): Response {
   const events: Record<string, unknown>[] = [{ type: "response.created", response: { ...response, output: [] } }];
   for (const [output_index, item] of response.output.entries()) {
+    if (response.status === "incomplete" && item.type !== "message") continue;
     if (typeof item.type !== "string" || !["message", "function_call", "reasoning"].includes(item.type)) throw new Error("Unsupported completed Codex output; raw details withheld");
     events.push({ type: "response.output_item.added", output_index, item: { ...item, content: [], arguments: "", summary: [] } });
     if (item.type === "message") {
@@ -95,7 +96,7 @@ function codexCompletedStream(response: CodexResponse): Response {
     }
     events.push({ type: "response.output_item.done", output_index, item });
   }
-  events.push({ type: "response.completed", response });
+  events.push({ type: `response.${response.status}`, response });
   return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
 }
 
@@ -261,14 +262,14 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
     let value: unknown;
     try { value = await readJsonResponse(response, MAX_RESPONSE_BYTES, 30_000, signal); }
     catch { signal?.throwIfAborted(); throw new Error("Codex JSON response was invalid, oversized or stalled; raw details withheld"); }
-    const snapshot = terminalCodexResponse(value, !streaming);
-    return streaming ? codexCompletedStream(snapshot) : new Response(JSON.stringify(snapshot), { headers: { "Content-Type": "application/json" } });
+    const snapshot = terminalCodexResponse(value, true);
+    return streaming ? codexTerminalStream(snapshot) : new Response(JSON.stringify(snapshot), { headers: { "Content-Type": "application/json" } });
   }
   // The official Codex HTTP transport parses successful response bytes as SSE without a MIME gate.
   // Buffer mismatched/missing MIME until completion so HTML and partial streams cannot become success.
   try {
     const snapshot = await codexSnapshot(response, signal);
-    return streaming ? codexCompletedStream(terminalCodexResponse(await snapshot.json())) : snapshot;
+    return streaming ? codexTerminalStream(terminalCodexResponse(await snapshot.json(), true)) : snapshot;
   } catch (error) {
     signal?.throwIfAborted();
     if (error instanceof CodexStopError) throw error;

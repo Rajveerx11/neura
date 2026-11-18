@@ -7,8 +7,9 @@ terminals fall back to readline.
 
 Activity clears as the turn moves on. Approvals, warnings and review outcomes
 remain visible. Terminal chats show provider summaries only after `/thinking on`.
-`/status` shows detailed usage and the path to a scratch workspace. Earlier audit
-and test sections describe their recorded revisions. See [current design](../DESIGN.md).
+`/status` shows detailed usage and the active workspace path, including any
+scratch workspace. Earlier audit and test sections describe their recorded
+revisions. See [current design](../DESIGN.md).
 
 Audit baseline: `5f53c11`, 2026-11-02. Scope: [active CLI](../src/cli.ts),
 [CLI tests](https://github.com/Rajveerx11/neura/blob/1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d/tests/v1-cli.test.ts), [status](STATUS.md), and

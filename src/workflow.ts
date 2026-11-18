@@ -12,7 +12,7 @@ export type WorkflowDeps = {
   capture: (workspace: string, signal?: AbortSignal) => Promise<TreeSnapshot | null>;
   review: (input: ReviewInput) => Promise<ReviewReceipt>;
   assessRisk: (changed: string[]) => Risk;
-  fixTurn: (prompt: string) => Promise<void>;
+  fixTurn: (prompt: string) => Promise<boolean | void>;
   current: () => boolean;
   report: (line: string) => void;
 };
@@ -43,6 +43,8 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
   const maxRounds = args.manual ? 1 : MAX_REVIEW_ROUNDS;
   let receipt: ReviewReceipt | undefined;
   let rounds = 0;
+  let repairFailed = false;
+  const repairFailure = 'repair turn had failed actions. Inspect the workspace before continuing.';
   let task = args.task;
   const finish = (state: WorkflowState, reason: string, quiet = false): WorkflowOutcome => {
     if (!quiet) deps.report(state === 'ready' ? `READY FOR YOUR APPROVAL: ${reason} Nothing was committed, pushed or merged.`
@@ -59,9 +61,9 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
     if (!candidate) return finish('blocked', 'candidate snapshot unavailable; changes were not reviewed.');
     const changed = changedFiles(args.baseline, candidate);
     // A chat turn that changed nothing needs no review line; an explicit /review still says so.
-    if (!changed.length) return finish('skipped', 'no workspace changes.', !args.manual);
+    if (!changed.length) return repairFailed ? finish('blocked', repairFailure) : finish('skipped', 'no workspace changes.', !args.manual);
     const risk = deps.assessRisk(changed);
-    if (risk.level === 'trivial' && !args.manual) return finish('skipped', `trivial change (${risk.reasons.map(reason => reason.replace(/\.$/, '')).join('; ') || 'documentation only'}).`);
+    if (!repairFailed && risk.level === 'trivial' && !args.manual) return finish('skipped', `trivial change (${risk.reasons.map(reason => reason.replace(/\.$/, '')).join('; ') || 'documentation only'}).`);
     rounds++;
     deps.report(`Review round ${rounds}/${maxRounds}: ${changed.length} changed file(s), risk ${risk.level}${risk.reasons.length ? ` (${risk.reasons.join('; ')})` : ''}.`);
     receipt = await deps.review({ workspace: args.workspace, task, baseline: args.baseline, reviewer: args.reviewer, builder: args.builder, signal: args.signal, current: deps.current });
@@ -75,6 +77,7 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
     const afterReview = await deps.capture(args.workspace, args.signal);
     if (fenced()) return finish('blocked', aborted);
     if (!afterReview || afterReview.fingerprint !== receipt.fingerprint) return finish('blocked', 'workspace changed after review; the review is stale. Run /review again.');
+    if (repairFailed) return finish('blocked', repairFailure);
     const mustFix = receipt.findings.filter(f => f.mustFix);
     if (!mustFix.length) return finish('ready', `${receipt.status === 'clean' ? 'clean review' : `${receipt.findings.length} non-blocking finding(s) shown above`} at ${candidate.fingerprint.slice(0, 12)} after ${rounds} round(s); ${independence(receipt)} reviewer.`);
     if (rounds >= maxRounds) return finish('blocked', `${mustFix.length} must-fix finding(s) remain after ${rounds} review round(s): ${mustFix.map(f => clip(f.id, 20)).join(', ')}.`);
@@ -85,7 +88,7 @@ export async function runReviewLoop(args: WorkflowArgs, deps: WorkflowDeps): Pro
     const beforeFix = await deps.capture(args.workspace, args.signal);
     if (fenced()) return finish('blocked', aborted);
     if (!beforeFix || beforeFix.fingerprint !== receipt.fingerprint) return finish('blocked', 'workspace changed before repair; the review is stale. Run /review again.');
-    try { await deps.fixTurn(prompt); }
+    try { repairFailed = await deps.fixTurn(prompt) === false; }
     catch (error) { return finish('blocked', `fix turn failed: ${clip(error instanceof Error ? error.message : 'unknown error', 300)}`); }
   }
 }
