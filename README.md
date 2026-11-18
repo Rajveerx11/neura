@@ -276,10 +276,11 @@ time with a time zone. Durations accept `s`, `m`, `h` and `d`. Repeat intervals
 start at one minute.
 
 Schedules run one at a time when the Work terminal is idle and the input box is
-empty. Normal sandboxing and approvals apply. Missed intervals are skipped. If a
-run fails or doesn't finish, its loop stops. Pending schedules wait for manual
-task recovery. Leaving the terminal or changing mode, model or conversation
-clears the queue. Use `/schedule list` to see times in UTC.
+empty. Normal sandboxing and approvals apply. A loop stops if an action fails
+or is denied, or if the turn ends unfinished. Missed intervals are skipped.
+Pending schedules wait while a task needs recovery. Leaving the terminal or
+changing mode, model or conversation clears the queue. Use `/schedule list` to
+see times in UTC.
 
 ### Manual verification: first integration slice
 

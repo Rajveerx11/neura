@@ -300,7 +300,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
         const notice = (line: string) => { endLine(); say(line); };
         const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation, { notice })
-          : [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice }), ...(mode === 'learn' ? learn.tools() : [])];
+          : [...createWorkspaceTools(workspace, () => mode, () => generation, approve), ...(mode === 'learn' ? learn.tools() : [])];
         if (skills.tool) tools.push(skills.tool);
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
           : mode === 'yolo' ? YOLO_INSTRUCTIONS
@@ -369,6 +369,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           } });
         endLine();
         const stopped = outcome.stopReason !== 'finished';
+        let actionFailed = outcome.actionFailed;
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');
         // Guidance and raw skill results expire at the end of the turn.
@@ -399,7 +400,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             throw new Error(`The fix reached the ${limit} and is unfinished. Say "continue" to go on.`);
           }
           say(`Reached the ${limit}. Task unfinished. Say "continue" to go on.`);
-        } else if (review && baseline) { await workflow(text, baseline, false); }
+        } else if (review && baseline) {
+          if (!await workflow(text, baseline, false)) actionFailed = true;
+        }
         else if (review && (mutationAttempted || resumingTask)) {
           fixStopped = true; // An unavailable original base must never become a completed/rebased task.
           if (mutationAttempted && !baselineWarned) {
@@ -415,6 +418,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           abort.signal.throwIfAborted();
         }
         if (owned && interactive) stdout.write('\n');
+        return !actionFailed;
       } catch (error) {
         endLine();
         if (taskStarted && generation === expected) {
@@ -432,24 +436,26 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       const expected = generation;
       fixStopped = false;
       const current = baseline ? await captureWorktree(workspace, { signal: abort?.signal }) : null;
-      if (generation !== expected || mode !== 'work' || abort?.signal.aborted) return;
+      if (generation !== expected || mode !== 'work' || abort?.signal.aborted) return false;
       if (baseline && current?.head !== baseline.head) {
         fixStopped = true;
         say('Review unavailable: HEAD changed since the original task base. The reviewer diffs current HEAD and cannot attest historical task changes. Original base retained; inspect committed changes separately.');
-        return;
+        return false;
       }
+      let actionsSucceeded = true;
       const outcome = await runReviewLoop({ workspace, task, baseline, reviewer: reviewer(), builder: provider, signal: abort?.signal, manual }, {
         capture: async (root, signal) => {
           const snapshot = await captureWorktree(root, { signal });
           return baseline && snapshot?.head !== baseline.head ? null : snapshot;
         },
         review: input => reviewCandidate(input), assessRisk,
-        fixTurn: prompt => turn(prompt, prompt, false),
+        fixTurn: async prompt => { if (!await turn(prompt, prompt, false)) actionsSucceeded = false; },
         current: () => generation === expected && mode === 'work',
         report: line => say(line),
       });
       if (outcome.state === 'blocked') fixStopped = true;
       if (outcome.receipt && generation === expected) lastReview = { generation, receipt: outcome.receipt };
+      return actionsSucceeded && outcome.state !== 'blocked';
     }
     async function input(text: string): Promise<boolean> {
       if (interactive && /^(?:exit|quit)$/i.test(text.trim())) text = '/quit'; // bare words, as in a shell
@@ -666,8 +672,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       try {
         if (job) {
           say(`Running schedule #${job.id}.`);
-          await turn(job.task);
-          if (canRunScheduled()) schedules.repeat(job);
+          const succeeded = await turn(job.task);
+          if (job.interval && canRunScheduled()) {
+            if (succeeded) schedules.repeat(job);
+            else say(`Loop #${job.id} stopped after a failed action.`);
+          }
         } else if (text?.trim() && !await input(text)) break;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Request failed.';

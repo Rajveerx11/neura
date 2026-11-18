@@ -23,6 +23,8 @@ export type ToolResult = {
   display?: string;
   /** Context that should never be printed as a fallback answer. */
   modelOnly?: true;
+  /** The tool completed with a failure result that the model should still receive. */
+  failed?: true;
 };
 
 export type ToolDefinition = {
@@ -116,7 +118,7 @@ function validToolResult(result: ToolResult): boolean {
   return !!result && Array.isArray(result.content) && Array.from(result.content).every(part => part && (
     part.type === "text" ? typeof part.text === "string" : part.type === "image" && typeof part.mimeType === "string" && typeof part.data === "string"
   )) && (result.terminate === undefined || typeof result.terminate === "boolean") && (result.display === undefined || typeof result.display === "string")
-    && (result.modelOnly === undefined || result.modelOnly === true);
+    && (result.modelOnly === undefined || result.modelOnly === true) && (result.failed === undefined || result.failed === true);
 }
 
 /** A tool's own refusal. Its message reaches the model; any other thrown error stays generic. */
@@ -128,7 +130,9 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
   let terminated = false;
   let closed = false;
   let reportingFailed = false;
+  let actionFailed = false;
   const report = (event: ToolEvent, invocationId?: string): boolean => {
+    actionFailed ||= event.phase === "failed" || event.phase === "blocked" || event.phase === "cancelled";
     try {
       observe(() => onToolEvent?.(event, invocationId));
       return true;
@@ -186,7 +190,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
           // Record effect/termination state before any fallible post-action notification.
           if (result.terminate) terminated = true;
           results.push(result);
-          emit(failed ? "failed" : "returned");
+          emit(failed || result.failed ? "failed" : "returned");
           return result;
         });
         queue = pending.then(() => undefined, () => undefined);
@@ -194,7 +198,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
       },
     };
   }
-  return { tools, declarations, results, report, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
+  return { tools, declarations, results, report, actionFailed: () => actionFailed, reportingFailed: () => reportingFailed, isTerminated: () => terminated, close: () => { closed = true; } };
 }
 
 /** Provider options travel with a history part. The retired framework's private namespace is dropped. */
@@ -235,7 +239,7 @@ export function modelPrompt(instructions: string, messages: any[]): any[] {
 
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
-export async function runTurn({ model, messages, instructions, tools, signal, current = () => true, onText, onReasoning, onToolEvent, hideToolText, maxSteps = DEFAULT_TURN_STEPS, requestTimeoutMs = MODEL_REQUEST_TIMEOUT_MS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | TurnLimit; usage?: TurnUsage }> {
+export async function runTurn({ model, messages, instructions, tools, signal, current = () => true, onText, onReasoning, onToolEvent, hideToolText, maxSteps = DEFAULT_TURN_STEPS, requestTimeoutMs = MODEL_REQUEST_TIMEOUT_MS }: RunTurnOptions): Promise<{ text: string; messages: any[]; stopReason: "finished" | TurnLimit; actionFailed: boolean; usage?: TurnUsage }> {
   signal?.throwIfAborted();
   if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) throw new Error("Invalid turn step limit");
   if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > MODEL_REQUEST_TIMEOUT_MS) throw new Error("Invalid model request timeout");
@@ -246,7 +250,6 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
   checkCurrent();
   const turn = createTurnTools(tools, signal, onToolEvent, current);
   const history: any[] = [];
-  let streamed = "";
   let answer = "";
   let reasoningFailed = false;
   let stopReason: "finished" | TurnLimit = "finished";
@@ -300,11 +303,7 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
       // Truncated output cannot authorize even a syntactically complete-looking action.
       if (reason === "length") {
         answer = reply.content.filter(part => part.type === "text").map(part => part.text).join("");
-        if (answer) {
-          const chunk = (streamed && !streamed.endsWith("\n") ? "\n" : "") + answer;
-          streamed += chunk; showText(chunk);
-          history.push({ role: "assistant", content: [{ type: "text", text: answer }] });
-        }
+        if (answer) history.push({ role: "assistant", content: [{ type: "text", text: answer }] });
         stopReason = "output-limit"; break;
       }
       const said: any[] = [];
@@ -327,12 +326,6 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
         }
       }
       if (reasoningFailed) break;
-      if (answer) {
-        // Text from separate steps must not run together on one line.
-        const chunk = (streamed && !streamed.endsWith("\n") ? "\n" : "") + answer;
-        streamed += chunk;
-        showText(chunk);
-      }
       if (said.length) history.push({ role: "assistant", content: said });
       if (!calls.length) break;
       const outputs: any[] = [];
@@ -362,11 +355,10 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
     const toolText = hideToolText ? "" : turn.results.filter(result => !result.modelOnly)
       .flatMap(result => result.content.filter(part => part.type === "text").map(part => part.text)).join("\n");
     const fallback = stopReason === "finished" ? display || toolText || "Turn ended without assistant text." : "";
-    const text = answer && display ? `${answer}\n${display}` : answer || fallback;
-    if (!streamed && text) showText(text);
-    else if (streamed && display) showText(`\n${display}`);
+    const text = stopReason === "step-limit" ? display : [answer, display].filter(Boolean).join("\n") || fallback;
+    if (text) showText(text);
     checkCurrent();
-    return { text, messages: [...messages, ...history], stopReason, ...(usage ? { usage } : {}) };
+    return { text, messages: [...messages, ...history], stopReason, actionFailed: turn.actionFailed(), ...(usage ? { usage } : {}) };
   } finally {
     turn.close();
   }

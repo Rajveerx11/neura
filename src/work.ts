@@ -18,8 +18,6 @@ export type WorkApproval = (description: string) => Promise<boolean>;
 export type WorkToolOptions = {
   /** Adds grep and find outside Work. The reviewer uses this; Learn does not. */
   search?: boolean;
-  /** One line per command that ran without a prompt. */
-  notice?: (line: string) => void;
   sandbox?: typeof runInHumanAwaySandbox;
 };
 export const READ_ONLY_TOOLS = new Set(['read', 'ls', 'grep', 'find']);
@@ -88,7 +86,9 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
     return { name, description, parameters, async execute(input, { signal }) {
       try {
         check(signal, !READ_ONLY_TOOLS.has(name));
-        return { content: [{ type: 'text', text: JSON.stringify(await execute(schema.parse(input), signal)) }] };
+        const output = await execute(schema.parse(input), signal);
+        const failed = name === 'work_exec' && (output.code !== 0 || output.completed === false);
+        return { content: [{ type: 'text', text: JSON.stringify(output) }], ...(failed ? { failed: true } : {}) };
       } catch (error) {
         if (signal?.aborted) throw error;
         // The model needs the refusal to recover: stale hash, ambiguous edit, denied path. System errors name host paths instead.
@@ -203,8 +203,8 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       if (action.route === 'deny' || ['protected-data', 'protected-control', 'remote-mutation', 'broad-destruction'].includes(action.category)) throw new Error(`Command unavailable in v1: ${action.reason}`);
       if (NEEDS_NETWORK.test(params.command)) throw new Error(`No network in the sandbox, so this cannot work here. Ask the user to run it in WSL from the project folder, then continue: ${redactSensitiveText(params.command, 500)}`);
       // Without .git the read-only bind has nothing to protect, and a command could plant one, so a person still decides.
-      if (action.route === 'allow' && fs.existsSync(path.join(root, '.git'))) options.notice?.(`Running in sandbox: ${redactSensitiveText(params.command, 200)}`);
-      else if (!await approve(`Run in network-disabled WSL sandbox?\n${redactSensitiveText(params.command, 8000)}\nTimeout: ${params.timeoutMs ?? 120000} ms\nApproval applies once to this exact action.`)) throw new Error('Command denied; no execution.');
+      const needsApproval = action.route !== 'allow' || !fs.existsSync(path.join(root, '.git'));
+      if (needsApproval && !await approve(`Run in network-disabled WSL sandbox?\n${redactSensitiveText(params.command, 8000)}\nTimeout: ${params.timeoutMs ?? 120000} ms\nApproval applies once to this exact action.`)) throw new Error('Command denied; no execution.');
       check(signal, true);
       const fresh = inspectAction({ toolName: 'work_exec', input: params }, root);
       if (fresh.actionFingerprint !== action.actionFingerprint || fresh.workspaceFingerprint !== action.workspaceFingerprint || JSON.stringify(fresh.approvalBinding) !== JSON.stringify(action.approvalBinding)) throw new Error('Action/workspace changed after approval; confirm again.');
