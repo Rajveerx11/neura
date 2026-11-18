@@ -64,6 +64,10 @@ function terminalCodexResponse(value: unknown, allowOutputLimit = false): CodexR
   if (!response || (response.status !== "completed" && !limited) || (response.error !== undefined && response.error !== null) || !Array.isArray(response.output) || response.output.some(item => !item || typeof item !== "object" || Array.isArray(item))) {
     throw new Error(`Codex response did not complete; ${codexDenialReason(value)}; no API billing fallback was used`);
   }
+  if (!limited && response.output.some(item => item.type === "function_call" &&
+    item.status !== undefined && item.status !== null && item.status !== "completed")) {
+    throw new Error("Codex completed response contained an unfinished action. Action batch rejected.");
+  }
   return response;
 }
 

@@ -300,22 +300,21 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
       if (reason === "tool-calls" && !ids.size) throw new Error("Model returned no requested actions.");
       const input = reply.usage?.inputTokens?.total, output = reply.usage?.outputTokens?.total;
       usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output } : undefined;
+      // The Responses adapter marks commentary separately. Keep it in history for the provider.
+      answer = reply.content.filter(part => part.type === "text" && part.providerMetadata?.openai?.phase !== "commentary").map(part => part.text).join("");
       // Truncated output cannot authorize even a syntactically complete-looking action.
       if (reason === "length") {
-        answer = reply.content.filter(part => part.type === "text").map(part => part.text).join("");
         if (answer) history.push({ role: "assistant", content: [{ type: "text", text: answer }] });
         stopReason = "output-limit"; break;
       }
       const said: any[] = [];
       const calls: any[] = [];
-      answer = "";
       for (const part of Array.isArray(reply.content) ? reply.content : []) {
         if (reasoningFailed) break;
         if (part?.type === "reasoning" && typeof part.text === "string") {
           showReasoning(part.text);
           said.push({ type: "reasoning", text: part.text, ...partOptions(part) });
         } else if (part?.type === "text" && typeof part.text === "string") {
-          answer += part.text;
           said.push({ type: "text", text: part.text, ...partOptions(part) });
         } else if (part?.type === "tool-call" && typeof part.toolCallId === "string" && typeof part.toolName === "string") {
           let args: unknown = part.input;
@@ -355,7 +354,8 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
     const toolText = hideToolText ? "" : turn.results.filter(result => !result.modelOnly)
       .flatMap(result => result.content.filter(part => part.type === "text").map(part => part.text)).join("\n");
     const fallback = stopReason === "finished" ? display || toolText || "Turn ended without assistant text." : "";
-    const text = stopReason === "step-limit" ? display : [answer, display].filter(Boolean).join("\n") || fallback;
+    const displayOnly = stopReason === "step-limit" || (turn.isTerminated() && Boolean(display));
+    const text = displayOnly ? display : [answer, display].filter(Boolean).join("\n") || fallback;
     if (text) showText(text);
     checkCurrent();
     return { text, messages: [...messages, ...history], stopReason, actionFailed: turn.actionFailed(), ...(usage ? { usage } : {}) };

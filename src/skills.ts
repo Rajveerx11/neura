@@ -109,10 +109,12 @@ export function discoverSkills(roots: readonly string[]): InstalledSkill[] {
   const skills = new Map<string, InstalledSkill>();
   const visited = new Set<string>();
   let entries = 0;
+  const searchable = (name: string) => !name.startsWith('.') && name.toLowerCase() !== 'node_modules';
   function visit(directory: string, depth: number) {
     try {
       directory = fs.realpathSync.native(directory);
-      if (visited.has(directory) || !allowed.some(root => learnPathInside(root, directory))) return;
+      if (visited.has(directory) || !allowed.some(root => learnPathInside(root, directory) &&
+        path.relative(root, directory).split(path.sep).every(searchable))) return;
       if (depth > 0 && allowed.some(root => path.relative(root, directory) === '')) return;
       unlinkedDirectory(directory);
       visited.add(directory);
@@ -130,7 +132,7 @@ export function discoverSkills(roots: readonly string[]): InstalledSkill[] {
           const entry = scan.readSync();
           if (!entry) break;
           entries++;
-          if ((entry.isDirectory() || entry.isSymbolicLink()) && !entry.name.startsWith('.') && entry.name.toLowerCase() !== 'node_modules') dirs.push(entry.name);
+          if ((entry.isDirectory() || entry.isSymbolicLink()) && searchable(entry.name)) dirs.push(entry.name);
         }
       } finally { scan.closeSync(); }
       for (const dir of dirs.sort()) visit(path.join(directory, dir), depth + 1);
