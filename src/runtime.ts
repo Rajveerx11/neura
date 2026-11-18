@@ -21,6 +21,8 @@ export type ToolResult = {
   terminate?: boolean;
   /** Learner-facing text, shown even when the model also wrote a preamble. Never sent to the model. */
   display?: string;
+  /** Context that should never be printed as a fallback answer. */
+  modelOnly?: true;
 };
 
 export type ToolDefinition = {
@@ -113,7 +115,8 @@ function observe(callback: () => unknown): void {
 function validToolResult(result: ToolResult): boolean {
   return !!result && Array.isArray(result.content) && Array.from(result.content).every(part => part && (
     part.type === "text" ? typeof part.text === "string" : part.type === "image" && typeof part.mimeType === "string" && typeof part.data === "string"
-  )) && (result.terminate === undefined || typeof result.terminate === "boolean") && (result.display === undefined || typeof result.display === "string");
+  )) && (result.terminate === undefined || typeof result.terminate === "boolean") && (result.display === undefined || typeof result.display === "string")
+    && (result.modelOnly === undefined || result.modelOnly === true);
 }
 
 /** A tool's own refusal. Its message reaches the model; any other thrown error stays generic. */
@@ -356,7 +359,8 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
     if (turn.reportingFailed()) throw new Error("Tool status output failed. Some actions may already have completed; inspect current state before retrying.");
     const display = turn.results.flatMap((result) => result.display ? [result.display] : []).join("\n");
     if (stopReason === "finished" && !answer.trim() && !display && hideToolText) throw new Error("Model finished without an answer.");
-    const toolText = hideToolText ? "" : turn.results.flatMap((result) => result.content.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
+    const toolText = hideToolText ? "" : turn.results.filter(result => !result.modelOnly)
+      .flatMap(result => result.content.filter(part => part.type === "text").map(part => part.text)).join("\n");
     const fallback = stopReason === "finished" ? display || toolText || "Turn ended without assistant text." : "";
     const text = answer && display ? `${answer}\n${display}` : answer || fallback;
     if (!streamed && text) showText(text);

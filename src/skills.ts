@@ -198,7 +198,7 @@ export function skillTurn(skills: readonly InstalledSkill[], selected?: Installe
       if (bytes > remainingBytes) throw new ToolFeedbackError('Skill content limit reached for this turn.');
       remainingBytes -= bytes;
       if (input.path === undefined) active.add(skill.name);
-      return { content: [{ type: 'text', text }] };
+      return { content: [{ type: 'text', text }], modelOnly: true };
     },
   } };
 }
