@@ -66,7 +66,7 @@ export function commandMatches(line: string, skills: readonly { name: string; de
   });
 }
 export type TerminalStatus = {
-  mode: Mode; provider: string; model: string; workspace: string; workspaceName: string;
+  mode: Mode; provider: string; model: string; workspace: string;
   history: 'on' | 'off' | 'save failed'; sessionState: 'new' | 'resumed'; sessionId?: string;
   thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number };
 };
@@ -318,23 +318,23 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       lines.push(paint('  ' + shortLabel(`${more}${plainGlyphs ? 'Up/Down' : '↑↓'} select · Tab complete · Enter run · Esc close`, width - 3), 'dim'));
       return lines;
     },
-    inputHint() { return paint(shortLabel('Type / for commands · $ for skills · Ctrl+C cancels a running task', width - 1), 'dim'); },
+    composer(prompt: string) {
+      const edge = box.h.repeat(width - 3);
+      const side = paint(box.v, 'dim');
+      return {
+        query: paint(box.tl + edge + box.tr, 'dim') + '\r\n' + side + ' ' + prompt,
+        side,
+        bottom: paint(box.bl + edge + box.br, 'dim'),
+      };
+    },
     // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
     wordmark(ascii = false) { return renderLogo(columns, ascii || env.TERM === 'dumb').join('\n'); },
     status(state: TerminalStatus) {
       const mode = modeLabel(state.mode);
-      const model = shortLabel(`${state.provider}/${state.model || '(not selected)'}`, width - mode.length - 3);
-      const lines = [paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim')];
-      const fields = [shortLabel(state.workspaceName, Math.min(width, 24)),
-        `history ${state.history}${state.history === 'off' ? '' : '/' + state.sessionState}`,
-        `thinking ${state.thinking ? 'on' : 'off'}`, `${state.messageCount} msgs`, '/status'];
-      let line = '';
-      for (const field of fields) {
-        if (line && cells(line + ' · ' + field) > width) { lines.push(paint(line, 'dim')); line = ''; }
-        line += (line ? ' · ' : '') + field;
-      }
-      if (line) lines.push(paint(line, 'dim'));
-      return lines.join('\n');
+      const available = Math.max(1, Math.min(width, columns) - 1);
+      if (available <= mode.length + 3) return paint(shortLabel(mode, available), state.mode === 'yolo' ? 'error' : 'copper');
+      const model = shortLabel(`${state.provider}/${state.model || '(not selected)'}`, available - mode.length - 3);
+      return paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim');
     },
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);

@@ -1,14 +1,14 @@
+import { addAbortListener } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { Interface } from 'node:readline/promises';
-import { commandMatches, type MenuItem } from './terminal-ui.ts';
+import { commandMatches, type createTerminalUI, type MenuItem } from './terminal-ui.ts';
 
-type Menu = { commandMenu(items: MenuItem[], selected: number): string[]; width: number };
 type Raw = NodeJS.ReadStream & { setRawMode(mode: boolean): unknown };
+const moveRows = (rows: number) => rows ? `\x1b[${Math.abs(rows)}${rows < 0 ? 'A' : 'B'}` : '';
+const column = (cols: number) => `\x1b[${cols + 1}G`;
 
 /**
- * Live command/skill menu for the real readline prompt. Raw keys pass through a filter before readline sees
- * them, so the open menu can claim Up/Down, Tab, Enter and Esc; every other key reaches readline unchanged.
- * Only public readline APIs are used: `line`, `getCursorPos()` and `write()`.
+ * Readline owns the draft and its cursor. Draw the lower border and menus outside its edit area.
  */
 export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode: (mode: boolean) => stdin.setRawMode(mode) });
@@ -19,73 +19,137 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   stdin.on('data', onData);
   stdin.once('end', onEnd);
 
-  function attach(rl: Interface, ui: () => Menu, active: () => boolean, matches: (line: string) => MenuItem[] = commandMatches) {
+  function attach(rl: Interface, ui: () => ReturnType<typeof createTerminalUI>, matches: (line: string) => MenuItem[] = commandMatches) {
+    const makeFrame = (query: string) => stdout.columns >= 32 && stdout.rows >= 4 ? ui().composer(query) : undefined;
+    let prompt: string | undefined;
+    let frame: ReturnType<typeof makeFrame>;
     let items: MenuItem[] = [];
     let selected = 0;
-    let shown = 0;
+    let shown = false;
     let lastLine = '';
     let dismissed: string | undefined;
     let closed = false;
     let pending: NodeJS.Immediate | undefined;
-    const column = () => rl.getCursorPos().cols + 1;
+    const endPosition = () => {
+      // Use readline's own cell widths for wraps, tabs and wide characters without moving the terminal cursor.
+      const editor = rl as Interface & { cursor: number };
+      const cursor = editor.cursor;
+      editor.cursor = editor.line.length;
+      try { return editor.getCursorPos(); } finally { editor.cursor = cursor; }
+    };
     const clear = () => {
       if (!shown) return;
-      stdout.write(`\r\n\x1b[J\x1b[1A\x1b[${column()}G`);
-      shown = 0;
+      const cursor = rl.getCursorPos(), end = endPosition();
+      const distance = end.rows - cursor.rows;
+      stdout.write(moveRows(distance) + column(end.cols) + '\x1b[J' + moveRows(-distance) + column(cursor.cols));
+      shown = false;
     };
-    const draw = () => {
-      const rows = ui().commandMenu(items, selected);
-      stdout.write(`\r\n\x1b[J${rows.join('\r\n')}\x1b[${rows.length}A\x1b[${column()}G`);
-      shown = rows.length;
+    const unframe = (query: string) => {
+      frame = undefined;
+      shown = false;
+      rl.setPrompt(query);
+      rl.prompt(true);
     };
     const update = () => {
-      if (closed) return;
+      if (closed || prompt === undefined) return;
+      clear();
       const line = rl.line;
       if (line !== lastLine) { selected = 0; lastLine = line; if (line !== dismissed) dismissed = undefined; }
-      // ponytail: single-row input only; a wrapped prompt would need row tracking for the redraw.
-      items = active() && line !== dismissed && rl.getCursorPos().rows === 0 ? matches(line) : [];
-      if (items.length) draw(); else clear();
+      const cursor = rl.getCursorPos(), end = endPosition();
+      const singleRow = end.rows === (frame ? 1 : 0);
+      // Leave the bottom row free when the draft fills the terminal.
+      const room = stdout.rows - end.rows - 1;
+      const bottom = frame && room > 0 ? frame.bottom : '';
+      const right = stdout.columns - 2;
+      // shortcut: wrapped drafts use readline's full width, so only single rows have a right edge.
+      const side = frame && singleRow && end.cols < right ? column(right) + frame.side : '';
+      const menuRows = Math.min(8, room - Number(Boolean(bottom)) - 1);
+      items = singleRow && line !== dismissed && stdout.columns >= 20 && menuRows > 0 ? matches(line) : [];
+      selected = Math.min(selected, Math.max(0, items.length - 1));
+      const rows = bottom ? [bottom] : [];
+      if (items.length) rows.push(...ui().commandMenu(items, selected, menuRows));
+      if (!side && !rows.length) return;
+      const distance = end.rows - cursor.rows;
+      stdout.write(moveRows(distance) + side + rows.map(row => '\r\n' + row).join('') +
+        moveRows(-distance - rows.length) + column(cursor.cols));
+      shown = true;
     };
-    const accept = (item: MenuItem, run: boolean) => {
-      clear();
+    const accept = (item: MenuItem, run: boolean, query: string) => {
       rl.write(null, { ctrl: true, name: 'e' });
       rl.write(null, { ctrl: true, name: 'u' });
       rl.write(run ? item.value : item.value + ' ');
-      if (run) rl.write(null, { name: 'return' });
-      else update();
+      if (!run) { update(); return; }
+      if (frame) unframe(query);
+      rl.write(null, { name: 'return' });
     };
     claim = key => {
-      // A queued redraw is not authority to complete a different line or a non-command prompt.
-      if (closed || !active() || rl.line !== lastLine || rl.getCursorPos().rows !== 0) { clear(); items = []; return false; }
-      if (!shown || !items.length) { if (/[\r\n]/.test(key)) clear(); return false; }
-      const item = items[selected];
-      if (key === '\x1b[A' || key === '\x1bOA') { selected = (selected + items.length - 1) % items.length; draw(); return true; }
-      if (key === '\x1b[B' || key === '\x1bOB') { selected = (selected + 1) % items.length; draw(); return true; }
-      if (key === '\t') { accept(item, false); return true; }
-      if (key === '\x1b') { dismissed = rl.line; clear(); return true; }
-      if (key === '\r' || key === '\n') {
-        if (rl.line.trim() === item.value && item.submit) { clear(); return false; }
-        accept(item, item.submit);
-        return true;
+      if (closed || prompt === undefined) return false;
+      const item = shown && rl.line === lastLine ? items[selected] : undefined;
+      clear();
+      if (item) {
+        if (key === '\x1b[A' || key === '\x1bOA') { selected = (selected + items.length - 1) % items.length; update(); return true; }
+        if (key === '\x1b[B' || key === '\x1bOB') { selected = (selected + 1) % items.length; update(); return true; }
+        if (key === '\t') { accept(item, false, prompt); return true; }
+        if (key === '\x1b') { dismissed = rl.line; update(); return true; }
+        if ((key === '\r' || key === '\n') && !(rl.line.trim() === item.value && item.submit)) {
+          accept(item, item.submit, prompt);
+          return true;
+        }
       }
-      if (/[\r\n\x03\x04]/.test(key)) clear();
+      if (frame && /[\r\n]/.test(key)) unframe(prompt);
       return false;
     };
     // Readline registered its keypress listener first, so this runs after it has updated `rl.line`.
     const onKeypress = () => {
       if (!closed && !pending) pending = setImmediate(() => { pending = undefined; update(); });
     };
+    // Change the query before readline measures and redraws it for the new width.
+    const onResizeStart = () => {
+      if (prompt === undefined) return;
+      frame = makeFrame(prompt);
+      rl.setPrompt(frame?.query ?? prompt);
+    };
+    const onResize = () => { shown = false; update(); };
     input.on('keypress', onKeypress);
-    stdout.on('resize', update);
+    rl.on('SIGCONT', onKeypress);
+    stdout.prependListener('resize', onResizeStart);
+    stdout.on('resize', onResize);
     rl.once('close', () => {
       closed = true;
+      if (prompt !== undefined) stdout.write(moveRows(-rl.getCursorPos().rows) + column(0) + '\x1b[J');
       if (pending) { clearImmediate(pending); pending = undefined; }
       claim = undefined;
       input.off('keypress', onKeypress);
-      stdin.off('data', onData); stdin.off('end', onEnd); stdout.off('resize', update);
+      rl.off('SIGCONT', onKeypress);
+      stdin.off('data', onData); stdin.off('end', onEnd);
+      stdout.off('resize', onResizeStart); stdout.off('resize', onResize);
       stdin.pause();
     });
-    return { clear };
+    return {
+      async question(query: string, options: { signal: AbortSignal }) {
+        if (closed || options.signal.aborted) return rl.question(query, options);
+        prompt = query;
+        frame = makeFrame(query);
+        dismissed = undefined;
+        let erasedRows = 0;
+        const listener = addAbortListener(options.signal, () => {
+          if (closed) return;
+          // Readline advances past the draft on abort. Remove the frame first so only the draft rows need erasing.
+          unframe('');
+          rl.write(null, { ctrl: true, name: 'e' });
+          erasedRows = rl.getCursorPos().rows + 1;
+        });
+        try {
+          const answer = rl.question(frame?.query ?? query, options);
+          update();
+          return await answer;
+        } finally {
+          listener[Symbol.dispose]();
+          if (erasedRows) stdout.write(moveRows(-erasedRows) + column(0) + '\x1b[J');
+          prompt = undefined;
+        }
+      },
+    };
   }
   return { input, attach };
 }

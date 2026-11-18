@@ -119,13 +119,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const workspaceKey = createHash('sha256').update(process.platform === 'win32' ? workspace.toLowerCase() : workspace).digest('hex');
   const sessions = path.join(home, 'sessions', workspaceKey);
   asciiGlyphs = Boolean(values.ascii);
-  // Real terminals get the live slash menu; anything without raw mode (pipes, test doubles) keeps plain readline.
+  // ANSI-capable terminals with raw input get the composer and command menus.
   const keyboard = interactive && process.env.TERM !== 'dumb' && typeof stdin.setRawMode === 'function' ? createCommandKeyboard(stdin, process.stdout) : undefined;
   const rl = interactive ? createInterface({ input: keyboard?.input ?? stdin, output: process.stdout, terminal: true }) : undefined;
-  let promptActive = false;
   const roots = skillRoots(workspace, home);
   let installedSkills: InstalledSkill[] | undefined;
-  const menu = rl && keyboard ? keyboard.attach(rl, () => terminal(), () => promptActive, line => {
+  const composer = rl && keyboard ? keyboard.attach(rl, () => terminal(), line => {
     if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
     return commandMatches(line, installedSkills);
   }) : undefined;
@@ -199,7 +198,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   }
   const statusSnapshot = (): TerminalStatus => ({
     mode, provider: provider.provider, model: modelLabel(provider.model),
-    workspace: redactSensitiveText(workspace), workspaceName: redactSensitiveText(path.basename(workspace) || workspace),
+    workspace: redactSensitiveText(workspace),
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
   });
@@ -222,10 +221,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (interactive) stdout.write(terminal().wordmark(values.ascii) + '\n\n'); // Approved logo; no false READY banner.
     recoveryNotice();
     if (mode === 'yolo') warning(YOLO_WARNING);
-    if (scratchWorkspace) {
-      say(`Scratch workspace: ${workspace}`);
-      say('Files remain here after exit, but OS temp cleanup may remove them. Use --cwd PATH for a project.');
-    }
+    if (scratchWorkspace) warning('OS temp cleanup can remove scratch files. Use /status for the workspace path.');
     async function changeModel(next: ProviderConfig) {
       createConfiguredModel(next);
       abort?.signal.throwIfAborted();
@@ -469,7 +465,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       }
       if (!text.startsWith('/')) { await turn(text); return true; }
       const [, command, rest = ''] = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()) ?? [];
-      if (command === 'quit' || command === 'exit') { if (interactive) say('Neura closed.'); return false; }
+      if (command === 'quit' || command === 'exit') return false;
       if (command === 'verify' && rest !== 'status' && recovery && (!recovery.baseline || reconciliationRequired)) throw new Error('Verification unavailable: original task base snapshot or reconciliation is missing. Inspect effects; no newer HEAD was substituted.');
       if (command === 'help') stdout.write(terminal().help() + '\n');
       else if (command === 'status') {
@@ -640,7 +636,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     }
     if (bridge) { await bridge.serve({ execute: input, cancel: () => abort?.abort() }); return; }
     if (prompt !== undefined) { await input(prompt); return; }
-    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n' + (menu ? terminal().inputHint() + '\n' : '')); // Once at launch. Chat shows answers only; /status has the rest.
+    if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n');
     let scheduleGeneration = generation;
     for (;;) {
       if (scheduleGeneration !== generation) {
@@ -651,16 +647,14 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       const wake = new AbortController();
       const stopTimer = canRunScheduled() ? schedules.wake(() => {
         if (rl!.line || inputClosed.signal.aborted) return false;
-        menu?.clear();
         wake.abort();
         return true;
       }) : undefined;
-      promptActive = true;
-      try { text = await rl!.question(terminal().prompt(mode), { signal: AbortSignal.any([inputClosed.signal, wake.signal]) }); }
-      catch {
-        menu?.clear();
-        if (inputClosed.signal.aborted || !wake.signal.aborted) break;
-      } finally { stopTimer?.(); promptActive = false; }
+      try { text = await (composer ?? rl!).question(terminal().prompt(mode), { signal: AbortSignal.any([inputClosed.signal, wake.signal]) }); }
+      catch (error) {
+        if (inputClosed.signal.aborted) break;
+        if (!wake.signal.aborted) throw error;
+      } finally { stopTimer?.(); }
       const job = text === undefined ? schedules.takeDue() : undefined;
       try {
         if (job) {
