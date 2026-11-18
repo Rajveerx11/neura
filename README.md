@@ -235,7 +235,8 @@ Teach one concept about database joins. Show a diagram and an example, then give
 ```
 
 Bare interactive launch from your user home creates a temporary scratch workspace
-and prints its path. For lasting work, launch in your project or pass `--cwd`.
+whose path is available in `/status`. For lasting work, launch in your project
+or pass `--cwd`.
 Explicit workspaces, headless tasks and resumed sessions never silently switch.
 
 ## Commands
@@ -273,11 +274,11 @@ for a one-time delay, or `/schedule at 2027-01-15T09:30+05:30 TASK` for an exact
 time with a time zone. Durations accept `s`, `m`, `h` and `d`. Repeat intervals
 start at one minute.
 
-Schedules run one at a time when the open Work terminal is idle and the input
-box is empty. Normal Work sandboxing and approvals apply. Missed intervals are
-skipped. A failing or unfinished run stops its loop, and pending schedules wait
-for manual task recovery. Leaving the terminal or changing mode, model or
-conversation clears the queue. Use `/schedule list` to see times in UTC.
+Schedules run one at a time when the Work terminal is idle and the input box is
+empty. Normal sandboxing and approvals apply. Missed intervals are skipped. If a
+run fails or doesn't finish, its loop stops. Pending schedules wait for manual
+task recovery. Leaving the terminal or changing mode, model or conversation
+clears the queue. Use `/schedule list` to see times in UTC.
 
 ### Manual verification: first integration slice
 
@@ -293,10 +294,11 @@ See [verification](docs/VERIFICATION.md).
 
 ## Terminal experience
 
-Interactive launch shows the approved logo, prompt-adjacent status and prompt.
-Chat turns print the answer. Tool calls, approvals and meaningful review outcomes
-stay visible. `/status` holds detailed usage. Provider-supplied reasoning summaries
-are optional. Hidden reasoning is never displayed.
+Interactive launch shows the approved logo, one status line, and a bordered
+prompt on supported terminals. Chat turns print the answer. Successful tool
+activity clears as the turn moves on. Warnings, approvals and review outcomes
+stay visible. Use `/status` for details and `/thinking on` to show provider
+reasoning summaries.
 
 `--ascii`, `TERM=dumb` and narrow terminals use `>_ neura`. `NO_COLOR` disables
 color. Headless requests, `--help` and `--check` omit artwork. See

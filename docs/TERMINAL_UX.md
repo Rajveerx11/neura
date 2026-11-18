@@ -1,12 +1,14 @@
 # Active terminal UX
 
-Current behavior, 2026-11-13: approved logo, startup status, input hint and prompt;
-chat turns print only the answer, rendered as Markdown. A live slash-command menu
-and an animated activity row are described in “Rich answers, activity and slash
-menu” below. Tool calls, approvals, warnings and review outcomes remain
-visible; `/status` holds detailed usage. The “Answer-only chat” section below
-supersedes older per-turn footer/status designs. See [current design](../DESIGN.md).
-Earlier audit/test sections remain dated evidence, not new acceptance.
+The terminal opens with the approved logo, one status line and a bordered prompt
+on ANSI terminals with enough room. Slash commands and skill suggestions appear
+below the prompt. Wrapped drafts keep horizontal borders. Plain and narrow
+terminals fall back to readline.
+
+Activity clears as the turn moves on. Approvals, warnings and review outcomes
+remain visible. Terminal chats show provider summaries only after `/thinking on`.
+`/status` shows detailed usage and the path to a scratch workspace. Earlier audit
+and test sections describe their recorded revisions. See [current design](../DESIGN.md).
 
 Audit baseline: `5f53c11`, 2026-11-02. Scope: [active CLI](../src/cli.ts),
 [CLI tests](https://github.com/Rajveerx11/neura/blob/1d4964a4f879fafc32d6fb74a0e575c7c77c0e5d/tests/v1-cli.test.ts), [status](STATUS.md), and

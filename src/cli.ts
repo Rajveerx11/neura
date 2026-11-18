@@ -92,7 +92,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const configuredModel = values.model ?? process.env.NEURA_MODEL;
   if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
   let modelExplicit = configuredModel !== undefined;
-  let showReasoning = !values['no-thinking'];
+  let showReasoning = Boolean(bridge && !values['no-thinking']);
   let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? defaultBaseURL(providerKind) };
   const modelLabel = (value: string) => terminalText(redactSensitiveText(value || '(not selected)', 200));
   // Explicit reviewer only; otherwise the reviewer follows the current builder model (same-family, labelled weaker).
@@ -202,7 +202,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
   });
-  // ANSI-capable terminals erase the transient waiting line; plain ones keep it as a record.
+  // Transient activity only belongs on terminals that can erase it.
   const erasable = interactive && process.env.TERM !== 'dumb';
   const approve = async (description: string) => {
     if (bridge) return bridge.approve(description);
@@ -267,9 +267,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       // Interactive answers render as Markdown; piped and ACP output stays byte-for-byte.
       const markdown = interactive && !bridge ? terminal().markdownStream() : undefined;
       const waiting = (label?: string) => {
-        if (!interactive || waitingOpen) return;
+        if (!erasable || waitingOpen) return;
         waitingOpen = true;
-        if (!erasable) { stdout.write(terminal().boundary('waiting')); return; }
         const started = Date.now();
         let frame = 0;
         const draw = () => stdout.write('\r\x1b[2K' + terminal().activity(frame++, Math.floor((Date.now() - started) / 1000), label));
@@ -278,7 +277,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       };
       const endLine = () => {
         if (ticker) { clearInterval(ticker); ticker = undefined; }
-        if (waitingOpen) stdout.write(erasable ? '\r\x1b[2K' : '\n');
+        if (waitingOpen) stdout.write('\r\x1b[2K');
         else if (lineOpen) stdout.write('\n');
         lineOpen = false; waitingOpen = false;
         const rest = markdown?.flush();
@@ -354,10 +353,15 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           },
           onToolEvent: (event, invocationId) => {
             bridge?.onToolEvent?.(event, invocationId);
-            // One line per tool call; started/returned are routine. Failed, blocked and cancelled stay visible.
             if (event.phase === 'started') { mutationAttempted ||= !READ_ONLY_TOOLS.has(event.toolName); return; }
-            if (event.phase === 'returned') { if (erasable) waiting('Working'); return; }
             if (bridge?.onToolEvent) return;
+            if (event.phase === 'requested' || event.phase === 'returned') {
+              if (erasable) {
+                endLine();
+                waiting(event.phase === 'requested' ? terminalText(redactSensitiveText(event.toolName, 128)) : undefined);
+              }
+              return;
+            }
             endLine();
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
           } });
@@ -565,7 +569,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } else if (command === 'thinking') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /thinking on or /thinking off.');
         if (rest) showReasoning = rest === 'on';
-        say(`Provider reasoning summaries: ${showReasoning ? 'on' : 'off'}. Hidden internal reasoning is not available.`);
+        say(`Provider reasoning summaries: ${showReasoning ? 'on' : 'off'}.`);
       } else if (command === 'login') {
         if (!rl || rest.trim()) throw new Error('Use /login without arguments in an interactive Neura terminal.');
         abort = new AbortController();

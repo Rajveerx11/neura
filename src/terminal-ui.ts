@@ -297,7 +297,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
     width, color, help, markdownStream,
     markdown(text: string) { const stream = markdownStream(); return (stream.push(text) + stream.flush()).replace(/\n$/, ''); },
     /** One erasable row: spinner, label, elapsed seconds and the cancel key. */
-    activity(frame: number, seconds: number, label = 'Thinking') {
+    activity(frame: number, seconds: number, label = 'Working') {
       const glyph = spinner[frame % spinner.length];
       return paint(glyph, 'copper') + ' ' + paint(shortLabel(`${label}… ${seconds}s · Ctrl+C to cancel`, width - 3), 'dim');
     },
