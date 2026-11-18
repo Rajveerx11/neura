@@ -12,7 +12,7 @@ import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
 import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
-import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent } from './runtime.ts';
+import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
 import { createSession, saveSession, resumeSession, listSessions, withoutToolImages, taskRecovery, type Session, type TaskRecovery } from './session.ts';
@@ -24,6 +24,7 @@ import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } f
 import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
 import { discoverSkills, skillRoots, skillGuidance, type InstalledSkill } from './skills.ts';
 import { createCommandKeyboard } from './prompt-input.ts';
+import { createSchedules, parseSchedule } from './schedules.ts';
 export { terminalText } from './terminal-ui.ts';
 
 let asciiGlyphs = false;
@@ -35,7 +36,7 @@ export type CliBridge = {
   approve: (description: string) => Promise<boolean>;
   onToolEvent?: (event: ToolEvent, invocationId?: string) => void;
   onReasoning?: (text: string) => void;
-  onStepLimit?: () => void;
+  onTurnLimit?: (limit: TurnLimit) => void;
   onModeChange?: (mode: Mode) => void;
   serve: (session: { execute: (text: string) => Promise<boolean>; cancel: () => void }) => Promise<void>;
 };
@@ -110,6 +111,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let fixStopped = false;
   let baselineWarned = false;
   const interactive = prompt === undefined && Boolean(stdin.isTTY && stdout.isTTY);
+  const schedules = createSchedules();
   const scratchWorkspace = values.cwd === undefined && interactive && !values.resume && path.relative(fs.realpathSync.native(os.homedir()), workspace) === '';
   if (scratchWorkspace) workspace = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'neura-workspace-')));
   try { assertWorkspaceOutsideNeuraHome(workspace, home); }
@@ -142,6 +144,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let sessionState: TerminalStatus['sessionState'] = 'new';
   let lastTurnUsage: TurnUsage | undefined;
   let historySaveFailed = false;
+  const canRunScheduled = () => mode === 'work' && !reconciliationRequired && !historySaveFailed &&
+    (!recovery || recovery.stage === 'completed');
   let lastVerification: WorkspaceReceipt | undefined;
   let verificationGeneration = -1;
   let releaseSession: (() => Promise<void>) | undefined;
@@ -257,6 +261,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill = '') {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
       if (reconciliationRequired) throw new Error('Task outcome needs reconciliation. Inspect effects and use /reconcile, or /new for a separate task. No task was replayed.');
+      const resumingTask = Boolean(recovery && recovery.stage !== 'completed');
       const owned = !abort; // workflow fix turns reuse the outer request's cancellation
       abort ??= new AbortController();
       if (owned) { lastTurnUsage = undefined; fixStopped = false; }
@@ -332,7 +337,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
-        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode === 'yolo',
+        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
             endLine();
@@ -361,7 +366,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
           } });
         endLine();
-        const stopped = outcome.stopReason === 'step-limit';
+        const stopped = outcome.stopReason !== 'finished';
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');
         // Repository context is lower-priority user data, refreshed each turn rather than persisted into history.
@@ -381,18 +386,19 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           try { session = await saveSession(sessions, { ...session, messages: memory }); memory = session.messages; historySaveFailed = false; }
           catch { historySaveFailed = true; warning('Turn completed, but history was not saved safely. Do not repeat a mutation merely to save its result.'); }
         }
-        if (stopped) {
-          bridge?.onStepLimit?.();
+        if (outcome.stopReason !== 'finished') {
+          const limit = outcome.stopReason === 'step-limit' ? `${maxSteps}-step limit` : 'model output limit';
+          bridge?.onTurnLimit?.(outcome.stopReason);
           if (!rl && !bridge) process.exitCode = 1;
           if (!reviewTurn) {
             fixStopped = true;
             await persistRecovery({ ...recovery!, stage: 'unfinished' }, expected);
             taskStarted = false;
-            throw new Error(`the fix stopped at the ${maxSteps}-step limit and is unfinished. Say "continue" to go on.`);
+            throw new Error(`The fix reached the ${limit} and is unfinished. Say "continue" to go on.`);
           }
-          say(`Stopped at the ${maxSteps}-step limit. The task is unfinished${review ? ' and was not reviewed' : ''}. Say "continue" to go on.`);
+          say(`Reached the ${limit}. Task unfinished. Say "continue" to go on.`);
         } else if (review && baseline) { await workflow(text, baseline, false); }
-        else if (review) {
+        else if (review && (mutationAttempted || resumingTask)) {
           fixStopped = true; // An unavailable original base must never become a completed/rebased task.
           if (mutationAttempted && !baselineWarned) {
             baselineWarned = true; // once per session; plain chat stays answer-only
@@ -408,6 +414,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
         if (owned && interactive) stdout.write('\n');
       } catch (error) {
+        endLine();
         if (taskStarted && generation === expected) {
           reconciliationRequired = true;
           recovery = { ...recovery!, stage: 'reconcile' };
@@ -508,6 +515,28 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             say('This receipt is session metadata, not signed attestation, automatic approval or task completion. Detector-only is never verified.');
           }
         } finally { abort = undefined; }
+      } else if (command === 'schedule' || command === 'loop') {
+        if (!interactive || mode !== 'work') throw new Error('Schedules require an interactive Work terminal.');
+        if (command === 'schedule' && (!rest || rest === 'list')) {
+          const jobs = schedules.list();
+          if (!jobs.length) say('No schedules.');
+          else {
+            if (!canRunScheduled()) say('Schedules paused. Resolve the current task to resume.');
+            for (const job of jobs) {
+              const label = terminalText(redactSensitiveText(job.task, 120)).replace(/\s+/g, ' ').trim();
+              say(`#${job.id} · ${new Date(job.due).toISOString()}${job.interval ? ' · repeats' : ''} · ${label}`);
+            }
+          }
+        } else if (command === 'schedule' && rest.startsWith('cancel ')) {
+          const id = rest.slice(7);
+          if (!/^\d+$/.test(id) || !schedules.remove(Number(id))) throw new Error('Schedule ID not found. Use /schedule list.');
+          say(`Cancelled schedule #${id}.`);
+        } else {
+          if (!canRunScheduled()) throw new Error('Resolve the current task before scheduling a new one.');
+          if (command === 'loop' && !rest) throw new Error('Use /loop DURATION TASK.');
+          const job = schedules.add(parseSchedule(command === 'loop' ? `every ${rest}` : rest));
+          say(`Schedule #${job.id} · ${new Date(job.due).toISOString()}`);
+        }
       } else if (command === 'workflow') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /workflow on or /workflow off.');
         if (rest) workflowOn = rest === 'on';
@@ -612,13 +641,34 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (bridge) { await bridge.serve({ execute: input, cancel: () => abort?.abort() }); return; }
     if (prompt !== undefined) { await input(prompt); return; }
     if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n' + (menu ? terminal().inputHint() + '\n' : '')); // Once at launch. Chat shows answers only; /status has the rest.
+    let scheduleGeneration = generation;
     for (;;) {
-      let text: string;
+      if (scheduleGeneration !== generation) {
+        schedules.clear();
+        scheduleGeneration = generation;
+      }
+      let text: string | undefined;
+      const wake = new AbortController();
+      const stopTimer = canRunScheduled() ? schedules.wake(() => {
+        if (rl!.line || inputClosed.signal.aborted) return false;
+        menu?.clear();
+        wake.abort();
+        return true;
+      }) : undefined;
       promptActive = true;
-      try { text = await rl!.question(terminal().prompt(mode), { signal: inputClosed.signal }); } catch { menu?.clear(); say('Neura closed.'); break; }
-      finally { promptActive = false; }
-      if (!text.trim()) continue;
-      try { if (!await input(text)) break; } catch (error) {
+      try { text = await rl!.question(terminal().prompt(mode), { signal: AbortSignal.any([inputClosed.signal, wake.signal]) }); }
+      catch {
+        menu?.clear();
+        if (inputClosed.signal.aborted || !wake.signal.aborted) break;
+      } finally { stopTimer?.(); promptActive = false; }
+      const job = text === undefined ? schedules.takeDue() : undefined;
+      try {
+        if (job) {
+          say(`Running schedule #${job.id}.`);
+          await turn(job.task);
+          if (canRunScheduled()) schedules.repeat(job);
+        } else if (text?.trim() && !await input(text)) break;
+      } catch (error) {
         const message = error instanceof Error ? error.message : 'Request failed.';
         if (error instanceof Error && error.name === 'AbortError') {
           stderr.write(terminal(process.stderr).feedback('Cancelled. No task was replayed. Inspect current state before retrying.', 'cancelled') + '\n');

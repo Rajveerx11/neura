@@ -249,6 +249,9 @@ Explicit workspaces, headless tasks and resumed sessions never silently switch.
 | `/login`, `/logout` | Explicit subscription authorization or local credential removal |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries |
 | `/workflow on\|off` | Toggle automatic Work review |
+| `/loop DURATION TASK`, `/schedule every DURATION TASK` | Repeat a Work task in this terminal |
+| `/schedule in DURATION TASK`, `/schedule at TIMESTAMP TASK` | Run a Work task once |
+| `/schedule list`, `/schedule cancel ID` | List or cancel pending tasks |
 | `/review`, `/review status` | Review session changes or check receipt currency |
 | `/reviewer PROVIDER MODEL [URL]`, `/reviewer default` | Select a reviewer or follow the builder |
 | `/verify quick`, `/verify full`, `/verify status` | Request bounded verification or inspect its receipt |
@@ -262,6 +265,19 @@ Ctrl+C cancels a running turn. `--prompt "TASK"` runs a headless task. Headless
 requests cannot grant approvals. Policy-allowed sandbox commands can still run
 without approval. `--no-history` disables conversation persistence, not credential
 or Learn-artifact writes. Model changes start a fresh conversation.
+
+### Loops and schedules
+
+`/loop 15m Summarize recent commits` repeats a Work task. Use `/schedule in 30m TASK`
+for a one-time delay, or `/schedule at 2027-01-15T09:30+05:30 TASK` for an exact
+time with a time zone. Durations accept `s`, `m`, `h` and `d`. Repeat intervals
+start at one minute.
+
+Schedules run one at a time when the open Work terminal is idle and the input
+box is empty. Normal Work sandboxing and approvals apply. Missed intervals are
+skipped. A failing or unfinished run stops its loop, and pending schedules wait
+for manual task recovery. Leaving the terminal or changing mode, model or
+conversation clears the queue. Use `/schedule list` to see times in UTC.
 
 ### Manual verification: first integration slice
 

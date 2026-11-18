@@ -14,7 +14,7 @@ const MODES = { currentModeId: 'work', availableModes: [{ id: 'work', name: 'Wor
 const MAX_FRAME = 256 * 1024;
 const MAX_QUEUED_OUTPUT = 1024 * 1024;
 type Controller = Parameters<CliBridge['serve']>[0];
-type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; stepLimit: boolean; currentTool?: string; mode: string; permissionError?: boolean; pendingYolo?: boolean };
+type Session = { controller: Controller; done: Promise<void>; close: () => void; busy: boolean; cancelled: boolean; active?: Promise<unknown>; limit?: 'max_tokens' | 'max_turn_requests'; currentTool?: string; mode: string; permissionError?: boolean; pendingYolo?: boolean };
 type Frame = { jsonrpc: string; id?: string | number | null; method?: string; params?: any; result?: any; error?: unknown };
 class RpcError extends Error {
   code: number;
@@ -98,7 +98,10 @@ export function serveAcp(input = stdin, output = stdout) {
       const probeWorkspace = providerProbe ? fs.mkdtempSync(path.join(os.tmpdir(), 'neura-acp-probe-')) : undefined;
       const done = main(['--cwd', probeWorkspace ?? params.cwd, ...(providerProbe ? ['--no-history'] : [])], {
         write: text => update(sessionId, text), approve: text => approve(sessionId, text),
-        onStepLimit: () => { const session = sessions.get(sessionId); if (session) session.stepLimit = true; },
+        onTurnLimit: reason => {
+          const session = sessions.get(sessionId);
+          if (session) session.limit = reason === 'output-limit' ? 'max_tokens' : 'max_turn_requests';
+        },
         // The one source of truth for T3's mode display, however the mode changed.
         onModeChange: mode => {
           const session = sessions.get(sessionId);
@@ -125,7 +128,7 @@ export function serveAcp(input = stdin, output = stdout) {
       opening.add(started);
       let controller: Controller;
       try { controller = await started; } finally { opening.delete(started); }
-      sessions.set(sessionId, { controller, done, close, busy: false, cancelled: false, stepLimit: false, mode: 'work' });
+      sessions.set(sessionId, { controller, done, close, busy: false, cancelled: false, mode: 'work' });
       if (closed) { close(); return {}; }
       if (params.mcpServers.length) update(sessionId, 'Neura development adapter: external MCP servers are not connected. Neura-owned tools and sandbox remain active.\n');
       const modelId = process.env.NEURA_MODEL || 'default';
@@ -171,7 +174,7 @@ export function serveAcp(input = stdin, output = stdout) {
       }).join('\n');
       if (!text.trim() || text.length > 32000) throw new RpcError(-32602, 'Task must contain 1-32000 characters');
       if (/^\/(?:login|logout|new|clear|resume|sessions|model|quit|exit)(?:\s|$)/.test(text)) throw new RpcError(-32602, 'Use the native Neura terminal for account, model and history management');
-      session.busy = true; session.cancelled = false; session.stepLimit = false;
+      session.busy = true; session.cancelled = false; session.limit = undefined;
       try {
         // A typed /mode replaces the pending choice; other commands such as /status run without it.
         if (/^\/mode(?:\s|$)/.test(text)) session.pendingYolo = false;
@@ -188,7 +191,7 @@ export function serveAcp(input = stdin, output = stdout) {
         if (session.cancelled) return { stopReason: 'cancelled' };
         session.active = session.controller.execute(text);
         await session.active;
-        return { stopReason: session.cancelled ? 'cancelled' : session.stepLimit ? 'max_turn_requests' : 'end_turn' };
+        return { stopReason: session.cancelled ? 'cancelled' : session.limit ?? 'end_turn' };
       } catch (error) {
         if (session.cancelled) return { stopReason: 'cancelled' };
         throw error;

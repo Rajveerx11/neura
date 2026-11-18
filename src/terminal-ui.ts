@@ -26,6 +26,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'reconcile', description: 'Acknowledge inspection of an interrupted task before continuing' },
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
   { name: 'workflow', args: '[on|off]', description: 'Independent read-only review of Work changes', options: [['on', 'Review each change'], ['off', 'No automatic review']] },
+  { name: 'loop', args: 'DURATION TASK', description: 'Repeat a task in this Work terminal', needsArg: true },
+  { name: 'schedule', args: '[list|cancel ID|in DURATION TASK|at TIMESTAMP TASK|every DURATION TASK]', description: 'Run a task later in this Work terminal', options: [
+    ['list', 'List schedules'], ['cancel ID', 'Cancel by ID'], ['in DURATION TASK', 'Run after a delay'],
+    ['at TIMESTAMP TASK', 'Run at an ISO timestamp'], ['every DURATION TASK', 'Repeat at an interval']] },
   { name: 'review', args: '[status]', description: 'Review changes since the session baseline', options: [['status', 'Is the last review still current?']] },
   { name: 'reviewer', args: '[PROVIDER MODEL [URL]|default]', description: 'Show or choose the independent reviewer', options: [['default', 'Follow the builder model']] },
   { name: 'verify', args: '[quick|full|status]', description: 'Manual verification in Work', options: [['quick', 'Detector-only check'], ['full', 'Full verification'], ['status', 'Check the last receipt']] },
@@ -56,7 +60,8 @@ export function commandMatches(line: string, skills: readonly { name: string; de
   const command = sub && SLASH_COMMANDS.find(entry => entry.name === sub[1].toLowerCase());
   if (!sub || !command?.options) return [];
   return command.options.filter(([option]) => option.startsWith(sub[2].toLowerCase())).map(([option, description]) => {
-    const [name, hint = ''] = option.split(' ');
+    const [name, ...args] = option.split(' ');
+    const hint = args.join(' ');
     return { value: `/${command.name} ${name}`, label: name, hint, description, submit: !hint };
   });
 }
@@ -242,6 +247,12 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/review [status]', 'Review all changes since the session baseline, or check whether the last review is still current.'],
         ['/reviewer PROVIDER MODEL [URL]', 'Choose an independent reviewer. Use a different provider for cross-family review.'],
         ['/reviewer [default]', 'Show the reviewer, or reset it to follow the builder model (labelled same-family).'],
+      ]),
+      group('Schedules in Work', [
+        ['/loop DURATION TASK', 'Repeat a task in this terminal. Minimum interval is 1m. Also available as /schedule every DURATION TASK.'],
+        ['/schedule in DURATION TASK', 'Run once after a delay, such as 15m.'],
+        ['/schedule at TIMESTAMP TASK', 'Run once at an ISO timestamp with a time zone.'],
+        ['/schedule list · /schedule cancel ID', 'Inspect or cancel schedules. Schedules expire when you exit or change mode, model or conversation.'],
       ]),
       group('Models and sign-in', [
         ['/model', 'Subscription picker: enter a number or listed model ID; Enter cancels.'],
