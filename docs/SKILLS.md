@@ -19,8 +19,9 @@ A package contains an exact `SKILL.md` filename with
 [Agent Skills YAML frontmatter](https://agentskills.io/specification). The `name`
 matches the package directory and the `description` tells the model when to use
 it. Neura searches up to four directory levels and 4,000 entries. The first
-package with a given name wins. Discovery skips symbolic links, junctions,
-hard-linked files and legacy Pi directories. Submit `$` to refresh the list.
+package with a given name wins. A linked package directory must resolve inside
+a listed root. Linked roots, linked files, hard-linked files and legacy Pi
+directories are skipped. Submit `$` to refresh the list.
 
 For an ordinary task, the model receives names and descriptions. It can use
 `open_skill` to open a matching skill, then read text resources using paths

@@ -4,6 +4,7 @@ import os from 'node:os';
 import { Type } from 'typebox';
 import { isAlias, isMap, isScalar, parseDocument } from 'yaml';
 import { PROTECTED_CONTROL, SECRET_PATH } from '../agent/neura/action-paths.ts';
+import { learnPathInside } from '../agent/neura/learn-files.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { ToolFeedbackError, type ToolDefinition } from './runtime.ts';
 
@@ -101,14 +102,20 @@ function parseSkill(text: string, file: string) {
 }
 
 export function discoverSkills(roots: readonly string[]): InstalledSkill[] {
+  const allowed = roots.flatMap(root => {
+    const directory = path.resolve(root);
+    try { unlinkedDirectory(directory); return [directory]; } catch { return []; }
+  });
   const skills = new Map<string, InstalledSkill>();
   const visited = new Set<string>();
   let entries = 0;
   function visit(directory: string, depth: number) {
-    if (visited.has(directory)) return;
-    visited.add(directory);
     try {
+      directory = fs.realpathSync.native(directory);
+      if (visited.has(directory) || !allowed.some(root => learnPathInside(root, directory))) return;
+      if (depth > 0 && allowed.some(root => path.relative(root, directory) === '')) return;
       unlinkedDirectory(directory);
+      visited.add(directory);
       const file = path.join(directory, 'SKILL.md');
       if (depth > 0 && fs.lstatSync(file, { throwIfNoEntry: false })) {
         const { name, description } = parseSkill(readText(file, MAX_FRONTMATTER_BYTES), file);
@@ -123,13 +130,13 @@ export function discoverSkills(roots: readonly string[]): InstalledSkill[] {
           const entry = scan.readSync();
           if (!entry) break;
           entries++;
-          if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name.toLowerCase() !== 'node_modules') dirs.push(entry.name);
+          if ((entry.isDirectory() || entry.isSymbolicLink()) && !entry.name.startsWith('.') && entry.name.toLowerCase() !== 'node_modules') dirs.push(entry.name);
         }
       } finally { scan.closeSync(); }
       for (const dir of dirs.sort()) visit(path.join(directory, dir), depth + 1);
     } catch { /* Missing, unreadable, linked and malformed packages are not offered. */ }
   }
-  for (const root of roots) visit(path.resolve(root), 0);
+  for (const root of allowed) visit(root, 0);
   return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
