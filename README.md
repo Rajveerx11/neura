@@ -38,9 +38,10 @@ and Esc closes.
 
 ### Installed skills
 
-Type `$` to browse installed skills. Select one, then submit `$NAME TASK`.
-Skill guidance does not change tools, approvals or sandbox policy. The list
-shown here comes from this PC's installed packages, not a bundled catalog.
+Type `$` to browse installed skills, then submit `$NAME TASK` to choose one.
+On ordinary tasks, Neura gives the model skill names and descriptions so it can
+open relevant guidance as needed. CLI and ACP share the same
+[skill discovery and read limits](docs/SKILLS.md).
 
 ![Running Neura terminal with the dollar-sign skill picker showing installed packages.](assets/screenshots/terminal-skills.png)
 

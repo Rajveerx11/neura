@@ -1,13 +1,13 @@
 # Installed skills
 
-## Active Mastra CLI: `$` invocation (2026-11-13)
+## Using skills in Neura
 
 Type `$` at the main prompt to browse installed skills. Up/Down selects.
 Tab or Enter fills `$NAME ` so you can add a task. Submit `$NAME TASK` to
 apply that skill. On terminals without the live menu, submit `$` to list
 names, then enter `$NAME TASK`. Unknown names and missing tasks produce an
-error without a model request. Dollar signs inside ordinary task text are
-unchanged. A leading `$` is reserved for skill invocation.
+error without a model request. ACP prompts and `--prompt` accept the same `$`
+commands. A leading `$` is reserved for skill invocation.
 
 Discovery checks these directories, in order:
 
@@ -15,25 +15,32 @@ Discovery checks these directories, in order:
 2. `$NEURA_HOME/skills` (default `~/.neura/skills`).
 3. User `~/.agents/skills`, then `~/.claude/skills`.
 
-A package contains `SKILL.md`. Nested bundles are searched up to four directory
-levels. The first package with a given name wins. Linked packages may resolve
-into another listed skill root, but not outside those roots or into `.pi`.
-Linked root directories, hard-linked skill files and files over 64 KiB are
-excluded. Discovery stops after 4,000 entries. No legacy Pi profile or registry
-is read. Typing `$` collects menu metadata. Only explicit `$NAME TASK` sends
-selected guidance to the model.
+A package contains an exact `SKILL.md` filename with
+[Agent Skills YAML frontmatter](https://agentskills.io/specification). The `name`
+matches the package directory and the `description` tells the model when to use
+it. Neura searches up to four directory levels and 4,000 entries. The first
+package with a given name wins. Discovery skips symbolic links, junctions,
+hard-linked files and legacy Pi directories. Submit `$` to refresh the list.
 
-Skill content is untrusted user context, not system instructions. It is refreshed
-on invocation and omitted from saved conversation history. It does not change
-mode, tools, approvals or sandbox policy. Neura does not automatically run
-scripts, install dependencies or expose MCP tools requested by a skill.
-References outside the workspace may be unavailable to the current tools.
-The assistant must report checks it could not run. This is guidance loading,
-not a claim that every installed skill can execute its full workflow.
+For an ordinary task, the model receives names and descriptions. It can use
+`open_skill` to open a matching skill, then read text resources using paths
+relative to that package. With `$NAME TASK`, Neura loads the chosen instructions
+directly and offers reads for that package. Both forms work for the current turn.
+
+Skill descriptions, instructions and resources are untrusted context. The
+current mode and its approvals and sandbox rules govern every action. Neura
+ignores permission fields such as `allowed-tools` and leaves scripts and
+dependency installation to the existing tool policy. Package reads deny
+private paths, links, binary assets and files under `scripts/`.
+
+Each file has a 64 KiB limit and frontmatter has an 8 KiB limit. The model
+catalog has a 32 KiB limit. Each turn allows eight `open_skill` calls and
+128 KiB of skill context, including JSON framing. Saved history keeps a
+placeholder for each skill tool result. A later turn must open the skill again.
 
 ## Historical Pi optional registry
 
-Historical Pi guidance reference, 2026-11-07. The active Mastra CLI does not
+Historical Pi guidance reference, 2026-11-07. The active Neura CLI does not
 implement this registry, discovery gate or `/skill-doctor`. No personal/Pi
 skills are implicitly imported. Retain the contracts below as migration evidence;
 see [parity](PARITY_MATRIX.md) and [current architecture](ARCHITECTURE.md).

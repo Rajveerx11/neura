@@ -45,8 +45,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 export type MenuItem = { value: string; label: string; hint: string; description: string; submit: boolean };
 /** Slash-command options, or installed skills after `$`. Skills complete first so the user can add a task. */
 export function commandMatches(line: string, skills: readonly { name: string; description: string }[] = []): MenuItem[] {
-  const skill = /^\$([a-z0-9-]*)$/i.exec(line);
-  if (skill) return skills.filter(entry => entry.name.startsWith(skill[1].toLowerCase())).map(entry => ({
+  const skill = /^\$([\p{L}\p{M}\p{N}-]*)$/u.exec(line);
+  if (skill) return skills.filter(entry => entry.name.startsWith(skill[1].normalize('NFKC').toLowerCase())).map(entry => ({
     value: '$' + entry.name, label: '$' + entry.name, hint: 'TASK', description: entry.description, submit: false,
   }));
   const top = /^\/(\S*)$/.exec(line);

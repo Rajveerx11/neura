@@ -3,7 +3,7 @@
 ## Active graphs (2026-11-15)
 
 Current runtime pins are `@ai-sdk/openai@4.0.106`,
-`@ai-sdk/anthropic@4.0.93`, `typebox@1.4.4` and `zod@4.6.7`. Root development
+`@ai-sdk/anthropic@4.0.93`, `typebox@1.4.4`, `yaml@2.9.1` and `zod@4.6.7`. Root development
 pins and the separate Learn graph are recorded in the
 [M1 closure review](MASTRA_V1_DEPENDENCIES.md#m1-package-closure-review-2026-11-05).
 The nested graph currently pins canvas `1.1.0`, PDF.js `6.5.438`, Tesseract `7.0.0`,
@@ -17,6 +17,11 @@ No Pi package or latest-Pi registry check belongs to the active application.
 Update coupled AI SDK provider contracts together; new runtime packages require
 source/lifecycle review, documentation and tests. Third-party terms remain
 separate from Neura's Apache-2.0 source license.
+
+[YAML 2.9.1](https://github.com/eemeli/yaml/releases/tag/v2.9.1) is ISC-licensed
+with zero runtime dependencies or install hooks. Neura parses bounded YAML
+frontmatter and reads two scalar values from the document tree. Collections and
+permission fields have no effect on tool access.
 
 `@mastra/core` was removed on 2026-11-14 because its bundled EE code is not licensed for
 production use or redistribution; `check:pi-free` fails if any `@mastra/*` package or import

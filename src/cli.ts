@@ -22,7 +22,7 @@ import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
 import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
-import { discoverSkills, skillRoots, skillGuidance, type InstalledSkill } from './skills.ts';
+import { discoverSkills, skillName, skillRoots, skillTurn, SKILL_TOOL, withoutSkillResults, type InstalledSkill } from './skills.ts';
 import { createCommandKeyboard } from './prompt-input.ts';
 import { createSchedules, parseSchedule } from './schedules.ts';
 export { terminalText } from './terminal-ui.ts';
@@ -254,10 +254,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
       } finally { abort = undefined; }
     }
-    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill = '') {
+    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill?: InstalledSkill) {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
       if (reconciliationRequired) throw new Error('Task outcome needs reconciliation. Inspect effects and use /reconcile, or /new for a separate task. No task was replayed.');
       const resumingTask = Boolean(recovery && recovery.stage !== 'completed');
+      const skills = skillTurn(reviewTurn ? installedSkills ??= discoverSkills(roots) : [], selectedSkill);
       const owned = !abort; // workflow fix turns reuse the outer request's cancellation
       abort ??= new AbortController();
       if (owned) { lastTurnUsage = undefined; fixStopped = false; }
@@ -300,10 +301,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const notice = (line: string) => { endLine(); say(line); };
         const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation, { notice })
           : [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { notice }), ...(mode === 'learn' ? learn.tools() : [])];
+        if (skills.tool) tools.push(skills.tool);
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
           : mode === 'yolo' ? YOLO_INSTRUCTIONS
           : [WORK_INSTRUCTIONS, ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
-        const guidance = [mode === 'learn' ? '' : projectInstructions(workspace), selectedSkill].filter(Boolean).join('\n\n');
+        const guidance = [mode === 'learn' ? '' : projectInstructions(workspace), skills.guidance].filter(Boolean).join('\n\n');
         const guidanceIndex = memory.length;
         const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         const maxSteps = mode === 'learn' ? DEFAULT_TURN_STEPS : WORK_TURN_STEPS;
@@ -353,7 +355,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           },
           onToolEvent: (event, invocationId) => {
             bridge?.onToolEvent?.(event, invocationId);
-            if (event.phase === 'started') { mutationAttempted ||= !READ_ONLY_TOOLS.has(event.toolName); return; }
+            if (event.phase === 'started') { mutationAttempted ||= event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName); return; }
             if (bridge?.onToolEvent) return;
             if (event.phase === 'requested' || event.phase === 'returned') {
               if (erasable) {
@@ -369,8 +371,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const stopped = outcome.stopReason !== 'finished';
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');
-        // Repository context is lower-priority user data, refreshed each turn rather than persisted into history.
-        memory = withoutToolImages(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages);
+        // Guidance and raw skill results expire at the end of the turn.
+        memory = withoutToolImages(withoutSkillResults(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages));
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
         lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
           ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;
@@ -452,19 +454,20 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     async function input(text: string): Promise<boolean> {
       if (interactive && /^(?:exit|quit)$/i.test(text.trim())) text = '/quit'; // bare words, as in a shell
       if (text.startsWith('$')) {
-        const match = /^\$([a-z0-9]+(?:-[a-z0-9]+)*)?(?:\s+([\s\S]*))?$/i.exec(text.trim());
-        if (!match) throw new Error('Use $ to list installed skills, or $NAME TASK to apply one.');
+        const match = /^\$(\S+)?(?:\s+([\s\S]*))?$/.exec(text.trim());
+        const [, rawName, task = ''] = match ?? [];
+        const name = rawName && skillName(rawName.normalize('NFKC').toLowerCase());
+        if (!match || (rawName && !name)) throw new Error('Use $ to list installed skills, or $NAME TASK to apply one.');
         installedSkills = discoverSkills(roots);
-        const [, name, task = ''] = match;
         if (!name) {
           if (!installedSkills.length) say('No installed skills found. Add a package with SKILL.md under .agents/skills, .claude/skills or .neura/skills.');
           else for (const skill of installedSkills) say(`$${skill.name} — ${skill.description || 'Installed skill'}`);
           return true;
         }
-        const skill = installedSkills.find(entry => entry.name === name.toLowerCase());
+        const skill = installedSkills.find(entry => entry.name === name);
         if (!skill) throw new Error('Installed skill not found. Type $ to list available skills.');
         if (!task.trim()) throw new Error(`Use $${skill.name} TASK to apply this skill.`);
-        await turn(text, task, true, skillGuidance(skill, roots));
+        await turn(text, task, true, skill);
         return true;
       }
       if (!text.startsWith('/')) { await turn(text); return true; }
