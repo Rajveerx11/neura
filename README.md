@@ -228,6 +228,11 @@ reasoning replay may need a different adapter.
 See [OpenRouter](https://openrouter.ai/developers) and
 [AIRouter.in](https://www.airouter.in/docs/api-reference).
 
+Neura disables OpenRouter's web plugin per request. Use an OpenRouter workspace
+where the plugin is off or request overrides are allowed. A workspace that
+enforces the plugin is incompatible with Neura's tool controls.
+See [OpenRouter plugin settings](https://openrouter.ai/docs/guides/features/plugins/overview).
+
 For Gemini with a Google AI consumer subscription, sign in to Google's Antigravity
 CLI and use it as a separate agent in an ACP client. Google supports this editor
 integration and restricts using the consumer login inside third-party coding agents.

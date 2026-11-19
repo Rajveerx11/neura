@@ -2,7 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { codexAuthorization } from "./auth.ts";
 import { readFile } from "node:fs/promises";
-import { redactSensitiveText } from "../agent/neura/redaction.ts";
+import { redactCredentialTokens, redactSensitiveText } from "../agent/neura/redaction.ts";
 
 export const PROVIDER_KINDS = ["local", "openai", "anthropic", "openai-codex", "openrouter", "airouter"] as const;
 type ProviderKind = (typeof PROVIDER_KINDS)[number];
@@ -82,7 +82,7 @@ function rejectGatewayOverride(provider: GatewayProvider, override: unknown): vo
 export function isDirectGatewayModel(id: unknown): id is string {
   // Routing aliases can swap models. The online variant adds a gateway-executed tool.
   return typeof id === "string" && id.length <= 256 && /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:/-]*$/i.test(id)
-    && !/^(?:openrouter|airouter)\//i.test(id) && !/:online(?:$|:)/i.test(id) && !/(?:^|\/)sk-(?:or|air)-v1-/i.test(id);
+    && !/^(?:openrouter|airouter)\//i.test(id) && !/:online(?:$|:)/i.test(id) && redactCredentialTokens(id) === id;
 }
 
 class GatewayHttpError extends Error {}
@@ -434,7 +434,9 @@ function gatewayChat(provider: GatewayProvider, model: string): ChatModel {
       }
       const headers = new Headers(init.headers);
       headers.set("Authorization", `Bearer ${apiKey}`);
-      const routing = provider === "openrouter" ? { provider: { allow_fallbacks: false } } : {};
+      const routing = provider === "openrouter"
+        ? { provider: { allow_fallbacks: false }, plugins: [{ id: "web", enabled: false }] }
+        : {};
       const body = JSON.stringify({ ...JSON.parse(init.body), model, ...routing });
       return checkedGatewayResponse(await fetch(chatURL, { ...init, headers, body, redirect: "error" }));
     },

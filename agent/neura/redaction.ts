@@ -104,6 +104,11 @@ function redactJwtCandidates(text: string, checkBudget?: () => void): string {
   return parts.length ? parts.join("") + text.slice(cursor) : text;
 }
 
+export function redactCredentialTokens(text: string, checkBudget?: () => void): string {
+  return redactJwtCandidates(text, checkBudget)
+    .replace(/\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AIza[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16})\b/g, REDACTED);
+}
+
 export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFINITY, checkBudget?: () => void): string {
   checkBudget?.();
   let text = redactPrivateKeyBlocks(String(value ?? ""), checkBudget);
@@ -115,8 +120,7 @@ export function redactSensitiveText(value: unknown, limit = Number.POSITIVE_INFI
     .replace(/\b([A-Z][A-Z0-9_]*_(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s;]+)/g, `$1${REDACTED}`)
     .replace(/(--?(?:password|passwd|token|api-key|secret|credential)\s+)(?:"[^"]*"|'[^']*'|[^\s;]+)/ig, `$1${REDACTED}`);
   checkBudget?.();
-  text = redactJwtCandidates(redactUrlCredentials(text, checkBudget), checkBudget)
-    .replace(/\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AIza[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16})\b/g, REDACTED)
+  text = redactCredentialTokens(redactUrlCredentials(text, checkBudget), checkBudget)
     .replace(/\bhttps?:\/\/[^\s<>"']+/ig, redactUrlQuery);
   checkBudget?.();
   text = redactHighEntropy(text);
