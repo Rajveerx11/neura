@@ -1,7 +1,7 @@
 import { changedFiles, type TreeSnapshot } from '../agent/neura/verification.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import type { ProviderConfig } from './providers.ts';
-import type { ReviewReceipt, ReviewInput, Risk } from './review.ts';
+import { reviewerIndependenceLabel, type ReviewReceipt, type ReviewInput, type Risk } from './review.ts';
 
 export const MAX_REVIEW_ROUNDS = 3;
 export const WORKFLOW_INSTRUCTIONS = `Engineering workflow: assess the task before editing. For a bug, first reproduce the failing behavior through the real user path, then edit, then re-run that same path to show it now passes. For risky changes (auth, credentials, permissions, sandbox, migrations, dependencies, CI, installers) investigate the surrounding code first. Run the relevant tests and typecheck with work_exec and report concrete evidence (command and result). An independent reviewer will check the result after your turn; never claim the work is reviewed, verified or approved yourself.`;
@@ -26,7 +26,7 @@ export type WorkflowArgs = {
 // Reviewer text is derived from workspace content: redact and bound it before display, history or the builder.
 const clip = (value: unknown, limit = 600) => redactSensitiveText(value, limit).replace(/\s+/g, ' ').trim();
 const location = (f: ReviewReceipt['findings'][number]) => clip(f.file, 200) + (Number.isSafeInteger(f.line) ? `:${f.line}` : '');
-const independence = (r: ReviewReceipt) => r.reviewer.independence === 'cross-family' ? 'cross-family' : 'same-family, weaker independence';
+const independence = (r: ReviewReceipt) => reviewerIndependenceLabel(r.reviewer.independence);
 
 export function formatFindings(receipt: ReviewReceipt): string {
   if (!receipt.findings.length) return 'No findings.';

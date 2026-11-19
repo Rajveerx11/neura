@@ -8,6 +8,14 @@ Latest published release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-19: OpenRouter and AIRouter.in connections
+
+- Browse gateway catalogs with `/model openrouter` and `/model airouter`, or
+  specify a model ID directly. Each gateway uses its own API key and fixed endpoint.
+- Gateway chat history requires the original gateway and model when resumed.
+- [T3 setup](T3_CODE.md#accounts-and-models) covers gateway threads and the separate
+  Google Antigravity agent for Gemini subscriptions.
+
 ### 2026-11-15: durable receipts and restart metadata (#169)
 
 - Saved sessions retain one bounded detector receipt. `/verify status` reloads

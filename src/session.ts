@@ -13,7 +13,7 @@ export type TaskRecovery = {
   stage: "running" | "unfinished" | "completed" | "reconcile";
   baseHead: string | null; baseline: TreeSnapshot | null;
 };
-export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery };
+export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery; modelRoute?: string };
 export type SessionSummary = Pick<Session, "id" | "createdAt" | "updatedAt">;
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const hashPattern = /^[0-9a-f]{64}$/;
@@ -137,10 +137,14 @@ export function withoutToolImages(messages: any[]): any[] {
 function normalizedSession(session: Session, trim: boolean): Session {
   const required = ["version", "id", "createdAt", "updatedAt", "messages"];
   const timestamp = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
-  if (!record(session) || !required.every(key => Object.hasOwn(session, key)) || Object.keys(session).some(key => ![...required, "recovery"].includes(key)) ||
+  if (!record(session) || !required.every(key => Object.hasOwn(session, key)) || Object.keys(session).some(key => ![...required, "recovery", "modelRoute"].includes(key)) ||
       session.version !== 1 || typeof session.id !== "string" || !idPattern.test(session.id) || !timestamp(session.createdAt) || !timestamp(session.updatedAt)) throw new Error("Invalid session envelope");
   const result: Session = { version: 1, id: session.id, createdAt: session.createdAt, updatedAt: session.updatedAt, messages: validateMessages(session.messages) };
   if (session.recovery !== undefined) result.recovery = validateRecovery(session.recovery);
+  if (session.modelRoute !== undefined) {
+    if (typeof session.modelRoute !== "string" || !hashPattern.test(session.modelRoute)) throw new Error("Invalid session model route");
+    result.modelRoute = session.modelRoute;
+  }
   while (result.messages.length > MAX_SESSION_MESSAGES || Buffer.byteLength(JSON.stringify(result)) > MAX_SESSION_BYTES) {
     if (!trim) throw new Error("Session exceeds history limits");
     const nextTurn = result.messages.findIndex((message, index) => index > 0 && message.role === "user");
@@ -166,10 +170,10 @@ async function rejectLinkedFile(filename: string) {
 }
 
 /** Creates only a new empty history; never loads framework or machine profiles. */
-export async function createSession(directory: string): Promise<Session> {
+export async function createSession(directory: string, modelRoute?: string): Promise<Session> {
   const root = await sessionDirectory(directory, true);
   const now = new Date().toISOString();
-  const session: Session = { version: 1, id: randomUUID(), createdAt: now, updatedAt: now, messages: [] };
+  const session = normalizedSession({ version: 1, id: randomUUID(), createdAt: now, updatedAt: now, messages: [], modelRoute }, false);
   const filename = sessionPath(root, session.id);
   const temporary = path.join(root, `.${session.id}.${randomUUID()}.tmp`);
   const bytes = JSON.stringify(session);

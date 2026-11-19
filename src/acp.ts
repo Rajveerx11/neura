@@ -132,7 +132,8 @@ export function serveAcp(input = stdin, output = stdout) {
       if (closed) { close(); return {}; }
       if (params.mcpServers.length) update(sessionId, 'Neura development adapter: external MCP servers are not connected. Neura-owned tools and sandbox remain active.\n');
       const modelId = process.env.NEURA_MODEL || 'default';
-      return { sessionId, modes: MODES, models: { currentModelId: modelId, availableModels: [{ modelId, name: process.env.NEURA_MODEL || 'Neura subscription default' }] } };
+      const defaultName = !process.env.NEURA_PROVIDER || process.env.NEURA_PROVIDER === 'openai-codex' ? 'Neura subscription default' : 'Model not configured';
+      return { sessionId, modes: MODES, models: { currentModelId: modelId, availableModels: [{ modelId, name: process.env.NEURA_MODEL || defaultName }] } };
     }
     if (method === 'session/cancel') { const [id] = getSession(params); cancel(id); return {}; }
     if (method === 'session/set_model') {

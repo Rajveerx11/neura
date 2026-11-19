@@ -11,14 +11,14 @@ import { lockSession } from './session-lock.ts';
 import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
 import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
-import { createConfiguredModel, listCodexModels, type ProviderConfig } from './providers.ts';
+import { createConfiguredModel, listCodexModels, listGatewayModels, PROVIDER_KINDS, type ProviderConfig } from './providers.ts';
 import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
 import { createSession, saveSession, resumeSession, listSessions, withoutToolImages, taskRecovery, type Session, type TaskRecovery } from './session.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { captureWorktree, type TreeSnapshot } from '../agent/neura/verification.ts';
-import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, type ReviewReceipt } from './review.ts';
+import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence, reviewerIndependenceLabel, type ReviewReceipt } from './review.ts';
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { createYoloTools, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
 import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
@@ -30,6 +30,11 @@ export { terminalText } from './terminal-ui.ts';
 let asciiGlyphs = false;
 const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env, ascii: asciiGlyphs });
 const failure = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
+const isProvider = (value: string): value is ProviderConfig['provider'] => PROVIDER_KINDS.some(kind => kind === value);
+const isGateway = (value: string): value is 'openrouter' | 'airouter' => value === 'openrouter' || value === 'airouter';
+const modelRoute = ({ provider, model }: ProviderConfig) => isGateway(provider) && model
+  ? createHash('sha256').update(JSON.stringify([provider, model])).digest('hex')
+  : undefined;
 
 export type CliBridge = {
   write: (text: string) => void;
@@ -79,14 +84,13 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const prompt = values.prompt ?? (positionals.length ? positionals.join(' ') : undefined);
   if (!bridge && prompt === undefined && !(stdin.isTTY && stdout.isTTY)) throw new Error('Noninteractive input requires an explicit --prompt.');
   if (values.prompt !== undefined && positionals.length) throw new Error('Use either --prompt or a positional task, not both.');
-  const providerKinds = ['openai-codex', 'local', 'openai', 'anthropic'];
   const defaultBaseURL = (kind: string) => kind === 'local' ? 'http://127.0.0.1:8080/v1' : undefined;
-  const providerKind = (values.provider ?? process.env.NEURA_PROVIDER ?? 'openai-codex') as ProviderConfig['provider'];
-  if (!providerKinds.includes(providerKind)) throw new Error('Unsupported provider.');
+  const providerKind = values.provider ?? process.env.NEURA_PROVIDER ?? 'openai-codex';
+  if (!isProvider(providerKind)) throw new Error('Unsupported provider.');
   const reviewerKind = values['reviewer-provider'] ?? process.env.NEURA_REVIEWER_PROVIDER;
   const reviewerModel = values['reviewer-model'] ?? process.env.NEURA_REVIEWER_MODEL;
   const reviewerURL = values['reviewer-base-url'] ?? process.env.NEURA_REVIEWER_BASE_URL;
-  if (reviewerKind !== undefined && !providerKinds.includes(reviewerKind)) throw new Error('Unsupported reviewer provider.');
+  if (reviewerKind !== undefined && !isProvider(reviewerKind)) throw new Error('Unsupported reviewer provider.');
   if (reviewerModel !== undefined && !reviewerModel.trim()) throw new Error('Reviewer model name is required.');
   if ((reviewerKind !== undefined || reviewerURL !== undefined) && reviewerModel === undefined) throw new Error('Reviewer model is required with a reviewer provider or base URL.');
   const configuredModel = values.model ?? process.env.NEURA_MODEL;
@@ -96,12 +100,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? defaultBaseURL(providerKind) };
   const modelLabel = (value: string) => terminalText(redactSensitiveText(value || '(not selected)', 200));
   // Explicit reviewer only; otherwise the reviewer follows the current builder model (same-family, labelled weaker).
-  let reviewerOverride: ProviderConfig | undefined = reviewerModel === undefined ? undefined : { provider: (reviewerKind ?? providerKind) as ProviderConfig['provider'], model: reviewerModel, baseURL: reviewerURL ?? defaultBaseURL(reviewerKind ?? providerKind) };
+  let reviewerOverride: ProviderConfig | undefined = reviewerModel === undefined ? undefined : { provider: reviewerKind ?? providerKind, model: reviewerModel, baseURL: reviewerURL ?? defaultBaseURL(reviewerKind ?? providerKind) };
   const reviewer = (): ProviderConfig => reviewerOverride ?? { provider: provider.provider, model: provider.model, baseURL: provider.baseURL };
   const parseProvider = (rest: string, command: string): ProviderConfig => {
     const [kind, model, url, ...extra] = rest.split(/\s+/);
-    if (!providerKinds.includes(kind) || !model || extra.length) throw new Error(`Use /${command} openai-codex|local|openai|anthropic MODEL [URL].`);
-    return { provider: kind as ProviderConfig['provider'], model, baseURL: url ?? defaultBaseURL(kind) };
+    if (!isProvider(kind) || !model || extra.length) throw new Error(`Use /${command} PROVIDER MODEL [URL]. Providers: ${PROVIDER_KINDS.join(', ')}.`);
+    return { provider: kind, model, baseURL: url ?? defaultBaseURL(kind) };
   };
   let workflowOn = true;
   let sessionBaseline: { generation: number; snapshot: TreeSnapshot | null } | undefined;
@@ -174,12 +178,16 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     recovery = next;
     restoreTaskBaseline();
   }
-  async function selectSession(id?: string) {
-    const fresh = id ? undefined : await createSession(sessions);
+  async function selectSession(id?: string, config = provider) {
+    const route = modelRoute(config);
+    const fresh = id ? undefined : await createSession(sessions, route);
     const release = await lockSession(sessions, id ?? fresh!.id);
     try {
       const next = fresh ?? await resumeSession(sessions, id!);
       if (next.recovery && next.recovery.workspaceKey !== workspaceKey) throw new Error('Task recovery belongs to another workspace.');
+      if (id && ((next.modelRoute && next.modelRoute !== route) || (isGateway(config.provider) && !next.modelRoute))) {
+        throw new Error('This history requires its original provider and model. Select that route before resuming, or start a new chat.');
+      }
       if (session) generation++; // Fence outstanding work before releasing the old writer lease.
       await pendingSessionSave?.catch(() => {});
       await releaseSession?.(); releaseSession = release;
@@ -192,8 +200,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       sessionState = id ? 'resumed' : 'new'; lastTurnUsage = undefined; historySaveFailed = false;
     } catch (error) { await release(); throw error; }
   }
-  async function freshConversation() {
-    if (!values['no-history']) await selectSession();
+  async function freshConversation(config = provider) {
+    if (!values['no-history']) await selectSession(undefined, config);
     else { memory = []; recovery = undefined; reconciliationRequired = false; restoreTaskBaseline(); sessionState = 'new'; lastTurnUsage = undefined; }
   }
   const statusSnapshot = (): TerminalStatus => ({
@@ -227,31 +235,33 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     async function changeModel(next: ProviderConfig) {
       createConfiguredModel(next);
       abort?.signal.throwIfAborted();
-      await freshConversation();
-      abort?.signal.throwIfAborted();
+      await freshConversation(next);
       provider = next; modelExplicit = true;
       generation++; learn.invalidate();
       say(`Model: ${modelLabel(provider.model)} (${provider.provider}). A fresh conversation is selected.`);
     }
-    async function pickModel() {
+    async function pickModel(kind = provider.provider) {
       stdout.write(terminal().metadata([['Provider', provider.provider], ['Current model', modelLabel(provider.model)]]) + '\n');
-      if (provider.provider !== 'openai-codex') {
-        say('For this provider use /model PROVIDER MODEL [URL]. API providers are explicitly selected and billed separately.');
+      if (kind !== 'openai-codex' && !isGateway(kind)) {
+        say('Use /model PROVIDER MODEL [URL], or /model openrouter or /model airouter for a gateway catalog.');
         return;
       }
       abort = new AbortController();
       try {
-        say('Fetching the subscription model catalog...');
-        const choices = await listCodexModels({ signal: abort.signal, baseURL: provider.baseURL });
-        if (!choices.length) { say('No subscription models available. Model unchanged.'); return; }
-        choices.forEach((choice, index) => stdout.write(terminal().modelChoice(modelLabel(choice.id), index, { catalogDefault: index === 0, current: choice.id === provider.model }) + '\n'));
+        say(kind === 'openai-codex' ? 'Fetching the subscription model catalog...' : `Fetching the ${kind} API model catalog. Usage bills through that gateway.`);
+        const baseURL = kind === provider.provider ? provider.baseURL : undefined;
+        const choices = kind === 'openai-codex'
+          ? await listCodexModels({ signal: abort.signal, baseURL })
+          : await listGatewayModels(kind, { signal: abort.signal });
+        if (!choices.length) { say(`No models listed. Use /model ${kind} MODEL to select one explicitly.`); return; }
+        choices.forEach((choice, index) => stdout.write(terminal().modelChoice(modelLabel(choice.id), index, { catalogDefault: kind === 'openai-codex' && index === 0, current: kind === provider.provider && choice.id === provider.model }) + '\n'));
         if (!rl) return;
         for (;;) {
           const answer = (await rl.question(terminal().pickerPrompt(), { signal: abort.signal })).trim();
           if (!answer) { say('Model unchanged.'); return; }
-          const selected = /^\d{1,3}$/.test(answer) ? choices[Number(answer) - 1] : choices.find(choice => choice.id === answer);
+          const selected = /^\d+$/.test(answer) ? choices[Number(answer) - 1] : choices.find(choice => choice.id === answer);
           if (!selected) { say('Choose one of the listed models, or press Enter to cancel.'); continue; }
-          await changeModel({ provider: 'openai-codex', model: selected.id });
+          await changeModel({ provider: kind, model: selected.id, baseURL });
           return;
         }
       } finally { abort = undefined; }
@@ -563,7 +573,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (rest === 'default') reviewerOverride = undefined;
         else if (rest) { const next = parseProvider(rest, 'reviewer'); createConfiguredModel(next); reviewerOverride = next; }
         const current = reviewer();
-        say(`Reviewer: ${modelLabel(current.model)} (${current.provider}${reviewerOverride ? '' : ', follows builder'}); ${reviewerIndependence(current, provider) === 'cross-family' ? 'cross-family' : 'same-family, weaker independence'}.`);
+        say(`Reviewer: ${modelLabel(current.model)} (${current.provider}${reviewerOverride ? '' : ', follows builder'}). ${reviewerIndependenceLabel(reviewerIndependence(current, provider))}.`);
       } else if (command === 'review') {
         if (mode !== 'work') throw new Error('Review is available only in Work.');
         if (!['', 'status'].includes(rest)) throw new Error('Use /review or /review status.');
@@ -594,8 +604,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         try {
           await loginCodex({ signal: abort.signal, onAuthorize: url => say(`Open this URL in your browser to sign in:\n${url}`) });
           const remembered = provider.provider === 'openai-codex' && modelExplicit ? provider.model : '';
-          provider = { provider: 'openai-codex', model: remembered }; modelExplicit = Boolean(remembered);
-          await freshConversation();
+          const next: ProviderConfig = { provider: 'openai-codex', model: remembered };
+          await freshConversation(next);
+          provider = next; modelExplicit = Boolean(remembered);
           generation++; learn.invalidate();
           say('Neura subscription login saved. A fresh conversation is selected; no Pi credentials were imported.');
         } finally { abort = undefined; }
@@ -651,8 +662,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         reconciliationRequired = false;
         say('Inspection acknowledged. Original task base retained; no actions replayed, approvals restored or verification granted. Give an explicit task to continue.');
       } else if (command === 'model') {
-        if (!rest.trim()) { await pickModel(); return true; }
-        await changeModel(parseProvider(rest, 'model'));
+        if (!rest) await pickModel();
+        else if (rest === 'openai-codex' || isGateway(rest)) await pickModel(rest);
+        else await changeModel(parseProvider(rest, 'model'));
       } else throw new Error('Unknown command. Use /help.');
       return true;
     }

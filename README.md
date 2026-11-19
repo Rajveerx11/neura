@@ -217,6 +217,23 @@ Use the model ID advertised by your server. Neura does not start or download it.
 `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Subscription failures never fall back to
 API billing. See [provider setup](docs/CODEX_AUTH.md).
 
+For OpenRouter, set `OPENROUTER_API_KEY` in Neura's environment and run
+`/model openrouter`. For AIRouter.in, set `AIRROUTER_API_KEY` and run
+`/model airouter`. Both catalogs use the gateway's official endpoint. To select
+a model directly, use `/model PROVIDER MODEL` or `--provider PROVIDER --model MODEL`.
+Choose a chat model that supports tools. Gateway usage bills through the chosen
+account. To resume a gateway chat, select the same provider and model first.
+The gateways use standard Chat Completions. Models requiring gateway-specific
+reasoning replay may need a different adapter.
+See [OpenRouter](https://openrouter.ai/developers) and
+[AIRouter.in](https://www.airouter.in/docs/api-reference).
+
+For Gemini with a Google AI consumer subscription, sign in to Google's Antigravity
+CLI and use it as a separate agent in an ACP client. Google supports this editor
+integration and restricts using the consumer login inside third-party coding agents.
+See [Antigravity ACP setup](https://antigravity.google/docs/cli/acp) and
+[Google's subscription FAQ](https://antigravity.google/docs/faq).
+
 In Work, ask Neura to read `sample.txt`, then create `result.txt` containing
 `beta`. Inspect the files yourself. For sandbox acceptance, use a disposable
 project with a committed Git baseline and run the configured-host check below.
@@ -247,7 +264,7 @@ Explicit workspaces, headless tasks and resumed sessions never silently switch.
 | `/help`, `/status` | Commands, provider, workspace, history and reported last-turn usage |
 | `/mode work`, `/mode learn` | Select Work or Learn |
 | `/mode yolo` | Enter [YOLO](#yolo) after a typed `yes`: no sandbox, no approvals |
-| `/model`, `/model PROVIDER MODEL [URL]` | Subscription picker or explicit provider/model selection |
+| `/model [PROVIDER]`, `/model PROVIDER MODEL [URL]` | Browse Codex or gateway models, or select an explicit model |
 | `/login`, `/logout` | Explicit subscription authorization or local credential removal |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries |
 | `/workflow on\|off` | Toggle automatic Work review |

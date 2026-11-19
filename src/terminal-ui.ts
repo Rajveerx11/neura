@@ -16,7 +16,8 @@ export type SlashCommand = { name: string; args?: string; description: string; n
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'help', description: 'Show commands' },
   { name: 'status', description: 'Mode, model, workspace, history and last-turn usage' },
-  { name: 'model', args: '[PROVIDER MODEL [URL]]', description: 'Pick a subscription model, or set one explicitly' },
+  { name: 'model', args: '[PROVIDER [MODEL [URL]]]', description: 'Browse a catalog or select a model explicitly', options: [
+    ['openai-codex', 'ChatGPT subscription catalog'], ['openrouter', 'OpenRouter API catalog'], ['airouter', 'AIRouter.in API catalog']] },
   { name: 'mode', args: 'work|learn|yolo', description: 'Switch mode', needsArg: true, options: [
     ['work', 'Sandboxed tools with approvals (default)'], ['learn', 'Guided lessons'], ['yolo', 'No sandbox, no approvals; asks for a typed yes']] },
   { name: 'clear', description: 'Clear context and start a new chat (keeps saved chats)' },
@@ -245,7 +246,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       group('Review workflow', [
         ['/workflow [on|off]', 'Work reviews each change read-only (up to 3 rounds, must-fix findings auto-fixed) and ends with READY FOR YOUR APPROVAL, BLOCKED or Review skipped; a turn that changed nothing ends silently. It never commits, pushes or merges.'],
         ['/review [status]', 'Review all changes since the session baseline, or check whether the last review is still current.'],
-        ['/reviewer PROVIDER MODEL [URL]', 'Choose an independent reviewer. Use a different provider for cross-family review.'],
+        ['/reviewer PROVIDER MODEL [URL]', 'Choose a reviewer. Cross-family review requires distinct model families.'],
         ['/reviewer [default]', 'Show the reviewer, or reset it to follow the builder model (labelled same-family).'],
       ]),
       group('Schedules in Work', [
@@ -255,8 +256,8 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/schedule list · /schedule cancel ID', 'Inspect or cancel schedules. Schedules expire when you exit or change mode, model or conversation.'],
       ]),
       group('Models and sign-in', [
-        ['/model', 'Subscription picker: enter a number or listed model ID; Enter cancels.'],
-        ['/model PROVIDER MODEL [URL]', 'Select openai-codex, local, openai or anthropic explicitly.'],
+        ['/model [PROVIDER]', 'Browse openai-codex, openrouter or airouter. Enter cancels.'],
+        ['/model PROVIDER MODEL [URL]', 'Select a model explicitly. OpenRouter and AIRouter use fixed endpoints.'],
         ['/login · /logout', 'Interactive ChatGPT subscription sign-in or local credential removal. API billing is never a fallback.'],
         ['/thinking [on|off]', 'Provider summaries only. Hidden internal reasoning is not available.'],
       ]),
@@ -277,7 +278,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['--mode work|learn', 'Start in Work (default) or Learn. Never persisted: a new process starts in Work.'],
         ['--yolo', 'Start in YOLO with no prompt: no sandbox, no approvals, network and full account access. The flag is your consent. Use only on repositories you trust.'],
         ...(width >= 46 ? [['--dangerously-bypass-approvals-and-sandbox', 'Same as --yolo.'] as [string, string]] : []),
-        ['--provider PROVIDER', 'openai-codex (default), local, openai or anthropic.'],
+        ['--provider PROVIDER', 'openai-codex (default), local, openai, anthropic, openrouter or airouter.'],
         ['--model NAME · --base-url URL', 'Explicit model and endpoint. Subscription default comes from the catalog, never a guessed model.'],
       ]),
       group('History and diagnostics', [
