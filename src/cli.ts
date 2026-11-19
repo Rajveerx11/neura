@@ -11,7 +11,7 @@ import { lockSession } from './session-lock.ts';
 import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
 import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
-import { createConfiguredModel, listCodexModels, listGatewayModels, PROVIDER_KINDS, type ProviderConfig } from './providers.ts';
+import { createConfiguredModel, isDirectGatewayModel, isGatewayProvider, listCodexModels, listGatewayModels, PROVIDER_KINDS, type ProviderConfig } from './providers.ts';
 import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
@@ -31,8 +31,7 @@ let asciiGlyphs = false;
 const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env, ascii: asciiGlyphs });
 const failure = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
 const isProvider = (value: string): value is ProviderConfig['provider'] => PROVIDER_KINDS.some(kind => kind === value);
-const isGateway = (value: string): value is 'openrouter' | 'airouter' => value === 'openrouter' || value === 'airouter';
-const modelRoute = ({ provider, model }: ProviderConfig) => isGateway(provider) && model
+const modelRoute = ({ provider, model }: ProviderConfig) => isGatewayProvider(provider) && model
   ? createHash('sha256').update(JSON.stringify([provider, model])).digest('hex')
   : undefined;
 
@@ -95,10 +94,14 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   if ((reviewerKind !== undefined || reviewerURL !== undefined) && reviewerModel === undefined) throw new Error('Reviewer model is required with a reviewer provider or base URL.');
   const configuredModel = values.model ?? process.env.NEURA_MODEL;
   if (configuredModel !== undefined && !configuredModel.trim()) throw new Error('Model name is required.');
+  if (configuredModel !== undefined && isGatewayProvider(providerKind) && !isDirectGatewayModel(configuredModel)) {
+    throw new Error('Gateway requires a direct model ID without server tools.');
+  }
   let modelExplicit = configuredModel !== undefined;
   let showReasoning = Boolean(bridge && !values['no-thinking']);
   let provider: ProviderConfig = { provider: providerKind, model: configuredModel ?? '', baseURL: values['base-url'] ?? process.env.NEURA_BASE_URL ?? defaultBaseURL(providerKind) };
-  const modelLabel = (value: string) => terminalText(redactSensitiveText(value || '(not selected)', 200));
+  const modelLabel = (value: string, kind: ProviderConfig['provider']) => terminalText(
+    isGatewayProvider(kind) && isDirectGatewayModel(value) ? value : redactSensitiveText(value || '(not selected)', 200));
   // Explicit reviewer only; otherwise the reviewer follows the current builder model (same-family, labelled weaker).
   let reviewerOverride: ProviderConfig | undefined = reviewerModel === undefined ? undefined : { provider: reviewerKind ?? providerKind, model: reviewerModel, baseURL: reviewerURL ?? defaultBaseURL(reviewerKind ?? providerKind) };
   const reviewer = (): ProviderConfig => reviewerOverride ?? { provider: provider.provider, model: provider.model, baseURL: provider.baseURL };
@@ -185,7 +188,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     try {
       const next = fresh ?? await resumeSession(sessions, id!);
       if (next.recovery && next.recovery.workspaceKey !== workspaceKey) throw new Error('Task recovery belongs to another workspace.');
-      if (id && ((next.modelRoute && next.modelRoute !== route) || (isGateway(config.provider) && !next.modelRoute))) {
+      if (id && ((next.modelRoute && next.modelRoute !== route) || (isGatewayProvider(config.provider) && !next.modelRoute))) {
         throw new Error('This history requires its original provider and model. Select that route before resuming, or start a new chat.');
       }
       if (session) generation++; // Fence outstanding work before releasing the old writer lease.
@@ -205,7 +208,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     else { memory = []; recovery = undefined; reconciliationRequired = false; restoreTaskBaseline(); sessionState = 'new'; lastTurnUsage = undefined; }
   }
   const statusSnapshot = (): TerminalStatus => ({
-    mode, provider: provider.provider, model: modelLabel(provider.model),
+    mode, provider: provider.provider, model: modelLabel(provider.model, provider.provider),
     workspace: redactSensitiveText(workspace),
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
@@ -238,11 +241,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       await freshConversation(next);
       provider = next; modelExplicit = true;
       generation++; learn.invalidate();
-      say(`Model: ${modelLabel(provider.model)} (${provider.provider}). A fresh conversation is selected.`);
+      say(`Model: ${modelLabel(provider.model, provider.provider)} (${provider.provider}). A fresh conversation is selected.`);
     }
     async function pickModel(kind = provider.provider) {
-      stdout.write(terminal().metadata([['Provider', provider.provider], ['Current model', modelLabel(provider.model)]]) + '\n');
-      if (kind !== 'openai-codex' && !isGateway(kind)) {
+      stdout.write(terminal().metadata([['Provider', provider.provider], ['Current model', modelLabel(provider.model, provider.provider)]]) + '\n');
+      if (kind !== 'openai-codex' && !isGatewayProvider(kind)) {
         say('Use /model PROVIDER MODEL [URL], or /model openrouter or /model airouter for a gateway catalog.');
         return;
       }
@@ -254,7 +257,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           ? await listCodexModels({ signal: abort.signal, baseURL })
           : await listGatewayModels(kind, { signal: abort.signal });
         if (!choices.length) { say(`No models listed. Use /model ${kind} MODEL to select one explicitly.`); return; }
-        choices.forEach((choice, index) => stdout.write(terminal().modelChoice(modelLabel(choice.id), index, { catalogDefault: kind === 'openai-codex' && index === 0, current: kind === provider.provider && choice.id === provider.model }) + '\n'));
+        choices.forEach((choice, index) => stdout.write(terminal().modelChoice(modelLabel(choice.id, kind), index, { catalogDefault: kind === 'openai-codex' && index === 0, current: kind === provider.provider && choice.id === provider.model }) + '\n'));
         if (!rl) return;
         for (;;) {
           const answer = (await rl.question(terminal().pickerPrompt(), { signal: abort.signal })).trim();
@@ -573,7 +576,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (rest === 'default') reviewerOverride = undefined;
         else if (rest) { const next = parseProvider(rest, 'reviewer'); createConfiguredModel(next); reviewerOverride = next; }
         const current = reviewer();
-        say(`Reviewer: ${modelLabel(current.model)} (${current.provider}${reviewerOverride ? '' : ', follows builder'}). ${reviewerIndependenceLabel(reviewerIndependence(current, provider))}.`);
+        say(`Reviewer: ${modelLabel(current.model, current.provider)} (${current.provider}${reviewerOverride ? '' : ', follows builder'}). ${reviewerIndependenceLabel(reviewerIndependence(current, provider))}.`);
       } else if (command === 'review') {
         if (mode !== 'work') throw new Error('Review is available only in Work.');
         if (!['', 'status'].includes(rest)) throw new Error('Use /review or /review status.');
@@ -663,7 +666,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         say('Inspection acknowledged. Original task base retained; no actions replayed, approvals restored or verification granted. Give an explicit task to continue.');
       } else if (command === 'model') {
         if (!rest) await pickModel();
-        else if (rest === 'openai-codex' || isGateway(rest)) await pickModel(rest);
+        else if (rest === 'openai-codex' || isGatewayProvider(rest)) await pickModel(rest);
         else await changeModel(parseProvider(rest, 'model'));
       } else throw new Error('Unknown command. Use /help.');
       return true;

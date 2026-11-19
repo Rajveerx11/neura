@@ -57,6 +57,8 @@ const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 // Match the official Codex transport's default stream-idle budget, without its retries.
 const STREAM_IDLE_TIMEOUT_MS = 300_000;
 const CODEX_MODELS_ENDPOINT = "https://chatgpt.com/backend-api/codex/models";
+export const OPENAI_API_URL = "https://api.openai.com/v1";
+export const ANTHROPIC_API_URL = "https://api.anthropic.com/v1";
 const GATEWAYS = {
   openrouter: { baseURL: "https://openrouter.ai/api/v1", key: "OPENROUTER_API_KEY", label: "OpenRouter" },
   airouter: { baseURL: "https://api.airouter.in/v1", key: "AIRROUTER_API_KEY", label: "AIRouter" },
@@ -64,6 +66,7 @@ const GATEWAYS = {
 type GatewayProvider = keyof typeof GATEWAYS;
 const GATEWAY_CATALOG_TIMEOUT_MS = 5_000;
 const MAX_GATEWAY_MODELS = 4_096;
+export const isGatewayProvider = (value: string): value is GatewayProvider => Object.hasOwn(GATEWAYS, value);
 
 function gatewayKey(provider: GatewayProvider): string {
   const { key, label } = GATEWAYS[provider];
@@ -76,10 +79,10 @@ function rejectGatewayOverride(provider: GatewayProvider, override: unknown): vo
   if (override !== undefined) throw new Error(`${GATEWAYS[provider].label} uses only its fixed HTTPS endpoint`);
 }
 
-function directGatewayModel(id: unknown): id is string {
-  // Gateway routing slugs and preset suffixes can select a different model.
-  return typeof id === "string" && /^[a-z0-9][a-z0-9._:/-]{0,255}$/i.test(id)
-    && !/^(?:openrouter|airouter)\//i.test(id) && redactSensitiveText(id, 256) === id;
+export function isDirectGatewayModel(id: unknown): id is string {
+  // Routing aliases can swap models. The online variant adds a gateway-executed tool.
+  return typeof id === "string" && id.length <= 256 && /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:/-]*$/i.test(id)
+    && !/^(?:openrouter|airouter)\//i.test(id) && !/:online(?:$|:)/i.test(id) && !/(?:^|\/)sk-(?:or|air)-v1-/i.test(id);
 }
 
 class GatewayHttpError extends Error {}
@@ -381,7 +384,7 @@ type GatewayCatalogEntry = {
 
 /** Discover candidate chat IDs for an explicit selection. */
 export async function listGatewayModels(provider: GatewayProvider, options: { signal?: AbortSignal } = {}): Promise<{ id: string }[]> {
-  if (!Object.hasOwn(GATEWAYS, provider)) throw new Error("Unsupported gateway");
+  if (!isGatewayProvider(provider)) throw new Error("Unsupported gateway");
   rejectGatewayOverride(provider, "baseURL" in options ? options.baseURL : undefined);
   const { signal } = options;
   signal?.throwIfAborted();
@@ -403,7 +406,7 @@ export async function listGatewayModels(provider: GatewayProvider, options: { si
     }
     const ids = new Set<string>();
     for (const model of catalog.data as (GatewayCatalogEntry | null)[]) {
-      if (!directGatewayModel(model?.id)) continue;
+      if (!isDirectGatewayModel(model?.id)) continue;
       if (Array.isArray(model.supported_parameters) && !model.supported_parameters.includes("tools")) continue;
       if (provider === "airouter") {
         if ((model.type != null && model.type !== "language") ||
@@ -417,10 +420,12 @@ export async function listGatewayModels(provider: GatewayProvider, options: { si
 }
 
 function gatewayChat(provider: GatewayProvider, model: string): ChatModel {
-  if (!directGatewayModel(model)) throw new Error("Gateway requires a direct model ID");
+  if (!isDirectGatewayModel(model)) throw new Error("Gateway requires a direct model ID without server tools");
   const { baseURL, label } = GATEWAYS[provider];
   const apiKey = gatewayKey(provider);
   const chatURL = `${baseURL}/chat/completions`;
+  // Apply the SDK's OpenAI model rules while keeping the exact gateway slug on the wire.
+  const sdkModel = model.startsWith("openai/") ? model.slice("openai/".length).split(":", 1)[0] : model;
   const configured = createOpenAI({
     name: provider, baseURL, apiKey,
     async fetch(url, init) {
@@ -429,13 +434,11 @@ function gatewayChat(provider: GatewayProvider, model: string): ChatModel {
       }
       const headers = new Headers(init.headers);
       headers.set("Authorization", `Bearer ${apiKey}`);
-      let body = init.body;
-      if (provider === "openrouter") {
-        body = JSON.stringify({ ...JSON.parse(body), provider: { allow_fallbacks: false } });
-      }
+      const routing = provider === "openrouter" ? { provider: { allow_fallbacks: false } } : {};
+      const body = JSON.stringify({ ...JSON.parse(init.body), model, ...routing });
       return checkedGatewayResponse(await fetch(chatURL, { ...init, headers, body, redirect: "error" }));
     },
-  }).chat(model);
+  }).chat(sdkModel);
   const generate = configured.doGenerate.bind(configured);
   const stream = configured.doStream.bind(configured);
   const failure = `${label} chat request failed`;
@@ -515,12 +518,12 @@ export function createConfiguredModel({ provider, model, baseURL, reasoningSumma
   if (provider === "openai") {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OpenAI API requires OPENAI_API_KEY; use openai-codex for ChatGPT subscription login");
-    return createOpenAI({ apiKey, baseURL: endpoint(baseURL ?? "https://api.openai.com/v1", false) }).responses(model);
+    return createOpenAI({ apiKey, baseURL: endpoint(baseURL ?? OPENAI_API_URL, false) }).responses(model);
   }
   if (provider === "anthropic") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Anthropic API requires ANTHROPIC_API_KEY; subscription login is not implemented");
-    return createAnthropic({ apiKey, baseURL: endpoint(baseURL ?? "https://api.anthropic.com/v1", false) })(model);
+    return createAnthropic({ apiKey, baseURL: endpoint(baseURL ?? ANTHROPIC_API_URL, false) })(model);
   }
   throw new Error("Unsupported provider");
 }
