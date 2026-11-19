@@ -103,6 +103,19 @@ thread. For a local model, explicitly change `NEURA_PROVIDER` to `local` and set
 selection and their separate credentials; subscription failures never fall back
 to API billing. Do not assume account isolation between two provider instances.
 
+To use a gateway in a Neura thread, set `NEURA_PROVIDER` to `openrouter` or
+`airouter` and set `NEURA_MODEL` to the exact model ID. Supply `OPENROUTER_API_KEY`
+or `AIRROUTER_API_KEY` through the launch environment's secret settings and omit
+`NEURA_BASE_URL`. Browse available models in Neura's terminal with `/model openrouter`
+or `/model airouter`. T3 displays the fixed model configured for the thread.
+
+For Gemini through Google AI Pro or Ultra, use the separate Google Antigravity
+agent. Sign in via `agy acp --login` and select Antigravity in your ACP client.
+If the client needs manual registration, use the installed `agy` executable with
+the `acp` argument. Antigravity supplies its own tools and permission controls.
+See [Google's ACP setup](https://antigravity.google/docs/cli/acp) and
+[subscription FAQ](https://antigravity.google/docs/faq).
+
 ## Supported behavior and limits
 
 - ACP v1 over newline-delimited JSON-RPC on stdin/stdout. Negotiation declines the

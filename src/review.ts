@@ -7,7 +7,7 @@ import { AUTOMATIC_GIT_ARGUMENTS, automaticGitEnvironment, resolveExecutable } f
 import { SECRET_PATH } from '../agent/neura/action-paths.ts';
 import { readPlanFileSnapshot } from '../agent/neura/plan-files.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
-import { createConfiguredModel, type ProviderConfig } from './providers.ts';
+import { ANTHROPIC_API_URL, createConfiguredModel, isGatewayProvider, OPENAI_API_URL, type ProviderConfig } from './providers.ts';
 import { runTurn } from './runtime.ts';
 import { createReadOnlyTools } from './work.ts';
 
@@ -25,7 +25,7 @@ export type ReviewReceipt = {
   schemaVersion: 1; id: string;
   fingerprint: string | null;
   status: 'clean' | 'findings' | 'unavailable' | 'stale';
-  reviewer: { provider: ProviderConfig['provider']; model: string; independence: 'cross-family' | 'same-family' };
+  reviewer: { provider: ProviderConfig['provider']; model: string; independence: ReviewerIndependence };
   risk: Risk;
   findings: Finding[];
   reason?: string;
@@ -72,9 +72,24 @@ export function isMustFix(f: Pick<Finding, 'severity' | 'confidence'>): boolean 
   return f.severity === 'blocker' || (f.severity === 'major' && f.confidence !== 'low');
 }
 
-const family = (provider: ProviderConfig['provider']) => provider === 'openai-codex' ? 'openai' : provider;
-export function reviewerIndependence(reviewer: ProviderConfig, builder: ProviderConfig): 'cross-family' | 'same-family' {
-  return family(reviewer.provider) === family(builder.provider) ? 'same-family' : 'cross-family';
+type ReviewerIndependence = 'cross-family' | 'same-family' | 'unverified';
+function family({ provider, model, baseURL }: ProviderConfig) {
+  const url = baseURL?.replace(/\/$/, '');
+  if ((provider === 'openai-codex' && url === undefined) || (provider === 'openai' && (url ?? OPENAI_API_URL) === OPENAI_API_URL)) return 'openai';
+  if (provider === 'anthropic' && (url ?? ANTHROPIC_API_URL) === ANTHROPIC_API_URL) return 'anthropic';
+  if (isGatewayProvider(provider) && url === undefined) {
+    return /^(openai|anthropic|google)\//.exec(model)?.[1];
+  }
+}
+export function reviewerIndependence(reviewer: ProviderConfig, builder: ProviderConfig): ReviewerIndependence {
+  if (reviewer.provider === builder.provider && reviewer.model === builder.model && reviewer.baseURL === builder.baseURL) return 'same-family';
+  const reviewingFamily = family(reviewer), buildingFamily = family(builder);
+  if (!reviewingFamily || !buildingFamily) return 'unverified';
+  return reviewingFamily === buildingFamily ? 'same-family' : 'cross-family';
+}
+export function reviewerIndependenceLabel(independence: ReviewerIndependence): string {
+  const labels = { 'cross-family': 'cross-family', 'same-family': 'same-family, weaker independence', unverified: 'model family unverified' };
+  return labels[independence];
 }
 
 export const REVIEW_INSTRUCTIONS = `You are an independent code reviewer. You did not write this change. Review only the candidate diff below against the stated task.

@@ -2,12 +2,18 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { codexAuthorization } from "./auth.ts";
 import { readFile } from "node:fs/promises";
-import { redactSensitiveText } from "../agent/neura/redaction.ts";
+import { redactCredentialTokens, redactSensitiveText } from "../agent/neura/redaction.ts";
 
-export type ProviderConfig = { provider: "local" | "openai" | "anthropic" | "openai-codex"; model: string; baseURL?: string; reasoningSummary?: boolean };
+export const PROVIDER_KINDS = ["local", "openai", "anthropic", "openai-codex", "openrouter", "airouter"] as const;
+type ProviderKind = (typeof PROVIDER_KINDS)[number];
+export type ProviderConfig = {
+  [Provider in ProviderKind]: { provider: Provider; model: string; baseURL?: string; reasoningSummary?: boolean };
+}[ProviderKind];
 
 type ChatModel = ReturnType<ReturnType<typeof createOpenAI>["chat"]>;
-type ModelPrompt = Parameters<ChatModel["doGenerate"]>[0]["prompt"];
+type ChatOptions = Parameters<ChatModel["doGenerate"]>[0];
+type ModelPrompt = ChatOptions["prompt"];
+type ChatStreamPart = Awaited<ReturnType<ChatModel["doStream"]>>["stream"] extends ReadableStream<infer Part> ? Part : never;
 
 function chatImagePrompt(prompt: ModelPrompt): ModelPrompt {
   const result: ModelPrompt = [];
@@ -31,6 +37,11 @@ function chatImagePrompt(prompt: ModelPrompt): ModelPrompt {
   return result;
 }
 
+// Chat Completions serializes tool media as JSON. Move images to a following user message.
+function chatImageOptions(options: ChatOptions): ChatOptions {
+  return { ...options, prompt: chatImagePrompt(options.prompt) };
+}
+
 function endpoint(value: string, local: boolean): string {
   const url = new URL(value);
   if (url.username || url.password || url.search || url.hash) throw new Error("Provider URL cannot contain credentials, query, or fragment");
@@ -46,6 +57,53 @@ const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 // Match the official Codex transport's default stream-idle budget, without its retries.
 const STREAM_IDLE_TIMEOUT_MS = 300_000;
 const CODEX_MODELS_ENDPOINT = "https://chatgpt.com/backend-api/codex/models";
+export const OPENAI_API_URL = "https://api.openai.com/v1";
+export const ANTHROPIC_API_URL = "https://api.anthropic.com/v1";
+const GATEWAYS = {
+  openrouter: { baseURL: "https://openrouter.ai/api/v1", key: "OPENROUTER_API_KEY", label: "OpenRouter" },
+  airouter: { baseURL: "https://api.airouter.in/v1", key: "AIRROUTER_API_KEY", label: "AIRouter" },
+} as const;
+type GatewayProvider = keyof typeof GATEWAYS;
+const GATEWAY_CATALOG_TIMEOUT_MS = 5_000;
+const MAX_GATEWAY_MODELS = 4_096;
+export const isGatewayProvider = (value: string): value is GatewayProvider => Object.hasOwn(GATEWAYS, value);
+
+function gatewayKey(provider: GatewayProvider): string {
+  const { key, label } = GATEWAYS[provider];
+  const apiKey = process.env[key]?.trim();
+  if (!apiKey) throw new Error(`${label} API requires ${key}`);
+  return apiKey;
+}
+
+function rejectGatewayOverride(provider: GatewayProvider, override: unknown): void {
+  if (override !== undefined) throw new Error(`${GATEWAYS[provider].label} uses only its fixed HTTPS endpoint`);
+}
+
+export function isDirectGatewayModel(id: unknown): id is string {
+  // Routing aliases can swap models. The online variant adds a gateway-executed tool.
+  return typeof id === "string" && id.length <= 256 && /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:/-]*$/i.test(id)
+    && !/^(?:openrouter|airouter)\//i.test(id) && !/:online(?:$|:)/i.test(id) && redactCredentialTokens(id) === id;
+}
+
+class GatewayHttpError extends Error {}
+
+function checkedGatewayResponse(response: Response): Response {
+  if (response.ok && !response.redirected) return response;
+  void response.body?.cancel().catch(() => undefined);
+  throw new GatewayHttpError(`HTTP ${response.status}`);
+}
+
+async function gatewayCall<T>(failure: string, signal: AbortSignal | undefined, call: () => PromiseLike<T>): Promise<T> {
+  try {
+    signal?.throwIfAborted();
+    const result = await call();
+    signal?.throwIfAborted();
+    return result;
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw new Error(error instanceof GatewayHttpError ? `${failure} (${error.message})` : failure);
+  }
+}
 
 function codexHeaders(access: string, accountId: string, accept: string): Headers {
   return new Headers({ "Content-Type": "application/json", Accept: accept, Authorization: `Bearer ${access}`, "ChatGPT-Account-ID": accountId, originator: "neura", "User-Agent": "neura" });
@@ -315,9 +373,111 @@ export async function listCodexModels({ signal, baseURL }: { signal?: AbortSigna
   return result;
 }
 
+type GatewayCatalogEntry = {
+  id?: unknown;
+  type?: unknown;
+  tags?: unknown;
+  supported_parameters?: unknown;
+  endpoints?: unknown;
+  architecture?: { output_modalities?: unknown };
+};
+
+/** Discover candidate chat IDs for an explicit selection. */
+export async function listGatewayModels(provider: GatewayProvider, options: { signal?: AbortSignal } = {}): Promise<{ id: string }[]> {
+  if (!isGatewayProvider(provider)) throw new Error("Unsupported gateway");
+  rejectGatewayOverride(provider, "baseURL" in options ? options.baseURL : undefined);
+  const { signal } = options;
+  signal?.throwIfAborted();
+  const { baseURL, label } = GATEWAYS[provider];
+  const apiKey = provider === "openrouter" ? gatewayKey(provider) : undefined;
+  const deadline = performance.now() + GATEWAY_CATALOG_TIMEOUT_MS;
+  const timeout = AbortSignal.timeout(GATEWAY_CATALOG_TIMEOUT_MS);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  return gatewayCall(`${label} model discovery failed`, signal, async () => {
+    const headers = new Headers({ Accept: "application/json" });
+    if (apiKey) headers.set("Authorization", `Bearer ${apiKey}`);
+    const response = checkedGatewayResponse(await fetch(`${baseURL}/models`, {
+      method: "GET", headers, redirect: "error", signal: requestSignal,
+    }));
+    const payload = await readJsonResponse(response, MAX_RESPONSE_BYTES, GATEWAY_CATALOG_TIMEOUT_MS, requestSignal, deadline);
+    const catalog = payload as { data?: unknown; error?: unknown } | null;
+    if (catalog?.error != null || !Array.isArray(catalog?.data) || catalog.data.length > MAX_GATEWAY_MODELS) {
+      throw new Error("Invalid gateway model catalog");
+    }
+    const ids = new Set<string>();
+    for (const model of catalog.data as (GatewayCatalogEntry | null)[]) {
+      if (!isDirectGatewayModel(model?.id)) continue;
+      if (Array.isArray(model.supported_parameters) && !model.supported_parameters.includes("tools")) continue;
+      if (provider === "airouter") {
+        if ((model.type != null && model.type !== "language") ||
+          (Array.isArray(model.tags) && !model.tags.includes("tool-use"))) continue;
+      } else if ((Array.isArray(model.endpoints) && !model.endpoints.includes("/api/v1/chat/completions")) ||
+        (Array.isArray(model.architecture?.output_modalities) && !model.architecture.output_modalities.includes("text"))) continue;
+      ids.add(model.id);
+    }
+    return [...ids].map(id => ({ id }));
+  });
+}
+
+function gatewayChat(provider: GatewayProvider, model: string): ChatModel {
+  if (!isDirectGatewayModel(model)) throw new Error("Gateway requires a direct model ID without server tools");
+  const { baseURL, label } = GATEWAYS[provider];
+  const apiKey = gatewayKey(provider);
+  const chatURL = `${baseURL}/chat/completions`;
+  // Apply the SDK's OpenAI model rules while keeping the exact gateway slug on the wire.
+  const sdkModel = model.startsWith("openai/") ? model.slice("openai/".length).split(":", 1)[0] : model;
+  const configured = createOpenAI({
+    name: provider, baseURL, apiKey,
+    async fetch(url, init) {
+      if (url !== chatURL || init?.method !== "POST" || typeof init.body !== "string") {
+        throw new Error("Invalid gateway transport request");
+      }
+      const headers = new Headers(init.headers);
+      headers.set("Authorization", `Bearer ${apiKey}`);
+      const routing = provider === "openrouter"
+        ? { provider: { allow_fallbacks: false }, plugins: [{ id: "web", enabled: false }] }
+        : {};
+      const body = JSON.stringify({ ...JSON.parse(init.body), model, ...routing });
+      return checkedGatewayResponse(await fetch(chatURL, { ...init, headers, body, redirect: "error" }));
+    },
+  }).chat(sdkModel);
+  const generate = configured.doGenerate.bind(configured);
+  const stream = configured.doStream.bind(configured);
+  const failure = `${label} chat request failed`;
+  configured.doGenerate = (options) => gatewayCall(failure, options.abortSignal, async () => {
+    const result = await generate(chatImageOptions(options));
+    const body = result.response?.body as { error?: unknown } | undefined;
+    if (body?.error != null || result.finishReason.unified === "other") throw new Error(failure);
+    return result;
+  });
+  configured.doStream = (options) => gatewayCall(failure, options.abortSignal, async () => {
+    const result = await stream({ ...chatImageOptions(options), includeRawChunks: false });
+    const sanitized = new TransformStream<ChatStreamPart, ChatStreamPart>({
+      transform(part, controller) {
+        if (part.type === "error" || (part.type === "finish" && part.finishReason.unified === "other")) {
+          controller.enqueue({ type: "error", error: new Error(failure) });
+          controller.terminate();
+        } else {
+          controller.enqueue(part);
+        }
+      },
+    });
+    const signal = options.abortSignal;
+    // Map source failures before the writable can forward their raw errors.
+    void result.stream.pipeTo(sanitized.writable, { preventAbort: true, signal }).catch(() =>
+      sanitized.writable.abort(signal?.aborted ? signal.reason : new Error(failure)).catch(() => undefined));
+    return { ...result, stream: sanitized.readable };
+  });
+  return configured;
+}
+
 /** API keys come only from the named environment variables; subscription login is separate. */
 export function createConfiguredModel({ provider, model, baseURL, reasoningSummary = true }: ProviderConfig) {
   if (!model.trim()) throw new Error("Model name is required");
+  if (provider === "openrouter" || provider === "airouter") {
+    rejectGatewayOverride(provider, baseURL);
+    return gatewayChat(provider, model);
+  }
   if (provider === "openai-codex") {
     if (baseURL) throw new Error("ChatGPT subscription uses only the fixed Codex endpoint");
     // The placeholder is never sent: codexFetch replaces all headers with subscription credentials.
@@ -351,22 +511,21 @@ export function createConfiguredModel({ provider, model, baseURL, reasoningSumma
   if (provider === "local") {
     if (!baseURL) throw new Error("Local provider requires an explicit baseURL");
     const configured = createOpenAI({ name: "neura-local", baseURL: endpoint(baseURL, true), apiKey: "local" }).chat(model);
-    // Chat Completions serializes tool media as JSON; deliver images in a following user content block.
     const generate = configured.doGenerate.bind(configured);
     const stream = configured.doStream.bind(configured);
-    configured.doGenerate = (options) => generate({ ...options, prompt: chatImagePrompt(options.prompt) });
-    configured.doStream = (options) => stream({ ...options, prompt: chatImagePrompt(options.prompt) });
+    configured.doGenerate = (options) => generate(chatImageOptions(options));
+    configured.doStream = (options) => stream(chatImageOptions(options));
     return configured;
   }
   if (provider === "openai") {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OpenAI API requires OPENAI_API_KEY; use openai-codex for ChatGPT subscription login");
-    return createOpenAI({ apiKey, baseURL: endpoint(baseURL ?? "https://api.openai.com/v1", false) }).responses(model);
+    return createOpenAI({ apiKey, baseURL: endpoint(baseURL ?? OPENAI_API_URL, false) }).responses(model);
   }
   if (provider === "anthropic") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Anthropic API requires ANTHROPIC_API_KEY; subscription login is not implemented");
-    return createAnthropic({ apiKey, baseURL: endpoint(baseURL ?? "https://api.anthropic.com/v1", false) })(model);
+    return createAnthropic({ apiKey, baseURL: endpoint(baseURL ?? ANTHROPIC_API_URL, false) })(model);
   }
   throw new Error("Unsupported provider");
 }
