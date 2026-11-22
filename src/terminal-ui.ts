@@ -8,7 +8,7 @@ export function terminalText(text: string): string {
 
 type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error' | 'code';
 export type Mode = 'work' | 'learn' | 'yolo';
-type Phase = 'requested' | 'started' | 'returned' | 'failed' | 'blocked' | 'cancelled';
+type ToolOutcome = 'returned' | 'failed' | 'blocked' | 'cancelled';
 export type TerminalOptions = { isTTY?: boolean; columns?: number; env?: Record<string, string | undefined>; ascii?: boolean };
 
 /** Slash commands shown by the live menu. Options with a second word (e.g. `answer TEXT`) need more input. */
@@ -93,15 +93,18 @@ function cells(text: string): number {
   }
   return size;
 }
-function shortLabel(text: string, limit: number): string {
+function shortLabel(text: string, limit: number, ellipsis = '…'): string {
+  if (limit <= 0) return '';
   const label = terminalLabel(text);
   if (cells(label) <= limit) return label;
   let result = '';
+  let remaining = limit - 1;
   for (const { segment } of graphemes.segment(label)) {
-    if (cells(result + segment) > limit - 1) break;
+    remaining -= cells(segment);
+    if (remaining < 0) break;
     result += segment;
   }
-  return result + '…';
+  return result + ellipsis;
 }
 // Plain words, so the danger signal survives NO_COLOR and TERM=dumb.
 const modeLabel = (mode: Mode) => mode === 'yolo' ? 'YOLO · DANGER' : mode === 'learn' ? 'Learn' : 'Work';
@@ -111,9 +114,13 @@ const reportedUsage = (usage: TerminalStatus['lastTurnUsage']) => usage &&
 
 /** Pure presentation. Only prose is wrapped; IDs, actions and structured output stay intact. */
 export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii = false }: TerminalOptions = {}) {
-  const width = Number.isFinite(columns) ? Math.max(20, Math.floor(columns)) : 80;
+  const terminalColumns = Number.isFinite(columns) ? Math.floor(columns) : 80;
+  const width = Math.max(20, terminalColumns);
+  const rowWidth = Math.max(0, terminalColumns - 1);
   const color = isTTY && env.NO_COLOR === undefined && env.TERM !== 'dumb';
   const plainGlyphs = ascii || env.TERM === 'dumb';
+  const separator = plainGlyphs ? ' - ' : ' · ';
+  const ellipsis = plainGlyphs ? '.' : '…';
   const paint = (text: string, tone: Tone) => {
     const safe = terminalText(text);
     return color ? `\x1b[38;2;${palette[tone]}m${safe}\x1b[0m` : safe;
@@ -298,9 +305,10 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
     width, color, help, markdownStream,
     markdown(text: string) { const stream = markdownStream(); return (stream.push(text) + stream.flush()).replace(/\n$/, ''); },
     /** One erasable row: spinner, label, elapsed seconds and the cancel key. */
-    activity(frame: number, seconds: number, label = 'Working') {
+    activity(frame: number, seconds: number, label = 'Waiting for model') {
+      if (rowWidth < 4) return '';
       const glyph = spinner[frame % spinner.length];
-      return paint(glyph, 'copper') + ' ' + paint(shortLabel(`${label}… ${seconds}s · Ctrl+C to cancel`, width - 3), 'dim');
+      return paint(glyph, 'copper') + ' ' + paint(shortLabel([label, `${seconds}s`, 'Ctrl+C to cancel'].join(separator), rowWidth - 2, ellipsis), 'dim');
     },
     /** Rows drawn under the prompt. Each fits in width - 1 cells so the terminal never wraps one. */
     commandMenu(items: MenuItem[], selected: number, rows = 8): string[] {
@@ -366,9 +374,12 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       // One row only, so the transient waiting line can be erased with a single line clear.
       return paint(shortLabel(labels[kind], width - 1), kind === 'answer' ? 'bone' : 'dim');
     },
-    tool(name: string, phase: Phase) {
+    tool(name: string, phase: ToolOutcome, elapsedMs?: number) {
+      const label = { returned: 'Done', failed: 'Failed', blocked: 'Blocked', cancelled: 'Cancelled' }[phase];
       const tone = phase === 'failed' || phase === 'blocked' ? 'error' : phase === 'cancelled' ? 'warning' : 'dim';
-      return paint(phase === 'requested' ? `[tool] ${name}` : `[tool] ${name}: ${phase}`, tone);
+      const fields = [label, terminalLabel(name)];
+      if (elapsedMs !== undefined) fields.push(`${(elapsedMs / 1000).toFixed(1)}s`);
+      return paint(shortLabel(fields.join(separator), rowWidth, ellipsis), tone);
     },
     approval(description: string) { return paint('[approval required]', 'warning') + '\n' + terminalText(description); },
     approvalPrompt() { return paint('Type yes to approve (default: no): ', 'warning'); },

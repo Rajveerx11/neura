@@ -280,7 +280,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       let lineOpen = false;
       let waitingOpen = false;
       let ticker: NodeJS.Timeout | undefined;
-      // Interactive answers render as Markdown; piped and ACP output stays byte-for-byte.
+      // Interactive answers render as Markdown. Pipes and ACP receive sanitized text.
       const markdown = interactive && !bridge ? terminal().markdownStream() : undefined;
       const waiting = (label?: string) => {
         if (!erasable || waitingOpen) return;
@@ -313,8 +313,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         const userMessage = { role: 'user', content: text };
         learn.input(learnerInput);
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
-        const notice = (line: string) => { endLine(); say(line); };
-        const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation, { notice })
+        const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation)
           : [...createWorkspaceTools(workspace, () => mode, () => generation, approve), ...(mode === 'learn' ? learn.tools() : [])];
         if (skills.tool) tools.push(skills.tool);
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
@@ -346,10 +345,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
         const baseline = recovery?.baseline ?? null;
         waiting();
-        let section: 'none' | 'reasoning' | 'answer' | 'tool' = 'none';
+        let section: 'none' | 'reasoning' | 'answer' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
         let failedEffect = false;
+        let toolStarted: number | undefined;
         const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
@@ -372,18 +372,22 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           onToolEvent: (event, invocationId) => {
             bridge?.onToolEvent?.(event, invocationId);
             const effect = event.toolName !== 'unknown' && event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName);
-            if (event.phase === 'started') { mutationAttempted ||= effect; return; }
+            if (event.phase === 'started') mutationAttempted ||= effect;
             if (event.phase === 'failed' || event.phase === 'blocked') failedEffect ||= effect;
-            if (bridge?.onToolEvent) return;
-            if (event.phase === 'requested' || event.phase === 'returned') {
-              if (erasable) {
-                endLine();
-                waiting(event.phase === 'requested' ? terminalText(redactSensitiveText(event.toolName, 128)) : undefined);
-              }
+            if (bridge?.onToolEvent || event.phase === 'requested') return;
+            const name = mode === 'yolo' && event.toolName === 'exec' ? 'exec on host' : event.toolName;
+            if (event.phase === 'started') {
+              toolStarted = performance.now();
+              endLine();
+              waiting(`Running ${name}`);
               return;
             }
             endLine();
-            stdout.write(terminal().tool(redactSensitiveText(event.toolName, 128), event.phase) + '\n'); section = 'tool';
+            const elapsed = toolStarted === undefined ? undefined : performance.now() - toolStarted;
+            toolStarted = undefined;
+            if (interactive) stdout.write(terminal().tool(name, event.phase, elapsed) + '\n');
+            else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(name, event.phase, elapsed) + '\n');
+            if (!abort?.signal.aborted) waiting();
           } });
         endLine();
         const stopped = outcome.stopReason !== 'finished';

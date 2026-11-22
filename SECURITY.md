@@ -106,9 +106,10 @@ inherited environment. It can read and change `.env`, `.git`, `.github`, other
 projects and Neura's own checkout. Prompt injection in a file, a web page or
 command output can use all of that.
 
-Secrets are readable, and anything the agent reads may reach the model provider and saved session history. Tool data is not redacted; only the one-line terminal
-notice for a command is. Neura has no undo or checkpoint for it. Use YOLO only on
-repositories you trust.
+Secrets are readable, and anything the agent reads may reach the model provider
+and saved session history. Tool data is not redacted. Terminal activity shows the
+tool name and outcome, not the command or its output. Neura has no undo or
+checkpoint for YOLO. Use it only on repositories you trust.
 
 Entry needs `--yolo` at startup or a typed `yes` for `/mode yolo`. ACP clients
 enter through `session/request_permission`. A client that auto-answers permissions
