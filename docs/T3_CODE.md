@@ -11,7 +11,7 @@ Run on the native Windows machine hosting T3 Code, with Node.js 24.15+ and both
 locked dependency graphs already installed:
 
 ```powershell
-node --test tests/v1-acp.test.ts
+npm run verify
 node scripts/register-t3.mjs --apply
 node scripts/register-t3.mjs --check
 node scripts/register-t3.mjs --probe
@@ -116,6 +116,21 @@ the `acp` argument. Antigravity supplies its own tools and permission controls.
 See [Google's ACP setup](https://antigravity.google/docs/cli/acp) and
 [subscription FAQ](https://antigravity.google/docs/faq).
 
+## Run Work commands in a standalone checkout
+
+Add a disposable standalone Git checkout as a separate T3 project. Use a copy
+with its own `.git` directory, not a linked Git worktree or a checkout that
+shares Git metadata. Keep it outside the running Neura checkout and `NEURA_HOME`.
+
+Open a **Local** thread in that project and select Neura in **Work** mode. Use
+**Supervised** permissions if you want T3 to ask before actions that require
+approval. A T3 Worktree thread can use scoped file tools, but `work_exec` refuses
+its `.git` pointer file. Switching to YOLO is not a workaround: it removes the
+sandbox and approvals.
+
+Start with `git status --short` through `work_exec` to verify the sandbox can
+run a read-only command in the standalone checkout.
+
 ## Supported behavior and limits
 
 - ACP v1 over newline-delimited JSON-RPC on stdin/stdout. Negotiation declines the
@@ -156,8 +171,7 @@ capabilities or expose T3 tools to the model. Native ACP load/resume/fork,
 rollback of conversation state, background subagents, model switching within a
 thread and usage reporting are not advertised. T3's portable handoff may start a
 new session; this is not native session restoration. Use the native terminal for
-account and history management. Maintained regression tests are source, not
-cleanup targets.
+account and history management.
 
 ## Diagnose setup without changing private state
 
@@ -177,12 +191,9 @@ shows the separate local browser boards, not T3's own interface.
 
 ## Verification
 
-`tests/v1-acp.test.ts` runs the real native CLI and Neura's agent loop against an isolated
-synthetic local model. It covers version negotiation, provider-free setup,
-workspace/session validation, retained multi-turn history, Work/Learn selection,
-permission allow/deny/invalid/cancel, tool cards and interrupted inference.
-It does not establish live subscription entitlement or full T3 feature parity.
-The harness includes the `acp` suite; the Pi-free gate also traces `src/acp.ts`.
+`npm run verify` checks repository policy, types, dependencies and documentation.
+It does not run the removed ACP regression suite. Keep runtime probes outside the
+repository and record the candidate revision. See [verification](VERIFICATION.md).
 
 ## References
 

@@ -38,9 +38,11 @@ distribution manifest.
       distribution approval is still required.
 - [ ] Define the supported features and platform. Name the exact source revision. Reconcile
       the [parity matrix](PARITY_MATRIX.md) without promoting mock evidence to parity.
-- [ ] Pass `npm run verify`, Learn browser checks and `git diff --check` on the candidate.
-- [ ] Pass actual configured-host `npm run test:v1:work-sandbox` and the separate
-      `npm run verify:sandbox`. Synthetic/hosted contracts do not replace them.
+- [ ] Pass `npm run verify` and `git diff --check` on the candidate. These are not runtime tests.
+- [ ] Run the external runtime suite on the exact candidate, including Learn browser checks
+      and actual Work execution on configured Windows/WSL2 with a separate isolation replay.
+      Keep test sources, fixtures and runners outside `main`. Synthetic tests do not replace
+      configured-host acceptance.
 - [ ] Install both exact graphs cleanly with scripts disabled. Pass vulnerability
       and registry-signature audits with `npm run audit:all`.
 - [ ] Pass complete-history secret scanning and scanner regressions. Close any
@@ -67,9 +69,11 @@ not authorize unattended operation. Full trusted proof remains unavailable. Dete
 
 `.github/workflows/release.yml` accepts `v*` tag pushes, requires an annotated
 tag whose target is contained in `origin/main`, installs both locked graphs and
-checks the active dependency boundary. It calls `verify:release` before audits,
-repository verification, configured-host Work acceptance, browser checks and
-secret-history/installer checks. It no longer stops at the licence gate, so the later steps now run and must pass.
+checks the active dependency boundary. `npm run verify:release -- --tag <tag>` also
+validates `VERSION`, package and lockfile versions, private-package flags, and release
+notes. The workflow still fails at `npm test`: it deliberately returns an unavailable
+error while CI has no trusted external runtime results. Do not replace that step with
+`npm run verify` or remove it to make the workflow pass.
 
 Later jobs contain source/archive/SBOM/checksum and draft-prerelease machinery
 inherited from the Pi pipeline. Those retained steps are not certified

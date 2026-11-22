@@ -373,7 +373,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             bridge?.onToolEvent?.(event, invocationId);
             const effect = event.toolName !== 'unknown' && event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName);
             if (event.phase === 'started') { mutationAttempted ||= effect; return; }
-            if (event.phase === 'failed') failedEffect ||= effect;
+            if (event.phase === 'failed' || event.phase === 'blocked') failedEffect ||= effect;
             if (bridge?.onToolEvent) return;
             if (event.phase === 'requested' || event.phase === 'returned') {
               if (erasable) {
@@ -418,9 +418,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             throw new Error(`The fix reached the ${limit} and is unfinished. Say "continue" to go on.`);
           }
           say(`Reached the ${limit}. Task unfinished. Say "continue" to go on.`);
-        } else if (mode === 'work' && failedEffect) {
+        } else if (mode !== 'learn' && failedEffect) {
           fixStopped = true;
-          say('Task unfinished after a failed Work action. Inspect its effects before continuing.');
+          say(`Task unfinished after a failed ${mode === 'yolo' ? 'YOLO' : 'Work'} action. Inspect its effects before continuing.`);
         } else if (review && baseline) {
           if (!await workflow(text, baseline, false)) actionFailed = true;
         }
@@ -433,7 +433,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
         if (taskStarted && owned) {
           abort.signal.throwIfAborted();
-          let stage: TaskRecovery['stage'] = stopped || fixStopped ? 'unfinished' : 'completed';
+          let stage: TaskRecovery['stage'] = stopped || fixStopped || actionFailed ? 'unfinished' : 'completed';
           if (reconciliationRequired) stage = 'reconcile';
           await persistRecovery({ ...recovery!, stage }, expected);
           abort.signal.throwIfAborted();

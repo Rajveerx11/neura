@@ -176,7 +176,7 @@ function scanWorkspace(workspace: string): WorkspaceScan {
       }
       if (stat.isFile() && stat.nlink !== 1) throw new Error(`Human Away sandbox refused hardlinked workspace entry: ${relative}`);
       // A gitfile may point at an otherwise writable directory. Until that target is protected, refuse execution.
-      if (entry.name.toLowerCase() === ".git" && !stat.isDirectory()) throw new Error("Sandbox commands do not support .git files (worktrees or separate Git directories). Use an external manual terminal.");
+      if (entry.name.toLowerCase() === ".git" && !stat.isDirectory()) throw new Error("Sandbox commands do not support .git files (linked worktrees or separate Git directories). Use a standalone Git checkout with a .git directory. In T3 Code, add that checkout as a project and run Neura in Local mode.");
       if (SECRET_PATH.test(`/${relative}`)) scan.secrets.push({ path: relative, directory: stat.isDirectory() });
       else if (stat.isDirectory()) pending.push(candidate);
     }

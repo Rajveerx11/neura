@@ -3,6 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+import { verifyRelease } from './verify-release.mjs';
 
 export const FORBIDDEN = /(?:@(?:earendil-works|mariozechner)\/pi-|(?:^|\/)pi-subagents(?:\/|$)|@(?:spences10|ollama)\/pi-)/;
 // Mastra packages bundle Enterprise Edition code that its licence bars from production use and redistribution.
@@ -108,7 +110,15 @@ export function traceImports(root, entry) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = fileURLToPath(new URL('..', import.meta.url));
+  const { values } = parseArgs({ options: { distribution: { type: 'boolean' }, tag: { type: 'string' } } });
   const errors = [];
+  if (values.tag !== undefined) {
+    if (!values.distribution) errors.push('--tag requires --distribution.');
+    else {
+      try { verifyRelease({ repoRoot: root, tag: values.tag }); }
+      catch (error) { errors.push(error.message); }
+    }
+  }
   let entries = 0;
   for (const relative of ['package.json', 'package-lock.json', 'agent/neura/package.json', 'agent/neura/package-lock.json']) {
     const result = checkGraph(relative, JSON.parse(fs.readFileSync(path.join(root, relative), 'utf8')));
@@ -133,5 +143,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`PASS: ${entries} lock entries and ${trace.modules} reachable local modules checked; exact pins, integrity, reviewed install scripts and permissive or reviewed licenses; active Neura graph is Pi-free by package/import identity.`);
   console.log('This does not certify all embedded third-party source, licensing, production readiness or removal of independent/running Pi installations.');
   // The checks above already failed on any Mastra package or import, which was the distribution blocker.
-  if (process.argv.includes('--distribution')) console.log('Distribution licence gate: no EE-licensed Mastra package or import is present. Installer, release rehearsal and readiness gates are separate.');
+  if (values.tag !== undefined) console.log('Release metadata matches the supplied tag. This does not authorize publication.');
+  if (values.distribution) console.log('Distribution licence gate: no EE-licensed Mastra package or import is present. Installer, release rehearsal and readiness gates are separate.');
 }

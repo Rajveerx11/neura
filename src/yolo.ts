@@ -107,11 +107,12 @@ export function createYoloTools(workspace: string, mode: () => string, generatio
     signal?.throwIfAborted();
     if (generation() !== exposed || mode() !== 'yolo') throw new Error('Mode/session changed; stale tool authority rejected.');
   }
-  function tool(name: string, description: string, parameters: any, run: (params: any, signal?: AbortSignal) => unknown): ToolDefinition {
+  function tool<Result>(name: string, description: string, parameters: any, run: (params: any, signal?: AbortSignal) => Result | Promise<Result>, failed?: (result: Result) => boolean): ToolDefinition {
     return { name, description, parameters, async execute(input, { signal }) {
       try {
         check(signal);
-        return { content: [{ type: 'text', text: JSON.stringify(await run(input, signal)) }] };
+        const result = await run(input, signal);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], ...(failed?.(result) ? { failed: true } : {}) };
       } catch (error) {
         if (signal?.aborted) throw error;
         throw new ToolFeedbackError(error instanceof Error ? error.message : 'Tool failed.');
@@ -164,6 +165,6 @@ export function createYoloTools(workspace: string, mode: () => string, generatio
       const outcome = await runOnHost(params.command, root, params.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal);
       signal?.throwIfAborted();
       return outcome;
-    }),
+    }, result => result.timedOut || result.exitCode !== 0),
   ];
 }
