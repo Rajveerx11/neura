@@ -13,7 +13,7 @@ This changes implementation order, not the need for deterministic authorization,
 privacy, dependency review or honest release gates.
 
 Manual setup and disposable-workspace checks are in the
-[project README](../README.md#manual-test-in-a-disposable-workspace).
+[usage guide](USAGE.md#manual-test-in-a-disposable-workspace).
 Keep testing limited to synthetic, non-sensitive materials: local use alone
 is not permission to process end-user, customer or business-operational data
 under the unresolved Mastra EE scope. Source-linked launcher checks establish

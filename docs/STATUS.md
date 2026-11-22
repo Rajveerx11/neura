@@ -5,13 +5,11 @@ were removed at the owner request. CI checks repository policy, source types,
 dependencies and documentation. Runtime regression tests are unavailable.
 Earlier test evidence below belongs to its recorded revision. See [verification](VERIFICATION.md).
 
-Documentation reconciliation: 2026-11-15, source through `f331b09` (#169).
-The [official README](../README.md) and [documentation index](README.md)
-describe Neura's own agent loop with Work, Learn and YOLO. The [release inventory](releases/README.md)
-separates unreleased source, the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
-Latest source changes include durable session receipts and restart metadata (#169),
-the task-start proof base (#165) and Mastra removal (#164).
-Original migration/security issues remain open; this documentation pass closes none.
+Current setup and use: [quick start](../README.md), [usage](USAGE.md) and
+[documentation index](README.md). Neura's own agent loop runs Work, Learn and
+YOLO. The [release inventory](releases/README.md) separates unreleased source,
+the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
+See the [changelog](CHANGELOG.md) for recent changes.
 
 Obsolete standalone HTML plans and old LinkedIn graphics have been removed from
 the checkout, with frozen-history links in [plans](../plans/README.md) and
@@ -213,7 +211,7 @@ original-task-base binding, ignored-file coverage and delivery enforcement remai
 open under #163/#28. A read-only local readiness probe reported that trusted WSL
 proof paths are not configured. No proof tooling was installed or run on the host.
 The offline PoW execution path remains unverified on this machine. Synthetic
-bridge checks are not real-artifact acceptance. See the [manual command](../README.md#manual-verification-first-integration-slice).
+bridge checks are not real-artifact acceptance. See the [manual verification guide](USAGE.md#manual-verification).
 
 Work now runs an engineering review workflow by default (`/workflow on|off`).
 After a Work turn changes the Git workspace, path-based risk routing skips

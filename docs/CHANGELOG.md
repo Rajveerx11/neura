@@ -8,6 +8,16 @@ Latest published release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-22: tool progress, task recovery and release metadata
+
+- Terminal activity names the running tool and shows its outcome without exposing
+  arguments or returned data. YOLO `exec` accepts a working directory for each call.
+- Failed or blocked actions no longer leave Work or YOLO tasks marked complete.
+- Release checks validate the supplied tag against version files and release notes.
+  Runtime evidence is still required before publication.
+- The [quick start](../README.md#quick-start-from-source) covers Windows setup.
+  Commands, provider setup and schedules live in the [usage guide](USAGE.md).
+
 ### 2026-11-19: OpenRouter and AIRouter.in connections
 
 - Browse gateway catalogs with `/model openrouter` and `/model airouter`, or

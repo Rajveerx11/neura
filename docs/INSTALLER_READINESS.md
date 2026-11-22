@@ -25,8 +25,24 @@ a sealed runtime, DACL privacy, model entitlement or actual WSL execution.
 
 The launcher executes the checkout's current bytes, including uncommitted changes.
 It has no automatic updater. There is no full-runtime activation transaction or
-automatic rollback command. Current installer tests are synthetic preservation/path
-contracts, not clean-host distribution acceptance.
+automatic rollback command. Disposable development-launcher checks do not establish
+clean-host distribution acceptance.
+
+## Update a source-linked install
+
+Exit Neura first. In the checkout your launcher points to, check for local changes.
+Stop if the checkout is dirty. On a clean `main`, run:
+
+```powershell
+git pull --ff-only origin main
+npm ci --ignore-scripts
+npm ci --prefix agent/neura --ignore-scripts
+powershell -NoProfile -File .\install.ps1 -Check
+neura --check
+```
+
+This updates the checkout, not a packaged release. If `-Check` reports a mismatch,
+inspect which checkout the launcher points to. Do not overwrite an unknown launcher.
 
 ## Preservation and legacy retirement
 

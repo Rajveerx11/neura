@@ -1,24 +1,17 @@
 # Neura documentation
 
-Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
-were removed at the owner request. CI checks repository policy, source types,
-dependencies and documentation. Runtime regression tests are unavailable.
-Earlier test evidence below belongs to its recorded revision. See [verification](VERIFICATION.md).
-
-Updated 2026-11-15 against the active application through `1c5be43`,
-including Neura's own agent loop (#164), the task-start proof base (#165),
-the local T3 Code integration and Learn prerequisite paths (#154).
-Work and Learn are the everyday modes. YOLO is an explicit opt-out from the sandbox and approvals.
-Development/testing uses synthetic, non-sensitive data while release packaging and
-distribution approval remain unresolved. Mastra was removed on 2026-11-14. No production readiness is claimed.
+Start with the [Windows quick start](../README.md#quick-start-from-source).
+The current Neura build is for development and testing with synthetic data.
+See [status](STATUS.md) for what's implemented and what still blocks release.
 
 ## Start here
 
 | Need | Guide |
 | --- | --- |
-| Understand Neura and run it from source | [Official README](../README.md) |
-| Check implemented behavior and open gates | [Status](STATUS.md), [Mastra implementation/evidence](MASTRA_V1.md), [parity matrix](PARITY_MATRIX.md) |
-| Choose a provider or diagnose subscription access | [Authentication](CODEX_AUTH.md) |
+| Install or update from source | [Quick start](../README.md#quick-start-from-source), [installer and rollback](INSTALLER_READINESS.md) |
+| Use the CLI, choose a model or schedule Work | [Usage](USAGE.md) |
+| Diagnose subscription access | [Authentication](CODEX_AUTH.md) |
+| Discover and use installed Agent Skills | [Skills](SKILLS.md) |
 | Register Neura as a local T3 Code development provider | [T3 Code integration](T3_CODE.md) |
 | See the interface, learn from documents and save progress | [Learn visual tour](LEARN_MODE.md#visual-tour), [lesson workflow](LEARN_MODE.md#start-a-lesson), [document runtime](LEARN_DEPENDENCIES.md) |
 | Understand Work review and proof limits | [Verification](VERIFICATION.md) |
@@ -44,10 +37,11 @@ distribution approval remain unresolved. Mastra was removed on 2026-11-14. No pr
 The latest published release is the Pi-based `v2.5.1`. Package metadata remains
 `2.6.0-rc.1`, whose GitHub draft is withheld. Neither is a published build of the current application.
 See the [changelog](CHANGELOG.md) for current unreleased changes before the
-historical release record.
+historical release record. See the [implementation record](MASTRA_V1.md) and
+[parity matrix](PARITY_MATRIX.md) for dated migration evidence.
 
 Retained [capability contracts](CAPABILITY_CONTRACTS.md),
-[Plan confidentiality](PLAN_CONFIDENTIALITY.md), [skills](SKILLS.md),
+[Plan confidentiality](PLAN_CONFIDENTIALITY.md),
 [plans](../plans/README.md), [Herdr integrations](../integrations/herdr-workspace/README.md)
 and [migration reference](MASTRA_MIGRATION_REFERENCE.md) describe shared internals
 or historical Pi behavior. They do not expose those features in the active CLI.
