@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/brand/neura-mark.svg" alt="Neura logo" width="88">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png">
+    <img src="assets/brand/neura-logo-light.png" alt="Neura logo" width="220">
+  </picture>
 </p>
 
 # Neura
