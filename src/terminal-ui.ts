@@ -275,6 +275,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
+        ['!COMMAND', `Run your own ${process.platform === 'win32' ? 'PowerShell' : 'bash'} command in the workspace, as you, with no sandbox or approval. Output is shown and added to the conversation. No interactive input; 10-minute limit.`],
         ['/help · /quit', 'Show help or exit (bare exit or quit also works). Ctrl+C cancels active work; at the input prompt it exits.'],
       ]),
     ];

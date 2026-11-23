@@ -97,6 +97,15 @@ unfinished. Inspect effects before retrying. Do not steal locks, discard invalid
 audit tails or delete private state to force success. Pattern redaction cannot
 recognize every secret.
 
+## Your own `!` commands
+
+In the interactive terminal, a line starting with `!` runs that command on the
+host in the workspace as you, in every mode, as a shell would. The sandbox and
+approvals govern only the agent's actions, so they do not apply. The command and
+its output, including any secrets it prints, join the conversation, reach the
+model provider and go into saved history. ACP clients and `--prompt` treat `!` as
+ordinary text.
+
 ## YOLO has no boundary
 
 YOLO is an explicit opt-out from everything above, with the same meaning as

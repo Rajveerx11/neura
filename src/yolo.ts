@@ -38,7 +38,7 @@ function killTree(child: ChildProcess, killed: () => void) {
 }
 
 /** executeProcess kills on overflow and only signals the direct child; this keeps draining and kills the tree. */
-function runOnHost(command: string, cwd: string, timeoutMs: number, signal?: AbortSignal) {
+export function runOnHost(command: string, cwd: string, timeoutMs: number, signal?: AbortSignal) {
   return new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean; truncated: boolean }>((resolve, reject) => {
     signal?.throwIfAborted();
     const [file, args] = shellCommand(command);
