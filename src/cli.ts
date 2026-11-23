@@ -30,6 +30,22 @@ export { terminalText } from './terminal-ui.ts';
 let asciiGlyphs = false;
 const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env, ascii: asciiGlyphs });
 const failure = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
+const userName = (() => { try { return os.userInfo().username; } catch { return undefined; } })();
+/** Current branch (or short detached SHA) from the nearest `.git`, read directly so no process is spawned per prompt. */
+function gitBranch(dir: string): string | undefined {
+  for (;;) {
+    let git = path.join(dir, '.git');
+    try {
+      // Worktrees and submodules use a `.git` file that points at the real git directory.
+      if (fs.statSync(git).isFile()) git = path.resolve(dir, /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(git, 'utf8'))?.[1].trim() ?? '');
+      const head = fs.readFileSync(path.join(git, 'HEAD'), 'utf8').trim();
+      return head.startsWith('ref: refs/heads/') ? head.slice(16) : head.slice(0, 7);
+    } catch { /* no repository here; look in the parent */ }
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
 const isProvider = (value: string): value is ProviderConfig['provider'] => PROVIDER_KINDS.some(kind => kind === value);
 const modelRoute = ({ provider, model }: ProviderConfig) => isGatewayProvider(provider) && model
   ? createHash('sha256').update(JSON.stringify([provider, model])).digest('hex')
@@ -134,7 +150,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const composer = rl && keyboard ? keyboard.attach(rl, () => terminal(), line => {
     if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
     return commandMatches(line, installedSkills);
-  }) : undefined;
+  }, () => terminal().statusBar(statusSnapshot())) : undefined;
   let pauseActivity = () => {};
   let abort: AbortController | undefined;
   const inputClosed = new AbortController();
@@ -212,6 +228,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     workspace: redactSensitiveText(workspace),
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
+    user: userName, branch: gitBranch(workspace),
   });
   // Transient activity only belongs on terminals that can erase it.
   const erasable = interactive && process.env.TERM !== 'dumb';
@@ -398,7 +415,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         memory = withoutToolImages(withoutSkillResults(guidance ? outcome.messages.filter((_, index) => index !== guidanceIndex) : outcome.messages));
         // A request's usage includes its workflow fix turns; any unreported count makes the total unknown.
         lastTurnUsage = owned ? outcome.usage : lastTurnUsage && outcome.usage
-          ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens } : undefined;
+          ? { inputTokens: lastTurnUsage.inputTokens + outcome.usage.inputTokens, outputTokens: lastTurnUsage.outputTokens + outcome.usage.outputTokens, contextTokens: outcome.usage.contextTokens } : undefined;
         if (taskStarted) {
           try { await persistRecovery({ ...recovery!, stage: 'running' }, expected, memory); }
           catch (error) {

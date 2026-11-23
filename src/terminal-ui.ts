@@ -6,7 +6,7 @@ export function terminalText(text: string): string {
   return stripVTControlCharacters(text).replace(/[\u2028\u2029]/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
-type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error' | 'code';
+type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error' | 'code' | 'ok';
 export type Mode = 'work' | 'learn' | 'yolo';
 type ToolOutcome = 'returned' | 'failed' | 'blocked' | 'cancelled';
 export type TerminalOptions = { isTTY?: boolean; columns?: number; env?: Record<string, string | undefined>; ascii?: boolean };
@@ -69,10 +69,11 @@ export function commandMatches(line: string, skills: readonly { name: string; de
 export type TerminalStatus = {
   mode: Mode; provider: string; model: string; workspace: string;
   history: 'on' | 'off' | 'save failed'; sessionState: 'new' | 'resumed'; sessionId?: string;
-  thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number };
+  thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number; contextTokens?: number };
+  user?: string; branch?: string;
 };
 const palette: Record<Tone, string> = {
-  copper: '217;120;65', bone: '232;226;216', dim: '122;130;139', warning: '211;166;74', error: '223;107;99', code: '134;167;215',
+  copper: '217;120;65', bone: '232;226;216', dim: '122;130;139', warning: '211;166;74', error: '223;107;99', code: '134;167;215', ok: '126;186;110',
 };
 const visible = (text: string) => cells(stripVTControlCharacters(text));
 /** Labels cannot create extra status rows or inject terminal commands. */
@@ -344,6 +345,28 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       if (available <= mode.length + 3) return paint(shortLabel(mode, available), state.mode === 'yolo' ? 'error' : 'copper');
       const model = shortLabel(`${state.provider}/${state.model || '(not selected)'}`, available - mode.length - 3);
       return paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim');
+    },
+    /** Two rows under the composer: user │ model │ ctx │ branch, then the mode. Low-priority fields drop first. */
+    statusBar(state: TerminalStatus): string[] {
+      if (rowWidth < 12) return [];
+      const sep = plainGlyphs ? ' | ' : ' │ ';
+      const ctx = reportedUsage(state.lastTurnUsage)?.contextTokens;
+      const tokens = (n: number) => n < 1000 ? `${n}` : n < 1e6 ? `${(n / 1000).toFixed(1)}k` : `${(n / 1e6).toFixed(2)}M`;
+      // ponytail: context window size is unverified per model, so show tokens used, not "% left".
+      const fields: [string, Tone][] = [[`${state.provider}/${state.model || '(not selected)'}`, 'dim']];
+      if (state.user) fields.unshift([terminalLabel(state.user), 'bone']);
+      if (Number.isSafeInteger(ctx) && ctx! >= 0) fields.push([`ctx ${tokens(ctx!)} tokens`, 'ok']);
+      else if (state.messageCount === 0) fields.push(['ctx empty', 'ok']);
+      if (state.branch) fields.push([(plainGlyphs ? 'git ' : '⎇ ') + terminalLabel(state.branch), 'code']);
+      const modelAt = () => fields.findIndex(([, tone]) => tone === 'dim');
+      const budget = () => rowWidth - fields.reduce((sum, [text], index) => sum + (index === modelAt() ? 0 : cells(text)), 0) - sep.length * (fields.length - 1);
+      // Drop branch, then user, then ctx until the model keeps at least 12 cells.
+      for (const tone of ['code', 'bone', 'ok'] as Tone[]) if (budget() < 12) { const at = fields.findIndex(([, t]) => t === tone); if (at >= 0) fields.splice(at, 1); }
+      fields[modelAt()][0] = shortLabel(fields[modelAt()][0], budget(), ellipsis);
+      const line = fields.map(([text, tone]) => paint(text, tone)).join(paint(sep, 'dim'));
+      const pointer = plainGlyphs ? '>> ' : '›› ';
+      const mode = state.mode === 'yolo' ? ['YOLO', 'DANGER', 'no sandbox, no approvals'].join(separator) : `${state.mode} mode`;
+      return [line, paint(shortLabel(pointer + mode + ' (/mode to switch)', rowWidth, ellipsis), state.mode === 'yolo' ? 'error' : 'copper')];
     },
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);

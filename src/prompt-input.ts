@@ -25,7 +25,8 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   stdin.on('data', onData);
   stdin.once('end', onEnd);
 
-  function attach(rl: Interface, ui: () => ReturnType<typeof createTerminalUI>, matches: (line: string) => MenuItem[] = commandMatches) {
+  function attach(rl: Interface, ui: () => ReturnType<typeof createTerminalUI>, matches: (line: string) => MenuItem[] = commandMatches,
+    footer: () => string[] = () => []) {
     const makeFrame = (query: string) => stdout.columns >= 32 && stdout.rows >= 4 ? ui().composer(query) : undefined;
     let prompt: string | undefined;
     let frame: ReturnType<typeof makeFrame>;
@@ -74,6 +75,8 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       selected = Math.min(selected, Math.max(0, items.length - 1));
       const rows = bottom ? [bottom] : [];
       if (items.length) rows.push(...ui().commandMenu(items, selected, menuRows));
+      // The status bar yields to the command menu, like the composer's own hint rows.
+      else if (bottom) rows.push(...footer().slice(0, Math.max(0, room - rows.length)));
       if (!side && !rows.length) return;
       const distance = end.rows - cursor.rows;
       stdout.write(moveRows(distance) + side + rows.map(row => '\r\n' + row).join('') +

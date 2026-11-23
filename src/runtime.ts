@@ -35,7 +35,8 @@ export type ToolDefinition = {
 };
 
 export type ToolEvent = { toolName: string; phase: "requested" | "started" | "returned" | "failed" | "blocked" | "cancelled" };
-export type TurnUsage = { inputTokens: number; outputTokens: number };
+/** `contextTokens`: the last request's input plus output, i.e. the conversation size the next request starts from. */
+export type TurnUsage = { inputTokens: number; outputTokens: number; contextTokens?: number };
 export type TurnLimit = "step-limit" | "output-limit";
 
 export type RunTurnOptions = {
@@ -283,7 +284,7 @@ export async function runTurn({ model, messages, instructions, tools, signal, cu
       const reason = reply.finishReason?.unified;
       if (reason === "error" || reason === "content-filter") throw new Error("Model did not complete; action batch rejected.");
       const input = reply.usage?.inputTokens?.total, output = reply.usage?.outputTokens?.total;
-      usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output } : undefined;
+      usage = usage && count(input) && count(output) ? { inputTokens: usage.inputTokens + input, outputTokens: usage.outputTokens + output, contextTokens: input + output } : undefined;
       // Truncated output can preserve text only. Its action batch is never dispatched.
       if (reason === "length") {
         const parts = reply.content.filter(part => part?.type === "text");
