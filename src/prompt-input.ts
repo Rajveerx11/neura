@@ -54,11 +54,17 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       stdout.write(moveRows(distance) + column(end.cols) + '\x1b[J' + moveRows(-distance) + column(cursor.cols));
       shown = false;
     };
+    // Readline does not update its wrapped-row count for pasted text, so a redraw would start
+    // too low and leave the old top border behind. Set it from the real cursor row first.
+    const redraw = (query: string) => {
+      (rl as Interface & { prevRows: number }).prevRows = rl.getCursorPos().rows;
+      rl.setPrompt(query);
+      rl.prompt(true);
+    };
     const unframe = (query: string) => {
       frame = undefined;
       shown = false;
-      rl.setPrompt(query);
-      rl.prompt(true);
+      redraw(query);
     };
     const update = () => {
       if (closed || prompt === undefined) return;
@@ -67,8 +73,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       if (line.startsWith('!') !== shell) {
         shell = !shell;
         frame = makeFrame(current());
-        rl.setPrompt(frame?.query ?? current());
-        rl.prompt(true);
+        redraw(frame?.query ?? current());
       }
       if (line !== lastLine) { selected = 0; lastLine = line; if (line !== dismissed) dismissed = undefined; }
       const cursor = rl.getCursorPos(), end = endPosition();
