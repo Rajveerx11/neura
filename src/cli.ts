@@ -452,7 +452,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         } else outcome = await runTurn(turnOptions);
         endLine();
         const stopped = outcome.stopReason !== 'finished';
-        const waitingWorker = subagents.waitingWorker();
+        const waitingWorker = subagents.waitingWorker(abort.signal);
         let actionFailed = outcome.actionFailed;
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');

@@ -107,8 +107,8 @@ follow-up. The next Work prompt includes excerpts from new reports.
 Use `/subagent worker TASK` to delegate changes. A worker runs within a
 supervised Work turn, with the same file rules, offline sandbox and approval
 prompts. Its tool activity and approval requests show the child name.
-A question pauses the worker and leaves the task unfinished until you reply
-or cancel it.
+A question pauses the worker and leaves that turn unfinished. Reply to resume
+the worker or cancel it by name.
 Neura can also call `subagent`, `subagent_message`, `subagent_wait`,
 `subagents_list` and `subagent_cancel` from its own Work turn. Inspect results
 before relying on them. A reviewer subagent uses the parent model and does not
@@ -118,12 +118,13 @@ Children use the current workspace, provider and model. Their context starts
 with the delegated task and project guidance. Child conversations live in
 memory. Reports returned through parent tools can enter saved parent history.
 Exiting clears the registry and cancels active children. So does switching
-mode, model or conversation. Cancelling a Work turn also cancels background
-runs it started. A session supports 12 named children, with up to three
-running at once and six turns per child. Scouts and reviewers get eight model
-steps per turn and three minutes per run, including any queued follow-up.
-Workers get 24 model steps per turn. Subagents are available in Work and
-cannot spawn their own children.
+mode, model or conversation. A cancelled or failed Work turn also cancels
+the background runs and follow-ups it started. A session supports 12 named
+children, with up to three running at once and six turns per child. Scouts
+and reviewers get eight model steps per turn and three minutes per run,
+including any queued follow-up.
+Workers get 24 model steps per turn. Subagents run only in Work and cannot
+spawn their own children.
 
 The named-agent workflow was inspired by [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents).
 
