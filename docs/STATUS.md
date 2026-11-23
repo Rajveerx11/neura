@@ -25,7 +25,7 @@ Earlier test evidence below belongs to its recorded revision. See [verification]
 Current setup and use: [quick start](../README.md), [usage](USAGE.md) and
 [documentation index](README.md). Neura's own agent loop runs Work, Learn and
 YOLO. The [release inventory](releases/README.md) separates unreleased source,
-the withheld `2.6.0-rc.1` draft and published Pi `2.5.1`.
+the `2.6.0-rc.2` source prerelease and published Pi `2.5.1`.
 See the [changelog](CHANGELOG.md) for recent changes.
 
 Obsolete standalone HTML plans and old LinkedIn graphics have been removed from
@@ -118,8 +118,8 @@ are being migrated together. Legacy provider/profile data is not imported.
 
 **Development/testing only. Not a release, full feature parity or production-ready.**
 Mastra was removed on 2026-11-14 (see above). Release packaging and distribution approval remain unresolved;
-the installer, release rehearsal and production gates stay open. Existing metadata stays `2.6.0-rc.1`; no new
-release or semantic-version decision is implied. Latest published remains `2.5.1`.
+the installer, release rehearsal and production gates stay open. `2.6.0-rc.2` is a source
+prerelease, published 2026-11-23. Latest stable remains `2.5.1`.
 
 Current implementation, exact test evidence and operational limitations are in
 [Mastra v1](MASTRA_V1.md), [dependency review](MASTRA_V1_DEPENDENCIES.md), and
@@ -341,8 +341,8 @@ summary. A chat turn that changed nothing prints no review line, and bare
 
 Last documentation audit: 2026-10-20
 
-Current candidate: [`2.6.0-rc.1`](releases/v2.6.0-rc.1.md). Latest published
-release remains `2.5.1` until the candidate passes release gates and is published.
+Current candidate: [`2.6.0-rc.2`](releases/v2.6.0-rc.2.md), a published prerelease. Latest
+stable release remains `2.5.1` until a candidate passes release gates.
 The candidate includes Work, modular verification, Learn Mode, the command
 launcher, shared capability/policy/process contracts, exact Pi `1.3.0`
 compatibility, reproducible opt-in guidance, and Plan confidentiality hardening.

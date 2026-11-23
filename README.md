@@ -23,8 +23,8 @@ disables lesson storage and recall.
 
 > The current application is a source-linked development build, not a production release.
 > Use synthetic, non-sensitive data. The latest [published release](docs/releases/README.md),
-> `v2.5.1`, is the older Pi-based app. `2.6.0-rc.1` is the current version label,
-> but its release draft is withheld.
+> `v2.5.1`, is the older Pi-based app. `v2.6.0-rc.2` is a source prerelease of the
+> current app for testing.
 
 ## Quick start from source
 
