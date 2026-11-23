@@ -11,6 +11,7 @@ import { runInHumanAwaySandbox } from '../agent/neura/human-away-sandbox.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { ToolFeedbackError, type ToolDefinition } from './runtime.ts';
 import { terminalText, type Mode } from './terminal-ui.ts';
+import type { RegressionMemory } from './regression-memory.ts';
 
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 const inside = (root: string, file: string) => { const relative = path.relative(root, file); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
@@ -19,6 +20,7 @@ export type WorkToolOptions = {
   /** Adds grep and find outside Work. The reviewer uses this; Learn does not. */
   search?: boolean;
   sandbox?: typeof runInHumanAwaySandbox;
+  regressions?: RegressionMemory;
 };
 export const READ_ONLY_TOOLS = new Set(['read', 'ls', 'grep', 'find']);
 // Routine project config. Secrets and every other dot path stay denied by the checks in fileTarget.
@@ -80,6 +82,15 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
   function check(signal?: AbortSignal, workOnly = false) {
     signal?.throwIfAborted();
     if (generation() !== exposed || (workOnly && mode() !== 'work')) throw new Error('Mode/session changed; stale tool authority rejected.');
+  }
+  const lessons = mode() === 'work' ? options.regressions : undefined;
+  let lastSource: string | undefined;
+  async function recheck(source: string, suite: string, signal?: AbortSignal) {
+    try { return { suite, ...await lessons!.check(source, suite, signal) }; }
+    catch (error) {
+      check(signal, true);
+      return { suite, result: 'unavailable', detail: redactSensitiveText(error instanceof Error ? error.message : 'Check unavailable', 300) };
+    }
   }
   function tool(name: string, description: string, parameters: any, execute: (params: any, signal?: AbortSignal) => Promise<any>): ToolDefinition {
     const schema = z.fromJSONSchema(parameters);
@@ -163,7 +174,12 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
         // Hard-link publication has exclusive-create semantics; rename would overwrite a new human file.
         fs.linkSync(temporary, file); fs.unlinkSync(temporary);
       } else fs.renameSync(temporary, file);
-      return { path: requested, sha256: hash(content), bytes: Buffer.byteLength(content) };
+      const result = { path: requested, sha256: hash(content), bytes: Buffer.byteLength(content) };
+      if (!lessons) return result;
+      const matches = await lessons.related(p => p === requested.replaceAll('\\', '/'), true);
+      const checks = [];
+      for (const r of matches) checks.push(await recheck(r.source, r.suite, signal));
+      return checks.length ? { ...result, regressionChecks: checks } : result;
     } finally {
       try { fs.unlinkSync(temporary); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     }
@@ -172,7 +188,12 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
     tool('read', 'Read a non-private workspace file and its SHA-256 hash. Use the hash for a subsequent write.', Type.Object({ path: Type.String({ minLength: 1, maxLength: 1024 }) }, { additionalProperties: false }), async (params, signal) => {
       check(signal); const snapshot = readPlanFileSnapshot(root, params.path);
       if (snapshot.byteLength > 1024 * 1024) throw new Error('Read exceeds 1 MiB.');
-      return { path: params.path, sha256: snapshot.sha256, text: redactSensitiveText(snapshot.content.toString('utf8'), 1024 * 1024), redacted: snapshot.redacted, editable: !snapshot.redacted };
+      const result = { path: params.path, sha256: snapshot.sha256, text: redactSensitiveText(snapshot.content.toString('utf8'), 1024 * 1024), redacted: snapshot.redacted, editable: !snapshot.redacted };
+      if (!lessons || snapshot.redacted) return result;
+      const source = params.path.replaceAll('\\', '/');
+      if (!/\.(?:test|spec)\.[cm]?js$/.test(source)) lastSource = source;
+      const recalled = (await lessons.related(p => p === source)).map(({ suite, assertion }) => ({ suite, assertion }));
+      return recalled.length ? { ...result, regressionLessons: recalled } : result;
     }),
     tool('ls', 'List bounded, non-private workspace entries.', Type.Object({ path: Type.String({ minLength: 1, maxLength: 1024 }) }, { additionalProperties: false }), async (params, signal) => {
       const text = await inspectPlanFiles(root, 'ls', params, signal); check(signal); return { entries: text };
@@ -206,13 +227,30 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       const needsApproval = action.route !== 'allow' || !fs.existsSync(path.join(root, '.git'));
       if (needsApproval && !await approve(`Run in network-disabled WSL sandbox?\n${redactSensitiveText(params.command, 8000)}\nTimeout: ${params.timeoutMs ?? 120000} ms\nApproval applies once to this exact action.`)) throw new Error('Command denied; no execution.');
       check(signal, true);
+      const watched = lessons ? await lessons.related(() => true, true) : [];
+      const fileHash = (source: string) => {
+        try { return readPlanFileSnapshot(root, source).sha256; } catch { return undefined; }
+      };
+      const hashes = new Map(watched.map(r => [r.source, fileHash(r.source)]));
+      check(signal, true);
       const fresh = inspectAction({ toolName: 'work_exec', input: params }, root);
       if (fresh.actionFingerprint !== action.actionFingerprint || fresh.workspaceFingerprint !== action.workspaceFingerprint || JSON.stringify(fresh.approvalBinding) !== JSON.stringify(action.approvalBinding)) throw new Error('Action/workspace changed after approval; confirm again.');
       const outcome = await (options.sandbox ?? runInHumanAwaySandbox)(root, params.command, params.timeoutMs ?? 120000, signal);
       check(signal, true);
-      return { ...outcome, isolation: 'WSL2/bubblewrap; no network', verification: 'Command outcome only, not a full proof receipt.' };
+      const regressionChecks = [];
+      for (const r of watched) {
+        if (fileHash(r.source) !== hashes.get(r.source)) regressionChecks.push(await recheck(r.source, r.suite, signal));
+      }
+      const focused = /^node --test ([\w./-]+\.(?:test|spec)\.[cm]?js)$/.exec(params.command);
+      if (lessons && lastSource && outcome.completed && outcome.code !== 0 && focused) {
+        regressionChecks.push(await recheck(lastSource, focused[1], signal));
+      }
+      return { ...outcome, ...(regressionChecks.length ? { regressionChecks } : {}), isolation: 'WSL2/bubblewrap; no network', verification: 'Command outcome only, not a full proof receipt.' };
     }),
   );
+  if (lessons) tools.push(tool('regression_check', 'Run a focused Node regression suite against one affected source file in the read-only Work sandbox. Records actual failed assertions and matching fixes. Results apply only to this check.', Type.Object({
+    source: Type.String({ minLength: 1, maxLength: 240 }), suite: Type.String({ minLength: 1, maxLength: 240 }),
+  }, { additionalProperties: false }), async ({ source, suite }, signal) => lessons.check(source, suite, signal)));
   return tools;
 }
 
