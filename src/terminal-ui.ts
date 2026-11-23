@@ -27,6 +27,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'reconcile', description: 'Acknowledge inspection of an interrupted task before continuing' },
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
   { name: 'workflow', args: '[on|off]', description: 'Independent read-only review of Work changes', options: [['on', 'Review each change'], ['off', 'No automatic review']] },
+  { name: 'subagent', args: '[ROLE TASK|list|wait NAME|message NAME TEXT|cancel NAME]', description: 'Delegate a Work task or manage subagents', options: [
+    ['list', 'Show roles and named subagents'], ['scout TASK', 'Inspect the workspace'], ['reviewer TASK', 'Review the workspace'],
+    ['worker TASK', 'Implement a supervised Work task'], ['wait NAME', 'Read a named result'],
+    ['message NAME TEXT', 'Continue a named subagent'], ['cancel NAME', 'Cancel a named turn']] },
   { name: 'loop', args: 'DURATION TASK', description: 'Repeat a task in this Work terminal', needsArg: true },
   { name: 'schedule', args: '[list|cancel ID|in DURATION TASK|at TIMESTAMP TASK|every DURATION TASK]', description: 'Run a task later in this Work terminal', options: [
     ['list', 'List schedules'], ['cancel ID', 'Cancel by ID'], ['in DURATION TASK', 'Run after a delay'],
@@ -67,6 +71,7 @@ export function commandMatches(line: string, skills: readonly { name: string; de
   });
 }
 export type TerminalStatus = {
+  runningSubagents?: number;
   mode: Mode; provider: string; model: string; workspace: string;
   history: 'on' | 'off' | 'save failed'; sessionState: 'new' | 'resumed'; sessionId?: string;
   thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number; contextTokens?: number };
@@ -371,7 +376,9 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       // Plain words, so shell mode stays visible under NO_COLOR.
       if (shell) return [line, paint(shortLabel(pointer + ['! shell mode', 'runs as you, no sandbox', 'delete ! to exit'].join(separator), rowWidth, ellipsis), 'shell')];
       const mode = state.mode === 'yolo' ? ['YOLO', 'DANGER', 'no sandbox, no approvals'].join(separator) : `${state.mode} mode`;
-      return [line, paint(shortLabel(pointer + mode + ' (/mode to switch)', rowWidth, ellipsis), state.mode === 'yolo' ? 'error' : 'copper')];
+      const agents = state.runningSubagents
+        ? `${separator} ${state.runningSubagents} ${state.runningSubagents === 1 ? 'subagent' : 'subagents'} running` : '';
+      return [line, paint(shortLabel(pointer + mode + agents + ' (/mode to switch)', rowWidth, ellipsis), state.mode === 'yolo' ? 'error' : 'copper')];
     },
     statusDetails(state: TerminalStatus) {
       const usage = reportedUsage(state.lastTurnUsage);
@@ -380,6 +387,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         `Model: ${state.model || '(not selected)'}`, `Workspace: ${state.workspace}`,
         `Session: ${state.sessionState} ${state.sessionId || '(in memory)'}`, `History: ${state.history}`,
         `Thinking: ${state.thinking ? 'on' : 'off'}`, `Conversation: ${state.messageCount} messages`,
+        ...(state.runningSubagents ? [`Subagents running: ${state.runningSubagents}`] : []),
         ...(usage ? [`Last turn input tokens: ${usage.inputTokens}`, `Last turn output tokens: ${usage.outputTokens}`] : ['Last turn tokens: unavailable']),
         'Context window: unknown',
       ].map(terminalLabel).join('\n') + '\n' + paint(prose('Development/testing only. Distribution is not cleared.'), 'dim');
