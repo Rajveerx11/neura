@@ -23,9 +23,10 @@ ten-line limits do not establish Mastra behavior.
 - Copper identity/focus, neutral activity and answers, textual warning/error
   states. No alternate screen, dashboard or startup model request. (Animation
   was added later; see “Rich answers, activity and slash menu”.)
-- Launch identity is the owner-approved prompt-to-result mark from `src/brand.ts`
-  (five lines, mark only, uncolored; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It
-  replaces the interim `o--o neura` mark used while this work was in a worktree.
+- Launch identity is the owner-approved pixel wordmark from `src/brand.ts`
+  (three lines, copper to bone, version on its baseline when it fits; uncolored under
+  `NO_COLOR`; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It replaced
+  the prompt-to-result mark on 2026-11-23.
 - Prompt-adjacent status and `/status` details: actual mode/model/workspace,
   history/session state, thinking-summary setting and conversation message count.
   Validated Mastra total usage is labelled last-turn input/output, never context

@@ -256,7 +256,10 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (!values['no-history']) {
       await selectSession(values.resume);
     } else if (values.resume) throw new Error('--resume cannot be combined with --no-history.');
-    if (interactive) stdout.write(terminal().wordmark(values.ascii) + '\n\n'); // Approved logo; no false READY banner.
+    if (interactive) { // Approved logo and version; no false READY banner.
+      const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: unknown };
+      stdout.write(terminal().wordmark(values.ascii, typeof version === 'string' ? `v${version}` : '') + '\n\n');
+    }
     recoveryNotice();
     if (mode === 'yolo') warning(YOLO_WARNING);
     if (scratchWorkspace) warning('OS temp cleanup can remove scratch files. Use /status for the workspace path.');

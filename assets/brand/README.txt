@@ -15,19 +15,22 @@ neura-lockup-mono.svg      Single-color lockup.
 neura-wordmark.svg         Custom lowercase lettering, paths only.
 neura-logo-dark.png        Logo on a dark surface.
 neura-logo-light.png       Logo on a light surface.
-terminal.txt              Half-block rendering of the vector mark.
+terminal.txt              Half-block pixel wordmark used at terminal launch.
 terminal-ascii.txt        >_ neura fallback for limited terminals.
 
 TERMINAL INTEGRATION
-src/brand.ts contains the pre-rendered launch mark. Startup does not load images,
+src/brand.ts contains the pre-rendered launch wordmark: lowercase "neura" in
+five-pixel half-block letters (owner choice, 2026-11-23). The vector files above
+still show the earlier prompt-to-result mark. Startup does not load images,
 discover fonts or add an image-rendering dependency. Normal interactive launch
-shows the uncolored logo, then the status line and prompt, without a readiness
-banner. Headless output stays clean.
+shows the wordmark, colored copper to bone across its columns, with the version
+on its baseline when it fits, then the status line and prompt, without a
+readiness banner. NO_COLOR leaves it uncolored. Headless output stays clean.
 
 Use --ascii for terminals with limited glyph support. TERM=dumb also selects ASCII.
 If the full mark will not fit, the CLI uses the ASCII name instead. The last column
-is reserved to avoid wrap-induced blank rows. The mark occupies five lines.
-No color, emoji, Braille or private-use font glyph is needed.
+is reserved to avoid wrap-induced blank rows. The wordmark occupies three lines.
+No emoji, Braille or private-use font glyph is needed.
 
 The CLI tests compare src/brand.ts against both text assets and a test-only raster
 of neura-mark.svg. That raster uses the existing locked Learn canvas package.

@@ -300,8 +300,8 @@ checks and configured-host acceptance remain separate gates.
 
 ## Branding and dependency grouping (2026-11-04)
 
-The owner-approved prompt-to-result mark (2026-11-13) replaces the earlier context-into-action mark.
-`src/brand.ts` holds a static five-line half-block rendering. Startup loads no
+The owner-approved pixel wordmark (2026-11-23) replaces the prompt-to-result mark (2026-11-13).
+`src/brand.ts` holds a static three-line half-block rendering, colored copper to bone at launch. Startup loads no
 image, font or new dependency. `--ascii`, `TERM=dumb` and terminals too narrow
 for the mark print `>_ neura`. Interactive launch prints only the logo, then
 status and the prompt; headless, `--help` and `--check` print no artwork. Assets and guide are in

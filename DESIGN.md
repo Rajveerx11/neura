@@ -35,7 +35,7 @@ animation is the erasable activity spinner while a turn runs. Use no emoji.
 
 ## Launch and conversation
 
-`src/brand.ts` supplies the approved static prompt-to-result mark. Startup
+`src/brand.ts` supplies the approved pixel wordmark, colored copper to bone. Startup
 loads no image/font dependency. Show the logo, prompt-adjacent status, a one-line
 input hint and the real readline prompt, with a live slash-command menu under it. There is no image-backed Terminal profile or Pi editor in the
 active application. Do not add a banner or readiness claim.
@@ -59,8 +59,8 @@ truncate a sensitive action into an incomplete approval. Ctrl+C cancels running
 work. Do not retry the task automatically.
 
 Validate output at 40, 56, 72, 80, 92 and 120 columns with long paths, model IDs
-and Unicode. Preserve plain/non-TTY behavior. The static logo is five lines,
-mark only, with no name beside it. Old Pi widget limits do not imply an active Pi UI. Work and Learn are
+and Unicode. Preserve plain/non-TTY behavior. The static logo is the three-line
+pixel wordmark with only the version beside it. Old Pi widget limits do not imply an active Pi UI. Work and Learn are
 the everyday modes, and YOLO is an explicit opt-in. No Shift+Tab mode cycle or `/dash` is implemented.
 
 ## Learn boards

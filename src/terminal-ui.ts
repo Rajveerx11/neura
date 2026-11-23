@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from 'node:util';
-import { renderLogo } from './brand.ts';
+import { LOGO_WIDTH, renderLogo } from './brand.ts';
 
 export function terminalText(text: string): string {
   // Unicode line/paragraph separators become real newlines so words never merge; other controls are dropped.
@@ -345,8 +345,18 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         bottom: paint(box.bl + edge + box.br, tone),
       };
     },
-    // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
-    wordmark(ascii = false) { return renderLogo(columns, ascii || env.TERM === 'dumb').join('\n'); },
+    // Approved wordmark (src/brand.ts), copper fading to bone across its columns, with the version on its
+    // baseline when it fits. ASCII for --ascii, TERM=dumb or narrow terminals; uncolored under NO_COLOR.
+    wordmark(ascii = false, version = '') {
+      const lines = renderLogo(columns, ascii || env.TERM === 'dumb');
+      if (lines.length === 1) return lines[0];
+      const [from, to] = [palette.copper, palette.bone].map(rgb => rgb.split(';').map(Number));
+      const shade = (x: number) => from.map((value, i) => Math.round(value + (to[i] - value) * x / (LOGO_WIDTH - 1))).join(';');
+      const rows = lines.map(line => color ? [...line].map((cell, x) => cell === ' ' ? cell : `\x1b[38;2;${shade(x)}m${cell}`).join('') + '\x1b[0m' : line);
+      const label = terminalLabel(version);
+      if (label && LOGO_WIDTH + 3 + cells(label) <= rowWidth) rows[rows.length - 1] += ' '.repeat(LOGO_WIDTH - lines[lines.length - 1].length + 3) + paint(label, 'dim');
+      return rows.join('\n');
+    },
     status(state: TerminalStatus) {
       const mode = modeLabel(state.mode);
       const available = Math.max(1, Math.min(width, columns) - 1);

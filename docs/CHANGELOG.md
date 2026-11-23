@@ -10,6 +10,8 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 
 ### 2026-11-23: status bar, your own shell commands and prereleases
 
+- New launch logo: a three-line pixel "neura" wordmark, colored copper to bone, with the
+  version beside it. `--ascii`, `TERM=dumb`, `NO_COLOR` and narrow fallbacks are unchanged.
 - Published [v2.6.0-rc.2](releases/v2.6.0-rc.2.md), then [v2.6.0-rc.3](releases/v2.6.0-rc.3.md), as source prereleases.
 - Submitting a pasted draft that wraps no longer leaves the prompt box's top border on
   screen. Interactive answers start after a blank row.
