@@ -301,9 +301,10 @@ support, submit `$` for a text list. `$NAME TASK` loads that installed package's
 `SKILL.md` as untrusted guidance for the request, not a new permission grant.
 No skill scripts run automatically. See [skill roots and limits](SKILLS.md).
 
-Native Windows console captures show the [command menu](../assets/screenshots/terminal-commands.png),
-[installed-skill picker](../assets/screenshots/terminal-skills.png) and
-[`/clear` confirmation](../assets/screenshots/terminal-clear.png).
+Windows Terminal captures show the [command menu](../assets/screenshots/terminal-commands.png),
+[installed-skill picker](../assets/screenshots/terminal-skills.png),
+[`/clear` confirmation](../assets/screenshots/terminal-clear.png) and
+[shell mode](../assets/screenshots/terminal-shell.png).
 [Provenance and reproduction](../assets/screenshots/README.md#native-terminal-captures)
 distinguish these running-CLI captures from fixture-rendered previews.
 They show no model response and do not establish resize behavior.

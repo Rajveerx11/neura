@@ -49,8 +49,16 @@ to run, and Esc to close. `Ctrl+C` cancels a turn.
 | `/subagent` | List roles, delegate a Work task, or manage a named subagent. |
 | `/verify quick`, `/verify full`, `/verify status` | Check the candidate or inspect a receipt. Full verification is unavailable. |
 | `$`, `$NAME TASK` | Browse or apply [installed skills](SKILLS.md). |
+| `!COMMAND` | Run your own shell command in the workspace, such as `!git status`. |
 | `/learn` | Lesson commands, hints, answers and explicit save/resume. |
 | `/quit`, `/exit` | Close Neura. |
+
+A line starting with `!` switches the prompt into shell mode: the box turns pink,
+the prompt reads `shell >`, and the status row says `! shell mode`. Delete the `!`
+to leave it. The command runs as you in PowerShell (bash elsewhere), outside the
+sandbox and approvals, for up to 10 minutes with no interactive input. Its output
+joins the conversation. ACP clients and `--prompt` treat `!` as plain text. See
+[security](../SECURITY.md#your-own--commands).
 
 ## Manual test in a disposable workspace
 

@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png">
-    <img src="assets/brand/neura-logo-light.png" alt="Neura logo" width="220">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-wordmark-pixel-dark.svg">
+    <img src="assets/brand/neura-wordmark-pixel-light.svg" alt="neura" width="240">
   </picture>
 </p>
 
@@ -64,7 +64,9 @@ The prompt box turns pink and reads `shell >` while the line is a command. It ru
 as you, outside the sandbox, and its output joins the conversation. Start a new
 conversation with `/new`; saved chats remain available through `/sessions`.
 
-![Neura's slash-command menu in a native Windows terminal.](assets/screenshots/terminal-commands.png)
+![Neura's slash-command menu in Windows Terminal.](assets/screenshots/terminal-commands.png)
+
+![Shell mode: a line starting with ! turns the prompt box pink.](assets/screenshots/terminal-shell.png)
 
 [More terminal screenshots and capture details](assets/screenshots/README.md#native-terminal-captures).
 
