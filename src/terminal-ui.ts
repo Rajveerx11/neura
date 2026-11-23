@@ -28,8 +28,9 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
   { name: 'workflow', args: '[on|off]', description: 'Independent read-only review of Work changes', options: [['on', 'Review each change'], ['off', 'No automatic review']] },
   { name: 'subagent', args: '[ROLE TASK|list|wait NAME|message NAME TEXT|cancel NAME]', description: 'Delegate a Work task or manage subagents', options: [
-    ['list', 'Show roles and named subagents'], ['scout', 'Inspect the workspace'], ['reviewer', 'Review the workspace'],
-    ['worker', 'Implement a supervised Work task'], ['wait', 'Read a named result'], ['message', 'Continue a named subagent'], ['cancel', 'Cancel a named turn']] },
+    ['list', 'Show roles and named subagents'], ['scout TASK', 'Inspect the workspace'], ['reviewer TASK', 'Review the workspace'],
+    ['worker TASK', 'Implement a supervised Work task'], ['wait NAME', 'Read a named result'],
+    ['message NAME TEXT', 'Continue a named subagent'], ['cancel NAME', 'Cancel a named turn']] },
   { name: 'loop', args: 'DURATION TASK', description: 'Repeat a task in this Work terminal', needsArg: true },
   { name: 'schedule', args: '[list|cancel ID|in DURATION TASK|at TIMESTAMP TASK|every DURATION TASK]', description: 'Run a task later in this Work terminal', options: [
     ['list', 'List schedules'], ['cancel ID', 'Cancel by ID'], ['in DURATION TASK', 'Run after a delay'],

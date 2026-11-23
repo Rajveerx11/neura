@@ -97,17 +97,18 @@ Ask Neura to delegate in a Work prompt, or start a subagent directly.
 /subagent cancel reviewer
 ```
 
-Scouts and reviewers run in parallel with read-only workspace tools. The terminal
-status bar shows how many subagents are running. It posts completion notices
-when the prompt is idle. `/subagent wait NAME` shows the report or a pending
-question. `/subagent message NAME TEXT` replies or continues the same child
-conversation. A running child can queue one follow-up. The next Work prompt
-includes excerpts from new reports so Neura can use them without starting a
-turn on its own.
+Scouts and reviewers run in parallel with read-only workspace tools. The
+status bar under the interactive composer shows how many are running.
+When the prompt is idle and empty, Neura prints a completion notice.
+`/subagent wait NAME` shows the report or question. `/subagent message NAME TEXT`
+answers it or continues the child conversation. A running child can queue one
+follow-up. The next Work prompt includes excerpts from new reports.
 
 Use `/subagent worker TASK` to delegate changes. A worker runs within a
 supervised Work turn, with the same file rules, offline sandbox and approval
-prompts. It pauses at a question so the parent can answer before work continues.
+prompts. Its tool activity and approval requests show the child name.
+A question pauses the worker and leaves the task unfinished until you reply
+or cancel it.
 Neura can also call `subagent`, `subagent_message`, `subagent_wait`,
 `subagents_list` and `subagent_cancel` from its own Work turn. Inspect results
 before relying on them. A reviewer subagent uses the parent model and does not
@@ -116,10 +117,13 @@ issue an independent review receipt.
 Children use the current workspace, provider and model. Their context starts
 with the delegated task and project guidance. Child conversations live in
 memory. Reports returned through parent tools can enter saved parent history.
-Switching mode, model or conversation or exiting clears the registry and
-cancels active children. A session supports up to 12 named children, three
-concurrent runs and six turns per child. Subagents cannot spawn their own
-children and are unavailable in Learn and YOLO.
+Exiting clears the registry and cancels active children. So does switching
+mode, model or conversation. Cancelling a Work turn also cancels background
+runs it started. A session supports 12 named children, with up to three
+running at once and six turns per child. Scouts and reviewers get eight model
+steps per turn and three minutes per run, including any queued follow-up.
+Workers get 24 model steps per turn. Subagents are available in Work and
+cannot spawn their own children.
 
 The named-agent workflow was inspired by [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents).
 

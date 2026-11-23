@@ -160,7 +160,10 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
   const onClose = () => { inputClosed.abort(); abort?.abort(); subagents.cancelRunning(); };
-  const onInterrupt = () => { subagents.cancelRunning(); if (abort) abort.abort(); else inputClosed.abort(); };
+  const onInterrupt = () => {
+    if (abort) abort.abort();
+    else { inputClosed.abort(); subagents.cancelRunning(); }
+  };
   process.on('SIGINT', onInterrupt);
   rl?.on('SIGINT', onInterrupt);
   rl?.once('close', onClose);
@@ -374,17 +377,39 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         let answerVisible = false;
         let mutationAttempted = false;
         let failedEffect = false;
-        let toolStarted: number | undefined;
+        const toolStarted = new Map<string | undefined, number>();
         const recordEffect = (event: ToolEvent) => {
           if (event.toolName === 'unknown' || event.toolName === SKILL_TOOL || event.toolName === 'ask_question' ||
               READ_ONLY_TOOLS.has(event.toolName) || SUBAGENT_TOOLS.has(event.toolName)) return;
           if (event.phase === 'started') mutationAttempted = true;
           if (event.phase === 'failed' || event.phase === 'blocked') failedEffect = true;
         };
+        const showTool = (event: ToolEvent, invocationId?: string, child?: string) => {
+          recordEffect(event);
+          const toolName = child ? `${child}: ${event.toolName}` : event.toolName;
+          bridge?.onToolEvent?.({ ...event, toolName }, invocationId);
+          if (bridge?.onToolEvent || event.phase === 'requested') return;
+          const label = mode === 'yolo' && toolName === 'exec' ? 'exec on host' : toolName;
+          if (event.phase === 'started') {
+            toolStarted.set(invocationId, performance.now());
+            endLine();
+            waiting(`Running ${label}`);
+            return;
+          }
+          endLine();
+          const started = toolStarted.get(invocationId);
+          toolStarted.delete(invocationId);
+          const elapsed = started === undefined ? undefined : performance.now() - started;
+          if (interactive) stdout.write(terminal().tool(label, event.phase, elapsed) + '\n');
+          else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(label, event.phase, elapsed) + '\n');
+          if (!abort?.signal.aborted) waiting();
+        };
         const subagentScope = {
           model, guidance: project, current: () => generation === expected && mode === 'work',
           readTools: () => createReadOnlyTools(workspace, () => generation),
-          workTools: () => workspaceTools, onWorkerToolEvent: recordEffect,
+          workTools: (name: string) => createWorkspaceTools(workspace, () => mode, () => generation, description => approve(`Subagent ${name}\n${description}`)),
+          onWorkerToolEvent: (name: string, event: ToolEvent, invocationId?: string) => showTool(event, invocationId, name),
+          reportWorker: Boolean(delegation),
         };
         if (mode === 'work' && reviewTurn) tools.push(...subagents.tools(subagentScope));
         const turnOptions: RunTurnOptions = { model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
@@ -406,24 +431,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             else { stdout.write(text); lineOpen = !text.endsWith('\n'); }
             section = 'answer'; answerVisible = true;
           },
-          onToolEvent: (event, invocationId) => {
-            bridge?.onToolEvent?.(event, invocationId);
-            recordEffect(event);
-            if (bridge?.onToolEvent || event.phase === 'requested') return;
-            const name = mode === 'yolo' && event.toolName === 'exec' ? 'exec on host' : event.toolName;
-            if (event.phase === 'started') {
-              toolStarted = performance.now();
-              endLine();
-              waiting(`Running ${name}`);
-              return;
-            }
-            endLine();
-            const elapsed = toolStarted === undefined ? undefined : performance.now() - toolStarted;
-            toolStarted = undefined;
-            if (interactive) stdout.write(terminal().tool(name, event.phase, elapsed) + '\n');
-            else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(name, event.phase, elapsed) + '\n');
-            if (!abort?.signal.aborted) waiting();
-          } };
+          onToolEvent: showTool,
+        };
         let outcome: Awaited<ReturnType<typeof runTurn>>;
         if (delegation) {
           let report: string;
@@ -443,6 +452,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         } else outcome = await runTurn(turnOptions);
         endLine();
         const stopped = outcome.stopReason !== 'finished';
+        const waitingWorker = subagents.waitingWorker();
         let actionFailed = outcome.actionFailed;
         if (interactive && !answerVisible && !stopped) say('Turn ended without answer text. Review tool outcomes above.');
         if (generation !== expected || abort.signal.aborted) throw new Error('Session changed or turn cancelled; result discarded.');
@@ -477,6 +487,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         } else if (mode !== 'learn' && failedEffect) {
           fixStopped = true;
           say(`Task unfinished after a failed ${mode === 'yolo' ? 'YOLO' : 'Work'} action. Inspect its effects before continuing.`);
+        } else if (waitingWorker) {
+          fixStopped = true;
+          say(`Worker ${waitingWorker} needs a reply. Use /subagent wait ${waitingWorker} to read its question.`);
         } else if (review && baseline) {
           if (!await workflow(text, baseline, false)) actionFailed = true;
         }
@@ -500,7 +513,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         return succeeded;
       } catch (error) {
         endLine();
-        if (owned) subagents.cancelRunning();
+        if (owned && abort) subagents.cancelRunning(abort.signal);
         if (taskStarted && generation === expected) {
           reconciliationRequired = true;
           recovery = { ...recovery!, stage: 'reconcile' };
