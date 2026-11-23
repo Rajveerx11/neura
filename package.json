@@ -1,6 +1,6 @@
 {
   "name": "neura-harness",
-  "version": "2.6.0-rc.1",
+  "version": "2.6.0-rc.2",
   "description": "Windows-first terminal assistant for engineering and practical learning, with Work and Learn modes.",
   "private": true,
   "license": "Apache-2.0",

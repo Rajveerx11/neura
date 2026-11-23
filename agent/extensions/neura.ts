@@ -45,7 +45,7 @@ function logoLines(width: number, color: string = TXT): string[] {
 export function launchSurfaceLines(width: number, theme: Theme, editorLines: string[]): string[] {
   const safeWidth = Math.max(1, width);
   const identity = wordmarkLines(safeWidth, TXT).map((line) => centered(line, safeWidth));
-  const status = `${fg(MUT, "Neura v2.6.0-rc.1")}${fg(HUMAN, "  ·  READY")}`;
+  const status = `${fg(MUT, "Neura v2.6.0-rc.2")}${fg(HUMAN, "  ·  READY")}`;
   return [
     ...identity,
     centered(status, safeWidth),

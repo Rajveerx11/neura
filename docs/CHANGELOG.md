@@ -1,14 +1,16 @@
 # Changelog
 
-## Unreleased: Neura agent loop with Work, Learn and YOLO
+## v2.6.0-rc.2 prerelease: Neura agent loop with Work, Learn and YOLO
 
 Current source is development/testing only, with synthetic, non-sensitive data.
-Package metadata remains `2.6.0-rc.1`. No new version or published release is implied.
-Latest published release remains historical Pi `2.5.1`. Mastra was removed on
+`2.6.0-rc.2` was published on 2026-11-23 as a source prerelease, not a stable release.
+Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
-### 2026-11-23: status bar and your own shell commands
+### 2026-11-23: status bar, your own shell commands and v2.6.0-rc.2
+
+- Published [v2.6.0-rc.2](releases/v2.6.0-rc.2.md) as a source prerelease.
 
 - A status bar under the prompt shows user, model, context tokens and branch, then the mode.
 - Start a line with `!` to run your own command in the workspace, as you, outside the
