@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-gate:
-    name: Release gate
+  verify-tag:
+    name: Verify release tag
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
@@ -38,66 +38,10 @@ jobs:
           if ($commit -ne $env:GITHUB_SHA) { throw 'Tag target does not match the workflow commit.' }
           git merge-base --is-ancestor $commit origin/main
           if ($LASTEXITCODE -ne 0) { throw 'Release commit is not contained in origin/main.' }
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "24.16.0"
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            agent/neura/package-lock.json
-      - name: Provision pinned Git runtime
-        shell: pwsh
-        timeout-minutes: 8
-        run: |
-          $contract = Get-Content -LiteralPath .\agent\neura\runtime-contract.json -Raw | ConvertFrom-Json
-          $git = $contract.automaticExecutables.git
-          $archive = Join-Path $env:RUNNER_TEMP $git.windowsArchive
-          $destination = Join-Path $env:RUNNER_TEMP "neura-pinned-git"
-          powershell -NoProfile -NonInteractive -File .\scripts\download-verified.ps1 -Uri $git.windowsArchiveUrl -OutFile $archive -Sha256 $git.windowsArchiveSha256
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $extract = Start-Process -FilePath $archive -ArgumentList "-o$destination", "-y" -Wait -PassThru -WindowStyle Hidden
-          if ($extract.ExitCode -ne 0) { throw "Pinned Git extraction failed with exit code $($extract.ExitCode)." }
-          $executable = Join-Path $destination 'cmd\git.exe'
-          $version = & $executable --version
-          if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne $git.windowsVersion) { throw 'Pinned Git identity check failed.' }
-          "NEURA_GIT_EXECUTABLE=$executable" >> $env:GITHUB_ENV
-          (Split-Path -Parent $executable) >> $env:GITHUB_PATH
-      - name: Install locked development dependencies
-        run: npm ci --ignore-scripts
-      - name: Install locked learning document runtime
-        run: npm ci --prefix agent/neura --ignore-scripts
-      - name: Check active Mastra dependency boundary
-        run: npm run check:pi-free
-      - name: Verify release policy
-        env:
-          TAG: ${{ github.ref_name }}
-        run: npm run verify:release -- --tag "$env:TAG"
-      - name: Audit dependency vulnerabilities and registry signatures
-        shell: pwsh
-        run: |
-          # Same bounded EBUSY retry as Neura CI: once, only for npm's transient Windows cache lock.
-          $ErrorActionPreference = 'Continue'; $PSNativeCommandUseErrorActionPreference = $false
-          npm run audit:all 2>&1 | Tee-Object -Variable lines
-          if ($LASTEXITCODE -eq 0) { exit 0 }
-          if (-not ($lines -match 'EBUSY')) { exit 1 }
-          Write-Warning 'npm cache EBUSY (transient Windows file lock); retrying the full audit once.'
-          npm run audit:all
-          exit $LASTEXITCODE
-      - name: Verify repository policy, types, dependency boundary and docs
-        run: npm run verify
-      - name: Require runtime regression evidence (unavailable after test removal)
-        run: npm test
-      - name: Verify complete history secret scan
-        shell: pwsh
-        timeout-minutes: 8
-        run: powershell -NoProfile -File .\scripts\verify-secrets.ps1
-      - name: Verify installer on ephemeral runner
-        shell: pwsh
-        run: |
-          $bin = Join-Path $env:RUNNER_TEMP 'neura-mastra-bin'
-          powershell -NoProfile -File .\install.ps1 -Development -BinDirectory $bin
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          powershell -NoProfile -File .\install.ps1 -Check -BinDirectory $bin
+
+  release-gate:
+    needs: verify-tag
+    uses: ./.github/workflows/verify.yml
 
   package:
     name: Release assets

@@ -8,6 +8,7 @@ on:
   merge_group:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -79,9 +80,6 @@ jobs:
           npm run audit:all
           exit $LASTEXITCODE
 
-      - name: Verify active Mastra graph is Pi-free
-        run: npm run check:pi-free
-
       - name: Verify repository policy, types, dependency boundary and docs (no runtime tests)
         run: npm run verify
 
@@ -114,10 +112,42 @@ jobs:
       - name: Verify source-linked development launcher in disposable directory
         shell: pwsh
         run: |
-          $bin = Join-Path $env:RUNNER_TEMP 'neura-mastra-bin'
+          $bin = Join-Path $env:RUNNER_TEMP 'neura-bin'
           powershell -NoProfile -File .\install.ps1 -Development -BinDirectory $bin
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell -NoProfile -File .\install.ps1 -Check -BinDirectory $bin
+
+      - name: Start Work and resume a session with the installed launcher
+        shell: pwsh
+        run: |
+          $launcher = Join-Path $env:RUNNER_TEMP 'neura-bin/neura.cmd'
+          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
+          $project = New-Item -ItemType Directory -Path (Join-Path $root 'project') -Force
+          $env:NEURA_HOME = Join-Path $root 'private'
+          $work = @('--mode', 'work', '--cwd', $project.FullName, '--prompt', '/status')
+          $null = & $launcher @work --no-history
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $sessions = Join-Path $env:NEURA_HOME 'sessions'
+          if (Test-Path -LiteralPath $sessions) { throw 'History-disabled Work created session storage.' }
+          $null = & $launcher @work
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $files = @(Get-ChildItem -LiteralPath $sessions -Recurse -File -Filter '*.json')
+          if ($files.Count -ne 1) { throw 'Expected one new Work session.' }
+          $id = $files[0].BaseName
+          $status = & $launcher @work --resume $id
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($status -notcontains "Session: resumed $id") { throw 'Work did not resume the saved session.' }
+
+      - name: Verify tagged release policy
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: npm run verify:release -- --tag "$env:TAG"
+
+      - name: Require full runtime regression evidence for release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: npm test
 
   portable-proof:
     name: portable-proof
