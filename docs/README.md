@@ -34,7 +34,7 @@ See [status](STATUS.md) for what's implemented and what still blocks release.
 
 ## History and migration evidence
 
-The latest published release is the Pi-based `v2.5.1`. `v2.6.0-rc.2` is a
+The latest published release is the Pi-based `v2.5.1`. `v2.6.0-rc.3` is a
 source prerelease of the current application, not a stable release.
 See the [changelog](CHANGELOG.md) for current unreleased changes before the
 historical release record. See the [implementation record](MASTRA_V1.md) and

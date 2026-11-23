@@ -8,7 +8,7 @@ with synthetic, non-sensitive data. Mastra and its EE-licensed code were removed
 of many: the unchecked items below still block a release. Do not promote a draft or
 infer production readiness from passing tests.
 
-Package metadata and `VERSION` are `2.6.0-rc.2`, published on 2026-11-23 as a source
+Package metadata and `VERSION` are `2.6.0-rc.3`, published on 2026-11-23 as a source
 prerelease on owner instruction with the gates below still open. “v1” names the current
 implementation generation. The latest stable release is the historical Pi-based `v2.5.1`.
 The `v2.6.0-rc.1` draft was never published. See the [release inventory](releases/README.md) and [status](STATUS.md).
