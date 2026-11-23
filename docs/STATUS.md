@@ -12,6 +12,8 @@ a lesson. Projects with other test frameworks still use ordinary Work checks.
 Verified lessons live under the workspace’s private sessions directory. Work
 recalls them when a task names the source or the agent reads it, and reruns
 matching suites after an edit. A new assertion failure suspends the lesson.
+An unfinished task keeps the identities of its failed checks across restarts.
+Each needs a passing rerun of the same suite and named cases before completion.
 This evidence covers the focused test only. It cannot approve a tool or change
 the result of `/verify`. Learn, YOLO and `--no-history` do not load the store.
 When Work trims old turns, it keeps up to eight short, redacted excerpts in that

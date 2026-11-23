@@ -43,17 +43,19 @@ export class RegressionMemory {
   readonly directory: string;
   readonly session: string;
   readonly fence: () => void;
-  constructor(workspace: string, directory: string, session: string, fence: () => void) {
+  readonly recordResult?: (checkId: string, failed: boolean) => Promise<void>;
+  constructor(workspace: string, directory: string, session: string, fence: () => void, recordResult?: RegressionMemory['recordResult']) {
     this.workspace = workspace;
     this.directory = directory;
     this.session = session;
     this.fence = fence;
+    this.recordResult = recordResult;
   }
 
-  async related(match: (source: string) => boolean, includePending = false) {
+  async related(match: (source: string, suite: string) => boolean, includePending = false) {
     const rows = await loadLessons(this.directory);
     this.fence();
-    return rows.filter(r => match(r.source) && (r.passedAt || (includePending && r.session === this.session)) && this.currentSuite(r)).reverse();
+    return rows.filter(r => match(r.source, r.suite) && (r.passedAt || (includePending && r.session === this.session)) && this.currentSuite(r)).reverse();
   }
 
   private currentSuite(row: Lesson) {
@@ -96,20 +98,24 @@ export class RegressionMemory {
     const names = result.map(r => r.name).sort();
     if (new Set(names).size !== names.length || names.some(n => /[\x00-\x1f\x7f]|\[REDACTED\]/.test(n) || redactSensitiveText(n, 160) !== n)) throw new Error('Test names must be distinct and safe to retain.');
     const cases = hash(JSON.stringify(names));
+    const checkId = hash(JSON.stringify([source, suite, suiteHash, cases]));
     const failed = result.find(r => r.failed);
     const cohort = hash(JSON.stringify(Object.entries(before.files).filter(([p]) => p !== source)));
     const base = { source, suite, suiteHash, cases, session: this.session, cohort, failedSource: before.files[source], failedAt: before.fingerprint };
     if (failed) {
+      await this.recordResult?.(checkId, true);
       await recordLesson(this.directory, previous, { ...base, assertion: failed.name, passedAt: null }, fence);
       return { result: 'failed', assertion: failed.name, lesson: 'provisional' };
     }
+    let savedAssertion: string | undefined;
     if (previous && !previous.passedAt && previous.suiteHash === suiteHash && previous.cases === cases &&
         previous.cohort === cohort && previous.failedSource !== before.files[source]) {
       await recordLesson(this.directory, previous, { ...previous, passedAt: before.fingerprint }, fence);
-      this.outstanding.delete(key);
-      return { result: 'passed', assertion: previous.assertion, lesson: 'saved' };
+      savedAssertion = previous.assertion;
     }
+    fence();
+    await this.recordResult?.(checkId, false);
     this.outstanding.delete(key);
-    return { result: 'passed', lesson: 'no new failure/fix pair' };
+    return savedAssertion ? { result: 'passed', assertion: savedAssertion, lesson: 'saved' } : { result: 'passed', lesson: 'no new failure/fix pair' };
   }
 }

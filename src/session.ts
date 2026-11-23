@@ -13,6 +13,7 @@ export type TaskRecovery = {
   version: 1; taskId: string; workspaceKey: string;
   stage: "running" | "unfinished" | "completed" | "reconcile";
   baseHead: string | null; baseline: TreeSnapshot | null;
+  failedChecks?: string[];
 };
 export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery; modelRoute?: string; earlierTurns?: string[] };
 export type SessionSummary = Pick<Session, "id" | "createdAt" | "updatedAt">;
@@ -26,11 +27,14 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function validateRecovery(value: TaskRecovery): TaskRecovery {
   const keys = ["version", "taskId", "workspaceKey", "stage", "baseHead", "baseline"];
-  if (!record(value) || Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key)) ||
+  if (!record(value) || !keys.every(key => Object.hasOwn(value, key)) || Object.keys(value).some(key => !keys.includes(key) && key !== 'failedChecks') ||
       value.version !== 1 || typeof value.taskId !== "string" || !idPattern.test(value.taskId) ||
       typeof value.workspaceKey !== "string" || !hashPattern.test(value.workspaceKey) ||
       !["running", "unfinished", "completed", "reconcile"].includes(value.stage) ||
       (value.baseHead !== null && (typeof value.baseHead !== "string" || !COMMIT_ID.test(value.baseHead)))) throw new Error("Invalid task recovery metadata");
+  if (value.failedChecks !== undefined && (!Array.isArray(value.failedChecks) || value.failedChecks.length > 64 ||
+      value.failedChecks.some(id => typeof id !== 'string' || !hashPattern.test(id)) ||
+      new Set(value.failedChecks).size !== value.failedChecks.length || (value.stage === 'completed' && value.failedChecks.length))) throw new Error('Invalid unresolved regression checks');
   if (Buffer.byteLength(JSON.stringify(value)) > MAX_RECOVERY_BYTES) throw new Error("Task recovery metadata exceeds limits");
   const baseline = value.baseline;
   if (baseline !== null) {

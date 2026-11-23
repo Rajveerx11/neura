@@ -151,7 +151,8 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
     // Workflows and composite actions run remotely with repository permissions, so each .github write needs a person. Other control files stay refused.
     const ci = CI_CONFIG.test(path.relative(root, file));
     if (action.route !== 'allow' && !(ci && action.category === 'protected-control')) throw new Error(`Write unavailable: ${action.reason}`);
-    const matches = lessons ? await lessons.related(p => p === path.relative(root, file).split(path.sep).join('/'), true) : [];
+    const relative = path.relative(root, file).split(path.sep).join('/');
+    const matches = lessons ? await lessons.related((source, suite) => source === relative || suite === relative, true) : [];
     check(signal, true);
     if (fileTarget(requested) !== file) throw new Error('Target changed before write.');
     if (ci) {
@@ -195,7 +196,9 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       if (!lessons || snapshot.redacted) return result;
       const source = canonicalLessonPath(root, params.path);
       if (!/\.(?:test|spec)\.[cm]?js$/.test(source)) lastSource = source;
-      const recalled = (await lessons.related(p => p === source)).map(({ suite, assertion }) => ({ suite, assertion }));
+      const related = await lessons.related(p => p === source);
+      check(signal);
+      const recalled = related.map(({ suite, assertion }) => ({ suite, assertion }));
       return recalled.length ? { ...result, regressionLessons: recalled } : result;
     }),
     tool('ls', 'List bounded, non-private workspace entries.', Type.Object({ path: Type.String({ minLength: 1, maxLength: 1024 }) }, { additionalProperties: false }), async (params, signal) => {
@@ -234,15 +237,17 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       const fileHash = (source: string) => {
         try { return readPlanFileSnapshot(root, source).sha256; } catch { return undefined; }
       };
-      const hashes = new Map(watched.map(r => [r.source, fileHash(r.source)]));
+      const paths = new Set(watched.flatMap(r => [r.source, r.suite]));
+      const hashes = new Map(Array.from(paths, p => [p, fileHash(p)]));
       check(signal, true);
       const fresh = inspectAction({ toolName: 'work_exec', input: params }, root);
       if (fresh.actionFingerprint !== action.actionFingerprint || fresh.workspaceFingerprint !== action.workspaceFingerprint || JSON.stringify(fresh.approvalBinding) !== JSON.stringify(action.approvalBinding)) throw new Error('Action/workspace changed after approval; confirm again.');
       const outcome = await (options.sandbox ?? runInHumanAwaySandbox)(root, params.command, params.timeoutMs ?? 120000, signal);
       check(signal, true);
       const regressionChecks = [];
+      const changed = new Set([...paths].filter(p => fileHash(p) !== hashes.get(p)));
       for (const r of watched) {
-        if (fileHash(r.source) !== hashes.get(r.source)) regressionChecks.push(await recheck(r.source, r.suite, signal));
+        if (changed.has(r.source) || changed.has(r.suite)) regressionChecks.push(await recheck(r.source, r.suite, signal));
       }
       const focused = /^node --test ([\w./-]+\.(?:test|spec)\.[cm]?js)$/.exec(params.command);
       if (lessons && outcome.completed && outcome.code !== 0 && focused) {

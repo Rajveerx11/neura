@@ -342,6 +342,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           ? new RegressionMemory(workspace, path.join(sessions, 'regressions'), session.id, () => {
             abort?.signal.throwIfAborted();
             if (generation !== expected || mode !== 'work') throw new Error('Stale Work session.');
+          }, async (checkId, failed) => {
+            if (!recovery || generation !== expected || mode !== 'work') throw new Error('Stale regression result.');
+            const checks = recovery.failedChecks ?? [];
+            if (checks.includes(checkId) === failed) return;
+            const failedChecks = failed ? [...checks, checkId] : checks.filter(id => id !== checkId);
+            await persistRecovery({ ...recovery, failedChecks }, expected);
           }) : undefined;
         const workspaceTools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation)
           : createWorkspaceTools(workspace, () => mode, () => generation, approve, { regressions });
@@ -463,7 +469,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         endLine();
         const stopped = outcome.stopReason !== 'finished';
         const waitingWorker = subagents.waitingWorker(abort.signal);
-        if (regressions?.outstanding.size) {
+        if (regressions?.outstanding.size || recovery?.failedChecks?.length) {
           failedEffect = true;
           say('A focused regression check still failed or could not finish.');
         }
@@ -608,7 +614,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         installedSkills = discoverSkills(roots);
         if (!name) {
           if (!installedSkills.length) say('No installed skills found. Add a package with SKILL.md under .agents/skills, .claude/skills or .neura/skills.');
-          else for (const skill of installedSkills) say(`$${skill.name} â€” ${skill.description || 'Installed skill'}`);
+          else for (const skill of installedSkills) say(`$${skill.name} — ${skill.description || 'Installed skill'}`);
           return true;
         }
         const skill = installedSkills.find(entry => entry.name === name);
@@ -694,7 +700,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             if (!canRunScheduled()) say('Schedules paused. Resolve the current task to resume.');
             for (const job of jobs) {
               const label = terminalText(redactSensitiveText(job.task, 120)).replace(/\s+/g, ' ').trim();
-              say(`#${job.id} Â· ${scheduleTime(job)}${job.interval ? ' Â· repeats' : ''} Â· ${label}`);
+              say(`#${job.id} · ${scheduleTime(job)}${job.interval ? ' · repeats' : ''} · ${label}`);
             }
           }
         } else if (command === 'schedule' && rest.startsWith('cancel ')) {
@@ -705,7 +711,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           if (!canRunScheduled()) throw new Error('Resolve the current task before scheduling a new one.');
           if (command === 'loop' && !rest) throw new Error('Use /loop DURATION TASK.');
           const job = schedules.add(parseSchedule(command === 'loop' ? `every ${rest}` : rest));
-          say(`Schedule #${job.id} Â· ${scheduleTime(job)}`);
+          say(`Schedule #${job.id} · ${scheduleTime(job)}`);
         }
       } else if (command === 'workflow') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /workflow on or /workflow off.');

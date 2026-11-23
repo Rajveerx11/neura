@@ -50,13 +50,14 @@ export async function loadLessons(directory: string): Promise<Lesson[]> {
 }
 
 export async function recordLesson(directory: string, previous: Lesson | undefined, next: Lesson, fence: () => void) {
-  lesson.parse(next);
+  next = lesson.parse(next);
+  const expected = JSON.stringify(previous);
   const root = await sessionDirectory(directory, true);
   const release = await lockSession(root, STORE_LOCK);
   try {
     const rows = read(root);
     const index = rows.findIndex(r => r.source === next.source && r.suite === next.suite);
-    if (JSON.stringify(rows[index]) !== JSON.stringify(previous)) throw new Error('Another session updated this lesson. Recheck it.');
+    if (JSON.stringify(rows[index]) !== expected) throw new Error('Another session updated this lesson. Recheck it.');
     if (index >= 0) rows.splice(index, 1);
     const bytes = JSON.stringify({ version: 1, lessons: [...rows, next].slice(-MAX_LESSONS) });
     if (Buffer.byteLength(bytes) > MAX_BYTES) throw new Error('Lesson store exceeds its limit.');
