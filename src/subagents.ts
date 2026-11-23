@@ -159,11 +159,12 @@ export function createSubagents(onNotice: () => void = () => {}) {
       const agent = get(input.name);
       const message = messageText(input.message);
       if (!agent.pending) return start(agent, message, scope, signal);
+      if (agent.state !== 'running') throw new ToolFeedbackError('Subagent is finishing. Wait for its report before sending another message.');
       if (agent.controller?.signal.aborted || agent.queued !== undefined || agent.turns >= MAX_TURNS) {
         throw new ToolFeedbackError('Subagent cannot queue another message. Wait for its current turn.');
       }
       agent.queued = { text: message, parentSignal: signal };
-      return { ...report(agent), text: 'Message queued for the next child turn.' };
+      return { ...report(agent), text: 'Message queued. It will run when the current child turn succeeds.' };
     }
     if (!Object.hasOwn(roles, input.role)) throw new ToolFeedbackError(`Choose subagent role ${roleNames.join(', ')}.`);
     const role = input.role as Role;
@@ -198,7 +199,7 @@ export function createSubagents(onNotice: () => void = () => {}) {
 
   function cancel(name: string) {
     const agent = get(name);
-    if (agent.controller) {
+    if (agent.controller && agent.state === 'running') {
       agent.controller.abort();
       return `Cancelling subagent ${name}.`;
     }
