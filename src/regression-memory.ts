@@ -7,7 +7,7 @@ import { runInHumanAwaySandbox } from '../agent/neura/human-away-sandbox.ts';
 import { readPlanFileSnapshot } from '../agent/neura/plan-files.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { captureWorktree } from '../agent/neura/verification.ts';
-import { lessonPath, suitePath, loadLessons, recordLesson, type Lesson } from './regression-store.ts';
+import { canonicalLessonPath, lessonPath, suitePath, loadLessons, recordLesson, type Lesson } from './regression-store.ts';
 import { assertWorkspaceExecutionAllowed } from './work.ts';
 
 // The parent test runner owns the result. Test stdout, TAP text and model claims never enter the protocol.
@@ -19,8 +19,11 @@ const results = [];
 let unsupported = false;
 for await (const {type, data} of run({files:[file], concurrency:1})) {
   if (type !== 'test:pass' && type !== 'test:fail') continue;
-  const assertion = data.details?.error?.cause?.code === 'ERR_ASSERTION';
-  if (data.skip || data.todo || !data.file || resolve(data.file) !== file ||
+  const error = data.details?.error;
+  const assertion = error?.failureType === 'testCodeFailure' && error.cause?.code === 'ERR_ASSERTION';
+  // Node 18 omits type for ordinary tests, but marks suites explicitly.
+  if (data.skip !== undefined || data.todo !== undefined || (data.details?.type ?? 'test') !== 'test' ||
+      !data.file || resolve(data.file) !== file ||
       data.name === file || data.name === process.argv[2] || data.nesting !== 0 ||
       results.length >= 64 || typeof data.name !== 'string' || data.name.length > 160 ||
       (type === 'test:fail' && !assertion)) { unsupported = true; continue; }
@@ -61,7 +64,8 @@ export class RegressionMemory {
   async check(source: string, suite: string, signal?: AbortSignal) {
     const fence = () => { signal?.throwIfAborted(); this.fence(); };
     fence();
-    lessonPath.parse(source); suitePath.parse(suite);
+    source = lessonPath.parse(canonicalLessonPath(this.workspace, lessonPath.parse(source)));
+    suite = suitePath.parse(canonicalLessonPath(this.workspace, suitePath.parse(suite)));
     if (source === suite) throw new Error('Select the implementation file and a separate test suite.');
     const key = source + '\n' + suite;
     this.outstanding.add(key);

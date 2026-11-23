@@ -6,6 +6,11 @@ import { sessionDirectory } from './session.ts';
 import { lockSession } from './session-lock.ts';
 import { SECRET_PATH, PROTECTED_CONTROL } from '../agent/neura/action-paths.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
+import { authorizePlanPath } from '../agent/neura/plan-files.ts';
+
+export function canonicalLessonPath(root: string, requested: string) {
+  return path.relative(root, authorizePlanPath(root, requested).canonical).split(path.sep).join('/');
+}
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const lessonPath = z.string().max(240).regex(/^(?:[A-Za-z0-9_][\w.-]*\/)*[A-Za-z0-9_][\w.-]*$/)

@@ -237,7 +237,8 @@ async function runScanned(workspace: string, scan: WorkspaceScan, command: strin
 }
 
 async function toWslPath(workspace: string): Promise<string> {
-  const result = await runWsl(["wslpath", "-a", "-u", "--", fs.realpathSync(workspace)], 10_000);
+  // This value is a mount operand. Redaction is for display and can change which directory is mounted.
+  const result = await runWsl(["wslpath", "-a", "-u", "--", fs.realpathSync(workspace)], 10_000, undefined, false);
   const converted = result.stdout.trim();
   if (result.code !== 0 || !converted.startsWith("/") || converted.includes("\n")) {
     throw new Error("Human Away sandbox could not map the workspace into WSL2.");

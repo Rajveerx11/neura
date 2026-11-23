@@ -12,6 +12,7 @@ import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { ToolFeedbackError, type ToolDefinition } from './runtime.ts';
 import { terminalText, type Mode } from './terminal-ui.ts';
 import type { RegressionMemory } from './regression-memory.ts';
+import { canonicalLessonPath } from './regression-store.ts';
 
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 const inside = (root: string, file: string) => { const relative = path.relative(root, file); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
@@ -86,10 +87,10 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
   const lessons = mode() === 'work' ? options.regressions : undefined;
   let lastSource: string | undefined;
   async function recheck(source: string, suite: string, signal?: AbortSignal) {
-    try { return { suite, ...await lessons!.check(source, suite, signal) }; }
+    try { return { source, suite, ...await lessons!.check(source, suite, signal) }; }
     catch (error) {
       check(signal, true);
-      return { suite, result: 'unavailable', detail: redactSensitiveText(error instanceof Error ? error.message : 'Check unavailable', 300) };
+      return { source, suite, result: 'unavailable', detail: redactSensitiveText(error instanceof Error ? error.message : 'Check unavailable', 300) };
     }
   }
   function tool(name: string, description: string, parameters: any, execute: (params: any, signal?: AbortSignal) => Promise<any>): ToolDefinition {
@@ -150,6 +151,9 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
     // Workflows and composite actions run remotely with repository permissions, so each .github write needs a person. Other control files stay refused.
     const ci = CI_CONFIG.test(path.relative(root, file));
     if (action.route !== 'allow' && !(ci && action.category === 'protected-control')) throw new Error(`Write unavailable: ${action.reason}`);
+    const matches = lessons ? await lessons.related(p => p === path.relative(root, file).split(path.sep).join('/'), true) : [];
+    check(signal, true);
+    if (fileTarget(requested) !== file) throw new Error('Target changed before write.');
     if (ci) {
       if (content.length > CI_PROMPT_CHARS) throw new Error('This CI file is too long to show for approval. Ask the user to edit it manually.');
       const shownContent = redactSensitiveText(content, CI_PROMPT_CHARS * 2);
@@ -176,7 +180,6 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       } else fs.renameSync(temporary, file);
       const result = { path: requested, sha256: hash(content), bytes: Buffer.byteLength(content) };
       if (!lessons) return result;
-      const matches = await lessons.related(p => p === requested.replaceAll('\\', '/'), true);
       const checks = [];
       for (const r of matches) checks.push(await recheck(r.source, r.suite, signal));
       return checks.length ? { ...result, regressionChecks: checks } : result;
@@ -190,7 +193,7 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
       if (snapshot.byteLength > 1024 * 1024) throw new Error('Read exceeds 1 MiB.');
       const result = { path: params.path, sha256: snapshot.sha256, text: redactSensitiveText(snapshot.content.toString('utf8'), 1024 * 1024), redacted: snapshot.redacted, editable: !snapshot.redacted };
       if (!lessons || snapshot.redacted) return result;
-      const source = params.path.replaceAll('\\', '/');
+      const source = canonicalLessonPath(root, params.path);
       if (!/\.(?:test|spec)\.[cm]?js$/.test(source)) lastSource = source;
       const recalled = (await lessons.related(p => p === source)).map(({ suite, assertion }) => ({ suite, assertion }));
       return recalled.length ? { ...result, regressionLessons: recalled } : result;
@@ -242,8 +245,17 @@ export function createWorkspaceTools(workspace: string, mode: () => Mode, genera
         if (fileHash(r.source) !== hashes.get(r.source)) regressionChecks.push(await recheck(r.source, r.suite, signal));
       }
       const focused = /^node --test ([\w./-]+\.(?:test|spec)\.[cm]?js)$/.exec(params.command);
-      if (lessons && lastSource && outcome.completed && outcome.code !== 0 && focused) {
-        regressionChecks.push(await recheck(lastSource, focused[1], signal));
+      if (lessons && outcome.completed && outcome.code !== 0 && focused) {
+        let suite: string | undefined;
+        try { suite = canonicalLessonPath(root, focused[1]); } catch { /* Missing or private test cannot supply evidence. */ }
+        if (suite) {
+          const sources = watched.filter(r => r.suite === suite).map(r => r.source);
+          const stem = path.basename(suite).replace(/\.(?:test|spec)\.[cm]?js$/, '');
+          if (!sources.length && lastSource && path.parse(lastSource).name === stem) sources.push(lastSource);
+          for (const source of sources) {
+            if (!regressionChecks.some(r => r.source === source && r.suite === suite)) regressionChecks.push(await recheck(source, suite, signal));
+          }
+        }
       }
       return { ...outcome, ...(regressionChecks.length ? { regressionChecks } : {}), isolation: 'WSL2/bubblewrap; no network', verification: 'Command outcome only, not a full proof receipt.' };
     }),
