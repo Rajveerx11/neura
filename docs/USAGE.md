@@ -46,6 +46,7 @@ to run, and Esc to close. `Ctrl+C` cancels a turn.
 | `/reconcile` | Acknowledge inspection after an uncertain task. Does not replay actions or clear crash locks. |
 | `/workflow on\|off`, `/review`, `/review status` | Control Work review or inspect its receipt. |
 | `/reviewer PROVIDER MODEL [URL]`, `/reviewer default` | Select a reviewer or follow the builder. |
+| `/subagent` | List roles, delegate a Work task, or manage a named subagent. |
 | `/verify quick`, `/verify full`, `/verify status` | Check the candidate or inspect a receipt. Full verification is unavailable. |
 | `$`, `$NAME TASK` | Browse or apply [installed skills](SKILLS.md). |
 | `/learn` | Lesson commands, hints, answers and explicit save/resume. |
@@ -82,6 +83,50 @@ Tasks wait for an idle prompt with no input. Schedules use normal Work approvals
 A loop stops on failure, denial or an unfinished turn. Missed intervals are skipped.
 Exit or switch mode, model or conversation to clear the queue. Schedules do not run
 in the background after Neura exits.
+
+## Subagents in Work
+
+Ask Neura to delegate in a Work prompt, or start a subagent directly.
+
+```text
+/subagent scout Map the entry points under src
+/subagent reviewer Check the current implementation for cancellation bugs
+/subagent list
+/subagent wait scout
+/subagent message scout Include paths for the callers you found
+/subagent cancel reviewer
+```
+
+Scouts and reviewers run in parallel with read-only workspace tools. The
+status bar under the interactive composer shows how many are running.
+When the prompt is idle and empty, Neura prints a completion notice.
+`/subagent wait NAME` shows the report or question. `/subagent message NAME TEXT`
+answers it or continues the child conversation. A running child can queue one
+follow-up. The next Work prompt includes excerpts from new reports.
+
+Use `/subagent worker TASK` to delegate changes. A worker runs within a
+supervised Work turn, with the same file rules, offline sandbox and approval
+prompts. Its tool activity and approval requests show the child name.
+A question pauses the worker and leaves that turn unfinished. Reply to resume
+the worker or cancel it by name.
+Neura can also call `subagent`, `subagent_message`, `subagent_wait`,
+`subagents_list` and `subagent_cancel` from its own Work turn. Inspect results
+before relying on them. A reviewer subagent uses the parent model and does not
+issue an independent review receipt.
+
+Children use the current workspace, provider and model. Their context starts
+with the delegated task and project guidance. Child conversations live in
+memory. Reports returned through parent tools can enter saved parent history.
+Exiting clears the registry and cancels active children. So does switching
+mode, model or conversation. A cancelled or failed Work turn also cancels
+the background runs and follow-ups it started. A session supports 12 named
+children, with up to three running at once and six turns per child. Scouts
+and reviewers get eight model steps per turn and three minutes per run,
+including any queued follow-up.
+Workers get 24 model steps per turn. Subagents run only in Work and cannot
+spawn their own children.
+
+The named-agent workflow was inspired by [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents).
 
 ## Manual verification
 

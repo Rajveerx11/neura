@@ -10,9 +10,9 @@ import { createHash } from 'node:crypto';
 import { lockSession } from './session-lock.ts';
 import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
-import { createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
+import { createReadOnlyTools, createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
 import { createConfiguredModel, isDirectGatewayModel, isGatewayProvider, listCodexModels, listGatewayModels, PROVIDER_KINDS, type ProviderConfig } from './providers.ts';
-import { DEFAULT_TURN_STEPS, runTurn, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit } from './runtime.ts';
+import { DEFAULT_TURN_STEPS, runTurn, ToolFeedbackError, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit, type RunTurnOptions } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
 import { RegressionMemory, LEARNING_INSTRUCTIONS } from './regression-memory.ts';
@@ -26,6 +26,7 @@ import { createTerminalUI, terminalText, commandMatches, type Mode, type Termina
 import { discoverSkills, skillName, skillRoots, skillTurn, SKILL_TOOL, withoutSkillResults, type InstalledSkill } from './skills.ts';
 import { clearDraft, createCommandKeyboard } from './prompt-input.ts';
 import { createSchedules, parseSchedule, scheduleTime } from './schedules.ts';
+import { createSubagents, formatSubagent, SUBAGENT_INSTRUCTIONS, SUBAGENT_TOOLS, type SubagentRequest } from './subagents.ts';
 export { terminalText } from './terminal-ui.ts';
 
 let asciiGlyphs = false;
@@ -95,6 +96,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   if (yoloFlag && values.mode !== undefined) throw new Error('--yolo cannot be combined with --mode.');
   let mode: Mode = yoloFlag ? 'yolo' : values.mode === 'learn' ? 'learn' : 'work';
   let generation = 0;
+  let wakeForSubagents: (() => void) | undefined;
+  const subagents = createSubagents(() => wakeForSubagents?.());
+  const advanceGeneration = () => { generation++; subagents.clear(); };
   const home = path.resolve(process.env.NEURA_HOME || path.join(os.homedir(), '.neura'));
   if (home.split(/[\\/]/).some(part => part.replace(/[. ]+$/, '').toLowerCase() === '.pi')) throw new Error('NEURA_HOME must be outside the legacy Pi profile.');
   const prompt = values.prompt ?? (positionals.length ? positionals.join(' ') : undefined);
@@ -156,8 +160,11 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   let abort: AbortController | undefined;
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
-  const onClose = () => { inputClosed.abort(); abort?.abort(); };
-  const onInterrupt = () => { if (abort) abort.abort(); else inputClosed.abort(); };
+  const onClose = () => { inputClosed.abort(); abort?.abort(); subagents.cancelRunning(); };
+  const onInterrupt = () => {
+    if (abort) abort.abort();
+    else { inputClosed.abort(); subagents.cancelRunning(); }
+  };
   process.on('SIGINT', onInterrupt);
   rl?.on('SIGINT', onInterrupt);
   rl?.once('close', onClose);
@@ -208,7 +215,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       if (id && ((next.modelRoute && next.modelRoute !== route) || (isGatewayProvider(config.provider) && !next.modelRoute))) {
         throw new Error('This history requires its original provider and model. Select that route before resuming, or start a new chat.');
       }
-      if (session) generation++; // Fence outstanding work before releasing the old writer lease.
+      if (session) advanceGeneration(); // Fence outstanding work before releasing the old writer lease.
       await pendingSessionSave?.catch(() => {});
       await releaseSession?.(); releaseSession = release;
       session = next; memory = next.messages;
@@ -229,7 +236,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     workspace: redactSensitiveText(workspace),
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
     sessionState, sessionId: session?.id, thinking: showReasoning, messageCount: memory.length, lastTurnUsage,
-    user: userName, branch: gitBranch(workspace),
+    user: userName, branch: gitBranch(workspace), runningSubagents: subagents.running(),
   });
   // Transient activity only belongs on terminals that can erase it.
   const erasable = interactive && process.env.TERM !== 'dumb';
@@ -258,7 +265,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       abort?.signal.throwIfAborted();
       await freshConversation(next);
       provider = next; modelExplicit = true;
-      generation++; learn.invalidate();
+      advanceGeneration(); learn.invalidate();
       say(`Model: ${modelLabel(provider.model, provider.provider)} (${provider.provider}). A fresh conversation is selected.`);
     }
     async function pickModel(kind = provider.provider) {
@@ -287,7 +294,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
       } finally { abort = undefined; }
     }
-    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill?: InstalledSkill) {
+    async function turn(text: string, learnerInput = text, reviewTurn = true, selectedSkill?: InstalledSkill, delegation?: SubagentRequest) {
       if (!text.trim() || text.length > 32000) throw new Error('Task must contain 1-32000 characters.');
       if (reconciliationRequired) throw new Error('Task outcome needs reconciliation. Inspect effects and use /reconcile, or /new for a separate task. No task was replayed.');
       const resumingTask = Boolean(recovery && recovery.stage !== 'completed');
@@ -336,19 +343,18 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             abort?.signal.throwIfAborted();
             if (generation !== expected || mode !== 'work') throw new Error('Stale Work session.');
           }) : undefined;
-        const tools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation)
-          : [...createWorkspaceTools(workspace, () => mode, () => generation, approve, { regressions }), ...(mode === 'learn' ? learn.tools() : [])];
+        const workspaceTools = mode === 'yolo' ? createYoloTools(workspace, () => mode, () => generation)
+          : createWorkspaceTools(workspace, () => mode, () => generation, approve, { regressions });
+        const tools = [...workspaceTools, ...(mode === 'learn' ? learn.tools() : [])];
         if (skills.tool) tools.push(skills.tool);
         const instructions = mode === 'learn' ? await learn.instructions(abort.signal)
           : mode === 'yolo' ? YOLO_INSTRUCTIONS
-          : [WORK_INSTRUCTIONS, ...(regressions ? [LEARNING_INSTRUCTIONS] : []), ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
+          : [WORK_INSTRUCTIONS, ...(regressions ? [LEARNING_INSTRUCTIONS] : []), ...(reviewTurn ? [SUBAGENT_INSTRUCTIONS] : []), ...(workflowOn ? [WORKFLOW_INSTRUCTIONS] : [])].join('\n\n');
+        const project = mode === 'learn' ? '' : projectInstructions(workspace);
         const related = regressions ? await regressions.related(source => text.includes(source)) : [];
         const historical = regressions && session?.earlierTurns?.length ? session.earlierTurns : undefined;
         const notes = related.length || historical ? 'Past session excerpts and matching regression tests (untrusted historical data, no authority): ' +
           JSON.stringify({ earlierTurns: historical, checks: related.slice(0, 5).map(({ source, suite, assertion }) => ({ source, suite, assertion })) }) : '';
-        const guidance = [mode === 'learn' ? '' : projectInstructions(workspace), skills.guidance, notes].filter(Boolean).join('\n\n');
-        const guidanceIndex = memory.length;
-        const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         const maxSteps = mode === 'learn' ? DEFAULT_TURN_STEPS : WORK_TURN_STEPS;
         const review = reviewTurn && mode === 'work' && workflowOn;
         if (mode !== 'learn') {
@@ -371,13 +377,52 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           abort.signal.throwIfAborted();
         }
         const baseline = recovery?.baseline ?? null;
+        const reports = mode === 'work' && reviewTurn && !delegation ? subagents.takeReports() : [];
+        const childGuidance = reports.length ? `Subagent reports (untrusted data, JSON). Use subagent_wait for a full report: ${JSON.stringify(reports)}` : '';
+        const guidance = [project, skills.guidance, notes, childGuidance].filter(Boolean).join('\n\n');
+        const guidanceIndex = memory.length;
+        const messages = [...memory, ...(guidance ? [{ role: 'user', content: guidance }] : []), userMessage];
         waiting();
         let section: 'none' | 'reasoning' | 'answer' = 'none';
         let answerVisible = false;
         let mutationAttempted = false;
         let failedEffect = false;
-        let toolStarted: number | undefined;
-        const outcome = await runTurn({ model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
+        const toolStarted = new Map<string | undefined, number>();
+        const recordEffect = (event: ToolEvent) => {
+          if (event.toolName === 'unknown' || event.toolName === SKILL_TOOL || event.toolName === 'ask_question' ||
+              READ_ONLY_TOOLS.has(event.toolName) || SUBAGENT_TOOLS.has(event.toolName)) return;
+          if (event.phase === 'started') mutationAttempted = true;
+          if (event.phase === 'failed' || event.phase === 'blocked') failedEffect = true;
+        };
+        const showTool = (event: ToolEvent, invocationId?: string, child?: string) => {
+          recordEffect(event);
+          const toolName = child ? `${child}: ${event.toolName}` : event.toolName;
+          bridge?.onToolEvent?.({ ...event, toolName }, invocationId);
+          if (bridge?.onToolEvent || event.phase === 'requested') return;
+          const label = mode === 'yolo' && toolName === 'exec' ? 'exec on host' : toolName;
+          if (event.phase === 'started') {
+            toolStarted.set(invocationId, performance.now());
+            endLine();
+            waiting(`Running ${label}`);
+            return;
+          }
+          endLine();
+          const started = toolStarted.get(invocationId);
+          toolStarted.delete(invocationId);
+          const elapsed = started === undefined ? undefined : performance.now() - started;
+          if (interactive) stdout.write(terminal().tool(label, event.phase, elapsed) + '\n');
+          else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(label, event.phase, elapsed) + '\n');
+          if (!abort?.signal.aborted) waiting();
+        };
+        const subagentScope = {
+          model, guidance: project, current: () => generation === expected && mode === 'work',
+          readTools: () => createReadOnlyTools(workspace, () => generation),
+          workTools: (name: string) => createWorkspaceTools(workspace, () => mode, () => generation, description => approve(`Subagent ${name}\n${description}`)),
+          onWorkerToolEvent: (name: string, event: ToolEvent, invocationId?: string) => showTool(event, invocationId, name),
+          reportWorker: Boolean(delegation),
+        };
+        if (mode === 'work' && reviewTurn) tools.push(...subagents.tools(subagentScope));
+        const turnOptions: RunTurnOptions = { model, messages, instructions, tools, signal: abort.signal, current: () => generation === expected, maxSteps, hideToolText: mode !== 'learn',
           onReasoning: showReasoning ? summary => {
             if (bridge?.onReasoning) { bridge.onReasoning(redactSensitiveText(summary, 8000)); return; }
             endLine();
@@ -396,28 +441,28 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             else { stdout.write(text); lineOpen = !text.endsWith('\n'); }
             section = 'answer'; answerVisible = true;
           },
-          onToolEvent: (event, invocationId) => {
-            bridge?.onToolEvent?.(event, invocationId);
-            const effect = event.toolName !== 'unknown' && event.toolName !== SKILL_TOOL && !READ_ONLY_TOOLS.has(event.toolName);
-            if (event.phase === 'started') mutationAttempted ||= effect;
-            if (event.phase === 'failed' || event.phase === 'blocked') failedEffect ||= effect;
-            if (bridge?.onToolEvent || event.phase === 'requested') return;
-            const name = mode === 'yolo' && event.toolName === 'exec' ? 'exec on host' : event.toolName;
-            if (event.phase === 'started') {
-              toolStarted = performance.now();
-              endLine();
-              waiting(`Running ${name}`);
-              return;
-            }
-            endLine();
-            const elapsed = toolStarted === undefined ? undefined : performance.now() - toolStarted;
-            toolStarted = undefined;
-            if (interactive) stdout.write(terminal().tool(name, event.phase, elapsed) + '\n');
-            else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(name, event.phase, elapsed) + '\n');
-            if (!abort?.signal.aborted) waiting();
-          } });
+          onToolEvent: showTool,
+        };
+        let outcome: Awaited<ReturnType<typeof runTurn>>;
+        if (delegation) {
+          let report: string;
+          let actionFailed: boolean;
+          try {
+            const result = await subagents.request(delegation, subagentScope, abort.signal);
+            report = formatSubagent(result);
+            actionFailed = !['completed', 'running'].includes(result.state);
+          } catch (error) {
+            if (!(error instanceof ToolFeedbackError)) throw error;
+            report = error.message;
+            actionFailed = true;
+          }
+          abort.signal.throwIfAborted();
+          turnOptions.onText?.(report);
+          outcome = { text: report, messages: memory, stopReason: 'finished', actionFailed };
+        } else outcome = await runTurn(turnOptions);
         endLine();
         const stopped = outcome.stopReason !== 'finished';
+        const waitingWorker = subagents.waitingWorker(abort.signal);
         if (regressions?.outstanding.size) {
           failedEffect = true;
           say('A focused regression check still failed or could not finish.');
@@ -456,6 +501,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         } else if (mode !== 'learn' && failedEffect) {
           fixStopped = true;
           say(`Task unfinished after a failed ${mode === 'yolo' ? 'YOLO' : 'Work'} action. Inspect its effects before continuing.`);
+        } else if (waitingWorker) {
+          fixStopped = true;
+          say(`Worker ${waitingWorker} needs a reply. Use /subagent wait ${waitingWorker} to read its question.`);
         } else if (review && baseline) {
           if (!await workflow(text, baseline, false)) actionFailed = true;
         }
@@ -479,6 +527,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         return succeeded;
       } catch (error) {
         endLine();
+        if (owned && abort) subagents.cancelRunning(abort.signal);
         if (taskStarted && generation === expected) {
           reconciliationRequired = true;
           recovery = { ...recovery!, stage: 'reconcile' };
@@ -559,7 +608,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         installedSkills = discoverSkills(roots);
         if (!name) {
           if (!installedSkills.length) say('No installed skills found. Add a package with SKILL.md under .agents/skills, .claude/skills or .neura/skills.');
-          else for (const skill of installedSkills) say(`$${skill.name} — ${skill.description || 'Installed skill'}`);
+          else for (const skill of installedSkills) say(`$${skill.name} â€” ${skill.description || 'Installed skill'}`);
           return true;
         }
         const skill = installedSkills.find(entry => entry.name === name);
@@ -616,6 +665,26 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             say('This receipt is session metadata, not signed attestation, automatic approval or task completion. Detector-only is never verified.');
           }
         } finally { abort = undefined; }
+      } else if (command === 'subagent') {
+        if (mode !== 'work') throw new Error('Subagents require Work mode.');
+        const [, action = 'list', detail = ''] = /^(\S+)(?:\s+([\s\S]*))?$/.exec(rest.trim()) ?? [];
+        if (action === 'list' && !detail) {
+          for (const [role, description] of Object.entries(subagents.roles())) say(`${role}: ${description}`);
+          for (const agent of subagents.list()) say(formatSubagent(agent));
+        } else if (action === 'cancel' && /^\S+$/.test(detail)) {
+          say(subagents.cancel(detail));
+        } else if (action === 'wait' && /^\S+$/.test(detail)) {
+          abort = new AbortController();
+          try { say(formatSubagent(await subagents.wait(detail, abort.signal))); }
+          finally { abort = undefined; }
+        } else if (action === 'message') {
+          const match = /^(\S+)\s+([\s\S]+)$/.exec(detail);
+          if (!match) throw new Error('Use /subagent message NAME TEXT.');
+          await turn(text, text, true, undefined, { name: match[1], message: match[2] });
+        } else {
+          if (!Object.hasOwn(subagents.roles(), action) || !detail.trim()) throw new Error('Use /subagent ROLE TASK, list, wait NAME, message NAME TEXT or cancel NAME.');
+          await turn(text, text, true, undefined, { role: action, task: detail });
+        }
       } else if (command === 'schedule' || command === 'loop') {
         if (!interactive || mode !== 'work') throw new Error('Schedules require an interactive Work terminal.');
         if (command === 'schedule' && (!rest || rest === 'list')) {
@@ -625,7 +694,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             if (!canRunScheduled()) say('Schedules paused. Resolve the current task to resume.');
             for (const job of jobs) {
               const label = terminalText(redactSensitiveText(job.task, 120)).replace(/\s+/g, ' ').trim();
-              say(`#${job.id} · ${scheduleTime(job)}${job.interval ? ' · repeats' : ''} · ${label}`);
+              say(`#${job.id} Â· ${scheduleTime(job)}${job.interval ? ' Â· repeats' : ''} Â· ${label}`);
             }
           }
         } else if (command === 'schedule' && rest.startsWith('cancel ')) {
@@ -636,7 +705,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           if (!canRunScheduled()) throw new Error('Resolve the current task before scheduling a new one.');
           if (command === 'loop' && !rest) throw new Error('Use /loop DURATION TASK.');
           const job = schedules.add(parseSchedule(command === 'loop' ? `every ${rest}` : rest));
-          say(`Schedule #${job.id} · ${scheduleTime(job)}`);
+          say(`Schedule #${job.id} Â· ${scheduleTime(job)}`);
         }
       } else if (command === 'workflow') {
         if (rest && !['on', 'off'].includes(rest)) throw new Error('Use /workflow on or /workflow off.');
@@ -680,14 +749,15 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           const next: ProviderConfig = { provider: 'openai-codex', model: remembered };
           await freshConversation(next);
           provider = next; modelExplicit = Boolean(remembered);
-          generation++; learn.invalidate();
+          advanceGeneration(); learn.invalidate();
           say('Neura subscription login saved. A fresh conversation is selected; no Pi credentials were imported.');
         } finally { abort = undefined; }
       } else if (command === 'logout') {
         if (rest.trim()) throw new Error('/logout accepts no arguments.');
+        subagents.clear();
         await logoutCodex();
         await freshConversation();
-        generation++; learn.invalidate(true);
+        advanceGeneration(); learn.invalidate(true);
         say('Neura subscription credentials removed locally. Remote tokens were not revoked.');
       } else if (command === 'mode') {
         if (!['work', 'learn', 'yolo'].includes(rest)) throw new Error('Only /mode work, /mode learn and /mode yolo are available.');
@@ -705,7 +775,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         previousAbort?.abort();
         while (pendingSessionSave) await pendingSessionSave.catch(() => {});
         if (recovery?.stage === 'running') reconciliationRequired = true;
-        generation++; restoreTaskBaseline(); learn.invalidate(); mode = rest as Mode; say(`Mode: ${mode}`); bridge?.onModeChange?.(mode);
+        advanceGeneration(); restoreTaskBaseline(); learn.invalidate(); mode = rest as Mode; say(`Mode: ${mode}`); bridge?.onModeChange?.(mode);
         recoveryNotice();
       } else if (command === 'learn') {
         if (mode !== 'learn') throw new Error('Enter /mode learn first.');
@@ -715,7 +785,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } else if (command === 'new' || command === 'clear') {
         if (rest.trim()) throw new Error(`Use /${command} without arguments.`);
         await freshConversation();
-        generation++; learn.invalidate(true);
+        advanceGeneration(); learn.invalidate(true);
         sessionBaseline = undefined; lastReview = undefined;
         lastVerification = undefined; verificationGeneration = -1; baselineWarned = false;
         say(command === 'clear' ? 'Context cleared. New chat started; saved chats kept.' : 'New session; mode authority and learning state refreshed.');
@@ -726,7 +796,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       } else if (command === 'resume') {
         if (values['no-history']) throw new Error('History disabled.');
         await selectSession(rest);
-        generation++; restoreTaskBaseline(); lastReview = undefined; lastVerification = undefined; verificationGeneration = -1;
+        advanceGeneration(); restoreTaskBaseline(); lastReview = undefined; lastVerification = undefined; verificationGeneration = -1;
         learn.invalidate(true); mode = 'work'; say('Workspace history resumed in Work. Use /mode learn and explicitly /learn resume to restore a lesson.'); recoveryNotice(); bridge?.onModeChange?.(mode);
       } else if (command === 'reconcile') {
         if (rest.trim()) throw new Error('Use /reconcile without arguments after inspecting the workspace and any external effects.');
@@ -742,7 +812,15 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       return true;
     }
     if (bridge) { await bridge.serve({ execute: input, cancel: () => abort?.abort() }); return; }
-    if (prompt !== undefined) { await input(prompt); return; }
+    if (prompt !== undefined) {
+      await input(prompt);
+      await subagents.settle();
+      for (const agent of subagents.takeNotices()) {
+        say(formatSubagent(agent));
+        if (agent.state !== 'completed') process.exitCode = 1;
+      }
+      return;
+    }
     if (interactive) stdout.write(terminal().status(statusSnapshot()) + '\n');
     let scheduleGeneration = generation;
     for (;;) {
@@ -750,8 +828,15 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         schedules.clear();
         scheduleGeneration = generation;
       }
+      for (const { text: _report, ...agent } of subagents.takeNotices()) say(`${formatSubagent(agent)} /subagent wait ${agent.name}`);
       let text: string | undefined;
       const wake = new AbortController();
+      let agentWake = false;
+      wakeForSubagents = () => {
+        if (rl!.line || inputClosed.signal.aborted) return;
+        agentWake = true;
+        wake.abort();
+      };
       const stopTimer = canRunScheduled() ? schedules.wake(() => {
         if (rl!.line || inputClosed.signal.aborted) return false;
         wake.abort();
@@ -761,8 +846,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
       catch (error) {
         if (inputClosed.signal.aborted) break;
         if (!wake.signal.aborted) throw error;
-      } finally { stopTimer?.(); }
-      const job = text === undefined ? schedules.takeDue() : undefined;
+      } finally { wakeForSubagents = undefined; stopTimer?.(); }
+      const job = text === undefined && !agentWake ? schedules.takeDue() : undefined;
       try {
         if (job) {
           say(`Running schedule #${job.id}.`);
@@ -784,7 +869,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         if (provider.provider === 'openai-codex' && message.includes('rejected request field: reasoning.summary')) say('This model rejected summaries. Use /thinking off before a manual retry. No task was replayed.');
       }
     }
-  } finally { generation++; learn.invalidate(true); process.off('SIGINT', onInterrupt); rl?.close(); await releaseSession?.(); }
+  } finally { advanceGeneration(); learn.invalidate(true); process.off('SIGINT', onInterrupt); rl?.close(); await releaseSession?.(); }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { failure(error instanceof Error ? error.message : 'Neura failed.'); process.exitCode = 1; });
