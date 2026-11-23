@@ -440,6 +440,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
             if (!text) return;
             if (section !== 'answer') {
               endLine();
+              // A blank row separates the answer from the prompt and tool rows above it.
+              if (interactive) stdout.write('\n');
               // Label the answer only where it must be told apart from a labelled reasoning summary.
               if (section === 'reasoning') stdout.write(terminal().boundary('answer') + '\n');
             }

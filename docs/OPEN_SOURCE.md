@@ -11,7 +11,7 @@ and redistribution terms remain undocumented. The historical artwork's terms
 do not clear the new assets. See [releasing](RELEASING.md) and
 [dependency review](MASTRA_V1_DEPENDENCIES.md).
 
-The latest published release is historical Pi `v2.5.1`. `v2.6.0-rc.2` is a
+The latest published release is historical Pi `v2.5.1`. `v2.6.0-rc.3` is a
 source prerelease. Current user/contributor docs describe Neura's own agent loop. Old exported
 plans and marketing graphics have frozen-history links instead of checkout copies.
 GitHub About/topics and both existing release descriptions were reconciled with
@@ -53,7 +53,7 @@ and production readiness are separate decisions.
 - [x] Historical release records remain labelled with channel that applied when
       published.
 
-The `2.6.0-rc.2` source prerelease includes Work, Learn, YOLO and the
+The `2.6.0-rc.3` source prerelease includes Work, Learn, YOLO and the
 23-suite verifier. The earlier Pi `1.3.0` candidate is superseded and frozen in Git history. Candidate metadata and a GitHub draft do not establish a
 published release or completion of the remaining gates.
 
