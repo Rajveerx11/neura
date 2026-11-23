@@ -150,7 +150,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const composer = rl && keyboard ? keyboard.attach(rl, () => terminal(), line => {
     if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
     return commandMatches(line, installedSkills);
-  }, () => terminal().statusBar(statusSnapshot())) : undefined;
+  }, shell => terminal().statusBar(statusSnapshot(), shell)) : undefined;
   let pauseActivity = () => {};
   let abort: AbortController | undefined;
   const inputClosed = new AbortController();

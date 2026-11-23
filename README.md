@@ -54,7 +54,8 @@ For local inference, OpenAI, Anthropic or gateways, see [providers](docs/USAGE.m
 
 Type `/` to browse commands or `$` to browse installed skills. Start a line
 with `!` to run your own shell command in the workspace, such as `!git status`.
-It runs as you, outside the sandbox, and its output joins the conversation. Start a new
+The prompt box turns pink and reads `shell >` while the line is a command. It runs
+as you, outside the sandbox, and its output joins the conversation. Start a new
 conversation with `/new`; saved chats remain available through `/sessions`.
 
 ![Neura's slash-command menu in a native Windows terminal.](assets/screenshots/terminal-commands.png)
