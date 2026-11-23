@@ -26,9 +26,12 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   stdin.once('end', onEnd);
 
   function attach(rl: Interface, ui: () => ReturnType<typeof createTerminalUI>, matches: (line: string) => MenuItem[] = commandMatches,
-    footer: () => string[] = () => []) {
-    const makeFrame = (query: string) => stdout.columns >= 32 && stdout.rows >= 4 ? ui().composer(query) : undefined;
+    footer: (shell: boolean) => string[] = () => []) {
+    // A draft starting with ! is a shell command (see cli.ts); show it as a distinct mode, like Claude Code's bash mode.
+    let shell = false;
+    const makeFrame = (query: string) => stdout.columns >= 32 && stdout.rows >= 4 ? ui().composer(query, shell) : undefined;
     let prompt: string | undefined;
+    const current = () => shell ? ui().shellPrompt() : prompt!;
     let frame: ReturnType<typeof makeFrame>;
     let items: MenuItem[] = [];
     let selected = 0;
@@ -61,6 +64,12 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       if (closed || prompt === undefined) return;
       clear();
       const line = rl.line;
+      if (line.startsWith('!') !== shell) {
+        shell = !shell;
+        frame = makeFrame(current());
+        rl.setPrompt(frame?.query ?? current());
+        rl.prompt(true);
+      }
       if (line !== lastLine) { selected = 0; lastLine = line; if (line !== dismissed) dismissed = undefined; }
       const cursor = rl.getCursorPos(), end = endPosition();
       const singleRow = end.rows === (frame ? 1 : 0);
@@ -76,7 +85,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       const rows = bottom ? [bottom] : [];
       if (items.length) rows.push(...ui().commandMenu(items, selected, menuRows));
       // The status bar yields to the command menu, like the composer's own hint rows.
-      else if (bottom) rows.push(...footer().slice(0, Math.max(0, room - rows.length)));
+      else if (bottom) rows.push(...footer(shell).slice(0, Math.max(0, room - rows.length)));
       if (!side && !rows.length) return;
       const distance = end.rows - cursor.rows;
       stdout.write(moveRows(distance) + side + rows.map(row => '\r\n' + row).join('') +
@@ -110,7 +119,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
     // Only an unmodified Return submits readline's question, even when a chunk contains several keys.
     const beforeKeypress = (_text: string, key?: { name?: string; meta?: boolean; ctrl?: boolean; shift?: boolean }) => {
       if (frame && prompt !== undefined && key && !key.meta && !key.ctrl && !key.shift &&
-        (key.name === 'return' || key.name === 'enter')) unframe(prompt);
+        (key.name === 'return' || key.name === 'enter')) { shell = rl.line.startsWith('!'); unframe(current()); }
     };
     // Readline registered its keypress listener first, so this runs after it has updated `rl.line`.
     const onKeypress = () => {
@@ -119,8 +128,8 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
     // Change the query before readline measures and redraws it for the new width.
     const onResizeStart = () => {
       if (prompt === undefined) return;
-      frame = makeFrame(prompt);
-      rl.setPrompt(frame?.query ?? prompt);
+      frame = makeFrame(current());
+      rl.setPrompt(frame?.query ?? current());
     };
     const onResize = () => { shown = false; update(); };
     input.prependListener('keypress', beforeKeypress);
@@ -143,6 +152,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       async question(query: string, options: { signal: AbortSignal }) {
         if (closed || options.signal.aborted) return rl.question(query, options);
         prompt = query;
+        shell = false;
         frame = makeFrame(query);
         dismissed = undefined;
         let erasedRows = 0;

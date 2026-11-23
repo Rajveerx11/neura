@@ -6,7 +6,7 @@ export function terminalText(text: string): string {
   return stripVTControlCharacters(text).replace(/[\u2028\u2029]/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
-type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error' | 'code' | 'ok';
+type Tone = 'copper' | 'bone' | 'dim' | 'warning' | 'error' | 'code' | 'ok' | 'shell';
 export type Mode = 'work' | 'learn' | 'yolo';
 type ToolOutcome = 'returned' | 'failed' | 'blocked' | 'cancelled';
 export type TerminalOptions = { isTTY?: boolean; columns?: number; env?: Record<string, string | undefined>; ascii?: boolean };
@@ -78,7 +78,7 @@ export type TerminalStatus = {
   user?: string; branch?: string;
 };
 const palette: Record<Tone, string> = {
-  copper: '217;120;65', bone: '232;226;216', dim: '122;130;139', warning: '211;166;74', error: '223;107;99', code: '134;167;215', ok: '126;186;110',
+  copper: '217;120;65', bone: '232;226;216', dim: '122;130;139', warning: '211;166;74', error: '223;107;99', code: '134;167;215', ok: '126;186;110', shell: '253;93;177',
 };
 const visible = (text: string) => cells(stripVTControlCharacters(text));
 /** Labels cannot create extra status rows or inject terminal commands. */
@@ -334,13 +334,15 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       lines.push(paint('  ' + shortLabel(`${more}${plainGlyphs ? 'Up/Down' : '↑↓'} select · Tab complete · Enter run · Esc close`, width - 3), 'dim'));
       return lines;
     },
-    composer(prompt: string) {
+    /** The frame turns pink while the draft is a `!` shell command, like Claude Code's bash mode. */
+    composer(prompt: string, shell = false) {
       const edge = box.h.repeat(Math.max(0, columns - 3));
-      const side = paint(box.v, 'dim');
+      const tone = shell ? 'shell' : 'dim';
+      const side = paint(box.v, tone);
       return {
-        query: paint(box.tl + edge + box.tr, 'dim') + '\r\n' + side + ' ' + prompt,
+        query: paint(box.tl + edge + box.tr, tone) + '\r\n' + side + ' ' + prompt,
         side,
-        bottom: paint(box.bl + edge + box.br, 'dim'),
+        bottom: paint(box.bl + edge + box.br, tone),
       };
     },
     // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
@@ -353,7 +355,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       return paint(mode, state.mode === 'yolo' ? 'error' : 'copper') + paint(' · ' + model, 'dim');
     },
     /** Two rows under the composer: user │ model │ ctx │ branch, then the mode. Low-priority fields drop first. */
-    statusBar(state: TerminalStatus): string[] {
+    statusBar(state: TerminalStatus, shell = false): string[] {
       if (rowWidth < 12) return [];
       const sep = plainGlyphs ? ' | ' : ' │ ';
       const ctx = reportedUsage(state.lastTurnUsage)?.contextTokens;
@@ -371,6 +373,8 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       fields[modelAt()][0] = shortLabel(fields[modelAt()][0], budget(), ellipsis);
       const line = fields.map(([text, tone]) => paint(text, tone)).join(paint(sep, 'dim'));
       const pointer = plainGlyphs ? '>> ' : '›› ';
+      // Plain words, so shell mode stays visible under NO_COLOR.
+      if (shell) return [line, paint(shortLabel(pointer + ['! shell mode', 'runs as you, no sandbox', 'delete ! to exit'].join(separator), rowWidth, ellipsis), 'shell')];
       const mode = state.mode === 'yolo' ? ['YOLO', 'DANGER', 'no sandbox, no approvals'].join(separator) : `${state.mode} mode`;
       const agents = state.runningSubagents
         ? `${separator} ${state.runningSubagents} ${state.runningSubagents === 1 ? 'subagent' : 'subagents'} running` : '';
@@ -389,6 +393,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       ].map(terminalLabel).join('\n') + '\n' + paint(prose('Development/testing only. Distribution is not cleared.'), 'dim');
     },
     prompt(mode: Mode) { return paint(`${mode} > `, mode === 'yolo' ? 'error' : 'copper'); },
+    shellPrompt() { return paint('shell > ', 'shell'); },
     // Move whole metadata fields to their own line when space runs out. Never shorten values.
     metadata(entries: [string, string][]) {
       const lines: string[] = [];
