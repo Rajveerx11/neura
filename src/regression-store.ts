@@ -3,7 +3,6 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { sessionDirectory } from './session.ts';
-import { lockSession } from './session-lock.ts';
 import { SECRET_PATH, PROTECTED_CONTROL } from '../agent/neura/action-paths.ts';
 import { redactSensitiveText } from '../agent/neura/redaction.ts';
 import { authorizePlanPath } from '../agent/neura/plan-files.ts';
@@ -24,9 +23,18 @@ const lesson = z.strictObject({
 export type Lesson = z.infer<typeof lesson>;
 const MAX_LESSONS = 48;
 const schema = z.strictObject({ version: z.literal(1), lessons: z.array(lesson).max(MAX_LESSONS) });
-// All sessions in this private workspace directory coordinate on one lease.
-const STORE_LOCK = 'cc43bf39-4110-4af1-8c4f-42a0ff4cae12';
 const MAX_BYTES = 128 * 1024;
+
+// SQLite holds an OS file lock for the transaction. The empty file carries no lesson data.
+function writerFile(root: string) {
+  const filename = path.join(root, 'writer.sqlite');
+  try { fs.closeSync(fs.openSync(filename, 'wx', 0o600)); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+  const stat = fs.lstatSync(filename);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size !== 0 ||
+      ['-journal', '-wal', '-shm'].some(suffix => fs.lstatSync(filename + suffix, { throwIfNoEntry: false }))) throw new Error('Unsafe lesson writer lock.');
+  return { filename, stat };
+}
 
 function read(root: string): Lesson[] {
   const filename = path.join(root, 'lessons.json');
@@ -52,9 +60,17 @@ export async function loadLessons(directory: string): Promise<Lesson[]> {
 export async function recordLesson(directory: string, previous: Lesson | undefined, next: Lesson, fence: () => void) {
   next = lesson.parse(next);
   const expected = JSON.stringify(previous);
+  const { DatabaseSync } = await import('node:sqlite');
   const root = await sessionDirectory(directory, true);
-  const release = await lockSession(root, STORE_LOCK);
+  const parent = fs.lstatSync(root);
+  const { filename, stat } = writerFile(root);
+  const lease = new DatabaseSync(filename);
   try {
+    lease.exec('PRAGMA journal_mode=MEMORY; BEGIN EXCLUSIVE');
+    const locked = fs.lstatSync(filename);
+    const current = fs.lstatSync(root);
+    if (locked.dev !== stat.dev || locked.ino !== stat.ino || locked.nlink !== 1 ||
+        current.dev !== parent.dev || current.ino !== parent.ino) throw new Error('Lesson directory or writer lock changed.');
     const rows = read(root);
     const index = rows.findIndex(r => r.source === next.source && r.suite === next.suite);
     if (JSON.stringify(rows[index]) !== expected) throw new Error('Another session updated this lesson. Recheck it.');
@@ -62,12 +78,11 @@ export async function recordLesson(directory: string, previous: Lesson | undefin
     const bytes = JSON.stringify({ version: 1, lessons: [...rows, next].slice(-MAX_LESSONS) });
     if (Buffer.byteLength(bytes) > MAX_BYTES) throw new Error('Lesson store exceeds its limit.');
     const tmp = path.join(root, randomUUID() + '.tmp');
-    await release.assertOwned();
     fence();
     const fd = fs.openSync(tmp, 'wx', 0o600);
     try {
       try { fs.writeFileSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
       fs.renameSync(tmp, path.join(root, 'lessons.json'));
     } finally { fs.rmSync(tmp, { force: true }); }
-  } finally { await release(); }
+  } finally { lease.close(); }
 }
