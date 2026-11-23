@@ -1,5 +1,24 @@
 # Neura status
 
+## Work regression memory
+
+Work records a candidate when a named, top-level Node test fails an assertion
+in its read-only WSL sandbox. A user correction or review finding prompts the
+agent to reproduce the failure. The same suite must pass with the same set of
+test names after the selected source changes. The other files in the workspace
+snapshot must match. Skips, setup errors and interrupted runs cannot promote
+a lesson. Projects with other test frameworks still use ordinary Work checks.
+
+Verified lessons live under the workspace’s private sessions directory. Work
+recalls them when a task names the source or the agent reads it, and reruns
+matching suites after an edit. A new assertion failure suspends the lesson.
+An unfinished task keeps the identities of its failed checks across restarts.
+Each needs a passing rerun of the same suite and named cases before completion.
+This evidence covers the focused test only. It cannot approve a tool or change
+the result of `/verify`. Learn, YOLO and `--no-history` do not load the store.
+When Work trims old turns, it keeps up to eight short, redacted excerpts in that
+session. Tool outputs and reasoning are excluded from excerpts.
+
 Test policy, 2026-11-17: repository test sources, fixtures and test-only runners
 were removed at the owner request. CI checks repository policy, source types,
 dependencies and documentation. Runtime regression tests are unavailable.

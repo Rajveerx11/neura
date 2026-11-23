@@ -12,6 +12,12 @@ reads and edits your project, runs commands in an offline sandbox, and reviews
 changes. **Learn** turns local documents and questions into cited lessons and
 exercises. Neura runs its own agent loop, with neither Mastra nor Pi.
 
+Work can remember a focused Node regression in the same workspace. On a bug or
+correction, the agent runs a named assertion before the fix. Editing its source
+reruns the suite in a read-only sandbox. A matching pass saves the lesson for
+future sessions. A later failure makes it provisional again. `--no-history`
+disables lesson storage and recall.
+
 [Documentation](docs/README.md) · [Usage](docs/USAGE.md) · [T3 Code](docs/T3_CODE.md) ·
 [Changelog](docs/CHANGELOG.md) · [Security](SECURITY.md)
 

@@ -22,6 +22,13 @@ Their success is not runtime, browser, sandbox or secret-scanner regression evid
 CodeQL, dependency review, dependency/signature audits, complete-history secret
 scanning and the disposable development-launcher check remain configured.
 
+On Windows, CI starts Work through the installed launcher in a temporary
+workspace. It checks that `--no-history` creates no session storage, then
+creates and resumes a saved session. These commands run offline. The separate
+fail/fix/recall checks for regression memory still run outside this repository.
+Annotated release tags on main pass through the same CI workflow before
+packaging. The release also requires the full runtime suite (`npm test`).
+
 Separate checks remain available:
 
 | Command | Scope |
