@@ -10,9 +10,9 @@ generated artwork, model output or replacement text was composited into the imag
 
 | Asset | State shown |
 | --- | --- |
-| [terminal-commands.png](terminal-commands.png) | `/` opens the live command menu |
-| [terminal-skills.png](terminal-skills.png) | `$` opens the installed-skill menu, reading this PC's shared skill directories |
-| [terminal-clear.png](terminal-clear.png) | `/clear` confirms a new chat and returns to the Work prompt |
+| [terminal-command-menu.png](terminal-command-menu.png) | `/` opens the live command menu |
+| [terminal-skill-menu.png](terminal-skill-menu.png) | `$` opens the installed-skill menu, reading this PC's shared skill directories |
+| [terminal-clear-chat.png](terminal-clear-chat.png) | `/clear` confirms a new chat and returns to the Work prompt |
 | [terminal-shell.png](terminal-shell.png) | Typing `!git status` switches the prompt into pink shell mode (not submitted) |
 
 The process used an empty task-owned `neura-demo` workspace, an isolated
