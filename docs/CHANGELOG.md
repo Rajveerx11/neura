@@ -8,6 +8,14 @@ Latest published release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-23: status bar and your own shell commands
+
+- A status bar under the prompt shows user, model, context tokens and branch, then the mode.
+- Start a line with `!` to run your own command in the workspace, as you, outside the
+  sandbox and approvals. Output joins the conversation. Interactive terminal only.
+- While the line starts with `!`, the prompt box turns pink, the prompt reads `shell >`
+  and the status row names shell mode.
+
 ### 2026-11-22: tool progress, task recovery and release metadata
 
 - Terminal activity names the running tool and shows its outcome without exposing
