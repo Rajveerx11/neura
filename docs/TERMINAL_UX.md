@@ -301,9 +301,9 @@ support, submit `$` for a text list. `$NAME TASK` loads that installed package's
 `SKILL.md` as untrusted guidance for the request, not a new permission grant.
 No skill scripts run automatically. See [skill roots and limits](SKILLS.md).
 
-Windows Terminal captures show the [command menu](../assets/screenshots/terminal-commands.png),
-[installed-skill picker](../assets/screenshots/terminal-skills.png),
-[`/clear` confirmation](../assets/screenshots/terminal-clear.png) and
+Windows Terminal captures show the [command menu](../assets/screenshots/terminal-command-menu.png),
+[installed-skill picker](../assets/screenshots/terminal-skill-menu.png),
+[`/clear` confirmation](../assets/screenshots/terminal-clear-chat.png) and
 [shell mode](../assets/screenshots/terminal-shell.png).
 [Provenance and reproduction](../assets/screenshots/README.md#native-terminal-captures)
 distinguish these running-CLI captures from fixture-rendered previews.

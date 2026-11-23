@@ -64,7 +64,7 @@ The prompt box turns pink and reads `shell >` while the line is a command. It ru
 as you, outside the sandbox, and its output joins the conversation. Start a new
 conversation with `/new`; saved chats remain available through `/sessions`.
 
-![Neura's slash-command menu in Windows Terminal.](assets/screenshots/terminal-commands.png)
+![Neura's slash-command menu in Windows Terminal.](assets/screenshots/terminal-command-menu.png)
 
 ![Shell mode: a line starting with ! turns the prompt box pink.](assets/screenshots/terminal-shell.png)
 
