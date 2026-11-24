@@ -8,6 +8,13 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-24: context window in the status bar
+
+- The status bar shows `ctx USED / WINDOW tokens`, for example `ctx 103.3k / 500k tokens`.
+  The window comes from the provider's catalog (Codex, OpenRouter, AIRouter), a local
+  llama.cpp server, or models.dev for the OpenAI and Anthropic APIs. Unlisted models stay
+  unknown. `/status` adds the percentage used.
+
 ### 2026-11-24: paste images
 
 - `Alt+V` (or a forwarded `Ctrl+V`) pastes a clipboard image or copied image file as

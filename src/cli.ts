@@ -11,7 +11,7 @@ import { lockSession } from './session-lock.ts';
 import { loginCodex, logoutCodex } from './auth.ts';
 import { createLearnWorkshop } from './learn.ts';
 import { createReadOnlyTools, createWorkspaceTools, projectInstructions, READ_ONLY_TOOLS, WORK_INSTRUCTIONS, assertWorkspaceOutsideNeuraHome } from './work.ts';
-import { createConfiguredModel, isDirectGatewayModel, isGatewayProvider, listCodexModels, listGatewayModels, PROVIDER_KINDS, type ProviderConfig } from './providers.ts';
+import { contextWindow, createConfiguredModel, isDirectGatewayModel, isGatewayProvider, listCodexModels, listGatewayModels, PROVIDER_KINDS, type ProviderConfig } from './providers.ts';
 import { DEFAULT_TURN_STEPS, runTurn, ToolFeedbackError, WORK_TURN_STEPS, type TurnUsage, type ToolEvent, type TurnLimit, type RunTurnOptions } from './runtime.ts';
 import { verifyWorkspace, workspaceReceiptStatus, type WorkspaceReceipt } from './verification.ts';
 import { loadWorkspaceReceipt, saveWorkspaceReceipt } from './verification-store.ts';
@@ -278,7 +278,17 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (!values['no-history']) await selectSession(undefined, config);
     else { memory = []; recovery = undefined; reconciliationRequired = false; restoreTaskBaseline(); sessionState = 'new'; lastTurnUsage = undefined; }
   }
+  // One catalog lookup per route; the status bar shows the size once it arrives. A failed lookup stays unknown.
+  const contextWindows = new Map<string, number | undefined>();
+  const windowFor = (config: ProviderConfig) => {
+    const key = JSON.stringify([config.provider, config.model, config.baseURL]);
+    if (!config.model || contextWindows.has(key)) return contextWindows.get(key);
+    contextWindows.set(key, undefined);
+    contextWindow(config).then(size => contextWindows.set(key, size), () => {});
+    return undefined;
+  };
   const statusSnapshot = (): TerminalStatus => ({
+    contextWindow: windowFor(provider),
     mode, provider: provider.provider, model: modelLabel(provider.model, provider.provider),
     workspace: redactSensitiveText(workspace),
     history: values['no-history'] ? 'off' : historySaveFailed ? 'save failed' : 'on',
