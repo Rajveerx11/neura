@@ -279,7 +279,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/status', 'Mode, model, workspace, history and last-turn usage. Context window stays unknown unless verified.'],
         ['/clear · /new', 'Clear conversation context and start a new chat. Saved chats remain available; mode and model stay selected.'],
         ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
-        ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault.'],
+        ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault, set in ~/.neura/<mode>-vault.json. A mode without a vault does not learn.'],
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
         ['!COMMAND', `Run your own ${process.platform === 'win32' ? 'PowerShell' : 'bash'} command in the workspace, as you, with no sandbox or approval. Output is shown and added to the conversation. No interactive input; 10-minute limit.`],

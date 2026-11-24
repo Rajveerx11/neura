@@ -64,7 +64,8 @@ function minimizedText(value: string, limit: number): string {
 export function safeText(value: string, limit: number): string {
   return minimizedText(value, limit)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/!/g, "\\!").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+    // Escape backslashes first, or an input `\[` would become `\\[` and reopen the link.
+    .replace(/\\/g, "\\\\").replace(/!/g, "\\!").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
 }
 function slug(value: string): string {
   const result = value.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
