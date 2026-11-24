@@ -119,7 +119,7 @@ export function serveAcp(input = stdin, output = stdout) {
           if (session) session.currentTool = event.phase === 'started' ? toolCallId : undefined;
           const status = event.phase === 'started' ? 'in_progress' : event.phase === 'returned' ? 'completed' : 'failed';
           send({ method: 'session/update', params: { sessionId, update: { sessionUpdate: first ? 'tool_call' : 'tool_call_update', toolCallId,
-            ...(first ? { title: event.toolName, kind: 'other' } : {}), status } } });
+            ...(first ? { title: event.detail ? `${event.toolName}: ${event.detail}` : event.toolName, kind: 'other' } : {}), status } } });
           if (event.phase !== 'started') toolCalls.delete(toolCallId);
         },
         serve: async controller => { ready(controller); await lifetime; },

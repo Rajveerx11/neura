@@ -281,7 +281,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
         ['!COMMAND', `Run your own ${process.platform === 'win32' ? 'PowerShell' : 'bash'} command in the workspace, as you, with no sandbox or approval. Output is shown and added to the conversation. No interactive input; 10-minute limit.`],
-        ['/help · /quit', 'Show help or exit (bare exit or quit also works). Ctrl+C cancels active work; at the input prompt it exits.'],
+        ['/help · /quit', 'Show help or exit (bare exit or quit also works). Press Ctrl+C three times within 2 seconds to cancel active work, or to exit at the input prompt. Fewer presses only show a reminder, so copying text is safe.'],
       ]),
     ];
     if (options) groups.splice(1, 0,
@@ -315,7 +315,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
     activity(frame: number, seconds: number, label = 'Waiting for model') {
       if (rowWidth < 4) return '';
       const glyph = spinner[frame % spinner.length];
-      return paint(glyph, 'copper') + ' ' + paint(shortLabel([label, `${seconds}s`, 'Ctrl+C to cancel'].join(separator), rowWidth - 2, ellipsis), 'dim');
+      return paint(glyph, 'copper') + ' ' + paint(shortLabel([label, `${seconds}s`, 'Ctrl+C x3 to cancel'].join(separator), rowWidth - 2, ellipsis), 'dim');
     },
     /** Rows drawn under the prompt. Each fits in width - 1 cells so the terminal never wraps one. */
     commandMenu(items: MenuItem[], selected: number, rows = 8): string[] {
@@ -421,13 +421,18 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       // One row only, so the transient waiting line can be erased with a single line clear.
       return paint(shortLabel(labels[kind], width - 1), kind === 'answer' ? 'bone' : 'dim');
     },
-    tool(name: string, phase: ToolOutcome, elapsedMs?: number) {
+    tool(name: string, phase: ToolOutcome, elapsedMs?: number, detail?: string, reason?: string) {
       const label = { returned: 'Done', failed: 'Failed', blocked: 'Blocked', cancelled: 'Cancelled' }[phase];
       const tone = phase === 'failed' || phase === 'blocked' ? 'error' : phase === 'cancelled' ? 'warning' : 'dim';
       const fields = [label, terminalLabel(name)];
       if (elapsedMs !== undefined) fields.push(`${(elapsedMs / 1000).toFixed(1)}s`);
-      return paint(shortLabel(fields.join(separator), rowWidth, ellipsis), tone);
+      if (detail) fields.push(detail);
+      const row = paint(shortLabel(fields.join(separator), rowWidth, ellipsis), tone);
+      // The reason gets its own row so a long command cannot push it off screen.
+      return reason ? row + '\n' + paint('  ' + shortLabel(reason, rowWidth - 2, ellipsis), 'dim') : row;
     },
+    /** One warning row, for footers that count their rows. */
+    hint(text: string) { return paint(shortLabel(text, rowWidth, ellipsis), 'warning'); },
     approval(description: string) { return paint('[approval required]', 'warning') + '\n' + terminalText(description); },
     approvalPrompt() { return paint('Type yes to approve (default: no): ', 'warning'); },
     pickerPrompt() { return paint(width < 56 ? 'Model number or ID (Enter cancels): ' : 'Choose a number or listed model ID; Enter cancels: ', 'copper'); },

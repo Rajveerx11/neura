@@ -30,6 +30,8 @@ import { createSubagents, formatSubagent, SUBAGENT_INSTRUCTIONS, SUBAGENT_TOOLS,
 export { terminalText } from './terminal-ui.ts';
 
 let asciiGlyphs = false;
+const INTERRUPT_PRESSES = 3;
+const INTERRUPT_WINDOW_MS = 2000;
 const terminal = (stream: NodeJS.WriteStream = stdout) => createTerminalUI({ isTTY: Boolean(stream.isTTY), columns: stream.columns, env: process.env, ascii: asciiGlyphs });
 const failure = (text: string) => stderr.write(terminal(stderr).feedback(redactSensitiveText(text, 8000), 'error') + '\n');
 const userName = (() => { try { return os.userInfo().username; } catch { return undefined; } })();
@@ -152,16 +154,41 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
   const rl = interactive ? createInterface({ input: keyboard?.input ?? stdin, output: process.stdout, terminal: true }) : undefined;
   const roots = skillRoots(workspace, home);
   let installedSkills: InstalledSkill[] | undefined;
+  let abort: AbortController | undefined;
+  let approving = false;
+  // A single Ctrl+C is often a copy habit. Only INTERRUPT_PRESSES within the window cancel work or exit.
+  let interrupts: number[] = [];
+  const interruptHint = () => {
+    const left = INTERRUPT_PRESSES - interrupts.length;
+    if (!interrupts.length || left <= 0 || Date.now() - interrupts.at(-1)! >= INTERRUPT_WINDOW_MS) return undefined;
+    return `Press Ctrl+C ${left} more time${left === 1 ? '' : 's'} within ${INTERRUPT_WINDOW_MS / 1000}s to ${abort ? 'cancel' : 'exit'}.`;
+  };
   const composer = rl && keyboard ? keyboard.attach(rl, () => terminal(), line => {
     if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
     return commandMatches(line, installedSkills);
-  }, shell => terminal().statusBar(statusSnapshot(), shell)) : undefined;
+  }, shell => {
+    const hint = interruptHint();
+    return [...(hint ? [terminal().hint(hint)] : []), ...terminal().statusBar(statusSnapshot(), shell)];
+  }) : undefined;
   let pauseActivity = () => {};
-  let abort: AbortController | undefined;
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
   const onClose = () => { inputClosed.abort(); abort?.abort(); subagents.cancelRunning(); };
   const onInterrupt = () => {
+    const now = Date.now();
+    interrupts = [...interrupts.filter(at => now - at < INTERRUPT_WINDOW_MS), now];
+    // Only a person at a terminal presses Ctrl+C by habit; a signal to a --prompt run still stops it at once.
+    const hint = interactive ? interruptHint() : undefined;
+    if (hint) {
+      if (composer && !abort) return; // The composer footer shows it on the redraw that follows this key.
+      const atPrompt = Boolean(rl) && (!abort || approving);
+      if (atPrompt) stdout.write('\n');
+      else if (interactive && process.env.TERM !== 'dumb') stderr.write('\r\x1b[2K'); // Replace the activity row; it redraws below.
+      warning(hint);
+      if (atPrompt) rl!.prompt(true);
+      return;
+    }
+    interrupts = [];
     if (abort) abort.abort();
     else { inputClosed.abort(); subagents.cancelRunning(); }
   };
@@ -247,7 +274,9 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     // Typeahead entered during a turn is not a response to this action.
     clearDraft(rl);
     stdout.write('\n' + terminal().approval(description) + '\n');
-    const response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal });
+    approving = true;
+    let response: string;
+    try { response = await rl.question(terminal().approvalPrompt(), { signal: abort?.signal }); } finally { approving = false; }
     const approved = response.trim() === 'yes';
     say(approved ? 'Approved once for this exact action.' : 'Denied. No approval granted.');
     return approved;
@@ -419,8 +448,8 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           const started = toolStarted.get(invocationId);
           toolStarted.delete(invocationId);
           const elapsed = started === undefined ? undefined : performance.now() - started;
-          if (interactive) stdout.write(terminal().tool(label, event.phase, elapsed) + '\n');
-          else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(label, event.phase, elapsed) + '\n');
+          if (interactive) stdout.write(terminal().tool(label, event.phase, elapsed, event.detail, event.reason) + '\n');
+          else if (event.phase !== 'returned') stderr.write((bridge ? terminal() : terminal(process.stderr)).tool(label, event.phase, elapsed, event.detail, event.reason) + '\n');
           if (!abort?.signal.aborted) waiting();
         };
         const subagentScope = {

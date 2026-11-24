@@ -91,8 +91,10 @@ providers, model selection, sandbox policy, history or proof semantics.
   answer boundary. Reasoning summaries stay labelled, optional and separate;
   `/thinking off` and `--no-thinking` suppress them. Never imply hidden reasoning
   is available. Keep transcript scrollback and normal selection/copy intact.
-- Ctrl+C during catalog fetch, inference, login or approval cancels that operation
-  and returns to the prompt. Ctrl+C while idle and EOF exit cleanly. An aborted
+- Three Ctrl+C presses within 2 seconds during catalog fetch, inference, login or
+  approval cancel that operation and return to the prompt. Three presses while idle,
+  or EOF, exit cleanly. Fewer presses only show how many remain (2026-11-24), so a
+  copy habit cannot cancel work. Noninteractive `--prompt` runs still stop on one signal. An aborted
   operation cannot approve or start a pending action. Cancellation does not claim
   rollback of effects already completed; inspect state before a manual retry.
 - Approval owns the next input. Show exact action, boundary and one-use scope;
@@ -270,7 +272,7 @@ command discovery. Changes, all dependency-free:
   wide) and fenced code with a gutter. Code bytes are never wrapped or restyled.
   Model text is sanitized before styling, so it cannot inject escapes. Piped,
   `--prompt` and ACP output stay byte-for-byte unrendered.
-- **Activity row.** ANSI terminals show `⠋ Thinking… 3s · Ctrl+C to cancel`
+- **Activity row.** ANSI terminals show `⠋ Thinking… 3s · Ctrl+C x3 to cancel`
   (`Working…` after a tool returns), erased before any other output and before
   an approval prompt. `TERM=dumb` keeps the static `[thinking]` line.
 - **Slash menu.** Typing `/` at the main prompt opens a menu under the input,

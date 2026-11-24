@@ -8,6 +8,15 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-24: visible tool calls and safer Ctrl+C
+
+- Tool rows now show what each call targets, such as the command and its folder for
+  `exec` or the path for file tools. A failed call adds a second row with the exit code
+  and last error line. Both are redacted and display-only; the model never sees them.
+  This replaces the 2026-11-22 rule that rows hide arguments. ACP tool cards use the same text.
+- Ctrl+C must be pressed three times within 2 seconds to cancel work or exit. A single
+  press, such as a copy habit, only shows how many presses remain.
+
 ### 2026-11-23: status bar, your own shell commands and prereleases
 
 - New launch logo: a three-line pixel "neura" wordmark, colored copper to bone, with the

@@ -34,7 +34,9 @@ agent. See [T3 provider setup](T3_CODE.md#accounts-and-models).
 ## Commands
 
 Type `/` to open the command menu. Use Up/Down to select, Tab to complete, Enter
-to run, and Esc to close. `Ctrl+C` cancels a turn.
+to run, and Esc to close. Press `Ctrl+C` three times within 2 seconds to cancel a
+turn or, at the prompt, to exit. One press only shows how many remain, so copying
+text with `Ctrl+C` is safe.
 
 | Command | Purpose |
 | --- | --- |
