@@ -78,6 +78,12 @@ only a configured, marked `Neura/` subtree with minimized append-only events. Ra
 are not encrypted or authenticated against the signed-in user. Obsidian/plugins
 can sync them independently. Network-backed vaults are unsupported.
 
+Work and YOLO self-learning write only to their own configured vault's marked
+`Neura/Lessons/<project>/` folder. The `save_lesson` tool takes a title and text, never a
+path. Notes are redacted and escaped so Obsidian cannot render links or embeds
+from them. Two modes configured on one vault fail closed. Recalled lessons reach
+the model as untrusted data with no authority.
+
 Save/resume is explicit. Restored excerpts require reimport for new citations.
 Browser actions return through user-copied revision-bound commands. Async
 generation checks prevent stale state/warnings, but completed artifacts/events

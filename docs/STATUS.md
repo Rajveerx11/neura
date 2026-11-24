@@ -1,5 +1,24 @@
 # Neura status
 
+## Self-learning vaults (2026-11-24)
+
+Self-learning is on by default. `/selflearn` shows each mode's vault, and
+`/selflearn on|off` switches it for every mode. Each mode learns only into its own
+Obsidian vault and recalls only from it:
+
+| Mode | Config | What it keeps |
+| --- | --- | --- |
+| Learn | `~/.neura/learn-vault.json` | Academic memory: concepts, mistakes, preferences (see [Learn Mode](LEARN_MODE.md)) |
+| Work | `~/.neura/work-vault.json` | Project lessons under `Neura/Lessons/<project>/` |
+| YOLO | `~/.neura/yolo-vault.json` | Project lessons under `Neura/Lessons/<project>/`, never shared with Work |
+
+`NEURA_LEARN_VAULT`, `NEURA_WORK_VAULT` and `NEURA_YOLO_VAULT` override the files.
+Work and YOLO offer the model a `save_lesson` tool and recall the newest eight
+lessons for the current project. Lessons are notes you can edit; deleting a note
+retires it. A mode without a vault does not learn. Regression memory below is separate
+and unaffected by `/selflearn`. Evidence: out-of-repository checks with temporary
+vaults; no live model turn has saved a lesson yet.
+
 ## Work regression memory
 
 Work records a candidate when a named, top-level Node test fails an assertion

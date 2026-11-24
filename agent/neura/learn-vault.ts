@@ -61,7 +61,7 @@ function stableIdentifier(value: unknown, limit: number, label: string): string 
 function minimizedText(value: string, limit: number): string {
   return redactSensitiveText(value, limit).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
 }
-function safeText(value: string, limit: number): string {
+export function safeText(value: string, limit: number): string {
   return minimizedText(value, limit)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/!/g, "\\!").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
@@ -78,20 +78,60 @@ function fenced(value: string): string {
   return `${fence}text\n${text}\n${fence}`;
 }
 
-async function configuredVault(): Promise<string | null> {
-  let configured = process.env.NEURA_LEARN_VAULT?.trim() ?? "";
+export type VaultKind = "learn" | "work" | "yolo";
+export const VAULT_KINDS: readonly VaultKind[] = ["learn", "work", "yolo"];
+const SELF_LEARNING = "self-learning.json";
+
+const piPart = (value: string) => value.split(/[\\/]/).some(part => part.replace(/[. ]+$/, "").toLowerCase() === ".pi");
+function neuraHome(): string {
+  const home = process.env.NEURA_HOME || path.join(os.homedir(), ".neura");
+  if (!path.isAbsolute(home) || piPart(home)) throw new Error("Vault configuration requires a Neura-owned absolute home outside Pi.");
+  return home;
+}
+/** Canonical Neura home, or null before Neura has created it. */
+async function canonicalHome(): Promise<string | null> {
+  let home: string;
+  try { home = await realLearnDirectory(neuraHome()); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+  if (piPart(home)) throw new Error("Vault configuration requires a Neura-owned absolute home outside Pi.");
+  return home;
+}
+
+/** Self-learning is on unless the owner turned it off with /selflearn off. */
+export async function selfLearningEnabled(): Promise<boolean> {
+  const home = await canonicalHome();
+  if (!home) return true;
+  try {
+    const parsed = JSON.parse(await readLearnRegular(path.join(home, SELF_LEARNING), CONFIG_LIMIT));
+    if (!parsed || parsed.version !== 1 || typeof parsed.enabled !== "boolean" || Object.keys(parsed).length !== 2) throw new Error("Self-learning setting is invalid.");
+    return parsed.enabled;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw error;
+  }
+}
+
+export async function setSelfLearning(enabled: boolean): Promise<void> {
+  await fs.mkdir(neuraHome(), { recursive: true, mode: 0o700 });
+  const home = await canonicalHome();
+  if (!home) throw new Error("Neura home could not be created.");
+  const file = path.join(home, SELF_LEARNING);
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporary, JSON.stringify({ version: 1, enabled }) + "\n", { flag: "wx", mode: 0o600 });
+  try { await fs.rename(temporary, file); }
+  catch (error) { await fs.rm(temporary, { force: true }); throw error; }
+}
+
+/** The vault path a mode names in NEURA_<MODE>_VAULT or ~/.neura/<mode>-vault.json, unresolved. */
+async function namedVault(kind: VaultKind): Promise<string | null> {
+  let configured = process.env[`NEURA_${kind.toUpperCase()}_VAULT`]?.trim() ?? "";
   if (!configured) {
-    const home = process.env.NEURA_HOME || path.join(os.homedir(), ".neura");
-    if (!path.isAbsolute(home) || home.split(/[\\/]/).some(part => part.replace(/[. ]+$/, "").toLowerCase() === ".pi")) throw new Error("Learn configuration requires a Neura-owned absolute home outside Pi.");
-    let canonicalHome: string;
-    try { canonicalHome = await realLearnDirectory(home); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
-    if (canonicalHome.split(/[\\/]/).some(part => part.replace(/[. ]+$/, "").toLowerCase() === ".pi")) throw new Error("Learn configuration requires a Neura-owned absolute home outside Pi.");
-    const config = path.join(canonicalHome, "learn-vault.json");
+    const home = await canonicalHome();
+    if (!home) return null;
     try {
-      const parsed = JSON.parse(await readLearnRegular(config, CONFIG_LIMIT));
+      const parsed = JSON.parse(await readLearnRegular(path.join(home, `${kind}-vault.json`), CONFIG_LIMIT));
       if (!parsed || parsed.version !== 1 || typeof parsed.vault !== "string" || Object.keys(parsed).some((key) => !["version", "vault"].includes(key))) {
-        throw new Error("Learn vault configuration is invalid.");
+        throw new Error(`The ${kind} vault configuration is invalid.`);
       }
       configured = parsed.vault.trim();
     } catch (error) {
@@ -100,11 +140,47 @@ async function configuredVault(): Promise<string | null> {
     }
   }
   if (!configured) return null;
-  if (!path.isAbsolute(configured) || isNetworkPath(configured)) throw new Error("Learn vault must be an absolute path and cannot be a UNC path.");
+  if (!path.isAbsolute(configured) || isNetworkPath(configured)) throw new Error("A vault must be an absolute path and cannot be a UNC path.");
+  return configured;
+}
+
+async function obsidianVault(configured: string): Promise<string> {
   const vault = await realLearnDirectory(configured);
   const obsidian = await realLearnDirectory(path.join(vault, ".obsidian"));
-  if (path.dirname(obsidian) !== vault) throw new Error("Learn vault marker escaped the configured vault.");
+  if (path.dirname(obsidian) !== vault) throw new Error("Vault marker escaped the configured vault.");
   return vault;
+}
+
+/** A mode's own Obsidian vault, or null when unset or self-learning is off. Modes never share a vault. */
+export async function configuredVault(kind: VaultKind = "learn"): Promise<string | null> {
+  if (!await selfLearningEnabled()) return null;
+  const configured = await namedVault(kind);
+  if (!configured) return null;
+  const vault = await obsidianVault(configured);
+  for (const other of VAULT_KINDS) {
+    if (other === kind) continue;
+    const named = await namedVault(other);
+    let canonical: string | undefined;
+    try { canonical = named ? await realLearnDirectory(named) : undefined; } catch { canonical = undefined; }
+    const same = process.platform === "win32" ? canonical?.toLowerCase() === vault.toLowerCase() : canonical === vault;
+    if (canonical && same) throw new Error(`The ${kind} and ${other} modes must use separate vaults.`);
+  }
+  return vault;
+}
+
+/** Display-only status for /selflearn: each mode's vault, or why it is unavailable. */
+export async function selfLearningStatus(): Promise<{ enabled: boolean; vaults: Record<VaultKind, string> }> {
+  const enabled = await selfLearningEnabled();
+  const vaults = {} as Record<VaultKind, string>;
+  for (const kind of VAULT_KINDS) {
+    try {
+      const configured = await namedVault(kind);
+      if (!configured) { vaults[kind] = "not configured"; continue; }
+      await obsidianVault(configured);
+      vaults[kind] = enabled ? (await configuredVault(kind)) ?? configured : configured;
+    } catch (error) { vaults[kind] = `unavailable (${error instanceof Error ? error.message : "unreadable"})`; }
+  }
+  return { enabled, vaults };
 }
 
 async function realChild(root: string, child: string): Promise<string> {
@@ -113,7 +189,7 @@ async function realChild(root: string, child: string): Promise<string> {
   return canonical;
 }
 
-async function ensureChild(root: string, child: string): Promise<string> {
+export async function ensureChild(root: string, child: string): Promise<string> {
   const destination = path.join(root, child);
   try { await fs.mkdir(destination, { mode: 0o700 }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
@@ -139,7 +215,7 @@ async function waitForConcurrentOwner(root: string): Promise<void> {
   }
 }
 
-async function managedRoot(vault: string, create: boolean): Promise<{ root: string; system: string; events: string }> {
+export async function managedRoot(vault: string, create: boolean): Promise<{ root: string; system: string; events: string }> {
   let root: string;
   let createdRoot = false;
   try { root = await realChild(vault, MANAGED); }
