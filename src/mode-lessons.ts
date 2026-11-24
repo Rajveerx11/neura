@@ -63,14 +63,16 @@ export async function recallLessons(kind: ProjectMode, workspace: string, limit 
   return lessons.sort((a, b) => (Date.parse(b.created) || 0) - (Date.parse(a.created) || 0)).slice(0, limit);
 }
 
-/** Writes one lesson note. Returns its file name, 'duplicate', or null when self-learning is off or unconfigured. */
-export async function saveLesson(kind: ProjectMode, workspace: string, input: { title: string; lesson: string; evidence?: string }): Promise<string | null> {
+/** Writes one lesson note. Returns its file name, 'duplicate', 'stale', or null when self-learning is off or unconfigured. */
+export async function saveLesson(kind: ProjectMode, workspace: string, input: { title: string; lesson: string; evidence?: string }, current: () => boolean = () => true): Promise<string | null> {
   const title = clean(input.title, 120), lesson = clean(input.lesson, 1000), evidence = input.evidence ? clean(input.evidence, 500) : '';
   if (!title || !lesson) throw new ToolFeedbackError('A lesson needs a title and text.');
   const directory = await lessonsDirectory(kind, workspace, true);
   if (!directory) return null;
   // ponytail: duplicate check covers the newest 50 titles; a title index if projects collect thousands.
   if ((await recallLessons(kind, workspace, 50)).some(saved => saved.title.toLowerCase() === safeText(title, 160).toLowerCase())) return 'duplicate';
+  // The session can change during the awaits above; recheck right before the only write.
+  if (!current()) return 'stale';
   const id = randomUUID(), created = new Date().toISOString();
   const note = `---\nneura_lesson: ${id}\nschema: 1\nmode: ${kind}\nproject: ${path.basename(directory)}\ncreated: ${created}\n---\n\n# ${safeText(title, 160)}\n\n${safeText(lesson, 1000)}\n` +
     (evidence ? `\n## Evidence\n${safeText(evidence, 500)}\n` : '');
@@ -94,8 +96,9 @@ export function lessonTool(kind: ProjectMode, workspace: string, current: () => 
       const reply = (text: string) => ({ content: [{ type: 'text' as const, text }] });
       if (!current()) return reply('Mode or session changed; lesson not saved.');
       let saved: string | null;
-      try { saved = await saveLesson(kind, workspace, input); }
+      try { saved = await saveLesson(kind, workspace, input, current); }
       catch (error) { return reply(`Lesson not saved: ${redactSensitiveText(error instanceof Error ? error.message : 'vault error', 200)}`); }
+      if (saved === 'stale') return reply('Mode or session changed; lesson not saved.');
       if (!saved) return reply('Self-learning is off or this mode has no vault; lesson not saved.');
       return reply(saved === 'duplicate' ? 'A lesson with this title already exists.' : 'Lesson saved.');
     },
