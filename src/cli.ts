@@ -389,6 +389,7 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
         }
         // Images ride only on the task that names their label; any others are discarded with the draft.
         const images = [...pastedImages].filter(([label]) => text.includes(label));
+        if (delegation && images.length) throw new Error('Subagents cannot receive pasted images. Send the image with a normal task instead.');
         pastedImages.clear();
         const userMessage = images.length
           ? { role: 'user', content: [{ type: 'text', text }, ...images.map(([, image]) => ({ type: 'image', image, mediaType: 'image/png' }))] }

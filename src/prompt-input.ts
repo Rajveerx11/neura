@@ -23,8 +23,13 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   const onData = (chunk: Buffer | string) => {
     const key = String(chunk);
     // Alt+V, or Ctrl+V when the terminal forwards it, pastes a clipboard image. Text paste stays the terminal's.
-    if (imagePaste && (key === '\x1bv' || key === '\x16')) { imagePaste(); return; }
-    if (!claim?.(key)) input.write(key);
+    // A chunk can carry typed text around the shortcut; forward that text unchanged.
+    // ponytail: an ESC and v split across two chunks is not joined; add a short timer if a terminal does that.
+    const parts = imagePaste ? key.split(/(\x1bv|\x16)/) : [key];
+    for (const part of parts) {
+      if (part === '\x1bv' || part === '\x16') imagePaste!();
+      else if (part && !claim?.(part)) input.write(part);
+    }
   };
   const onEnd = () => input.end();
   stdin.setEncoding('utf8');
