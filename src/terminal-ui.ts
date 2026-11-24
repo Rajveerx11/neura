@@ -282,6 +282,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault, set in ~/.neura/<mode>-vault.json. A mode without a vault does not learn.'],
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
+        ['Alt+V', 'Paste a clipboard image or a copied image file as [Image #N] (Ctrl+V too, if your terminal forwards it). Windows only. The image goes with the next task, then leaves saved history.'],
         ['!COMMAND', `Run your own ${process.platform === 'win32' ? 'PowerShell' : 'bash'} command in the workspace, as you, with no sandbox or approval. Output is shown and added to the conversation. No interactive input; 10-minute limit.`],
         ['/help · /quit', 'Show help or exit (bare exit or quit also works). Press Ctrl+C three times within 2 seconds to cancel active work, or to exit at the input prompt. Fewer presses only show a reminder, so copying text is safe.'],
       ]),
