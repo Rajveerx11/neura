@@ -23,6 +23,7 @@ import { assessRisk, reviewCandidate, reviewReceiptCurrent, reviewerIndependence
 import { runReviewLoop, WORKFLOW_INSTRUCTIONS } from './workflow.ts';
 import { LESSON_INSTRUCTIONS, lessonTool, recallLessons, type Lesson } from './mode-lessons.ts';
 import { configuredVault, selfLearningStatus, setSelfLearning } from '../agent/neura/learn-vault.ts';
+import { MAX_IMAGE_BYTES, readClipboardImage } from './clipboard-image.ts';
 import { createYoloTools, runOnHost, YOLO_CONFIRMATION, YOLO_INSTRUCTIONS, YOLO_WARNING } from './yolo.ts';
 import { createTerminalUI, terminalText, commandMatches, type Mode, type TerminalStatus } from './terminal-ui.ts';
 import { discoverSkills, skillName, skillRoots, skillTurn, SKILL_TOOL, withoutSkillResults, type InstalledSkill } from './skills.ts';
@@ -169,9 +170,26 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     if (line.startsWith('$')) installedSkills ??= discoverSkills(roots);
     return commandMatches(line, installedSkills);
   }, shell => {
-    const hint = interruptHint();
+    const hint = interruptHint() ?? (pasteNotice && Date.now() - pasteNotice.at < 4000 ? pasteNotice.text : undefined);
     return [...(hint ? [terminal().hint(hint)] : []), ...terminal().statusBar(statusSnapshot(), shell)];
   }) : undefined;
+  // Pasted images wait under their [Image #N] label until the next submitted task uses them.
+  const pastedImages = new Map<string, string>();
+  let pasteNotice: { text: string; at: number } | undefined;
+  let pasting = false;
+  keyboard?.onImagePaste(() => {
+    if (!composer || pasting) return;
+    pasting = true;
+    const notice = (text: string) => { pasteNotice = { text, at: Date.now() }; composer.insert(''); };
+    void readClipboardImage().then(png => {
+      if (!png) return notice('No image on the clipboard. Copy a screenshot or an image file, then press Alt+V.');
+      if (png.length > MAX_IMAGE_BYTES) return notice(`Clipboard image is ${(png.length / 1e6).toFixed(1)} MB; the limit is ${MAX_IMAGE_BYTES / 1e6} MB.`);
+      const label = `[Image #${pastedImages.size + 1}]`;
+      pastedImages.set(label, `data:image/png;base64,${png.toString('base64')}`);
+      if (!composer.insert(label + ' ')) { pastedImages.delete(label); notice('Image paste works only at the input prompt.'); }
+    }, (error: unknown) => notice(`Image paste failed: ${redactSensitiveText(error instanceof Error ? error.message : 'clipboard unreadable', 200)}`))
+      .finally(() => { pasting = false; });
+  });
   let pauseActivity = () => {};
   const inputClosed = new AbortController();
   // readline.close() does not settle a pending promises.question() on its own.
@@ -369,7 +387,12 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
           endLine();
           provider = { ...provider, model: choices[0].id }; modelExplicit = false;
         }
-        const userMessage = { role: 'user', content: text };
+        // Images ride only on the task that names their label; any others are discarded with the draft.
+        const images = [...pastedImages].filter(([label]) => text.includes(label));
+        pastedImages.clear();
+        const userMessage = images.length
+          ? { role: 'user', content: [{ type: 'text', text }, ...images.map(([, image]) => ({ type: 'image', image, mediaType: 'image/png' }))] }
+          : { role: 'user', content: text };
         learn.input(learnerInput);
         const model = createConfiguredModel({ ...provider, reasoningSummary: showReasoning });
         const regressions = mode === 'work' && session && !values['no-history']

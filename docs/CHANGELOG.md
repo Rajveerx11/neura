@@ -8,6 +8,11 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-24: paste images
+
+- `Alt+V` (or a forwarded `Ctrl+V`) pastes a clipboard image or copied image file as
+  `[Image #N]`, sent with the next task. Windows only. Saved history keeps a placeholder.
+
 ### 2026-11-24: self-learning vaults for every mode
 
 - Self-learning is on by default. `/selflearn on|off` switches it; `/selflearn` shows
