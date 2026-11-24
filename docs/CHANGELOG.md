@@ -8,6 +8,14 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-24: self-learning vaults for every mode
+
+- Self-learning is on by default. `/selflearn on|off` switches it; `/selflearn` shows
+  each mode's vault.
+- Learn, Work and YOLO each learn into their own Obsidian vault. Learn keeps its
+  academic memory. Work and YOLO save short project lessons with `save_lesson` and
+  recall them in later sessions of the same mode and project. Modes never share lessons.
+
 ### 2026-11-24: visible tool calls and safer Ctrl+C
 
 - Tool rows now show what each call targets, such as the command and its folder for

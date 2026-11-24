@@ -25,6 +25,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'sessions', description: 'List saved sessions for this workspace' },
   { name: 'resume', args: 'UUID', description: 'Resume a saved session', needsArg: true },
   { name: 'reconcile', description: 'Acknowledge inspection of an interrupted task before continuing' },
+  { name: 'selflearn', args: '[on|off]', description: 'Show or switch self-learning; each mode keeps its own Obsidian vault', options: [['on', 'Learn into each mode vault'], ['off', 'Stop saving and recalling lessons']] },
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
   { name: 'workflow', args: '[on|off]', description: 'Independent read-only review of Work changes', options: [['on', 'Review each change'], ['off', 'No automatic review']] },
   { name: 'subagent', args: '[ROLE TASK|list|wait NAME|message NAME TEXT|cancel NAME]', description: 'Delegate a Work task or manage subagents', options: [
@@ -278,6 +279,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/status', 'Mode, model, workspace, history and last-turn usage. Context window stays unknown unless verified.'],
         ['/clear · /new', 'Clear conversation context and start a new chat. Saved chats remain available; mode and model stay selected.'],
         ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
+        ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault, set in ~/.neura/<mode>-vault.json. A mode without a vault does not learn.'],
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
         ['!COMMAND', `Run your own ${process.platform === 'win32' ? 'PowerShell' : 'bash'} command in the workspace, as you, with no sandbox or approval. Output is shown and added to the conversation. No interactive input; 10-minute limit.`],

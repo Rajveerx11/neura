@@ -42,6 +42,7 @@ text with `Ctrl+C` is safe.
 | --- | --- |
 | `/help`, `/status` | Show commands or current mode, model, workspace and usage. |
 | `/model [PROVIDER]`, `/model PROVIDER MODEL [URL]` | Browse available catalogs or select a model explicitly. |
+| `/selflearn [on\|off]` | Show or switch self-learning. On by default. Learn, Work and YOLO each keep lessons in their own Obsidian vault. |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries. |
 | `/mode work`, `/mode learn`, `/mode yolo` | Switch modes. YOLO requires confirmation. |
 | `/new`, `/clear`, `/sessions`, `/resume ID` | Start a fresh chat or select a saved one. |
