@@ -337,7 +337,9 @@ async function codexFetch(url: Parameters<typeof fetch>[0], init?: RequestInit):
   }
 }
 
-export type SubscriptionModel = { id: string };
+/** `contextWindow`: tokens the conversation can fill, as the provider's catalog publishes it. Absent when unpublished. */
+export type SubscriptionModel = { id: string; contextWindow?: number };
+const windowSize = (value: unknown) => Number.isSafeInteger(value) && (value as number) > 0 && (value as number) <= 1e9 ? value as number : undefined;
 
 /** Explicit metadata discovery only; never import catalog instructions, policies or tools. */
 export async function listCodexModels({ signal, baseURL }: { signal?: AbortSignal; baseURL?: string } = {}): Promise<SubscriptionModel[]> {
@@ -362,13 +364,14 @@ export async function listCodexModels({ signal, baseURL }: { signal?: AbortSigna
   catch { signal?.throwIfAborted(); throw new Error("Subscription model catalog was invalid, oversized or stalled; raw details withheld"); }
   const models = (payload as { models?: unknown } | null)?.models;
   if (!Array.isArray(models) || models.length > 256) throw new Error("Subscription model catalog has an invalid shape; raw details withheld");
-  const choices = new Map<string, number>();
+  const choices = new Map<string, { priority: number; contextWindow?: number }>();
   for (const [index, model] of models.entries()) {
     if (!model || typeof model !== "object" || model.visibility !== "list" || typeof model.slug !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(model.slug)) continue;
     if (redactSensitiveText(model.slug, 256) !== model.slug) continue;
-    if (!choices.has(model.slug)) choices.set(model.slug, Number.isSafeInteger(model.priority) ? model.priority : index);
+    // `context_window` is what Codex itself budgets against; `max_context_window` is a configurable ceiling, not the default.
+    if (!choices.has(model.slug)) choices.set(model.slug, { priority: Number.isSafeInteger(model.priority) ? model.priority : index, contextWindow: windowSize(model.context_window) });
   }
-  const result = [...choices].sort((a, b) => a[1] - b[1]).map(([id]) => ({ id }));
+  const result = [...choices].sort((a, b) => a[1].priority - b[1].priority).map(([id, { contextWindow }]) => contextWindow ? { id, contextWindow } : { id });
   if (!result.length) throw new Error("The subscription catalog advertised no picker-visible models; no default was guessed");
   return result;
 }
@@ -379,11 +382,12 @@ type GatewayCatalogEntry = {
   tags?: unknown;
   supported_parameters?: unknown;
   endpoints?: unknown;
+  context_length?: unknown;
   architecture?: { output_modalities?: unknown };
 };
 
 /** Discover candidate chat IDs for an explicit selection. */
-export async function listGatewayModels(provider: GatewayProvider, options: { signal?: AbortSignal } = {}): Promise<{ id: string }[]> {
+export async function listGatewayModels(provider: GatewayProvider, options: { signal?: AbortSignal } = {}): Promise<SubscriptionModel[]> {
   if (!isGatewayProvider(provider)) throw new Error("Unsupported gateway");
   rejectGatewayOverride(provider, "baseURL" in options ? options.baseURL : undefined);
   const { signal } = options;
@@ -404,7 +408,7 @@ export async function listGatewayModels(provider: GatewayProvider, options: { si
     if (catalog?.error != null || !Array.isArray(catalog?.data) || catalog.data.length > MAX_GATEWAY_MODELS) {
       throw new Error("Invalid gateway model catalog");
     }
-    const ids = new Set<string>();
+    const ids = new Map<string, number | undefined>();
     for (const model of catalog.data as (GatewayCatalogEntry | null)[]) {
       if (!isDirectGatewayModel(model?.id)) continue;
       if (Array.isArray(model.supported_parameters) && !model.supported_parameters.includes("tools")) continue;
@@ -413,10 +417,47 @@ export async function listGatewayModels(provider: GatewayProvider, options: { si
           (Array.isArray(model.tags) && !model.tags.includes("tool-use"))) continue;
       } else if ((Array.isArray(model.endpoints) && !model.endpoints.includes("/api/v1/chat/completions")) ||
         (Array.isArray(model.architecture?.output_modalities) && !model.architecture.output_modalities.includes("text"))) continue;
-      ids.add(model.id);
+      if (!ids.has(model.id)) ids.set(model.id, windowSize(model.context_length));
     }
-    return [...ids].map(id => ({ id }));
+    return [...ids].map(([id, contextWindow]) => contextWindow ? { id, contextWindow } : { id });
   });
+}
+
+// OpenAI and Anthropic APIs do not publish context limits. models.dev does; OpenCode reads the same catalog.
+const MODELS_DEV_URL = "https://models.dev/api.json";
+let modelsDev: Promise<unknown> | undefined;
+
+async function catalogWindow(provider: "openai" | "anthropic", model: string): Promise<number | undefined> {
+  // ponytail: one ~7 MB download per process, held in memory; cache to disk if starts get slow.
+  modelsDev ??= (async () => {
+    const signal = AbortSignal.timeout(15_000);
+    const response = await fetch(MODELS_DEV_URL, { headers: { Accept: "application/json" }, redirect: "error", signal });
+    if (!response.ok) throw new Error("models.dev catalog unavailable");
+    return readJsonResponse(response, 32 * 1024 * 1024, 15_000, signal);
+  })().catch(error => { modelsDev = undefined; throw error; });
+  const entry = ((await modelsDev) as Record<string, { models?: Record<string, { limit?: { context?: unknown; input?: unknown } }> }>)?.[provider]?.models;
+  const limit = entry && Object.hasOwn(entry, model) ? entry[model]?.limit : undefined;
+  // `input` is what the conversation can fill when output has its own reserve; it matches Codex's `context_window`.
+  return windowSize(limit?.input) ?? windowSize(limit?.context);
+}
+
+/** llama.cpp reports its loaded context size; other local servers stay unknown. */
+async function localWindow(baseURL: string): Promise<number | undefined> {
+  const signal = AbortSignal.timeout(2_000);
+  const response = await fetch(new URL("/props", endpoint(baseURL, true)), { headers: { Accept: "application/json" }, redirect: "error", signal });
+  if (!response.ok) return undefined;
+  const props = await readJsonResponse(response, 1024 * 1024, 2_000, signal) as { default_generation_settings?: { n_ctx?: unknown }; n_ctx?: unknown } | null;
+  return windowSize(props?.default_generation_settings?.n_ctx) ?? windowSize(props?.n_ctx);
+}
+
+/** Context window for the selected route from the provider's own catalog, or undefined when nothing publishes one. Never guessed. */
+export async function contextWindow(config: ProviderConfig): Promise<number | undefined> {
+  const { provider, model } = config;
+  if (!model) return undefined;
+  if (provider === "openai-codex") return (await listCodexModels()).find(choice => choice.id === model)?.contextWindow;
+  if (isGatewayProvider(provider)) return (await listGatewayModels(provider)).find(choice => choice.id === model)?.contextWindow;
+  if (provider === "local") return config.baseURL ? localWindow(config.baseURL) : undefined;
+  return catalogWindow(provider, model);
 }
 
 function gatewayChat(provider: GatewayProvider, model: string): ChatModel {

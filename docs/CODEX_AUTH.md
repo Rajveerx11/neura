@@ -64,8 +64,8 @@ Discovery uses only `GET https://chatgpt.com/backend-api/codex/models` with
 `client_version` set to Neura's version, its OAuth bearer and account header.
 No API key or alternative endpoint is used. Redirects are refused. Catalog fetch
 and reading share a five-second budget after authorization, with an 8 MiB body
-limit and at most 256 entries. Only picker-visible, valid model IDs and sorting
-priority are retained. Catalog instructions, policies, tools and arbitrary labels
+limit and at most 256 entries. Only picker-visible, valid model IDs, sorting
+priority and `context_window` (for the status bar) are retained. Catalog instructions, policies, tools and arbitrary labels
 are ignored. This metadata does not grant any capability or prove model entitlement.
 
 The protocol shape and ChatGPT visibility rule were checked against official

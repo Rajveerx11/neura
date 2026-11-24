@@ -30,7 +30,9 @@ ten-line limits do not establish Mastra behavior.
 - Prompt-adjacent status and `/status` details: actual mode/model/workspace,
   history/session state, thinking-summary setting and conversation message count.
   Validated Mastra total usage is labelled last-turn input/output, never context
-  occupancy. Missing counts stay unavailable; context-window capacity stays unknown.
+  occupancy. Missing counts stay unavailable. Context-window capacity shows as
+  `ctx USED / WINDOW tokens` when the provider catalog, local llama.cpp server or
+  models.dev lists the model, and stays unknown otherwise.
 - Grouped help, complete model IDs and approval details,
   explicit answer boundaries, readable sessions, blank-input reprompt and
   cancellation/recovery feedback. Tool lifecycle phases remain visible, with

@@ -76,7 +76,7 @@ export type TerminalStatus = {
   mode: Mode; provider: string; model: string; workspace: string;
   history: 'on' | 'off' | 'save failed'; sessionState: 'new' | 'resumed'; sessionId?: string;
   thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number; contextTokens?: number };
-  user?: string; branch?: string;
+  user?: string; branch?: string; contextWindow?: number;
 };
 const palette: Record<Tone, string> = {
   copper: '217;120;65', bone: '232;226;216', dim: '122;130;139', warning: '211;166;74', error: '223;107;99', code: '134;167;215', ok: '126;186;110', shell: '253;93;177',
@@ -276,7 +276,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/thinking [on|off]', 'Provider summaries only. Hidden internal reasoning is not available.'],
       ]),
       group('Conversation', [
-        ['/status', 'Mode, model, workspace, history and last-turn usage. Context window stays unknown unless verified.'],
+        ['/status', 'Mode, model, workspace, history, last-turn usage and the context window from the provider catalog.'],
         ['/clear · /new', 'Clear conversation context and start a new chat. Saved chats remain available; mode and model stay selected.'],
         ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
         ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault, set in ~/.neura/<mode>-vault.json. A mode without a vault does not learn.'],
@@ -372,17 +372,18 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       if (rowWidth < 12) return [];
       const sep = plainGlyphs ? ' | ' : ' │ ';
       const ctx = reportedUsage(state.lastTurnUsage)?.contextTokens;
-      const tokens = (n: number) => n < 1000 ? `${n}` : n < 1e6 ? `${(n / 1000).toFixed(1)}k` : `${(n / 1e6).toFixed(2)}M`;
-      // ponytail: context window size is unverified per model, so show tokens used, not "% left".
+      // Unary + drops trailing zeros: 500.0k reads 500k, 1.05M stays.
+      const tokens = (n: number) => n < 1000 ? `${n}` : n < 999_950 ? `${+(n / 1000).toFixed(1)}k` : `${+(n / 1e6).toFixed(2)}M`;
+      const window = state.contextWindow ? ` / ${tokens(state.contextWindow)}` : '';
       const fields: [string, Tone][] = [[`${state.provider}/${state.model || '(not selected)'}`, 'dim']];
       if (state.user) fields.unshift([terminalLabel(state.user), 'bone']);
-      if (Number.isSafeInteger(ctx) && ctx! >= 0) fields.push([`ctx ${tokens(ctx!)} tokens`, 'ok']);
-      else if (state.messageCount === 0) fields.push(['ctx empty', 'ok']);
+      if (Number.isSafeInteger(ctx) && ctx! >= 0) fields.push([`ctx ${tokens(ctx!)}${window} tokens`, state.contextWindow && ctx! >= state.contextWindow * 0.9 ? 'warning' : 'ok']);
+      else if (state.messageCount === 0) fields.push([window ? `ctx 0${window} tokens` : 'ctx empty', 'ok']);
       if (state.branch) fields.push([(plainGlyphs ? 'git ' : '⎇ ') + terminalLabel(state.branch), 'code']);
       const modelAt = () => fields.findIndex(([, tone]) => tone === 'dim');
       const budget = () => rowWidth - fields.reduce((sum, [text], index) => sum + (index === modelAt() ? 0 : cells(text)), 0) - sep.length * (fields.length - 1);
       // Drop branch, then user, then ctx until the model keeps at least 12 cells.
-      for (const tone of ['code', 'bone', 'ok'] as Tone[]) if (budget() < 12) { const at = fields.findIndex(([, t]) => t === tone); if (at >= 0) fields.splice(at, 1); }
+      for (const tone of ['code', 'bone', 'ok', 'warning'] as Tone[]) if (budget() < 12) { const at = fields.findIndex(([, t]) => t === tone); if (at >= 0) fields.splice(at, 1); }
       fields[modelAt()][0] = shortLabel(fields[modelAt()][0], budget(), ellipsis);
       const line = fields.map(([text, tone]) => paint(text, tone)).join(paint(sep, 'dim'));
       const pointer = plainGlyphs ? '>> ' : '›› ';
@@ -402,7 +403,9 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         `Thinking: ${state.thinking ? 'on' : 'off'}`, `Conversation: ${state.messageCount} messages`,
         ...(state.runningSubagents ? [`Subagents running: ${state.runningSubagents}`] : []),
         ...(usage ? [`Last turn input tokens: ${usage.inputTokens}`, `Last turn output tokens: ${usage.outputTokens}`] : ['Last turn tokens: unavailable']),
-        'Context window: unknown',
+        state.contextWindow
+          ? `Context window: ${state.contextWindow} tokens` + (usage?.contextTokens != null ? `, ${Math.round(usage.contextTokens / state.contextWindow * 100)}% used` : '')
+          : 'Context window: unknown',
       ].map(terminalLabel).join('\n') + '\n' + paint(prose('Development/testing only. Distribution is not cleared.'), 'dim');
     },
     prompt(mode: Mode) { return paint(`${mode} > `, mode === 'yolo' ? 'error' : 'copper'); },

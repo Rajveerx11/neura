@@ -22,7 +22,7 @@ Replace the five-line block alphabet with `o--o  neura`: two connected nodes for
 - Actual mode, selected provider/model, workspace label, history/session state and thinking-summary setting.
 - Conversation message count is a message count, not a token estimate.
 - Provider-reported last-turn input/output totals are usage, not the exact current context occupancy. A tool-using turn may contain several model requests.
-- Missing usage and unknown context-window capacity stay unknown. No guessed context limits, billing rates, costs, compaction progress or percentages.
+- Context-window capacity comes only from a published source: the Codex catalog `context_window`, the OpenRouter or AIRouter catalog `context_length`, a local llama.cpp server's `/props` `n_ctx`, or models.dev for the OpenAI and Anthropic APIs (models.dev `limit.input`, else `limit.context`; OpenCode reads the same catalog). The strip shows `ctx USED / WINDOW tokens` and turns amber at 90%. A model no source lists stays unknown. Neura still guesses no context limits, billing rates, costs or compaction progress.
 - `/status` is the detailed view: complete sanitized identifiers and workspace path, plus honest development limits.
 - Automatic status belongs to interactive input only. Machine-oriented or explicit one-shot output must not gain the strip.
 - State resets must not attach old usage to a new conversation, resumed history or newly selected model.
