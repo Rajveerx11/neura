@@ -159,7 +159,9 @@ the same user. Parser deadlines and heap limits likewise do not sandbox native/W
 
 ## Optional Obsidian capture
 
-Capture is disabled by default. Configure `NEURA_LEARN_VAULT` with an absolute,
+Capture starts once a vault is configured. Self-learning is on by default;
+`/selflearn off` stops capture and recall in every mode and `/selflearn on` resumes
+it. Configure `NEURA_LEARN_VAULT` with an absolute,
 local, non-UNC vault path, or put this private file at
 `~/.neura/learn-vault.json` (under `NEURA_HOME` when explicitly set):
 

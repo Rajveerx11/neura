@@ -8,6 +8,35 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-24: context window in the status bar
+
+- The status bar shows `ctx USED / WINDOW tokens`, for example `ctx 103.3k / 500k tokens`.
+  The window comes from the provider's catalog (Codex, OpenRouter, AIRouter), a local
+  llama.cpp server, or models.dev for the OpenAI and Anthropic APIs. Unlisted models stay
+  unknown. `/status` adds the percentage used.
+
+### 2026-11-24: paste images
+
+- `Alt+V` (or a forwarded `Ctrl+V`) pastes a clipboard image or copied image file as
+  `[Image #N]`, sent with the next task. Windows only. Saved history keeps a placeholder.
+
+### 2026-11-24: self-learning vaults for every mode
+
+- Self-learning is on by default. `/selflearn on|off` switches it; `/selflearn` shows
+  each mode's vault.
+- Learn, Work and YOLO each learn into their own Obsidian vault. Learn keeps its
+  academic memory. Work and YOLO save short project lessons with `save_lesson` and
+  recall them in later sessions of the same mode and project. Modes never share lessons.
+
+### 2026-11-24: visible tool calls and safer Ctrl+C
+
+- Tool rows now show what each call targets, such as the command and its folder for
+  `exec` or the path for file tools. A failed call adds a second row with the exit code
+  and last error line. Both are redacted and display-only; the model never sees them.
+  This replaces the 2026-11-22 rule that rows hide arguments. ACP tool cards use the same text.
+- Ctrl+C must be pressed three times within 2 seconds to cancel work or exit. A single
+  press, such as a copy habit, only shows how many presses remain.
+
 ### 2026-11-23: status bar, your own shell commands and prereleases
 
 - New launch logo: a three-line pixel "neura" wordmark, colored copper to bone, with the

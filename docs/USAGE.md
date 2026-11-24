@@ -34,12 +34,22 @@ agent. See [T3 provider setup](T3_CODE.md#accounts-and-models).
 ## Commands
 
 Type `/` to open the command menu. Use Up/Down to select, Tab to complete, Enter
-to run, and Esc to close. `Ctrl+C` cancels a turn.
+to run, and Esc to close. Press `Ctrl+C` three times within 2 seconds to cancel a
+turn or, at the prompt, to exit. One press only shows how many remain, so copying
+text with `Ctrl+C` is safe.
+
+To attach a screenshot, copy it (or copy an image file in Explorer) and press
+`Alt+V` at the prompt. Neura inserts `[Image #1]`, and the image goes with that task.
+`Ctrl+V` works too when the terminal forwards it instead of pasting text. Windows
+only for now; images over 3.75 MB are refused. After the turn, saved history keeps
+a placeholder instead of the image. Copy-on-select is a terminal setting: herdr's
+`copy_on_select` or Windows Terminal's `copyOnSelect`.
 
 | Command | Purpose |
 | --- | --- |
 | `/help`, `/status` | Show commands or current mode, model, workspace and usage. |
 | `/model [PROVIDER]`, `/model PROVIDER MODEL [URL]` | Browse available catalogs or select a model explicitly. |
+| `/selflearn [on\|off]` | Show or switch self-learning. On by default. Learn, Work and YOLO each keep lessons in their own Obsidian vault. |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries. |
 | `/mode work`, `/mode learn`, `/mode yolo` | Switch modes. YOLO requires confirmation. |
 | `/new`, `/clear`, `/sessions`, `/resume ID` | Start a fresh chat or select a saved one. |

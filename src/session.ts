@@ -130,6 +130,8 @@ const scrubImages = (value: any): any => {
   if (Array.isArray(value)) return value.map(scrubImages);
   if (!value || typeof value !== "object") return value;
   if (["image", "media"].includes(value.type) && typeof value.data === "string") return { type: "text", text: "[Image removed from history after its turn. Read the page again if you need it.]" };
+  // A pasted image would overflow the session cap; the model keeps its own earlier answer about it.
+  if (value.type === "image" && typeof value.image === "string") return { type: "text", text: "[Pasted image removed from history after its turn. Paste it again if you need it.]" };
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, scrubImages(child)]));
 };
 
