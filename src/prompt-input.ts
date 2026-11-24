@@ -19,7 +19,18 @@ export function clearDraft(rl: Interface) {
 export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
   const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode: (mode: boolean) => stdin.setRawMode(mode) });
   let claim: ((key: string) => boolean) | undefined;
-  const onData = (chunk: Buffer | string) => { const key = String(chunk); if (!claim?.(key)) input.write(key); };
+  let imagePaste: (() => void) | undefined;
+  const onData = (chunk: Buffer | string) => {
+    const key = String(chunk);
+    // Alt+V, or Ctrl+V when the terminal forwards it, pastes a clipboard image. Text paste stays the terminal's.
+    // A chunk can carry typed text around the shortcut; forward that text unchanged.
+    // ponytail: an ESC and v split across two chunks is not joined; add a short timer if a terminal does that.
+    const parts = imagePaste ? key.split(/(\x1bv|\x16)/) : [key];
+    for (const part of parts) {
+      if (part === '\x1bv' || part === '\x16') imagePaste!();
+      else if (part && !claim?.(part)) input.write(part);
+    }
+  };
   const onEnd = () => input.end();
   stdin.setEncoding('utf8');
   stdin.on('data', onData);
@@ -179,7 +190,15 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
           prompt = undefined;
         }
       },
+      /** Type text into the open draft, as if the user had, and redraw the frame and footer. False when no prompt is open. */
+      insert(text: string) {
+        if (closed || prompt === undefined) return false;
+        clear();
+        if (text) rl.write(text);
+        update();
+        return true;
+      },
     };
   }
-  return { input, attach };
+  return { input, attach, onImagePaste: (handler: () => void) => { imagePaste = handler; } };
 }

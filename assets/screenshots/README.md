@@ -2,48 +2,50 @@
 
 ## Native terminal captures
 
-Captured 2026-11-13. These PNGs show the actual `src/cli.ts` process in a native Windows console
-host (`conhost.exe`), not an HTML/SVG reconstruction or a scripted renderer.
-Each is an unretouched 972 × 547 window capture. No generated artwork, model
-output or replacement text was composited into the images.
+Captured 2026-11-23. These PNGs show the actual installed `neura` process (source
+`28fef90`) in Windows Terminal on Windows 11, not an HTML/SVG reconstruction or a
+scripted renderer. Each is an unretouched 1153 × 544 window capture at 100 columns by
+22 rows, using the owner's terminal font (CaskaydiaCove Nerd Font Mono 11). No
+generated artwork, model output or replacement text was composited into the images.
 
 | Asset | State shown |
 | --- | --- |
-| [terminal-commands.png](terminal-commands.png) | `/` opens the live command menu, including `/clear` |
-| [terminal-skills.png](terminal-skills.png) | `$` opens the installed-skill menu, reading this PC's shared skill directories |
-| [terminal-clear.png](terminal-clear.png) | `/clear` confirms a new chat and returns to the Work prompt |
+| [terminal-command-menu.png](terminal-command-menu.png) | `/` opens the live command menu |
+| [terminal-skill-menu.png](terminal-skill-menu.png) | `$` opens the installed-skill menu, reading this PC's shared skill directories |
+| [terminal-clear-chat.png](terminal-clear-chat.png) | `/clear` confirms a new chat and returns to the Work prompt |
+| [terminal-shell.png](terminal-shell.png) | Typing `!git status` switches the prompt into pink shell mode (not submitted) |
 
 The process used an empty task-owned `neura-demo` workspace, an isolated
 `NEURA_HOME`, `--no-history`, `--provider local` and `--model offline-demo`.
 The model label was chosen for the capture. No inference, authentication,
-workspace writes or skill execution occurred. Only installed skill names and
-menu descriptions were shown. The skill count is specific to this machine.
+workspace writes, shell command or skill execution occurred. Only installed skill
+names and menu descriptions were shown. The skill count is specific to this machine.
 The `/clear` capture starts from an idle chat, so it demonstrates the command
-and prompt, not deletion of a previous model exchange. Context reset and saved
-chat preservation are covered separately by synthetic CLI tests.
+and prompt, not deletion of a previous model exchange.
 
-Capture used the Windows `PrintWindow` API on only the task-owned console,
-with per-monitor DPI awareness to avoid clipping. Console size was 106 columns
-by 25 rows. The first capture attempt had clipped window bounds and was
-discarded before these files were saved. No private desktop window, account,
-credential, document, session history or provider response was captured.
+Two capture-only aids were used. Keystrokes were written with `WriteConsoleInput`
+into that one task-owned console, so no other window received input. A Node
+`--import` preload replaced the status bar's user name with `demo`; the shipped
+CLI shows the real Windows user name. Windows were captured with the `PrintWindow`
+API, so no other desktop content appears.
 
 To reproduce the visible states, launch the development CLI in a disposable
 empty workspace with a separate `NEURA_HOME`:
 
 ```powershell
 neura --cwd C:\path\to\neura-demo --no-history --provider local --model offline-demo
+eura-demo --no-history --provider local --model offline-demo
 ```
 
-Type `/` for the first view. Press Esc, remove `/`, then type `$` for the
-second. Press Esc, remove `$`, then enter `/clear` for the third. Capture only
-that terminal window with the operating system's screenshot tool. Do not
+Type `/` for the first view, `$` for the second, `/clear` and Enter for the
+third, and `!git status` (without Enter) for the fourth. Capture only that
+terminal window with the operating system's screenshot tool. Do not
 submit a model task or include private paths in a public image. Exit with
 `/quit`. Remove only the workspace and home you created for the capture.
 
-The main README uses these terminal captures only. The earlier logo image,
-architecture illustration and fixture-based Learn preview are no longer
-embedded there. Their source assets remain in the repository.
+The main README embeds the pixel wordmark SVGs from [assets/brand](../brand/README.txt)
+and two of these terminal captures. The earlier logo PNGs, architecture
+illustration and fixture-based Learn preview remain in the repository.
 
 ## Learn renderer fixture captures · 2026-11-08
 

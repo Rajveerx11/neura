@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { addAbortListener } from "node:events";
 import { Check } from "typebox/value";
 import type { TSchema } from "typebox";
+import { redactSensitiveText } from "../agent/neura/redaction.ts";
 
 /**
  * Neura's own agent loop. It talks to a model through the AI SDK provider contract (specification v4)
@@ -34,7 +35,8 @@ export type ToolDefinition = {
   execute: (input: any, context: { signal?: AbortSignal }) => Promise<ToolResult>;
 };
 
-export type ToolEvent = { toolName: string; phase: "requested" | "started" | "returned" | "failed" | "blocked" | "cancelled" };
+/** `detail` (what the call targets) and `reason` (why it failed) are redacted, display-only text. Never sent to the model. */
+export type ToolEvent = { toolName: string; phase: "requested" | "started" | "returned" | "failed" | "blocked" | "cancelled"; detail?: string; reason?: string };
 /** `contextTokens`: the last request's input plus output, i.e. the conversation size the next request starts from. */
 export type TurnUsage = { inputTokens: number; outputTokens: number; contextTokens?: number };
 export type TurnLimit = "step-limit" | "output-limit";
@@ -106,6 +108,29 @@ function closedSchema(schema: any): any {
 
 const feedback = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 
+const DETAIL_LIMIT = 300;
+const oneLine = (text: string) => redactSensitiveText(text.replace(/\s+/g, " ").trim(), DETAIL_LIMIT);
+/** What a call targets, e.g. `git log -5 (in C:\repo)`. ponytail: common field names only; add per-tool summaries if a tool's row stays blank. */
+function toolDetail(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const fields = input as Record<string, unknown>;
+  const main = ["command", "path", "pattern", "name", "query", "id", "from"].map(key => fields[key]).find(value => typeof value === "string" && value.trim());
+  const cwd = typeof fields.cwd === "string" && fields.cwd.trim() ? ` (in ${fields.cwd.trim()})` : "";
+  return main || cwd ? oneLine(`${main ?? ""}${cwd}`) : undefined;
+}
+/** Why a call failed: exit code or timeout plus the last stderr line, else the tool's own feedback. */
+function failureReason(result: ToolResult): string | undefined {
+  const text = result.content.find(part => part.type === "text")?.text;
+  if (!text) return undefined;
+  let report: unknown;
+  try { report = JSON.parse(text); } catch { return oneLine(text); }
+  if (!report || typeof report !== "object") return oneLine(text);
+  const { exitCode, timedOut, stderr, stdout } = report as Record<string, unknown>;
+  if (exitCode === undefined && timedOut === undefined) return oneLine(text);
+  const last = [stderr, stdout].map(stream => typeof stream === "string" ? stream.trim().split(/\r?\n/).at(-1) : "").find(Boolean);
+  return oneLine(`${timedOut ? "timed out" : `exit ${exitCode}`}${last ? `: ${last}` : ""}`);
+}
+
 /** Observe synchronously without assimilating arbitrary thenables or leaking rejected promises. */
 function observe(callback: () => unknown): void {
   const observed = callback();
@@ -156,12 +181,14 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
         const invocationId = randomUUID(); // Runtime-owned identity; never a model-provided payload.
         report({ toolName: definition.name, phase: "requested" }, invocationId);
         const pending = queue.then(async () => {
-          const emit = (phase: ToolEvent["phase"]) => report({ toolName: definition.name, phase }, invocationId);
+          const detail = toolDetail(input);
+          const emit = (phase: ToolEvent["phase"], reason?: string) =>
+            report({ toolName: definition.name, phase, ...(detail ? { detail } : {}), ...(reason ? { reason } : {}) }, invocationId);
           if (signal?.aborted) { emit("cancelled"); signal.throwIfAborted(); }
-          if (closed || terminated || !current()) { emit("blocked"); return feedback("Turn closed; no further actions allowed."); }
+          if (closed || terminated || !current()) { emit("blocked", "Turn closed."); return feedback("Turn closed; no further actions allowed."); }
           // The effect boundary validates every input itself; nothing upstream is trusted to have done it.
           if (!validate(input)) {
-            emit("blocked");
+            emit("blocked", "Invalid tool input.");
             const blocked = feedback("Invalid tool input; action rejected.");
             results.push(blocked);
             return blocked;
@@ -172,7 +199,7 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
             return blocked;
           }
           // Observers can revoke authority or mutate direct-call input. Recheck at the actual effect boundary.
-          if (closed || terminated || !current() || !validate(input)) { emit("blocked"); return feedback("Turn closed or input changed; action rejected."); }
+          if (closed || terminated || !current() || !validate(input)) { emit("blocked", "Turn closed or input changed."); return feedback("Turn closed or input changed; action rejected."); }
           let result: ToolResult;
           let failed = false;
           try {
@@ -191,7 +218,8 @@ export function createTurnTools(definitions: ToolDefinition[], signal?: AbortSig
           // Record effect/termination state before any fallible post-action notification.
           if (result.terminate) terminated = true;
           results.push(result);
-          emit(failed || result.failed ? "failed" : "returned");
+          if (failed || result.failed) emit("failed", failureReason(result));
+          else emit("returned");
           return result;
         });
         queue = pending.then(() => undefined, () => undefined);

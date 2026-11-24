@@ -222,13 +222,13 @@ export function removeCreatedHostRunPaths(workspace: string, before: WorkspaceSc
   return { created, errors };
 }
 
-async function runScanned(workspace: string, scan: WorkspaceScan, command: string, timeoutMs: number, signal?: AbortSignal, proof?: ProofSandboxRuntime): Promise<ProcessResult> {
+async function runScanned(workspace: string, scan: WorkspaceScan, command: string, timeoutMs: number, signal?: AbortSignal, proof?: ProofSandboxRuntime, readOnly = false): Promise<ProcessResult> {
   const wslWorkspace = await toWslPath(workspace);
   let cleanup: ReturnType<typeof removeCreatedHostRunPaths> = { created: [], errors: [] };
   let result: ProcessResult;
   try {
-    result = await runBubblewrap(bubblewrapArguments(wslWorkspace, command, proof, scan), timeoutMs, signal);
-  } finally { cleanup = removeCreatedHostRunPaths(workspace, scan); }
+    result = await runBubblewrap(bubblewrapArguments(wslWorkspace, command, proof, scan, readOnly), timeoutMs, signal);
+  } finally { if (!readOnly) cleanup = removeCreatedHostRunPaths(workspace, scan); }
   const warnings = [
     ...(cleanup.created.length ? [`Neura removed protected paths this command created: ${cleanup.created.join(", ")}`] : []),
     ...(cleanup.errors.length ? [`Protected-path cleanup incomplete at: ${cleanup.errors.join(", ")}. Do not run host tools until you inspect this workspace manually.`] : []),
@@ -237,7 +237,8 @@ async function runScanned(workspace: string, scan: WorkspaceScan, command: strin
 }
 
 async function toWslPath(workspace: string): Promise<string> {
-  const result = await runWsl(["wslpath", "-a", "-u", "--", fs.realpathSync(workspace)], 10_000);
+  // This value is a mount operand. Redaction is for display and can change which directory is mounted.
+  const result = await runWsl(["wslpath", "-a", "-u", "--", fs.realpathSync(workspace)], 10_000, undefined, false);
   const converted = result.stdout.trim();
   if (result.code !== 0 || !converted.startsWith("/") || converted.includes("\n")) {
     throw new Error("Human Away sandbox could not map the workspace into WSL2.");
@@ -258,7 +259,7 @@ export function bubblewrapInput(args: string[]): Buffer {
   return Buffer.from(args.join("\0") + "\0", "utf8");
 }
 
-export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime, scan?: WorkspaceScan): string[] {
+export function bubblewrapArguments(wslWorkspace: string, command: string, proof?: ProofSandboxRuntime, scan?: WorkspaceScan, readOnly = false): string[] {
   const verifiedCommand = proof
     ? `set -eu; printf '%s\\n' ${[
       `${proof.trust.uvSha256}  /tmp/neura-bin/uv`,
@@ -290,7 +291,7 @@ export function bubblewrapArguments(wslWorkspace: string, command: string, proof
       "--ro-bind", proof.wheelhouse, "/tmp/proof-wheels",
     ] : []),
     "--dir", "/workspace",
-    "--bind", wslWorkspace, "/workspace",
+    readOnly ? "--ro-bind" : "--bind", wslWorkspace, "/workspace",
     // Host Git runs hooks and config from .git outside this sandbox, so nothing in here may change them.
     "--ro-bind-try", `${wslWorkspace}/.git`, "/workspace/.git",
     ...(scan?.hostRun ?? []).filter((entry) => entry !== ".git").flatMap((entry) => ["--ro-bind", `${wslWorkspace}/${entry}`, `/workspace/${entry}`]),
@@ -319,13 +320,14 @@ export async function runInHumanAwaySandbox(
   command: string,
   timeoutMs = 120_000,
   signal?: AbortSignal,
+  readOnly = false,
 ): Promise<ProcessResult> {
   if (process.platform !== "win32") throw new Error("Human Away sandbox currently requires Windows with WSL2.");
   if (!command.trim()) throw new Error("Human Away sandbox command is empty.");
   if (!fs.statSync(workspace).isDirectory()) throw new Error("Human Away sandbox workspace is not a directory.");
   const scan = assertWorkspaceHasNoLinks(workspace);
   if (!await humanAwaySandboxAvailable()) throw new Error("Human Away sandbox unavailable: install WSL2 and bubblewrap.");
-  return runScanned(workspace, scan, command, timeoutMs, signal);
+  return runScanned(workspace, scan, command, timeoutMs, signal, undefined, readOnly);
 }
 
 export async function runProofInSandbox(

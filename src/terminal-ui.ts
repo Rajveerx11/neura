@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from 'node:util';
-import { renderLogo } from './brand.ts';
+import { LOGO_WIDTH, renderLogo } from './brand.ts';
 
 export function terminalText(text: string): string {
   // Unicode line/paragraph separators become real newlines so words never merge; other controls are dropped.
@@ -25,6 +25,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'sessions', description: 'List saved sessions for this workspace' },
   { name: 'resume', args: 'UUID', description: 'Resume a saved session', needsArg: true },
   { name: 'reconcile', description: 'Acknowledge inspection of an interrupted task before continuing' },
+  { name: 'selflearn', args: '[on|off]', description: 'Show or switch self-learning; each mode keeps its own Obsidian vault', options: [['on', 'Learn into each mode vault'], ['off', 'Stop saving and recalling lessons']] },
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
   { name: 'workflow', args: '[on|off]', description: 'Independent read-only review of Work changes', options: [['on', 'Review each change'], ['off', 'No automatic review']] },
   { name: 'subagent', args: '[ROLE TASK|list|wait NAME|message NAME TEXT|cancel NAME]', description: 'Delegate a Work task or manage subagents', options: [
@@ -75,7 +76,7 @@ export type TerminalStatus = {
   mode: Mode; provider: string; model: string; workspace: string;
   history: 'on' | 'off' | 'save failed'; sessionState: 'new' | 'resumed'; sessionId?: string;
   thinking: boolean; messageCount: number; lastTurnUsage?: { inputTokens: number; outputTokens: number; contextTokens?: number };
-  user?: string; branch?: string;
+  user?: string; branch?: string; contextWindow?: number;
 };
 const palette: Record<Tone, string> = {
   copper: '217;120;65', bone: '232;226;216', dim: '122;130;139', warning: '211;166;74', error: '223;107;99', code: '134;167;215', ok: '126;186;110', shell: '253;93;177',
@@ -275,13 +276,15 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         ['/thinking [on|off]', 'Provider summaries only. Hidden internal reasoning is not available.'],
       ]),
       group('Conversation', [
-        ['/status', 'Mode, model, workspace, history and last-turn usage. Context window stays unknown unless verified.'],
+        ['/status', 'Mode, model, workspace, history, last-turn usage and the context window from the provider catalog.'],
         ['/clear · /new', 'Clear conversation context and start a new chat. Saved chats remain available; mode and model stay selected.'],
         ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
+        ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault, set in ~/.neura/<mode>-vault.json. A mode without a vault does not learn.'],
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
+        ['Alt+V', 'Paste a clipboard image or a copied image file as [Image #N] (Ctrl+V too, if your terminal forwards it). Windows only. The image goes with the next task, then leaves saved history.'],
         ['!COMMAND', `Run your own ${process.platform === 'win32' ? 'PowerShell' : 'bash'} command in the workspace, as you, with no sandbox or approval. Output is shown and added to the conversation. No interactive input; 10-minute limit.`],
-        ['/help · /quit', 'Show help or exit (bare exit or quit also works). Ctrl+C cancels active work; at the input prompt it exits.'],
+        ['/help · /quit', 'Show help or exit (bare exit or quit also works). Press Ctrl+C three times within 2 seconds to cancel active work, or to exit at the input prompt. Fewer presses only show a reminder, so copying text is safe.'],
       ]),
     ];
     if (options) groups.splice(1, 0,
@@ -315,7 +318,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
     activity(frame: number, seconds: number, label = 'Waiting for model') {
       if (rowWidth < 4) return '';
       const glyph = spinner[frame % spinner.length];
-      return paint(glyph, 'copper') + ' ' + paint(shortLabel([label, `${seconds}s`, 'Ctrl+C to cancel'].join(separator), rowWidth - 2, ellipsis), 'dim');
+      return paint(glyph, 'copper') + ' ' + paint(shortLabel([label, `${seconds}s`, 'Ctrl+C x3 to cancel'].join(separator), rowWidth - 2, ellipsis), 'dim');
     },
     /** Rows drawn under the prompt. Each fits in width - 1 cells so the terminal never wraps one. */
     commandMenu(items: MenuItem[], selected: number, rows = 8): string[] {
@@ -345,8 +348,18 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         bottom: paint(box.bl + edge + box.br, tone),
       };
     },
-    // Approved static mark (src/brand.ts), uncolored; ASCII for --ascii, TERM=dumb or narrow terminals.
-    wordmark(ascii = false) { return renderLogo(columns, ascii || env.TERM === 'dumb').join('\n'); },
+    // Approved wordmark (src/brand.ts), copper fading to bone across its columns, with the version on its
+    // baseline when it fits. ASCII for --ascii, TERM=dumb or narrow terminals; uncolored under NO_COLOR.
+    wordmark(ascii = false, version = '') {
+      const lines = renderLogo(columns, ascii || env.TERM === 'dumb');
+      if (lines.length === 1) return lines[0];
+      const [from, to] = [palette.copper, palette.bone].map(rgb => rgb.split(';').map(Number));
+      const shade = (x: number) => from.map((value, i) => Math.round(value + (to[i] - value) * x / (LOGO_WIDTH - 1))).join(';');
+      const rows = lines.map(line => color ? [...line].map((cell, x) => cell === ' ' ? cell : `\x1b[38;2;${shade(x)}m${cell}`).join('') + '\x1b[0m' : line);
+      const label = terminalLabel(version);
+      if (label && LOGO_WIDTH + 3 + cells(label) <= rowWidth) rows[rows.length - 1] += ' '.repeat(LOGO_WIDTH - lines[lines.length - 1].length + 3) + paint(label, 'dim');
+      return rows.join('\n');
+    },
     status(state: TerminalStatus) {
       const mode = modeLabel(state.mode);
       const available = Math.max(1, Math.min(width, columns) - 1);
@@ -359,17 +372,18 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       if (rowWidth < 12) return [];
       const sep = plainGlyphs ? ' | ' : ' │ ';
       const ctx = reportedUsage(state.lastTurnUsage)?.contextTokens;
-      const tokens = (n: number) => n < 1000 ? `${n}` : n < 1e6 ? `${(n / 1000).toFixed(1)}k` : `${(n / 1e6).toFixed(2)}M`;
-      // ponytail: context window size is unverified per model, so show tokens used, not "% left".
+      // Unary + drops trailing zeros: 500.0k reads 500k, 1.05M stays.
+      const tokens = (n: number) => n < 1000 ? `${n}` : n < 999_950 ? `${+(n / 1000).toFixed(1)}k` : `${+(n / 1e6).toFixed(2)}M`;
+      const window = state.contextWindow ? ` / ${tokens(state.contextWindow)}` : '';
       const fields: [string, Tone][] = [[`${state.provider}/${state.model || '(not selected)'}`, 'dim']];
       if (state.user) fields.unshift([terminalLabel(state.user), 'bone']);
-      if (Number.isSafeInteger(ctx) && ctx! >= 0) fields.push([`ctx ${tokens(ctx!)} tokens`, 'ok']);
-      else if (state.messageCount === 0) fields.push(['ctx empty', 'ok']);
+      if (Number.isSafeInteger(ctx) && ctx! >= 0) fields.push([`ctx ${tokens(ctx!)}${window} tokens`, state.contextWindow && ctx! >= state.contextWindow * 0.9 ? 'warning' : 'ok']);
+      else if (state.messageCount === 0) fields.push([window ? `ctx 0${window} tokens` : 'ctx empty', 'ok']);
       if (state.branch) fields.push([(plainGlyphs ? 'git ' : '⎇ ') + terminalLabel(state.branch), 'code']);
       const modelAt = () => fields.findIndex(([, tone]) => tone === 'dim');
       const budget = () => rowWidth - fields.reduce((sum, [text], index) => sum + (index === modelAt() ? 0 : cells(text)), 0) - sep.length * (fields.length - 1);
       // Drop branch, then user, then ctx until the model keeps at least 12 cells.
-      for (const tone of ['code', 'bone', 'ok'] as Tone[]) if (budget() < 12) { const at = fields.findIndex(([, t]) => t === tone); if (at >= 0) fields.splice(at, 1); }
+      for (const tone of ['code', 'bone', 'ok', 'warning'] as Tone[]) if (budget() < 12) { const at = fields.findIndex(([, t]) => t === tone); if (at >= 0) fields.splice(at, 1); }
       fields[modelAt()][0] = shortLabel(fields[modelAt()][0], budget(), ellipsis);
       const line = fields.map(([text, tone]) => paint(text, tone)).join(paint(sep, 'dim'));
       const pointer = plainGlyphs ? '>> ' : '›› ';
@@ -389,7 +403,9 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
         `Thinking: ${state.thinking ? 'on' : 'off'}`, `Conversation: ${state.messageCount} messages`,
         ...(state.runningSubagents ? [`Subagents running: ${state.runningSubagents}`] : []),
         ...(usage ? [`Last turn input tokens: ${usage.inputTokens}`, `Last turn output tokens: ${usage.outputTokens}`] : ['Last turn tokens: unavailable']),
-        'Context window: unknown',
+        state.contextWindow
+          ? `Context window: ${state.contextWindow} tokens` + (usage?.contextTokens != null ? `, ${Math.round(usage.contextTokens / state.contextWindow * 100)}% used` : '')
+          : 'Context window: unknown',
       ].map(terminalLabel).join('\n') + '\n' + paint(prose('Development/testing only. Distribution is not cleared.'), 'dim');
     },
     prompt(mode: Mode) { return paint(`${mode} > `, mode === 'yolo' ? 'error' : 'copper'); },
@@ -411,13 +427,18 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       // One row only, so the transient waiting line can be erased with a single line clear.
       return paint(shortLabel(labels[kind], width - 1), kind === 'answer' ? 'bone' : 'dim');
     },
-    tool(name: string, phase: ToolOutcome, elapsedMs?: number) {
+    tool(name: string, phase: ToolOutcome, elapsedMs?: number, detail?: string, reason?: string) {
       const label = { returned: 'Done', failed: 'Failed', blocked: 'Blocked', cancelled: 'Cancelled' }[phase];
       const tone = phase === 'failed' || phase === 'blocked' ? 'error' : phase === 'cancelled' ? 'warning' : 'dim';
       const fields = [label, terminalLabel(name)];
       if (elapsedMs !== undefined) fields.push(`${(elapsedMs / 1000).toFixed(1)}s`);
-      return paint(shortLabel(fields.join(separator), rowWidth, ellipsis), tone);
+      if (detail) fields.push(detail);
+      const row = paint(shortLabel(fields.join(separator), rowWidth, ellipsis), tone);
+      // The reason gets its own row so a long command cannot push it off screen.
+      return reason ? row + '\n' + paint('  ' + shortLabel(reason, rowWidth - 2, ellipsis), 'dim') : row;
     },
+    /** One warning row, for footers that count their rows. */
+    hint(text: string) { return paint(shortLabel(text, rowWidth, ellipsis), 'warning'); },
     approval(description: string) { return paint('[approval required]', 'warning') + '\n' + terminalText(description); },
     approvalPrompt() { return paint('Type yes to approve (default: no): ', 'warning'); },
     pickerPrompt() { return paint(width < 56 ? 'Model number or ID (Enter cancels): ' : 'Choose a number or listed model ID; Enter cancels: ', 'copper'); },

@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-logo-dark.png">
-    <img src="assets/brand/neura-logo-light.png" alt="Neura logo" width="220">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/neura-wordmark-pixel-dark.svg">
+    <img src="assets/brand/neura-wordmark-pixel-light.svg" alt="neura" width="240">
   </picture>
 </p>
 
@@ -11,6 +11,12 @@ Neura is a Windows-first terminal agent for coding and practical learning. **Wor
 reads and edits your project, runs commands in an offline sandbox, and reviews
 changes. **Learn** turns local documents and questions into cited lessons and
 exercises. Neura runs its own agent loop, with neither Mastra nor Pi.
+
+Work can remember a focused Node regression in the same workspace. On a bug or
+correction, the agent runs a named assertion before the fix. Editing its source
+reruns the suite in a read-only sandbox. A matching pass saves the lesson for
+future sessions. A later failure makes it provisional again. `--no-history`
+disables lesson storage and recall.
 
 [Documentation](docs/README.md) · [Usage](docs/USAGE.md) · [T3 Code](docs/T3_CODE.md) ·
 [Changelog](docs/CHANGELOG.md) · [Security](SECURITY.md)
@@ -58,7 +64,9 @@ The prompt box turns pink and reads `shell >` while the line is a command. It ru
 as you, outside the sandbox, and its output joins the conversation. Start a new
 conversation with `/new`; saved chats remain available through `/sessions`.
 
-![Neura's slash-command menu in a native Windows terminal.](assets/screenshots/terminal-commands.png)
+![Neura's slash-command menu in Windows Terminal.](assets/screenshots/terminal-command-menu.png)
+
+![Shell mode: a line starting with ! turns the prompt box pink.](assets/screenshots/terminal-shell.png)
 
 [More terminal screenshots and capture details](assets/screenshots/README.md#native-terminal-captures).
 

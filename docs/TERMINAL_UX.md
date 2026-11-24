@@ -23,13 +23,16 @@ ten-line limits do not establish Mastra behavior.
 - Copper identity/focus, neutral activity and answers, textual warning/error
   states. No alternate screen, dashboard or startup model request. (Animation
   was added later; see “Rich answers, activity and slash menu”.)
-- Launch identity is the owner-approved prompt-to-result mark from `src/brand.ts`
-  (five lines, mark only, uncolored; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It
-  replaces the interim `o--o neura` mark used while this work was in a worktree.
+- Launch identity is the owner-approved pixel wordmark from `src/brand.ts`
+  (three lines, copper to bone, version on its baseline when it fits; uncolored under
+  `NO_COLOR`; `>_ neura` for `--ascii`, `TERM=dumb` and narrow terminals). It replaced
+  the prompt-to-result mark on 2026-11-23.
 - Prompt-adjacent status and `/status` details: actual mode/model/workspace,
   history/session state, thinking-summary setting and conversation message count.
   Validated Mastra total usage is labelled last-turn input/output, never context
-  occupancy. Missing counts stay unavailable; context-window capacity stays unknown.
+  occupancy. Missing counts stay unavailable. Context-window capacity shows as
+  `ctx USED / WINDOW tokens` when the provider catalog, local llama.cpp server or
+  models.dev lists the model, and stays unknown otherwise.
 - Grouped help, complete model IDs and approval details,
   explicit answer boundaries, readable sessions, blank-input reprompt and
   cancellation/recovery feedback. Tool lifecycle phases remain visible, with
@@ -90,8 +93,10 @@ providers, model selection, sandbox policy, history or proof semantics.
   answer boundary. Reasoning summaries stay labelled, optional and separate;
   `/thinking off` and `--no-thinking` suppress them. Never imply hidden reasoning
   is available. Keep transcript scrollback and normal selection/copy intact.
-- Ctrl+C during catalog fetch, inference, login or approval cancels that operation
-  and returns to the prompt. Ctrl+C while idle and EOF exit cleanly. An aborted
+- Three Ctrl+C presses within 2 seconds during catalog fetch, inference, login or
+  approval cancel that operation and return to the prompt. Three presses while idle,
+  or EOF, exit cleanly. Fewer presses only show how many remain (2026-11-24), so a
+  copy habit cannot cancel work. Noninteractive `--prompt` runs still stop on one signal. An aborted
   operation cannot approve or start a pending action. Cancellation does not claim
   rollback of effects already completed; inspect state before a manual retry.
 - Approval owns the next input. Show exact action, boundary and one-use scope;
@@ -269,7 +274,7 @@ command discovery. Changes, all dependency-free:
   wide) and fenced code with a gutter. Code bytes are never wrapped or restyled.
   Model text is sanitized before styling, so it cannot inject escapes. Piped,
   `--prompt` and ACP output stay byte-for-byte unrendered.
-- **Activity row.** ANSI terminals show `⠋ Thinking… 3s · Ctrl+C to cancel`
+- **Activity row.** ANSI terminals show `⠋ Thinking… 3s · Ctrl+C x3 to cancel`
   (`Working…` after a tool returns), erased before any other output and before
   an approval prompt. `TERM=dumb` keeps the static `[thinking]` line.
 - **Slash menu.** Typing `/` at the main prompt opens a menu under the input,
@@ -300,9 +305,10 @@ support, submit `$` for a text list. `$NAME TASK` loads that installed package's
 `SKILL.md` as untrusted guidance for the request, not a new permission grant.
 No skill scripts run automatically. See [skill roots and limits](SKILLS.md).
 
-Native Windows console captures show the [command menu](../assets/screenshots/terminal-commands.png),
-[installed-skill picker](../assets/screenshots/terminal-skills.png) and
-[`/clear` confirmation](../assets/screenshots/terminal-clear.png).
+Windows Terminal captures show the [command menu](../assets/screenshots/terminal-command-menu.png),
+[installed-skill picker](../assets/screenshots/terminal-skill-menu.png),
+[`/clear` confirmation](../assets/screenshots/terminal-clear-chat.png) and
+[shell mode](../assets/screenshots/terminal-shell.png).
 [Provenance and reproduction](../assets/screenshots/README.md#native-terminal-captures)
 distinguish these running-CLI captures from fixture-rendered previews.
 They show no model response and do not establish resize behavior.

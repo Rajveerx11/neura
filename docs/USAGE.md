@@ -34,12 +34,22 @@ agent. See [T3 provider setup](T3_CODE.md#accounts-and-models).
 ## Commands
 
 Type `/` to open the command menu. Use Up/Down to select, Tab to complete, Enter
-to run, and Esc to close. `Ctrl+C` cancels a turn.
+to run, and Esc to close. Press `Ctrl+C` three times within 2 seconds to cancel a
+turn or, at the prompt, to exit. One press only shows how many remain, so copying
+text with `Ctrl+C` is safe.
+
+To attach a screenshot, copy it (or copy an image file in Explorer) and press
+`Alt+V` at the prompt. Neura inserts `[Image #1]`, and the image goes with that task.
+`Ctrl+V` works too when the terminal forwards it instead of pasting text. Windows
+only for now; images over 3.75 MB are refused. After the turn, saved history keeps
+a placeholder instead of the image. Copy-on-select is a terminal setting: herdr's
+`copy_on_select` or Windows Terminal's `copyOnSelect`.
 
 | Command | Purpose |
 | --- | --- |
 | `/help`, `/status` | Show commands or current mode, model, workspace and usage. |
 | `/model [PROVIDER]`, `/model PROVIDER MODEL [URL]` | Browse available catalogs or select a model explicitly. |
+| `/selflearn [on\|off]` | Show or switch self-learning. On by default. Learn, Work and YOLO each keep lessons in their own Obsidian vault. |
 | `/thinking on\|off` | Toggle provider-supplied reasoning summaries. |
 | `/mode work`, `/mode learn`, `/mode yolo` | Switch modes. YOLO requires confirmation. |
 | `/new`, `/clear`, `/sessions`, `/resume ID` | Start a fresh chat or select a saved one. |
@@ -49,8 +59,16 @@ to run, and Esc to close. `Ctrl+C` cancels a turn.
 | `/subagent` | List roles, delegate a Work task, or manage a named subagent. |
 | `/verify quick`, `/verify full`, `/verify status` | Check the candidate or inspect a receipt. Full verification is unavailable. |
 | `$`, `$NAME TASK` | Browse or apply [installed skills](SKILLS.md). |
+| `!COMMAND` | Run your own shell command in the workspace, such as `!git status`. |
 | `/learn` | Lesson commands, hints, answers and explicit save/resume. |
 | `/quit`, `/exit` | Close Neura. |
+
+A line starting with `!` switches the prompt into shell mode: the box turns pink,
+the prompt reads `shell >`, and the status row says `! shell mode`. Delete the `!`
+to leave it. The command runs as you in PowerShell (bash elsewhere), outside the
+sandbox and approvals, for up to 10 minutes with no interactive input. Its output
+joins the conversation. ACP clients and `--prompt` treat `!` as plain text. See
+[security](../SECURITY.md#your-own--commands).
 
 ## Manual test in a disposable workspace
 

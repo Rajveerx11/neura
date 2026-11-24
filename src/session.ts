@@ -4,6 +4,7 @@ import { link, lstat, mkdir, open, readdir, realpath, unlink } from "node:fs/pro
 import path from "node:path";
 import { assertUnlinkedDirectoryAncestors } from "../agent/neura/directory-path.ts";
 import { COMMIT_ID, type TreeSnapshot } from "../agent/neura/verification.ts";
+import { redactSensitiveText } from "../agent/neura/redaction.ts";
 
 export const MAX_SESSION_MESSAGES = 200;
 export const MAX_SESSION_BYTES = 1024 * 1024;
@@ -12,8 +13,9 @@ export type TaskRecovery = {
   version: 1; taskId: string; workspaceKey: string;
   stage: "running" | "unfinished" | "completed" | "reconcile";
   baseHead: string | null; baseline: TreeSnapshot | null;
+  failedChecks?: string[];
 };
-export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery; modelRoute?: string };
+export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery; modelRoute?: string; earlierTurns?: string[] };
 export type SessionSummary = Pick<Session, "id" | "createdAt" | "updatedAt">;
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const hashPattern = /^[0-9a-f]{64}$/;
@@ -25,11 +27,14 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function validateRecovery(value: TaskRecovery): TaskRecovery {
   const keys = ["version", "taskId", "workspaceKey", "stage", "baseHead", "baseline"];
-  if (!record(value) || Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key)) ||
+  if (!record(value) || !keys.every(key => Object.hasOwn(value, key)) || Object.keys(value).some(key => !keys.includes(key) && key !== 'failedChecks') ||
       value.version !== 1 || typeof value.taskId !== "string" || !idPattern.test(value.taskId) ||
       typeof value.workspaceKey !== "string" || !hashPattern.test(value.workspaceKey) ||
       !["running", "unfinished", "completed", "reconcile"].includes(value.stage) ||
       (value.baseHead !== null && (typeof value.baseHead !== "string" || !COMMIT_ID.test(value.baseHead)))) throw new Error("Invalid task recovery metadata");
+  if (value.failedChecks !== undefined && (!Array.isArray(value.failedChecks) || value.failedChecks.length > 64 ||
+      value.failedChecks.some(id => typeof id !== 'string' || !hashPattern.test(id)) ||
+      new Set(value.failedChecks).size !== value.failedChecks.length || (value.stage === 'completed' && value.failedChecks.length))) throw new Error('Invalid unresolved regression checks');
   if (Buffer.byteLength(JSON.stringify(value)) > MAX_RECOVERY_BYTES) throw new Error("Task recovery metadata exceeds limits");
   const baseline = value.baseline;
   if (baseline !== null) {
@@ -125,6 +130,8 @@ const scrubImages = (value: any): any => {
   if (Array.isArray(value)) return value.map(scrubImages);
   if (!value || typeof value !== "object") return value;
   if (["image", "media"].includes(value.type) && typeof value.data === "string") return { type: "text", text: "[Image removed from history after its turn. Read the page again if you need it.]" };
+  // A pasted image would overflow the session cap; the model keeps its own earlier answer about it.
+  if (value.type === "image" && typeof value.image === "string") return { type: "text", text: "[Pasted image removed from history after its turn. Paste it again if you need it.]" };
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, scrubImages(child)]));
 };
 
@@ -134,13 +141,26 @@ export function withoutToolImages(messages: any[]): any[] {
   return messages.map((message) => Array.isArray(message.content) ? { ...message, content: scrubImages(message.content) } : message);
 }
 
-function normalizedSession(session: Session, trim: boolean): Session {
+function condensedTurn(messages: any[]): string {
+  const excerpt = (message: any) => {
+    const value = message?.content;
+    const text = typeof value === 'string' ? value : Array.isArray(value) ? value.filter(p => p.type === 'text').map(p => p.text).join(' ') : '';
+    return redactSensitiveText(text, 256).replace(/\s+/g, ' ').trim();
+  };
+  return [excerpt(messages[0]), excerpt(messages.findLast(m => m.role === 'assistant' && excerpt(m)))].filter(Boolean).join(' | ');
+}
+
+function normalizedSession(session: Session, trim: boolean, summarize = false): Session {
   const required = ["version", "id", "createdAt", "updatedAt", "messages"];
   const timestamp = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
-  if (!record(session) || !required.every(key => Object.hasOwn(session, key)) || Object.keys(session).some(key => ![...required, "recovery", "modelRoute"].includes(key)) ||
+  if (!record(session) || !required.every(key => Object.hasOwn(session, key)) || Object.keys(session).some(key => ![...required, "recovery", "modelRoute", "earlierTurns"].includes(key)) ||
       session.version !== 1 || typeof session.id !== "string" || !idPattern.test(session.id) || !timestamp(session.createdAt) || !timestamp(session.updatedAt)) throw new Error("Invalid session envelope");
   const result: Session = { version: 1, id: session.id, createdAt: session.createdAt, updatedAt: session.updatedAt, messages: validateMessages(session.messages) };
   if (session.recovery !== undefined) result.recovery = validateRecovery(session.recovery);
+  if (session.earlierTurns !== undefined) {
+    if (!Array.isArray(session.earlierTurns) || session.earlierTurns.length > 8 || !session.earlierTurns.every(s => typeof s === 'string' && s.length <= 540)) throw new Error('Invalid session excerpts');
+    result.earlierTurns = [...session.earlierTurns];
+  }
   if (session.modelRoute !== undefined) {
     if (typeof session.modelRoute !== "string" || !hashPattern.test(session.modelRoute)) throw new Error("Invalid session model route");
     result.modelRoute = session.modelRoute;
@@ -148,8 +168,15 @@ function normalizedSession(session: Session, trim: boolean): Session {
   while (result.messages.length > MAX_SESSION_MESSAGES || Buffer.byteLength(JSON.stringify(result)) > MAX_SESSION_BYTES) {
     if (!trim) throw new Error("Session exceeds history limits");
     const nextTurn = result.messages.findIndex((message, index) => index > 0 && message.role === "user");
-    if (nextTurn < 0) throw new Error("Current turn exceeds session limits");
-    result.messages.splice(0, nextTurn);
+    if (nextTurn < 0) {
+      if (result.earlierTurns) { delete result.earlierTurns; continue; }
+      throw new Error("Current turn exceeds session limits");
+    }
+    const removed = result.messages.splice(0, nextTurn);
+    if (summarize) {
+      const note = condensedTurn(removed);
+      if (note) result.earlierTurns = [...(result.earlierTurns ?? []), note].slice(-8);
+    }
   }
   return result;
 }
@@ -227,9 +254,9 @@ export async function resumeSession(directory: string, id: string): Promise<Sess
 }
 
 /** Single-writer history replacement. Tools and approval authority are never serialized. */
-export async function saveSession(directory: string, session: Session): Promise<Session> {
+export async function saveSession(directory: string, session: Session, summarize = false): Promise<Session> {
   // Validate and detach the complete JSON payload before any await; callers retain mutable history objects.
-  const bytes = JSON.stringify(normalizedSession({ ...session, updatedAt: new Date().toISOString() }, true));
+  const bytes = JSON.stringify(normalizedSession({ ...session, updatedAt: new Date().toISOString() }, true, summarize));
   const saved = normalizedSession(JSON.parse(bytes), false);
   const root = await sessionDirectory(directory);
   const filename = sessionPath(root, saved.id);
