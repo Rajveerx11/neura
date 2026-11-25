@@ -1015,7 +1015,10 @@ export async function main(args = process.argv.slice(2), bridge?: CliBridge): Pr
     finally { process.off('SIGINT', onInterrupt); }
     if (interactive && interruptedExit && session) {
       const route = session.modelRoute && isDirectGatewayModel(provider.model) ? ` --provider ${provider.provider} --model ${provider.model}` : '';
-      say(`\nResume from ${workspace}\nneura --resume ${session.id}${route}`);
+      const cwd = process.platform === 'win32' ? workspace.replaceAll('\\', '/') : workspace;
+      // Use a command safe to paste into both PowerShell and cmd. Other paths use the workspace instruction above it.
+      const cwdArg = /^[\p{L}\p{N} _.:/-]+$/u.test(cwd) ? ` --cwd "${cwd}"` : '';
+      say(`\nResume from ${workspace}\nneura --resume ${session.id}${cwdArg}${route}`);
     }
   }
 }
