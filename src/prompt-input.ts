@@ -28,7 +28,13 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
     const parts = imagePaste ? key.split(/(\x1bv|\x16)/) : [key];
     for (const part of parts) {
       if (part === '\x1bv' || part === '\x16') imagePaste!();
-      else if (part && !claim?.(part)) input.write(part);
+      else {
+        // A quick selection can arrive as several arrows and Return in one chunk.
+        const keys = part.match(/\x1b(?:\[|O)[AB]|\r\n?|\n/g);
+        for (const key of keys?.join('') === part ? keys : [part]) {
+          if (key && !claim?.(key)) input.write(key);
+        }
+      }
     }
   };
   const onEnd = () => input.end();
@@ -42,6 +48,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
     let shell = false;
     const makeFrame = (query: string) => stdout.columns >= 32 && stdout.rows >= 4 ? ui().composer(query, shell) : undefined;
     let prompt: string | undefined;
+    let promptMatches = matches;
     const current = () => shell ? ui().shellPrompt() : prompt!;
     let frame: ReturnType<typeof makeFrame>;
     let items: MenuItem[] = [];
@@ -96,7 +103,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       // shortcut: wrapped drafts use readline's full width, so only single rows have a right edge.
       const side = frame && singleRow && end.cols < right ? column(right) + frame.side : '';
       const menuRows = Math.min(8, room - Number(Boolean(bottom)) - 1);
-      items = singleRow && line !== dismissed && stdout.columns >= 20 && menuRows > 0 ? matches(line) : [];
+      items = singleRow && line !== dismissed && stdout.columns >= 20 && menuRows > 0 ? promptMatches(line) : [];
       selected = Math.min(selected, Math.max(0, items.length - 1));
       const rows = bottom ? [bottom] : [];
       if (items.length) rows.push(...ui().commandMenu(items, selected, menuRows));
@@ -125,7 +132,7 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
         if (key === '\x1b[B' || key === '\x1bOB') { selected = (selected + 1) % items.length; update(); return true; }
         if (key === '\t') { accept(item, false, prompt); return true; }
         if (key === '\x1b') { dismissed = rl.line; update(); return true; }
-        if ((key === '\r' || key === '\n') && !(rl.line.trim() === item.value && item.submit)) {
+        if ((key === '\r' || key === '\n' || key === '\r\n') && !(rl.line.trim() === item.value && item.submit)) {
           accept(item, item.submit, prompt);
           return true;
         }
@@ -165,10 +172,12 @@ export function createCommandKeyboard(stdin: Raw, stdout: NodeJS.WriteStream) {
       stdin.pause();
     });
     return {
-      async question(query: string, options: { signal: AbortSignal }) {
+      async question(query: string, options: { signal: AbortSignal }, menu = matches) {
         if (closed || options.signal.aborted) return rl.question(query, options);
         prompt = query;
+        promptMatches = menu;
         shell = false;
+        selected = 0;
         frame = makeFrame(query);
         dismissed = undefined;
         let erasedRows = 0;

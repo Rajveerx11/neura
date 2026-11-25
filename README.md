@@ -62,7 +62,11 @@ Type `/` to browse commands or `$` to browse installed skills. Start a line
 with `!` to run your own shell command in the workspace, such as `!git status`.
 The prompt box turns pink and reads `shell >` while the line is a command. It runs
 as you, outside the sandbox, and its output joins the conversation. Start a new
-conversation with `/new`; saved chats remain available through `/sessions`.
+conversation with `/new`. Use `/resume` and Up or Down to choose a saved chat.
+Use `/sessions` to find its UUID if you prefer `/resume UUID`. Resuming shows
+saved messages. At the prompt, Up and Down recall earlier prompts. Press
+Ctrl+C three times within two seconds at the prompt to exit and see the resume
+command.
 
 ![Neura's slash-command menu in Windows Terminal.](assets/screenshots/terminal-command-menu.png)
 

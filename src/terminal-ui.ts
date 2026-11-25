@@ -23,7 +23,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'clear', description: 'Clear context and start a new chat (keeps saved chats)' },
   { name: 'new', description: 'Start a fresh conversation' },
   { name: 'sessions', description: 'List saved sessions for this workspace' },
-  { name: 'resume', args: 'UUID', description: 'Resume a saved session', needsArg: true },
+  { name: 'resume', args: '[UUID]', description: 'Choose or resume a saved chat' },
   { name: 'reconcile', description: 'Acknowledge inspection of an interrupted task before continuing' },
   { name: 'selflearn', args: '[on|off]', description: 'Show or switch self-learning; each mode keeps its own Obsidian vault', options: [['on', 'Learn into each mode vault'], ['off', 'Stop saving and recalling lessons']] },
   { name: 'thinking', args: '[on|off]', description: 'Show or hide provider reasoning summaries', options: [['on', 'Show summaries'], ['off', 'Hide summaries']] },
@@ -278,7 +278,7 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       group('Conversation', [
         ['/status', 'Mode, model, workspace, history, last-turn usage and the context window from the provider catalog.'],
         ['/clear · /new', 'Clear conversation context and start a new chat. Saved chats remain available; mode and model stay selected.'],
-        ['/sessions · /resume UUID', 'List workspace history or explicitly resume it. Never imports Pi.'],
+        ['/sessions · /resume [UUID]', 'List saved chats or choose one with Up and Down. After resume, Up and Down recall saved prompts.'],
         ['/selflearn [on|off]', 'Self-learning is on by default. Learn, Work and YOLO each save and recall lessons only in their own Obsidian vault, set in ~/.neura/<mode>-vault.json. A mode without a vault does not learn.'],
         ['/reconcile', 'After inspecting an interrupted task, acknowledge its effects before continuing. Replays nothing and cannot clear a crash lock.'],
         ['$ · $NAME TASK', 'List installed skills, or apply one to a task. Skills do not grant tools or permissions.'],
@@ -449,10 +449,11 @@ export function createTerminalUI({ isTTY = false, columns = 80, env = {}, ascii 
       const prefix = kind === 'error' ? 'Error: ' : kind === 'warning' ? 'Warning: ' : '';
       return paint(prose(prefix + text), kind === 'info' ? 'dim' : kind === 'cancelled' ? 'warning' : kind);
     },
-    sessions(items: { id: string; updatedAt: string }[]) {
+    sessions(items: { id: string; updatedAt: string; title?: string }[]) {
       if (!items.length) return paint(prose('No saved sessions for this workspace. Use /new to start one.'), 'dim');
       return paint('Workspace sessions', 'bone') + '\n' + items.map(item =>
-        terminalText(item.id) + '\n' + paint(`  Updated: ${terminalText(item.updatedAt)}`, 'dim')).join('\n') +
+        terminalText(item.id) + (item.title ? '\n' + prose(terminalLabel(item.title)) : '') + '\n' +
+        paint(`  Updated: ${terminalText(item.updatedAt)}`, 'dim')).join('\n') +
         '\n' + paint('Use /resume UUID to resume explicitly.', 'dim');
     },
   };

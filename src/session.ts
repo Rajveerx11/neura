@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { constants, renameSync, type Stats } from "node:fs";
 import { link, lstat, mkdir, open, readdir, realpath, unlink } from "node:fs/promises";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { assertUnlinkedDirectoryAncestors } from "../agent/neura/directory-path.ts";
 import { COMMIT_ID, type TreeSnapshot } from "../agent/neura/verification.ts";
 import { redactSensitiveText } from "../agent/neura/redaction.ts";
@@ -16,7 +17,7 @@ export type TaskRecovery = {
   failedChecks?: string[];
 };
 export type Session = { version: 1; id: string; createdAt: string; updatedAt: string; messages: any[]; recovery?: TaskRecovery; modelRoute?: string; earlierTurns?: string[] };
-export type SessionSummary = Pick<Session, "id" | "createdAt" | "updatedAt">;
+export type SessionSummary = Pick<Session, "id" | "createdAt" | "updatedAt"> & { title?: string };
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const hashPattern = /^[0-9a-f]{64}$/;
 
@@ -141,10 +142,14 @@ export function withoutToolImages(messages: any[]): any[] {
   return messages.map((message) => Array.isArray(message.content) ? { ...message, content: scrubImages(message.content) } : message);
 }
 
+export function sessionMessageText(content: string | { type: string; text?: string }[], separator = '\n'): string {
+  return typeof content === 'string' ? content : content.filter(part => part.type === 'text')
+    .map(part => part.text).join(separator);
+}
+
 function condensedTurn(messages: any[]): string {
   const excerpt = (message: any) => {
-    const value = message?.content;
-    const text = typeof value === 'string' ? value : Array.isArray(value) ? value.filter(p => p.type === 'text').map(p => p.text).join(' ') : '';
+    const text = message ? sessionMessageText(message.content, ' ') : '';
     return redactSensitiveText(text, 256).replace(/\s+/g, ' ').trim();
   };
   return [excerpt(messages[0]), excerpt(messages.findLast(m => m.role === 'assistant' && excerpt(m)))].filter(Boolean).join(' | ');
@@ -287,15 +292,17 @@ export async function appendSession(directory: string, id: string, messages: any
   return saveSession(directory, { ...session, messages: [...session.messages, ...messages] });
 }
 
-export async function listSessions(directory: string): Promise<SessionSummary[]> {
+export async function listSessions(directory: string, includeTitles = false): Promise<SessionSummary[]> {
   let root: string;
   try { root = await sessionDirectory(directory); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
   const summaries: SessionSummary[] = [];
   for (const name of await readdir(root)) {
     if (!name.endsWith(".json") || !idPattern.test(name.slice(0, -5))) continue;
-    const { id, createdAt, updatedAt } = await resumeSession(root, name.slice(0, -5));
-    summaries.push({ id, createdAt, updatedAt });
+    const { id, createdAt, updatedAt, messages } = await resumeSession(root, name.slice(0, -5));
+    const first = includeTitles && messages.find(message => message.role === 'user');
+    const title = first ? redactSensitiveText(stripVTControlCharacters(sessionMessageText(first.content)), 120) : undefined;
+    summaries.push({ id, createdAt, updatedAt, ...(title?.trim() ? { title } : {}) });
   }
   return summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
