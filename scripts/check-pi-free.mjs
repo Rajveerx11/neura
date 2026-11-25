@@ -16,7 +16,7 @@ export const PERMISSIVE = new Set(['Apache-2.0', 'MIT', 'ISC', 'BSD-2-Clause', '
 // Reviewed exceptions bind to name@version, so any version change forces a fresh review.
 // License exceptions need the lock's `dev: true` flag. That is lock metadata, not a reachability analysis.
 export const REVIEWED_LICENSES = Object.freeze({
-  'axe-core@4.14.0': { license: 'MPL-2.0', reason: 'File-level copyleft; dev-only Learn accessibility test dependency, unmodified, never shipped by the source-linked install.' },
+  'axe-core@4.14.1': { license: 'MPL-2.0', reason: 'Unmodified development-only accessibility dependency under file-level copyleft; not part of the runtime graph.' },
 });
 export const REVIEWED_INSTALL_SCRIPTS = Object.freeze({
   'tesseract.js@7.0.0': '`opencollective-postinstall || true` donation banner only; every supported install uses --ignore-scripts.',
