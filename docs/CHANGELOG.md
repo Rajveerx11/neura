@@ -8,6 +8,12 @@ Latest stable release remains historical Pi `2.5.1`. Mastra was removed on
 2026-11-14; release packaging and distribution approval remain unresolved. See [status](STATUS.md) and
 [release inventory](releases/README.md).
 
+### 2026-11-25: resume saved chats
+
+- `/resume` opens a picker for saved workspace chats. Use Up or Down and Enter.
+  Resuming shows the saved messages. Up and Down at the prompt recall earlier inputs.
+- Exiting with Ctrl+C prints the workspace and the `neura --resume UUID` command.
+
 ### 2026-11-24: context window in the status bar
 
 - The status bar shows `ctx USED / WINDOW tokens`, for example `ctx 103.3k / 500k tokens`.
